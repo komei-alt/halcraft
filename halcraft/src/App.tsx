@@ -1,39 +1,49 @@
-import { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { PointerLockControls, Loader } from '@react-three/drei';
-import { Physics } from '@react-three/rapier';
-import { World } from './components/World';
-import { Player } from './components/Player';
-import { Environment } from './components/Environment';
-import { Companion } from './components/Companion';
+// ハルクラ — メインアプリケーション
+// Canvas + カスタム物理（Rapier不使用で軽量動作）
 
-export default function App() {
+import { Canvas } from '@react-three/fiber';
+import { Suspense } from 'react';
+import { Player } from './components/Player';
+import { World } from './components/World';
+import { Environment } from './components/Environment';
+import { BlockInteraction } from './components/BlockInteraction';
+import { Crosshair } from './components/ui/Crosshair';
+import { Hotbar } from './components/ui/Hotbar';
+import { StartScreen } from './components/ui/StartScreen';
+import { useGameStore } from './stores/useGameStore';
+import './App.css';
+
+function GameCanvas() {
   return (
-    <>
-      <div className="crosshair">+</div>
-      <Canvas shadows camera={{ fov: 60 }}>
-        {/* 環境光と発光ライト */}
-        <ambientLight intensity={1.5} />
-        <pointLight position={[100, 100, 100]} intensity={1} castShadow />
-        
-        <Suspense fallback={null}>
-          {/* Rapier 物理エンジン起動（重力をより強くしてフワフワ感を除去） */}
-          <Physics gravity={[0, -50, 0]}>
-            <Environment />
-            <World />
-            {/* 味方キャラクターをスタート地点の目の前に配置！ */}
-            <Companion position={[0, 1.1, -5]} />
-            <Player />
-          </Physics>
-        </Suspense>
-        
-        {/* 初回クリックで画面にポインターをロック（FPS操作の基本） */}
-        <PointerLockControls />
-      </Canvas>
-      
-      {/* 素材のロード画面自動表示 */}
-      <Loader />
-    </>
+    <Canvas
+      shadows
+      camera={{ fov: 70, near: 0.1, far: 200 }}
+      gl={{ antialias: false, powerPreference: 'high-performance' }}
+      style={{ position: 'fixed', inset: 0 }}
+    >
+      <Suspense fallback={null}>
+        <Environment />
+        <World />
+        <Player />
+        <BlockInteraction />
+      </Suspense>
+    </Canvas>
   );
 }
 
+export default function App() {
+  const phase = useGameStore((s) => s.phase);
+
+  return (
+    <>
+      <StartScreen />
+      {phase !== 'menu' && (
+        <>
+          <GameCanvas />
+          <Crosshair />
+          <Hotbar />
+        </>
+      )}
+    </>
+  );
+}

@@ -4,8 +4,9 @@
 
 ```
 Status: 確定
-Version: 1.0
+Version: 2.0
 Created: 2026-03-21
+Updated: 2026-03-21
 Replica of: CLAUDE.md
 Game: ハルクラ (HalCraft)
 ```
@@ -22,6 +23,7 @@ Game: ハルクラ (HalCraft)
 - マインクラフト的な世界観（ブロック、クラフト、モブ、冒険）
 - 独自のアセットデザイン（AIで生成した画像アセットを 3D 化）
 - ブラウザで完結する Web ゲーム
+- 複数の切り替え可能な3Dワールド
 
 ---
 
@@ -32,12 +34,14 @@ Game: ハルクラ (HalCraft)
 | フレームワーク | React 19 + TypeScript | UIとアプリ基盤 |
 | ビルドツール | Vite 8 | 開発サーバー・バンドラー |
 | 3D エンジン | Three.js + React Three Fiber (R3F) | 3Dレンダリングの中核 |
-| 3D ユーティリティ | @react-three/drei | カメラコントロール、テクスチャ、ローダー等 |
-| 物理エンジン | @react-three/rapier (Rapier) | 衝突判定、重力、剛体シミュレーション |
-| ポストプロセス | @react-three/postprocessing | ブルーム、SSAO 等のエフェクト |
-| 状態管理 | Zustand | ゲーム状態（インベントリ、HP 等） |
-| 地形生成 | simplex-noise | プロシージャル地形の生成 |
+| 3D ユーティリティ | @react-three/drei | テクスチャ、ローダー等 |
+| 物理エンジン | カスタム AABB 衝突判定 | ブロックワールド最適化の独自実装 |
+| 状態管理 | Zustand | ゲーム状態（チャンク、インベントリ、HP 等） |
+| 地形生成 | simplex-noise | プロシージャル地形の生成（FBMアルゴリズム） |
 | ID 生成 | uuid | エンティティのユニーク ID |
+
+> **注**: Rapier物理エンジンは初期実装で使用していたが、ブロックワールドとの相性問題により
+> カスタムAABB衝突判定に置き換えた。パフォーマンスと精度の両面で改善。
 
 ---
 
@@ -50,25 +54,38 @@ Hobby _Hal_Game 01/
 ├── halcraft/              ← ゲーム本体（Vite + React プロジェクト）
 │   ├── src/
 │   │   ├── main.tsx           ← エントリーポイント
-│   │   ├── App.tsx            ← ルートコンポーネント（Canvas, Physics）
+│   │   ├── App.tsx            ← ルートコンポーネント（Canvas統合）
 │   │   ├── App.css            ← アプリスタイル
 │   │   ├── index.css          ← グローバルスタイル
-│   │   ├── assets/            ← 静的アセット（画像）
-│   │   └── components/        ← Reactコンポーネント
-│   │       ├── Player.tsx         ← FPS プレイヤー操作
-│   │       ├── World.tsx          ← 地形・ブロック世界
-│   │       ├── Environment.tsx    ← スカイボックス・環境
-│   │       └── Companion.tsx      ← NPC ボクセル化コンパニオン
+│   │   ├── types/
+│   │   │   └── blocks.ts         ← ブロック種別定義（13種）
+│   │   ├── stores/
+│   │   │   ├── useGameStore.ts    ← ゲームフェーズ管理
+│   │   │   ├── usePlayerStore.ts  ← HP・ホットバー管理
+│   │   │   └── useWorldStore.ts   ← チャンク・ブロックデータ管理
+│   │   ├── utils/
+│   │   │   └── terrain.ts        ← 地形生成（FBM + simplex-noise）
+│   │   └── components/
+│   │       ├── Player.tsx         ← FPS プレイヤー（カスタム物理）
+│   │       ├── World.tsx          ← チャンクベース地形描画
+│   │       ├── Environment.tsx    ← スカイ・ライティング・霧
+│   │       ├── BlockInteraction.tsx ← ブロック破壊/設置
+│   │       └── ui/
+│   │           ├── Crosshair.tsx      ← 照準UI
+│   │           ├── Hotbar.tsx         ← ブロック選択バー
+│   │           └── StartScreen.tsx    ← タイトル画面
 │   ├── public/
-│   │   └── textures/          ← ゲーム用テクスチャ
+│   │   └── textures/
+│   │       ├── blocks/            ← ブロックテクスチャ（13種）
+│   │       └── sky.png            ← スカイボックステクスチャ
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── package.json
 │   └── tsconfig*.json
 ├── アセット/                ← 素材ライブラリ
-│   └── YYYY:MM:DD/          ← 日付別アセット
+│   └── 2026:03:21/          ← 日付別アセット（70素材）
 │       ├── *.png                ← 元画像（AI生成）
-│       └── processed/          ← 背景除去済みアセット
+│       └── processed/          ← 背景除去済みアセット（BiRefNet処理）
 ├── PLAN/                  ← 設計プラン（実行完了後は archive/ へ）
 │   └── archive/
 └── DOCUMENT/              ← ドキュメント（完了済みは archive/ へ）
@@ -77,146 +94,132 @@ Hobby _Hal_Game 01/
 
 ---
 
-## 4. 開発原則
+## 4. アセット分類体系（v2）
 
-### 4.1 AIファースト
+全70素材を6カテゴリに分類して管理する。
 
-- **全てAntigravity上で完結**する。コードの生成・デバッグ・テスト・ビルドをAIが自律的に行う。
-- 人間が手動コーディングすることを前提としない。AIが全作業を遂行する。
+| カテゴリ | 数 | 説明 |
+|---------|---|------|
+| 🧱 Block | 13 | マイクラ風の統一サイズ（1×1×1）ブロック。掘る・置く |
+| 🧊 3D Object | ~40 | キャラクター、乗り物、武器、装備、通貨など |
+| 🏠 Building | 5 | ブロック構成の破壊可能な建造物（中に入れる空間あり） |
+| 🌍 World | 6 | プロシージャル生成される切り替え可能な3Dワールド |
+| 🖼️ UI | 7 | HUD・メニューの2Dオーバーレイ |
+| 🎨 Concept Art | 5 | 世界観の参考資料（直接使用しない） |
 
-### 4.2 3D化ルール
-
-- 画像アセットからの 3D 化は、**裏面・側面・奥行きをAIが推論**して形状を生成する。
-- 2D 画像を単にボクセル化する（Companion方式）にとどまらず、厚みと立体感をもたせる。
-- テクスチャは `THREE.NearestFilter` を使い、ピクセルアート調の鮮明さを維持する。
-
-### 4.3 自律バグ修正
-
-- ビルドエラー、ランタイムエラーを検出した場合、AIが自律的に修正する。
-- コンソールエラー、型エラー、ESLint 警告もプロアクティブに修正する。
-
-### 4.4 操作体系
-
-- **キーボード**: WASD 移動、Space ジャンプ、その他ゲーム操作キーは今後拡張
-- **マウス**: 視点操作（PointerLockControls）、左クリック攻撃/設置、右クリック使用
-- FPS 視点を基本とする
+### ルール
+- 複数描かれた素材 → 単体で切り出して個別オブジェクト化
+- 建物系 → 壊せるブロックで構成し、中に入れる空間を作る
+- 背景 → 平面に絵を貼るのではなく、3Dワールドとしてプロシージャル生成
+- コンセプトアート → あくまで世界観の参考。スタイルや色味の指針
 
 ---
 
-## 5. アーキテクチャ規約
+## 5. 開発原則
 
-### 5.1 コンポーネント構成
+### 5.1 AIファースト
+
+- **全てAntigravity上で完結**する。
+- 人間が手動コーディングすることを前提としない。
+
+### 5.2 パフォーマンス設計
+
+- **InstancedMesh** でブロックを効率描画（ブロック種別ごとに1つ）
+- **チャンクシステム**: 16×16×64 のチャンク単位で管理
+- **露出面のみ描画**: 埋もれたブロックはレンダリングしない
+- **バージョン管理の再描画**: 変更されたチャンクのみ再構築
+- **カスタム物理**: Rapierを使わずAABB衝突判定で軽量動作
+
+### 5.3 操作体系
+
+- **WASD**: 移動 / **Shift**: ダッシュ
+- **Space**: ジャンプ
+- **マウス**: 視点操作（PointerLock）
+- **左クリック**: ブロック破壊
+- **右クリック**: ブロック設置
+- **1-9 / マウスホイール**: ホットバー選択
+
+---
+
+## 6. アーキテクチャ規約
+
+### 6.1 コンポーネント構成
 
 ```
 src/components/
-├── Player.tsx         ← プレイヤー制御（移動、カメラ追従、入力処理）
-├── World.tsx          ← ワールド生成（地形、ブロック）
-├── Environment.tsx    ← 環境描画（スカイボックス、光源、天候）
-├── Companion.tsx      ← NPC / モブ（画像→ボクセル変換）
-├── ui/                ← HUD・メニュー等の 2D UI（今後追加）
-├── blocks/            ← ブロック種別ごとのコンポーネント（今後追加）
-├── mobs/              ← モブ種別ごとのコンポーネント（今後追加）
-├── items/             ← アイテム種別ごとのコンポーネント（今後追加）
-└── systems/           ← ゲームシステム（クラフト、インベントリ等、今後追加）
+├── Player.tsx             ← プレイヤー制御（カスタム物理、入力処理）
+├── World.tsx              ← チャンクベース地形描画（InstancedMesh）
+├── Environment.tsx        ← 環境描画（スカイ、光源、霧）
+├── BlockInteraction.tsx   ← ブロック破壊/設置（レイマーチング）
+├── ui/                    ← HUD・メニュー等の 2D UI
+├── mobs/                  ← モブ種別ごとのコンポーネント（今後追加）
+├── vehicles/              ← 乗り物コンポーネント（今後追加）
+├── items/                 ← アイテムコンポーネント（今後追加）
+└── buildings/             ← 建造物コンポーネント（今後追加）
 ```
 
-### 5.2 状態管理（Zustand）
-
-ゲーム全体の状態は Zustand ストアで一元管理する。ストアは機能単位で分割する。
+### 6.2 状態管理（Zustand）
 
 ```typescript
-// 命名規約
 src/stores/
-├── useGameStore.ts        ← ゲーム全体（フェーズ、設定）
-├── usePlayerStore.ts      ← プレイヤー（HP、位置、インベントリ）
-├── useWorldStore.ts       ← ワールド（ブロックデータ、チャンク）
-└── useUIStore.ts          ← UI 状態（メニュー開閉、選択中スロット）
+├── useGameStore.ts        ← ゲームフェーズ管理
+├── usePlayerStore.ts      ← HP、ホットバー選択
+└── useWorldStore.ts       ← チャンクデータ、ブロック読み書き
 ```
 
-### 5.3 テクスチャ・アセット管理
+### 6.3 テクスチャ・アセット管理
 
-- ゲーム内テクスチャ → `public/textures/` に配置
-- アセットは `useTexture`（drei）でロードする
-- ピクセルアート風テクスチャは必ず `NearestFilter` を適用
-- 背景除去済みアセットを `アセット/YYYY:MM:DD/processed/` で管理
-
-### 5.4 物理エンジン
-
-- Rapier をベースとする物理シミュレーション
-- 重力: `[0, -50, 0]`（高重力でフワフワ感を排除）
-- プレイヤー: `CapsuleCollider` + `RigidBody(dynamic)`
-- 地形/建物: `RigidBody(fixed)` + `cuboid` コライダー
-- NPC: `RigidBody(fixed)` + `hull` コライダー
+- ブロックテクスチャ → `public/textures/blocks/` に配置
+- テクスチャは `THREE.TextureLoader` + メモリキャッシュ
+- ピクセルアート風テクスチャは `NearestFilter` を適用
+- 背景除去は **BiRefNet** モデル + **Alpha Matting** で高精度処理
 
 ---
 
-## 6. コーディング規約
+## 7. コーディング規約
 
-### 6.1 TypeScript
+### 7.1 TypeScript
 
-- `strict: true` を維持する
-- `any` 型は使用禁止。必ず適切な型を定義する
-- R3F コンポーネントの props は明示的にインターフェースを定義する
+- `strict: true` を維持
+- `any` 型は使用禁止
+- R3F コンポーネントの props は明示的にインターフェースを定義
 
-### 6.2 コンポーネント
+### 7.2 命名
 
-- 関数コンポーネント + hooks のみ使用（Class 非推奨）
-- 1ファイル 1コンポーネント（default export はルート App のみ、他は named export）
-- パフォーマンスが必要な箇所は `useMemo`, `useCallback`, `React.memo` を適切に使用
-
-### 6.3 命名
-
-- コンポーネント: `PascalCase` （例: `Player.tsx`, `IronGolem.tsx`）
-- ストア: `use[Name]Store.ts` （例: `usePlayerStore.ts`）
-- フック: `use[Name].ts` （例: `useKeyboard.ts`）
-- ユーティリティ: `camelCase.ts` （例: `voxelizer.ts`）
-- 定数: `UPPER_SNAKE_CASE` （例: `JUMP_FORCE`）
-- コメント: **日本語**で記述する
-
-### 6.4 パフォーマンス
-
-- `InstancedMesh` を活用し、大量のブロック/ボクセルを効率的にレンダリング
-- 描画範囲外のチャンクは非表示にする（チャンクローディング）
-- `useFrame` 内で不要なオブジェクト生成を避ける（事前に `useRef` で保持）
-- テクスチャアトラスを活用し、マテリアル数を最小限にする
+- コンポーネント: `PascalCase`（例: `Player.tsx`）
+- ストア: `use[Name]Store.ts`
+- ユーティリティ: `camelCase.ts`
+- 定数: `UPPER_SNAKE_CASE`
+- コメント: **日本語**
 
 ---
 
-## 7. Git 規約
+## 8. Git 規約
 
-### コミットメッセージ
-
-Conventional Commits 形式、日本語で記述する。
+Conventional Commits 形式、日本語。
 
 ```
-feat: プレイヤーのジャンプ処理を実装
-fix: 衝突判定の貫通バグを修正
-refactor: World コンポーネントをチャンクベースに変更
-assets: エンダーマンの3Dモデルを追加
-docs: プロジェクトルール CLAUDE.md を策定
+feat: チャンクベースの地形生成システムを実装
+fix: プレイヤーの衝突判定バグを修正
+assets: ブロックテクスチャ13種を追加
+docs: AGENTS.md をv2アーキテクチャに更新
 ```
-
-### ブランチ戦略
-
-- `main`: 安定版
-- `dev`: 開発ブランチ（日常の作業はここ）
-- `feature/xxx`: 機能追加時
 
 ---
 
-## 8. 開発コマンド
+## 9. 開発コマンド
 
 ```bash
 # 開発サーバー起動
 cd halcraft && npm run dev -- --host
 
+# 型チェック
+cd halcraft && npx tsc --noEmit
+
 # ビルド
 cd halcraft && npm run build
-
-# リント
-cd halcraft && npm run lint
 ```
 
 ---
 
-*最終更新: 2026-03-21*
+*最終更新: 2026-03-21 v2.0*
