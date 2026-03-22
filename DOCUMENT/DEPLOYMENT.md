@@ -120,7 +120,26 @@ halcraft.rosch.jp → <tunnel-id>.cfargotunnel.com (CNAME, Proxied)
 
 ## 5. デプロイ
 
-### クイックスタート
+### 自動デプロイ（推奨）
+
+`main` ブランチに `git push` するだけで自動的にNASにデプロイされる。
+
+```bash
+git push origin main
+# GitHub Webhook → Cloudflare Tunnel → NAS Webhookサーバー → Docker ビルド & 起動
+```
+
+**仕組み**:
+1. GitHub が push イベントを `https://deploy.rosch.jp/webhook` に送信
+2. NAS上の Webhook サーバー（`:9000`）が署名検証 → デプロイスクリプト実行
+3. git clone → `docker compose build --no-cache` → `docker compose up -d --force-recreate`
+
+**設定場所**:
+- Webhook サーバー: `/volume1/docker/deploy-webhook/`
+- デプロイスクリプト: `/volume1/docker/deploy-webhook/scripts/deploy-halcraft.sh`
+- GitHub Webhook: リポジトリ Settings → Webhooks
+
+### クイックスタート（手動）
 
 ```bash
 /deploy   # エージェントにデプロイを指示
@@ -151,7 +170,17 @@ curl -s -o /dev/null -w '%{http_code}' http://192.168.100.100:4000
 
 ---
 
-## 6. ヘルスチェックと動作確認
+## 6. ソースコード管理
+
+| 項目 | 値 |
+|------|-----|
+| GitHub | [komei-alt/halcraft](https://github.com/komei-alt/halcraft) (private) |
+| ブランチ | `main` |
+| 自動デプロイ | `main` に push で自動実行 |
+
+---
+
+## 7. ヘルスチェックと動作確認
 
 ```bash
 # コンテナ状態
@@ -160,16 +189,22 @@ ssh nas "sudo /usr/local/bin/docker ps --format 'table {{.Names}}\t{{.Status}}\t
 # ログ確認
 ssh nas "sudo /usr/local/bin/docker logs halcraft --tail 50"
 
+# Webhookサーバーのログ
+ssh nas "sudo /usr/local/bin/docker logs deploy-webhook --tail 50"
+
 # 社内アクセス
 curl -s http://192.168.100.100:4000
 
 # 外部アクセス（Tunnel 設定後）
 curl -s https://halcraft.rosch.jp
+
+# Webhookサーバーのヘルスチェック
+curl -s https://deploy.rosch.jp/health
 ```
 
 ---
 
-## 7. 緊急時のリカバリ
+## 8. 緊急時のリカバリ
 
 ```bash
 # コンテナ再起動
@@ -184,4 +219,5 @@ ssh nas "sudo /usr/local/bin/docker image prune -f"
 
 ---
 
-*最終更新: 2026-03-22 v1.1*
+*最終更新: 2026-03-22 v1.2*
+
