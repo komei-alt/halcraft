@@ -1,6 +1,7 @@
 // ブロック操作コンポーネント
 // レイマーチングで照準先のブロックを検出し、左クリック=破壊/攻撃、右クリック=設置を行う
 // モブが目の前にいる場合は攻撃が優先される
+// デスクトップ（マウス）とモバイル（タッチ）両対応
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback, useState } from 'react';
@@ -10,6 +11,8 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useInventoryStore } from '../stores/useInventoryStore';
 import { useMobStore } from '../stores/useMobStore';
 import { BLOCK_IDS } from '../types/blocks';
+import { isTouchDevice } from '../utils/device';
+import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -63,6 +66,9 @@ export function BlockInteraction() {
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
+
+  // タッチデバイス判定（初回のみ）
+  const isTouch = useRef(isTouchDevice());
 
   // レイマーチングで照準先のブロックを検出
   useFrame(() => {
@@ -124,6 +130,38 @@ export function BlockInteraction() {
       if (found.x === prev.x && found.y === prev.y && found.z === prev.z) return prev;
       return found;
     });
+
+    // --- モバイル: タッチによるブロック操作の処理 ---
+    if (isTouch.current) {
+      if (usePlayerStore.getState().isDead) return;
+
+      // 破壊
+      if (consumeBreakBlock()) {
+        // まずモブ攻撃をチェック
+        const targetMobId = findTargetMob();
+        if (targetMobId) {
+          const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          damageMob(targetMobId, ATTACK_DAMAGE, attackDir.x, attackDir.z);
+        } else {
+          const t = targetRef.current;
+          if (t) {
+            const blockId = getBlock(t.x, t.y, t.z);
+            if (breakBlock(t.x, t.y, t.z)) {
+              addItem(blockId);
+            }
+          }
+        }
+      }
+
+      // 設置
+      if (consumePlaceBlock()) {
+        const t = targetRef.current;
+        if (t && t.hasPlaceTarget) {
+          const selectedBlock = getSelectedBlock();
+          setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+        }
+      }
+    }
   });
 
   // 照準先のモブを検索
@@ -160,8 +198,10 @@ export function BlockInteraction() {
     return closestMobId;
   }, [camera]);
 
-  // クリック処理
+  // クリック処理（デスクトップのみ）
   const handleMouseDown = useCallback((e: MouseEvent) => {
+    // タッチデバイスではマウスクリックは使わない
+    if (isTouch.current) return;
     // PointerLock中でなければ無視
     if (!document.pointerLockElement) return;
     // 死亡中は操作不可
@@ -194,6 +234,9 @@ export function BlockInteraction() {
   }, [breakBlock, setBlock, getSelectedBlock, getBlock, addItem, damageMob, findTargetMob, camera]);
 
   useEffect(() => {
+    // デスクトップのみ: マウスイベントを登録
+    if (isTouch.current) return;
+
     document.addEventListener('mousedown', handleMouseDown);
     // 右クリックのコンテキストメニューを無効化
     const preventContext = (e: Event) => e.preventDefault();

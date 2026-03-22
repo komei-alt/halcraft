@@ -1,11 +1,13 @@
 // クラフト画面UIコンポーネント
 // 全ブロックを無限に出せるクリエイティブモード風の画面
-// Eキーで開閉、クリックでインベントリに追加
+// Eキー（デスクトップ）またはボタン（モバイル）で開閉
+// クリック/タップでインベントリに追加
 
 import { useEffect, useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { isTouchDevice } from '../../utils/device';
 import {
   BLOCK_DEFS,
   HOTBAR_BLOCKS,
@@ -84,21 +86,40 @@ const ALL_BLOCKS = Object.values(BLOCK_DEFS)
 
 // === コンポーネント ===
 
-export function CraftingScreen() {
+interface CraftingScreenProps {
+  /** 外部から開閉を制御（モバイル用） */
+  externalOpen?: boolean;
+  /** 外部から閉じるコールバック（モバイル用） */
+  onClose?: () => void;
+}
+
+export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const phase = useGameStore((s) => s.phase);
   const items = useInventoryStore((s) => s.items);
   const addItem = useInventoryStore((s) => s.addItem);
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
+  const isTouch = isTouchDevice();
 
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredItemId, setHoveredItemId] = useState<BlockId | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [addedBlockId, setAddedBlockId] = useState<BlockId | null>(null);
 
-  // Eキーでクラフト画面の開閉
+  // 外部からの開閉同期（モバイル用）
+  useEffect(() => {
+    if (externalOpen !== undefined) {
+      setIsOpen(externalOpen);
+      if (externalOpen && !isTouch) {
+        document.exitPointerLock();
+      }
+    }
+  }, [externalOpen, isTouch]);
+
+  // Eキーでクラフト画面の開閉（デスクトップのみ）
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (isTouch) return; // モバイルではEキーは不要
       if (e.code === 'KeyE' && phase === 'playing') {
         e.preventDefault();
         setIsOpen((prev) => {
@@ -119,7 +140,7 @@ export function CraftingScreen() {
         if (canvas) canvas.requestPointerLock();
       }
     },
-    [phase, isOpen],
+    [phase, isOpen, isTouch],
   );
 
   useEffect(() => {
@@ -187,8 +208,11 @@ export function CraftingScreen() {
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           setIsOpen(false);
-          const canvas = document.querySelector('canvas');
-          if (canvas) canvas.requestPointerLock();
+          onClose?.();
+          if (!isTouch) {
+            const canvas = document.querySelector('canvas');
+            if (canvas) canvas.requestPointerLock();
+          }
         }
       }}
     >
@@ -196,8 +220,12 @@ export function CraftingScreen() {
         id="crafting-main-panel"
         style={{
           display: 'flex',
-          gap: 16,
+          flexDirection: isTouch ? 'column' : 'row',
+          gap: isTouch ? 8 : 16,
           animation: 'craftSlideIn 0.2s ease-out',
+          maxHeight: isTouch ? '85vh' : 'auto',
+          overflowY: isTouch ? 'auto' : 'visible',
+          maxWidth: isTouch ? '92vw' : 'auto',
         }}
       >
         {/* ============================ */}
@@ -527,7 +555,7 @@ export function CraftingScreen() {
       <div
         style={{
           position: 'fixed',
-          bottom: 20,
+          bottom: isTouch ? 'calc(20px + env(safe-area-inset-bottom))' : 20,
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
@@ -535,28 +563,49 @@ export function CraftingScreen() {
           alignItems: 'center',
         }}
       >
-        <span
-          style={{
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: 13,
-            textShadow: '1px 1px 2px rgba(0,0,0,0.6)',
-          }}
-        >
-          <kbd
+        {isTouch ? (
+          <div
+            onClick={() => {
+              setIsOpen(false);
+              onClose?.();
+            }}
             style={{
-              padding: '2px 8px',
-              borderRadius: 3,
+              padding: '10px 24px',
+              borderRadius: 6,
               background: 'rgba(255,255,255,0.12)',
               border: '1px solid rgba(255,255,255,0.2)',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              fontWeight: 700,
+              color: 'rgba(255,255,255,0.7)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
             }}
           >
-            E
-          </kbd>{' '}
-          もどる
-        </span>
+            ✕ とじる
+          </div>
+        ) : (
+          <span
+            style={{
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 13,
+              textShadow: '1px 1px 2px rgba(0,0,0,0.6)',
+            }}
+          >
+            <kbd
+              style={{
+                padding: '2px 8px',
+                borderRadius: 3,
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              E
+            </kbd>{' '}
+            もどる
+          </span>
+        )}
       </div>
     </div>
   );

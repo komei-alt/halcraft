@@ -1,6 +1,7 @@
 // プレイヤーコンポーネント
 // カスタム物理エンジン方式：ブロックとの直接AABB衝突判定
 // Rapierに依存しないため軽量で確実
+// デスクトップ（キーボード+マウス）とモバイル（タッチ）両対応
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback } from 'react';
@@ -8,6 +9,13 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
+import { isTouchDevice } from '../utils/device';
+import {
+  joystickInput,
+  touchLook,
+  mobileActions,
+  resetTouchLookDelta,
+} from '../utils/touchInput';
 
 // 定数
 const MOVE_SPEED = 6;
@@ -42,6 +50,9 @@ export function Player() {
 
   // 視点回転
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+
+  // タッチデバイス判定（初回のみ）
+  const isTouch = useRef(isTouchDevice());
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
@@ -87,7 +98,7 @@ export function Player() {
     return false;
   }, [isBlockSolid]);
 
-  // マウスによる視点回転
+  // マウスによる視点回転（デスクトップ用）
   const handleMouseMove = useCallback((e: MouseEvent) => {
     euler.current.y -= e.movementX * MOUSE_SENSITIVITY;
     euler.current.x -= e.movementY * MOUSE_SENSITIVITY;
@@ -95,8 +106,11 @@ export function Player() {
     camera.quaternion.setFromEuler(euler.current);
   }, [camera]);
 
-  // PointerLock
+  // PointerLock（デスクトップのみ）
   useEffect(() => {
+    // タッチデバイスではPointerLockを使わない
+    if (isTouch.current) return;
+
     const canvas = document.querySelector('canvas');
     if (!canvas) return;
 
@@ -122,8 +136,10 @@ export function Player() {
     };
   }, [handleMouseMove]);
 
-  // キーボード入力
+  // キーボード入力（デスクトップのみ）
   useEffect(() => {
+    if (isTouch.current) return;
+
     const onKeyDown = (e: KeyboardEvent) => {
       switch (e.code) {
         case 'KeyW': keys.current.forward = true; break;
@@ -174,11 +190,23 @@ export function Player() {
     const vel = velocity.current;
     const pos = position.current;
 
-    // --- PointerLock中でなければ入力を無視（クラフト画面等） ---
-    const isLocked = !!document.pointerLockElement;
+    // --- タッチ視点操作の適用 ---
+    if (isTouch.current) {
+      euler.current.y -= touchLook.deltaX;
+      euler.current.x -= touchLook.deltaY;
+      euler.current.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, euler.current.x));
+      camera.quaternion.setFromEuler(euler.current);
+      resetTouchLookDelta();
+    }
+
+    // --- 入力のアクティブ判定 ---
+    // デスクトップ: PointerLock中のみ入力受付
+    // モバイル: 常に入力受付（タッチUIが制御）
+    const isInputActive = isTouch.current ? true : !!document.pointerLockElement;
 
     // --- ジャンプ（重力適用前に処理） ---
-    if (isLocked && keys.current.jump && onGround.current) {
+    const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
+    if (isInputActive && jumpRequested && onGround.current) {
       vel.y = JUMP_VELOCITY;
       onGround.current = false;
     }
@@ -190,10 +218,21 @@ export function Player() {
 
     // --- 水平入力 ---
     const speed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;
-    const inputZ = isLocked ? (keys.current.backward ? 1 : 0) - (keys.current.forward ? 1 : 0) : 0;
-    const inputX = isLocked ? (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) : 0;
 
-    if (inputX !== 0 || inputZ !== 0) {
+    let inputX: number;
+    let inputZ: number;
+
+    if (isTouch.current) {
+      // モバイル: ジョイスティック入力
+      inputX = joystickInput.x;
+      inputZ = -joystickInput.y; // ジョイスティックyの正=前方 → inputZの負=前方
+    } else {
+      // デスクトップ: キーボード入力
+      inputZ = isInputActive ? (keys.current.backward ? 1 : 0) - (keys.current.forward ? 1 : 0) : 0;
+      inputX = isInputActive ? (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) : 0;
+    }
+
+    if (Math.abs(inputX) > 0.1 || Math.abs(inputZ) > 0.1) {
       const moveDir = new THREE.Vector3(inputX, 0, inputZ).normalize();
       moveDir.applyEuler(new THREE.Euler(0, euler.current.y, 0, 'YXZ'));
       vel.x = moveDir.x * speed;

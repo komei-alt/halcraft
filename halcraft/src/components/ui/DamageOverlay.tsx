@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { isTouchDevice } from '../../utils/device';
 
 export function DamageOverlay() {
   const isDamageFlash = usePlayerStore((s) => s.isDamageFlash);
@@ -18,11 +19,13 @@ export function DamageOverlay() {
 
   const handleRespawn = () => {
     respawn();
-    // リスポーン時にポインターロックを再取得
-    setTimeout(() => {
-      const canvas = document.querySelector('canvas');
-      if (canvas) canvas.requestPointerLock();
-    }, 100);
+    // リスポーン時にポインターロックを再取得（デスクトップのみ）
+    if (!isTouchDevice()) {
+      setTimeout(() => {
+        const canvas = document.querySelector('canvas');
+        if (canvas) canvas.requestPointerLock();
+      }, 100);
+    }
   };
 
   return (

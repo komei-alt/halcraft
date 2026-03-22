@@ -26,6 +26,9 @@ interface PlayerState {
   /** 無敵終了時刻（Date.now()より小さいと無敵切れ） */
   invincibleUntil: number;
 
+  /** モバイル用: ブロック設置モードか（false=破壊モード） */
+  isPlaceMode: boolean;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -43,6 +46,9 @@ interface PlayerState {
 
   /** リスポーン */
   respawn: () => void;
+
+  /** 設置/破壊モードを切り替え */
+  togglePlaceMode: () => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -52,6 +58,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isDamageFlash: false,
   isDead: false,
   invincibleUntil: 0,
+  isPlaceMode: false,
 
   getSelectedBlock: () => {
     return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
@@ -99,4 +106,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       invincibleUntil: Date.now() + 5000, // 5秒間無敵
     });
   },
+
+  togglePlaceMode: () => {
+    set((state) => ({ isPlaceMode: !state.isPlaceMode }));
+  },
 }));
+

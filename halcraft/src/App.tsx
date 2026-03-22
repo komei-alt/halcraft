@@ -1,8 +1,9 @@
 // ハルクラ — メインアプリケーション
 // Canvas + カスタム物理（Rapier不使用で軽量動作）
+// デスクトップ＆モバイル両対応
 
 import { Canvas } from '@react-three/fiber';
-import { Suspense } from 'react';
+import { Suspense, useState, useCallback } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
@@ -18,15 +19,26 @@ import { DamageOverlay } from './components/ui/DamageOverlay';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
+import { MobileControls } from './components/ui/mobile/MobileControls';
 import { useGameStore } from './stores/useGameStore';
+import { isTouchDevice } from './utils/device';
 import './App.css';
 
 function GameCanvas() {
+  const isTouch = isTouchDevice();
+
   return (
     <Canvas
       shadows
-      camera={{ fov: 70, near: 0.1, far: 200 }}
-      gl={{ antialias: false, powerPreference: 'high-performance' }}
+      camera={{
+        fov: isTouch ? 65 : 70,
+        near: 0.1,
+        far: isTouch ? 120 : 200,
+      }}
+      gl={{
+        antialias: false,
+        powerPreference: isTouch ? 'default' : 'high-performance',
+      }}
       style={{ position: 'fixed', inset: 0 }}
     >
       <Suspense fallback={null}>
@@ -45,6 +57,18 @@ function GameCanvas() {
 
 export default function App() {
   const phase = useGameStore((s) => s.phase);
+  const isTouch = isTouchDevice();
+
+  // クラフト画面の開閉状態（モバイル用：外部から制御）
+  const [craftingOpen, setCraftingOpen] = useState(false);
+
+  const handleOpenCrafting = useCallback(() => {
+    setCraftingOpen(true);
+  }, []);
+
+  const handleCloseCrafting = useCallback(() => {
+    setCraftingOpen(false);
+  }, []);
 
   return (
     <>
@@ -57,7 +81,14 @@ export default function App() {
           <HealthBar />
           <TimeDisplay />
           <DamageOverlay />
-          <CraftingScreen />
+          <CraftingScreen
+            externalOpen={isTouch ? craftingOpen : undefined}
+            onClose={handleCloseCrafting}
+          />
+          {/* モバイルコントロール（タッチデバイスのみ） */}
+          {isTouch && (
+            <MobileControls onOpenCrafting={handleOpenCrafting} />
+          )}
         </>
       )}
     </>
