@@ -30,3 +30,56 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* クラフト画面アニメーション */
+@keyframes craftFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes craftSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes craftPop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes craftShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* クラフト画面のスクロールバーのスタイル */
+#inventory-panel::-webkit-scrollbar,
+#recipes-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+#inventory-panel::-webkit-scrollbar-track,
+#recipes-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#inventory-panel::-webkit-scrollbar-thumb,
+#recipes-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+#inventory-panel::-webkit-scrollbar-thumb:hover,
+#recipes-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

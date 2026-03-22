@@ -12,17 +12,17 @@ import { HOTBAR_BLOCKS, BLOCK_IDS } from '../types/blocks';
 // 定数
 const MOVE_SPEED = 6;
 const SPRINT_SPEED = 10;
-const JUMP_VELOCITY = 9;
-const GRAVITY = -28;
+const JUMP_VELOCITY = 8;
+const GRAVITY = -25;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
-const PLAYER_RADIUS = 0.3;
+const PLAYER_RADIUS = 0.25;
 
 export function Player() {
   const { camera } = useThree();
 
   // プレイヤーの物理状態
-  const position = useRef(new THREE.Vector3(8, 32, 8));
+  const position = useRef(new THREE.Vector3(8, 40, 8));
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const onGround = useRef(false);
 
@@ -42,59 +42,38 @@ export function Player() {
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
 
-  // ブロックとの衝突チェック
-  const isBlockSolid = useCallback((x: number, y: number, z: number) => {
-    const bx = Math.floor(x);
-    const by = Math.floor(y);
-    const bz = Math.floor(z);
-    return getBlock(bx, by, bz) !== BLOCK_IDS.AIR;
+  // ブロックが固体（通行不可）かチェック
+  const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
+    const blockId = getBlock(bx, by, bz);
+    return blockId !== BLOCK_IDS.AIR;
   }, [getBlock]);
 
-  // AABB衝突判定（軸ごとに分離して解決）
-  const collideAxis = useCallback((
-    pos: THREE.Vector3,
-    vel: THREE.Vector3,
-    axis: 'x' | 'y' | 'z',
-    dt: number,
-  ) => {
-    const newPos = pos.clone();
-    newPos[axis] += vel[axis] * dt;
-
-    // プレイヤーの占有範囲をチェック
-    const minX = newPos.x - PLAYER_RADIUS;
-    const maxX = newPos.x + PLAYER_RADIUS;
-    const minY = newPos.y;
-    const maxY = newPos.y + PLAYER_HEIGHT;
-    const minZ = newPos.z - PLAYER_RADIUS;
-    const maxZ = newPos.z + PLAYER_RADIUS;
+  // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定
+  const checkCollision = useCallback((px: number, py: number, pz: number): boolean => {
+    const minX = px - PLAYER_RADIUS;
+    const maxX = px + PLAYER_RADIUS;
+    const minY = py;
+    const maxY = py + PLAYER_HEIGHT;
+    const minZ = pz - PLAYER_RADIUS;
+    const maxZ = pz + PLAYER_RADIUS;
 
     for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
       for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
         for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
           if (!isBlockSolid(bx, by, bz)) continue;
 
-          // ブロックの境界
-          const blockMin = new THREE.Vector3(bx, by, bz);
-          const blockMax = new THREE.Vector3(bx + 1, by + 1, bz + 1);
-
-          // AABB重なりチェック
+          // ブロックAABBとの重なり判定
           if (
-            maxX > blockMin.x && minX < blockMax.x &&
-            maxY > blockMin.y && minY < blockMax.y &&
-            maxZ > blockMin.z && minZ < blockMax.z
+            maxX > bx && minX < bx + 1 &&
+            maxY > by && minY < by + 1 &&
+            maxZ > bz && minZ < bz + 1
           ) {
-            // 衝突解決
-            vel[axis] = 0;
-            if (axis === 'y' && vel.y <= 0) {
-              onGround.current = true;
-            }
-            return pos; // 元の位置を返す
+            return true;
           }
         }
       }
     }
-
-    return newPos;
+    return false;
   }, [isBlockSolid]);
 
   // マウスによる視点回転
@@ -140,7 +119,7 @@ export function Player() {
         case 'KeyS': keys.current.backward = true; break;
         case 'KeyA': keys.current.left = true; break;
         case 'KeyD': keys.current.right = true; break;
-        case 'Space': keys.current.jump = true; break;
+        case 'Space': keys.current.jump = true; e.preventDefault(); break;
         case 'ShiftLeft': keys.current.sprint = true; break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
@@ -181,14 +160,24 @@ export function Player() {
     const vel = velocity.current;
     const pos = position.current;
 
-    // 重力
-    vel.y += GRAVITY * dt;
-    onGround.current = false;
+    // --- PointerLock中でなければ入力を無視（クラフト画面等） ---
+    const isLocked = !!document.pointerLockElement;
 
-    // 入力から移動方向を算出
+    // --- ジャンプ（重力適用前に処理） ---
+    if (isLocked && keys.current.jump && onGround.current) {
+      vel.y = JUMP_VELOCITY;
+      onGround.current = false;
+    }
+
+    // --- 重力 ---
+    vel.y += GRAVITY * dt;
+    // 終端速度を制限
+    if (vel.y < -40) vel.y = -40;
+
+    // --- 水平入力 ---
     const speed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;
-    const inputZ = (keys.current.backward ? 1 : 0) - (keys.current.forward ? 1 : 0);
-    const inputX = (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0);
+    const inputZ = isLocked ? (keys.current.backward ? 1 : 0) - (keys.current.forward ? 1 : 0) : 0;
+    const inputX = isLocked ? (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) : 0;
 
     if (inputX !== 0 || inputZ !== 0) {
       const moveDir = new THREE.Vector3(inputX, 0, inputZ).normalize();
@@ -196,43 +185,69 @@ export function Player() {
       vel.x = moveDir.x * speed;
       vel.z = moveDir.z * speed;
     } else {
-      vel.x *= 0.8;
-      vel.z *= 0.8;
+      // 入力なし → 減速
+      vel.x *= 0.85;
+      vel.z *= 0.85;
       if (Math.abs(vel.x) < 0.01) vel.x = 0;
       if (Math.abs(vel.z) < 0.01) vel.z = 0;
     }
 
-    // 軸ごとの衝突判定と位置更新
-    const newPosY = collideAxis(pos, vel, 'y', dt);
-    position.current.copy(newPosY);
-
-    const newPosX = collideAxis(position.current, vel, 'x', dt);
-    position.current.copy(newPosX);
-
-    const newPosZ = collideAxis(position.current, vel, 'z', dt);
-    position.current.copy(newPosZ);
-
-    // 移動が衝突で止められなかった場合のみ位置を更新
-    if (vel.x !== 0) position.current.x += vel.x * dt;
-    if (vel.z !== 0) position.current.z += vel.z * dt;
-    if (vel.y !== 0) position.current.y += vel.y * dt;
-
-    // ジャンプ
-    if (keys.current.jump && onGround.current) {
-      vel.y = JUMP_VELOCITY;
-      onGround.current = false;
+    // --- 軸分離衝突判定 ---
+    // Y軸（上下）
+    const newY = pos.y + vel.y * dt;
+    if (checkCollision(pos.x, newY, pos.z)) {
+      // 落下中に衝突 → 接地
+      if (vel.y < 0) {
+        onGround.current = true;
+        // 足元のブロック上面にスナップ
+        const footBlockY = Math.floor(pos.y + vel.y * dt);
+        pos.y = footBlockY + 1;
+      }
+      vel.y = 0;
+    } else {
+      pos.y = newY;
+      // 空中にいる場合は接地フラグを降ろす
+      if (vel.y !== 0) {
+        onGround.current = false;
+      }
     }
 
-    // カメラ追従（目の高さ）
+    // X軸（左右）
+    const newX = pos.x + vel.x * dt;
+    if (checkCollision(newX, pos.y, pos.z)) {
+      vel.x = 0;
+    } else {
+      pos.x = newX;
+    }
+
+    // Z軸（前後）
+    const newZ = pos.z + vel.z * dt;
+    if (checkCollision(pos.x, pos.y, newZ)) {
+      vel.z = 0;
+    } else {
+      pos.z = newZ;
+    }
+
+    // --- 接地チェック（静止時にも接地判定を維持） ---
+    if (vel.y === 0) {
+      // 足元にブロックがあるか確認（少し下をチェック）
+      if (checkCollision(pos.x, pos.y - 0.05, pos.z)) {
+        onGround.current = true;
+      } else {
+        onGround.current = false;
+      }
+    }
+
+    // --- カメラ追従（目の高さ） ---
     camera.position.set(
-      position.current.x,
-      position.current.y + PLAYER_HEIGHT - 0.1,
-      position.current.z,
+      pos.x,
+      pos.y + PLAYER_HEIGHT - 0.1,
+      pos.z,
     );
 
-    // 落下リスポーン
-    if (position.current.y < -20) {
-      position.current.set(8, 32, 8);
+    // --- 落下リスポーン ---
+    if (pos.y < -20) {
+      pos.set(8, 40, 8);
       vel.set(0, 0, 0);
     }
   });

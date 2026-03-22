@@ -1,17 +1,20 @@
 // ブロック操作コンポーネント
-// レイキャストでプレイヤーの照準先を検出し、左クリック=破壊、右クリック=設置を行う
+// レイマーチングで照準先のブロックを検出し、左クリック=破壊、右クリック=設置を行う
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
+import { useInventoryStore } from '../stores/useInventoryStore';
 import { BLOCK_IDS } from '../types/blocks';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
-/** レイキャスティングの精度 */
-const RAY_STEPS = 100;
+/** レイマーチングのステップ数（多いほど精度が高い） */
+const RAY_STEPS = 120;
+/** レイマーチングのステップ間隔 */
+const STEP_SIZE = REACH / RAY_STEPS;
 
 interface TargetBlock {
   /** 照準先のブロック座標 */
@@ -22,6 +25,8 @@ interface TargetBlock {
   placeX: number;
   placeY: number;
   placeZ: number;
+  /** 設置先が有効かどうか */
+  hasPlaceTarget: boolean;
 }
 
 /** ブロック選択ハイライトの表示 */
@@ -47,6 +52,7 @@ export function BlockInteraction() {
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const setBlock = useWorldStore((s) => s.setBlock);
   const getSelectedBlock = usePlayerStore((s) => s.getSelectedBlock);
+  const addItem = useInventoryStore((s) => s.addItem);
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
@@ -56,32 +62,51 @@ export function BlockInteraction() {
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const origin = camera.position.clone();
 
-    let prevX = -999, prevY = -999, prevZ = -999;
     let found: TargetBlock | null = null;
 
-    for (let i = 0; i < RAY_STEPS; i++) {
-      const t = (i / RAY_STEPS) * REACH;
-      const point = origin.clone().add(dir.clone().multiplyScalar(t));
+    // 前回の空気ブロック座標を追跡
+    let lastAirX = -1;
+    let lastAirY = -1;
+    let lastAirZ = -1;
+    let hasLastAir = false;
+    let lastBx = -999;
+    let lastBy = -999;
+    let lastBz = -999;
 
-      const bx = Math.floor(point.x);
-      const by = Math.floor(point.y);
-      const bz = Math.floor(point.z);
+    for (let i = 1; i <= RAY_STEPS; i++) {
+      const t = i * STEP_SIZE;
+      const px = origin.x + dir.x * t;
+      const py = origin.y + dir.y * t;
+      const pz = origin.z + dir.z * t;
 
-      // 同じブロックなら重複チェックしない
-      if (bx === prevX && by === prevY && bz === prevZ) continue;
+      const bx = Math.floor(px);
+      const by = Math.floor(py);
+      const bz = Math.floor(pz);
+
+      // 同じブロック座標ならスキップ
+      if (bx === lastBx && by === lastBy && bz === lastBz) continue;
+      lastBx = bx;
+      lastBy = by;
+      lastBz = bz;
 
       const block = getBlock(bx, by, bz);
       if (block !== BLOCK_IDS.AIR) {
+        // 固体ブロックにヒット！
         found = {
           x: bx, y: by, z: bz,
-          placeX: prevX, placeY: prevY, placeZ: prevZ,
+          placeX: lastAirX,
+          placeY: lastAirY,
+          placeZ: lastAirZ,
+          hasPlaceTarget: hasLastAir,
         };
         break;
+      } else {
+        // 空気ブロック → 設置先候補として記録
+        lastAirX = bx;
+        lastAirY = by;
+        lastAirZ = bz;
+        hasLastAir = true;
       }
-
-      prevX = bx;
-      prevY = by;
-      prevZ = bz;
     }
 
     targetRef.current = found;
@@ -103,15 +128,18 @@ export function BlockInteraction() {
     if (!t) return;
 
     if (e.button === 0) {
-      // 左クリック: ブロック破壊
-      breakBlock(t.x, t.y, t.z);
+      // 左クリック: ブロック破壊 → インベントリに追加
+      const blockId = getBlock(t.x, t.y, t.z);
+      if (breakBlock(t.x, t.y, t.z)) {
+        addItem(blockId);
+      }
     } else if (e.button === 2) {
       // 右クリック: ブロック設置
-      if (t.placeX === -999) return;
+      if (!t.hasPlaceTarget) return;
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
     }
-  }, [breakBlock, setBlock, getSelectedBlock]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, addItem]);
 
   useEffect(() => {
     document.addEventListener('mousedown', handleMouseDown);

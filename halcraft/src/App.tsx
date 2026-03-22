@@ -10,6 +10,7 @@ import { BlockInteraction } from './components/BlockInteraction';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { StartScreen } from './components/ui/StartScreen';
+import { CraftingScreen } from './components/ui/CraftingScreen';
 import { useGameStore } from './stores/useGameStore';
 import './App.css';
 
@@ -42,6 +43,7 @@ export default function App() {
           <GameCanvas />
           <Crosshair />
           <Hotbar />
+          <CraftingScreen />
         </>
       )}
     </>
