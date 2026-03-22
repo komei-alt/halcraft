@@ -25,12 +25,24 @@ export const BLOCK_IDS = {
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
 
+/** 面別テクスチャ指定（マイクラ風のブロック用） */
+export interface FaceTextures {
+  /** 上面テクスチャ */
+  top: string;
+  /** 側面テクスチャ（前後左右共通） */
+  side: string;
+  /** 底面テクスチャ */
+  bottom: string;
+}
+
 /** ブロック情報 */
 export interface BlockInfo {
   id: BlockId;
   name: string;
   /** テクスチャファイル名（public/textures/blocks/ 配下） */
   texture: string;
+  /** 面別テクスチャ（指定時は texture より優先） */
+  faceTextures?: FaceTextures;
   /** 半透明か（ガラス等） */
   transparent: boolean;
   /** 破壊不可か（岩盤） */
@@ -59,6 +71,11 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.GRASS,
     name: '草付き土ブロック',
     texture: 'grass.png',
+    faceTextures: {
+      top: 'grass_top.png',
+      side: 'grass_side.png',
+      bottom: 'dirt.png',
+    },
     transparent: false,
     unbreakable: false,
     emissive: false,
