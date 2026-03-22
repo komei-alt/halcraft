@@ -23,9 +23,9 @@ Mac Studio (or MacBook Air)
 [外部アクセス]
 ユーザー → halcraft.rosch.jp → Cloudflare Tunnel → NAS:4000 (Nginx)
 
-[社内アクセス（スプリットDNS）]
+[社内アクセス（RTX1210 静的DNS）]
 ブラウザ → halcraft.rosch.jp
-  → Tailscale Split DNS → NAS dnsmasq (192.168.100.100:53)
+  → RTX1210 DNS → 192.168.100.100（NAS直接）
   → NAS Nginx リバースプロキシ (:443) → halcraft コンテナ (:4000)
 ```
 
@@ -49,45 +49,42 @@ Mac Studio (or MacBook Air)
 | コンテナ名 | イメージ | ポート | 用途 |
 |-----------|---------|--------|------|
 | `halcraft` | `halcraft:latest` | 4000:80 | Nginx SPA 配信 |
-| `dnsmasq` | `drpsychick/dnsmasq` | 53:53 | ローカルDNS解決 |
 
 > DB は不要。ゲーム状態はクライアントサイドの Zustand で管理。
 
 ---
 
-## 3.5 スプリットDNS（ローカル直接アクセス）
+## 3.5 ローカル直接アクセス（スプリットDNS）
 
 社内ネットワークでは Cloudflare Tunnel を経由せず NAS に直接アクセスする。
+全デバイス（子供の端末含む）で追加設定なしに自動的にローカルアクセスになる。
 
 ### 構成
 
-1. **NAS dnsmasq コンテナ** (`/volume1/docker/dnsmasq/dnsmasq.conf`)
+1. **RTX1210 ルーター 静的DNS** (`dns static` コマンド)
    - `halcraft.rosch.jp` → `192.168.100.100`
-   - `os.rosch.co.jp` → `192.168.100.100`
-   - `core.rosch.co.jp` → `192.168.100.100`
-   - 上流DNS: RTX1210 ルーター (`192.168.100.1`)
+   - `os.rosch.co.jp` → `192.168.100.100` ※ROSCH OS用
+   - `core.rosch.co.jp` → `192.168.100.100` ※DSM用
 
-2. **Tailscale Split DNS**
-   - `rosch.jp` → `192.168.100.100` (NAS dnsmasq)
-   - `rosch.co.jp` → `192.168.100.100` (NAS dnsmasq)
-
-3. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/halcraft.conf`)
+2. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/halcraft.conf`)
    - `halcraft.rosch.jp:443` → `localhost:4000`
 
-### 管理コマンド
+### RTX1210 への静的DNS追加方法
+
+```
+管理 → 保守 → コマンドの実行
+コマンド: dns static a <ホスト名> 192.168.100.100
+例: dns static a halcraft.rosch.jp 192.168.100.100
+```
+
+### 確認コマンド
 
 ```bash
-# dnsmasq ステータス確認
-ssh nas "sudo /usr/local/bin/docker ps | grep dnsmasq"
+# DNS解決テスト（RTX1210経由）
+nslookup halcraft.rosch.jp 192.168.100.1
 
-# dnsmasq ログ確認
-ssh nas "sudo /usr/local/bin/docker logs dnsmasq --tail 20"
-
-# dnsmasq 設定変更後の再起動
-ssh nas "sudo /usr/local/bin/docker restart dnsmasq"
-
-# DNS解決テスト
-nslookup halcraft.rosch.jp
+# ローカルアクセス速度テスト
+curl -sS -k -o /dev/null -w "HTTP:%{http_code} IP:%{remote_ip} Time:%{time_total}s\n" https://halcraft.rosch.jp
 ```
 
 ---
