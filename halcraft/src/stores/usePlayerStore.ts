@@ -1,8 +1,13 @@
 // プレイヤー状態の管理ストア
-// HP、選択中のブロック（ホットバー）を管理
+// HP、選択中のブロック（ホットバー）、ダメージ状態を管理
 
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
+
+/** 落下ダメージの閾値（これ以上落ちるとダメージ） */
+const FALL_DAMAGE_THRESHOLD = 3;
+/** 落下1ブロックあたりのダメージ量 */
+const FALL_DAMAGE_PER_BLOCK = 1;
 
 interface PlayerState {
   /** 体力 */
@@ -11,6 +16,12 @@ interface PlayerState {
 
   /** ホットバーの選択インデックス (0-8) */
   selectedSlot: number;
+
+  /** ダメージフラッシュ中か */
+  isDamageFlash: boolean;
+
+  /** 死亡状態か */
+  isDead: boolean;
 
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
@@ -21,14 +32,22 @@ interface PlayerState {
   /** ダメージを受ける */
   takeDamage: (amount: number) => void;
 
+  /** 落下ダメージを計算して適用 */
+  applyFallDamage: (fallDistance: number) => void;
+
   /** 回復 */
   heal: (amount: number) => void;
+
+  /** リスポーン */
+  respawn: () => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   hp: 20,
   maxHp: 20,
   selectedSlot: 0,
+  isDamageFlash: false,
+  isDead: false,
 
   getSelectedBlock: () => {
     return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
@@ -41,14 +60,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   takeDamage: (amount) => {
-    set((state) => ({
-      hp: Math.max(0, state.hp - amount),
-    }));
+    const newHp = Math.max(0, get().hp - amount);
+    set({
+      hp: newHp,
+      isDamageFlash: true,
+      isDead: newHp <= 0,
+    });
+    // フラッシュを一定時間後にリセット
+    setTimeout(() => set({ isDamageFlash: false }), 300);
+  },
+
+  applyFallDamage: (fallDistance) => {
+    if (fallDistance > FALL_DAMAGE_THRESHOLD) {
+      const damage = Math.floor((fallDistance - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_PER_BLOCK);
+      if (damage > 0) {
+        get().takeDamage(damage);
+      }
+    }
   },
 
   heal: (amount) => {
     set((state) => ({
       hp: Math.min(state.maxHp, state.hp + amount),
     }));
+  },
+
+  respawn: () => {
+    set({
+      hp: 20,
+      isDead: false,
+      isDamageFlash: false,
+    });
   },
 }));

@@ -1,11 +1,33 @@
 // クラフト画面UIコンポーネント
-// Eキーで開閉するマイクラ風のクラフトインターフェース
+// お子さんのデザイン画を踏襲した石グレーのグリッドベースUI
+// 左: インベントリグリッド + 上部ホットバー
+// 右: クラフトレシピグリッド
+// Eキーで開閉、アイテム選択でホットバーに反映
 
 import { useEffect, useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
+import { usePlayerStore } from '../../stores/usePlayerStore';
 import { CRAFTING_RECIPES } from '../../types/crafting';
-import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
+import {
+  BLOCK_DEFS,
+  HOTBAR_BLOCKS,
+  type BlockId,
+} from '../../types/blocks';
+
+// === 定数 ===
+/** インベントリグリッドの列数 */
+const INVENTORY_COLS = 9;
+/** インベントリグリッドの行数 */
+const INVENTORY_ROWS = 4;
+/** クラフトレシピグリッドの列数 */
+const RECIPE_COLS = 4;
+/** グリッドセルのサイズ (px) */
+const CELL_SIZE = 52;
+/** グリッドセル間のギャップ (px) */
+const CELL_GAP = 3;
+
+// === ヘルパー ===
 
 /** テクスチャURLを取得 */
 const getTextureUrl = (blockId: BlockId): string => {
@@ -19,15 +41,62 @@ const getBlockName = (blockId: BlockId): string => {
   return def?.name ?? '不明';
 };
 
+// === スタイル定数 ===
+const STONE_BG = '#8B8B8B';
+const STONE_DARK = '#6B6B6B';
+const STONE_BORDER = '#A0A0A0';
+const STONE_SHADOW = '#5A5A5A';
+const CELL_BG = '#7A7A7A';
+const CELL_BORDER_LIGHT = '#9E9E9E';
+const CELL_BORDER_DARK = '#5E5E5E';
+const CELL_HOVER = '#8E8E8E';
+const CELL_SELECTED = '#B0B0FF';
+
+/** 石テクスチャ風のベースパネルスタイル */
+const stonePanelStyle: React.CSSProperties = {
+  background: `linear-gradient(145deg, ${STONE_BG}, ${STONE_DARK})`,
+  border: `3px solid ${STONE_BORDER}`,
+  borderRadius: 4,
+  boxShadow: `
+    inset 1px 1px 0 ${STONE_BORDER},
+    inset -1px -1px 0 ${STONE_SHADOW},
+    4px 4px 12px rgba(0, 0, 0, 0.5)
+  `,
+  padding: 12,
+};
+
+/** グリッドセルのスタイル */
+const cellStyle = (isSelected: boolean, isHoverable: boolean): React.CSSProperties => ({
+  width: CELL_SIZE,
+  height: CELL_SIZE,
+  background: isSelected ? CELL_SELECTED : CELL_BG,
+  border: `2px solid ${CELL_BORDER_LIGHT}`,
+  borderBottomColor: CELL_BORDER_DARK,
+  borderRightColor: CELL_BORDER_DARK,
+  borderRadius: 2,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'relative' as const,
+  cursor: isHoverable ? 'pointer' : 'default',
+  transition: 'background 0.1s',
+  imageRendering: 'pixelated' as const,
+});
+
+// === コンポーネント ===
+
 export function CraftingScreen() {
   const phase = useGameStore((s) => s.phase);
   const items = useInventoryStore((s) => s.items);
   const canCraft = useInventoryStore((s) => s.canCraft);
   const craft = useInventoryStore((s) => s.craft);
+  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
+  const selectSlot = usePlayerStore((s) => s.selectSlot);
 
   const [isOpen, setIsOpen] = useState(false);
   const [craftedRecipeId, setCraftedRecipeId] = useState<string | null>(null);
-  const [shakingRecipeId, setShakingRecipeId] = useState<string | null>(null);
+  const [hoveredItemId, setHoveredItemId] = useState<BlockId | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
   // Eキーでクラフト画面の開閉
   const handleKeyDown = useCallback(
@@ -37,10 +106,8 @@ export function CraftingScreen() {
         setIsOpen((prev) => {
           const next = !prev;
           if (next) {
-            // クラフト画面を開く → PointerLock解除
             document.exitPointerLock();
           } else {
-            // クラフト画面を閉じる → PointerLock再取得
             const canvas = document.querySelector('canvas');
             if (canvas) canvas.requestPointerLock();
           }
@@ -70,19 +137,40 @@ export function CraftingScreen() {
       if (canCraft(recipe)) {
         craft(recipe);
         setCraftedRecipeId(recipeId);
-        setTimeout(() => setCraftedRecipeId(null), 600);
-      } else {
-        // 素材不足シェイク
-        setShakingRecipeId(recipeId);
-        setTimeout(() => setShakingRecipeId(null), 400);
+        setTimeout(() => setCraftedRecipeId(null), 500);
       }
     },
     [canCraft, craft],
   );
 
+  // ホットバースロットにアイテムをセット
+  const handleSelectItem = useCallback(
+    (blockId: BlockId) => {
+      // ホットバーのブロック一覧の中からこのブロックのインデックスを探す
+      const hotbarIndex = HOTBAR_BLOCKS.indexOf(blockId);
+      if (hotbarIndex >= 0) {
+        selectSlot(hotbarIndex);
+      }
+    },
+    [selectSlot],
+  );
+
+  // ツールチップ表示制御
+  const handleItemMouseMove = useCallback(
+    (e: React.MouseEvent, blockId: BlockId) => {
+      setHoveredItemId(blockId);
+      setTooltipPos({ x: e.clientX + 14, y: e.clientY - 10 });
+    },
+    [],
+  );
+
+  const handleItemMouseLeave = useCallback(() => {
+    setHoveredItemId(null);
+  }, []);
+
   if (!isOpen || phase !== 'playing') return null;
 
-  // インベントリに持っているアイテム一覧
+  // インベントリに所持しているアイテム一覧
   const inventoryEntries = Object.entries(items)
     .map(([idStr, count]) => ({
       blockId: parseInt(idStr) as BlockId,
@@ -100,12 +188,10 @@ export function CraftingScreen() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.7)',
-        backdropFilter: 'blur(8px)',
-        animation: 'craftFadeIn 0.2s ease-out',
+        background: 'rgba(0, 0, 0, 0.55)',
+        animation: 'craftFadeIn 0.15s ease-out',
       }}
       onClick={(e) => {
-        // オーバーレイの空白をクリックで閉じる
         if (e.target === e.currentTarget) {
           setIsOpen(false);
           const canvas = document.querySelector('canvas');
@@ -114,232 +200,283 @@ export function CraftingScreen() {
       }}
     >
       <div
-        id="crafting-panel"
+        id="crafting-main-panel"
         style={{
           display: 'flex',
-          gap: 24,
-          maxWidth: 900,
-          width: '90%',
-          maxHeight: '80vh',
-          animation: 'craftSlideIn 0.25s ease-out',
+          gap: 16,
+          animation: 'craftSlideIn 0.2s ease-out',
         }}
       >
-        {/* 左: インベントリ */}
-        <div
-          id="inventory-panel"
-          style={{
-            flex: '0 0 260px',
-            background: 'linear-gradient(145deg, rgba(30, 30, 40, 0.95), rgba(20, 20, 28, 0.95))',
-            borderRadius: 12,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            padding: 20,
-            overflowY: 'auto',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          <h2
+        {/* ============================ */}
+        {/* 左パネル: インベントリ       */}
+        {/* ============================ */}
+        <div style={stonePanelStyle}>
+          {/* パネルタイトル */}
+          <div
             style={{
-              color: '#e8e8f0',
-              fontSize: 16,
+              color: '#E8E8E8',
+              fontSize: 14,
               fontWeight: 700,
-              marginBottom: 16,
-              paddingBottom: 10,
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
+              marginBottom: 10,
+              textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
             }}
           >
-            <span style={{ fontSize: 20 }}>🎒</span>
             インベントリ
-          </h2>
+          </div>
 
-          {inventoryEntries.length === 0 ? (
-            <div
-              style={{
-                color: 'rgba(255,255,255,0.35)',
-                fontSize: 13,
-                textAlign: 'center',
-                padding: '32px 0',
-                lineHeight: 1.6,
-              }}
-            >
-              素材がありません
-              <br />
-              <span style={{ fontSize: 11, opacity: 0.7 }}>ブロックを破壊して集めよう</span>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 6,
-              }}
-            >
-              {inventoryEntries.map(({ blockId, count }) => (
+          {/* 上部: ホットバー（現在の選択を表示） */}
+          <div
+            style={{
+              display: 'flex',
+              gap: CELL_GAP,
+              marginBottom: 10,
+              padding: 6,
+              background: 'rgba(0,0,0,0.2)',
+              borderRadius: 3,
+              border: `1px solid ${STONE_SHADOW}`,
+            }}
+          >
+            {HOTBAR_BLOCKS.map((blockId, idx) => {
+              const isSelected = idx === selectedSlot;
+              const texUrl = getTextureUrl(blockId);
+              const count = items[blockId] ?? 0;
+
+              return (
                 <div
-                  key={blockId}
-                  title={getBlockName(blockId)}
+                  key={`hotbar-${idx}`}
+                  onClick={() => selectSlot(idx)}
+                  onMouseMove={(e) => handleItemMouseMove(e, blockId)}
+                  onMouseLeave={handleItemMouseLeave}
                   style={{
-                    width: '100%',
-                    aspectRatio: '1',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    borderRadius: 6,
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    transition: 'background 0.15s',
+                    ...cellStyle(isSelected, true),
+                    width: CELL_SIZE - 4,
+                    height: CELL_SIZE - 4,
+                    border: isSelected
+                      ? '2px solid #FFFFFF'
+                      : `2px solid ${CELL_BORDER_LIGHT}`,
+                    borderBottomColor: isSelected ? '#CCCCCC' : CELL_BORDER_DARK,
+                    borderRightColor: isSelected ? '#CCCCCC' : CELL_BORDER_DARK,
+                    background: isSelected ? 'rgba(180,180,255,0.35)' : CELL_BG,
                   }}
                 >
-                  <img
-                    src={getTextureUrl(blockId)}
-                    alt={getBlockName(blockId)}
-                    style={{
-                      width: '65%',
-                      height: '65%',
-                      imageRendering: 'pixelated',
-                      objectFit: 'contain',
-                    }}
-                  />
+                  {texUrl && (
+                    <img
+                      src={texUrl}
+                      alt={getBlockName(blockId)}
+                      draggable={false}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        imageRendering: 'pixelated',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  )}
+                  {count > 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 1,
+                        right: 3,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#FFF',
+                        textShadow: '1px 1px 2px #000',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {count}
+                    </span>
+                  )}
                   <span
                     style={{
                       position: 'absolute',
-                      bottom: 2,
-                      right: 4,
-                      fontSize: 11,
+                      top: 0,
+                      left: 2,
+                      fontSize: 9,
+                      color: isSelected ? '#FFF' : 'rgba(255,255,255,0.5)',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {idx + 1}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* グリッド: 持ち物一覧 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${INVENTORY_COLS}, ${CELL_SIZE}px)`,
+              gap: CELL_GAP,
+            }}
+          >
+            {Array.from({ length: INVENTORY_COLS * INVENTORY_ROWS }).map((_, cellIdx) => {
+              const entry = inventoryEntries[cellIdx];
+
+              if (!entry) {
+                // 空セル
+                return (
+                  <div
+                    key={`inv-empty-${cellIdx}`}
+                    style={cellStyle(false, false)}
+                  />
+                );
+              }
+
+              const { blockId, count } = entry;
+              const texUrl = getTextureUrl(blockId);
+              const isInHotbar = HOTBAR_BLOCKS.includes(blockId);
+
+              return (
+                <div
+                  key={`inv-${blockId}`}
+                  onClick={() => handleSelectItem(blockId)}
+                  onMouseMove={(e) => handleItemMouseMove(e, blockId)}
+                  onMouseLeave={handleItemMouseLeave}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.background = CELL_HOVER;
+                  }}
+                  style={cellStyle(false, isInHotbar)}
+                >
+                  {texUrl && (
+                    <img
+                      src={texUrl}
+                      alt={getBlockName(blockId)}
+                      draggable={false}
+                      style={{
+                        width: 34,
+                        height: 34,
+                        imageRendering: 'pixelated',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  )}
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: 1,
+                      right: 3,
+                      fontSize: 12,
                       fontWeight: 700,
-                      color: '#fff',
-                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                      color: '#FFF',
+                      textShadow: '1px 1px 2px #000',
                       fontFamily: 'monospace',
                     }}
                   >
                     {count}
                   </span>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
 
-        {/* 右: レシピ一覧 */}
-        <div
-          id="recipes-panel"
-          style={{
-            flex: 1,
-            background: 'linear-gradient(145deg, rgba(30, 30, 40, 0.95), rgba(20, 20, 28, 0.95))',
-            borderRadius: 12,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            padding: 20,
-            overflowY: 'auto',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          <h2
+        {/* ============================ */}
+        {/* 右パネル: クラフトレシピ      */}
+        {/* ============================ */}
+        <div style={{ ...stonePanelStyle, minWidth: 320 }}>
+          {/* パネルタイトル */}
+          <div
             style={{
-              color: '#e8e8f0',
-              fontSize: 16,
+              color: '#E8E8E8',
+              fontSize: 14,
               fontWeight: 700,
-              marginBottom: 16,
-              paddingBottom: 10,
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
+              marginBottom: 10,
+              textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
             }}
           >
-            <span style={{ fontSize: 20 }}>⚒️</span>
-            クラフト
-          </h2>
+            ⚒️ クラフト
+          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* レシピグリッド */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${RECIPE_COLS}, 1fr)`,
+              gap: CELL_GAP + 2,
+            }}
+          >
             {CRAFTING_RECIPES.map((recipe) => {
               const craftable = canCraft(recipe);
               const justCrafted = craftedRecipeId === recipe.id;
-              const isShaking = shakingRecipeId === recipe.id;
+              const texUrl = getTextureUrl(recipe.result);
 
               return (
                 <div
                   key={recipe.id}
                   onClick={() => handleCraft(recipe.id)}
+                  onMouseMove={(e) => {
+                    setHoveredItemId(recipe.result);
+                    setTooltipPos({ x: e.clientX + 14, y: e.clientY - 10 });
+                  }}
+                  onMouseLeave={handleItemMouseLeave}
                   style={{
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 14,
-                    padding: '12px 16px',
-                    borderRadius: 8,
+                    gap: 4,
+                    padding: 8,
+                    borderRadius: 4,
                     cursor: craftable ? 'pointer' : 'not-allowed',
                     background: justCrafted
-                      ? 'rgba(100, 255, 100, 0.15)'
+                      ? 'rgba(80, 200, 80, 0.25)'
                       : craftable
-                        ? 'rgba(255, 255, 255, 0.06)'
-                        : 'rgba(255, 255, 255, 0.02)',
+                        ? 'rgba(0,0,0,0.15)'
+                        : 'rgba(0,0,0,0.25)',
                     border: justCrafted
-                      ? '1px solid rgba(100, 255, 100, 0.4)'
+                      ? `2px solid #6F6`
                       : craftable
-                        ? '1px solid rgba(255,255,255,0.1)'
-                        : '1px solid rgba(255,255,255,0.04)',
-                    transition: 'all 0.2s ease',
+                        ? `2px solid ${CELL_BORDER_LIGHT}`
+                        : `2px solid ${STONE_SHADOW}`,
+                    borderBottomColor: justCrafted ? '#4A4' : CELL_BORDER_DARK,
+                    borderRightColor: justCrafted ? '#4A4' : CELL_BORDER_DARK,
+                    transition: 'all 0.15s',
                     opacity: craftable ? 1 : 0.5,
-                    animation: isShaking
-                      ? 'craftShake 0.4s ease'
-                      : justCrafted
-                        ? 'craftPop 0.4s ease'
-                        : 'none',
+                    animation: justCrafted ? 'craftPop 0.4s ease' : 'none',
                   }}
                   onMouseEnter={(e) => {
                     if (craftable) {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!justCrafted) {
-                      e.currentTarget.style.background = craftable
-                        ? 'rgba(255, 255, 255, 0.06)'
-                        : 'rgba(255, 255, 255, 0.02)';
-                      e.currentTarget.style.borderColor = craftable
-                        ? 'rgba(255,255,255,0.1)'
-                        : 'rgba(255,255,255,0.04)';
+                      (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.1)';
                     }
                   }}
                 >
-                  {/* 完成品アイコン */}
+                  {/* アイテムアイコン */}
                   <div
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 6,
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      position: 'relative',
+                      ...cellStyle(false, false),
+                      width: 56,
+                      height: 56,
+                      background: craftable ? CELL_BG : STONE_SHADOW,
                     }}
                   >
-                    <img
-                      src={getTextureUrl(recipe.result)}
-                      alt={recipe.name}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        imageRendering: 'pixelated',
-                        objectFit: 'contain',
-                      }}
-                    />
+                    {texUrl && (
+                      <img
+                        src={texUrl}
+                        alt={recipe.name}
+                        draggable={false}
+                        style={{
+                          width: 40,
+                          height: 40,
+                          imageRendering: 'pixelated',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    )}
                     {recipe.resultCount > 1 && (
                       <span
                         style={{
                           position: 'absolute',
                           bottom: 1,
                           right: 3,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: 700,
-                          color: '#fff',
-                          textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+                          color: '#FFF',
+                          textShadow: '1px 1px 2px #000',
                           fontFamily: 'monospace',
                         }}
                       >
@@ -348,92 +485,74 @@ export function CraftingScreen() {
                     )}
                   </div>
 
-                  {/* レシピ情報 */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        color: craftable ? '#e8e8f0' : 'rgba(255,255,255,0.4)',
-                        fontSize: 14,
-                        fontWeight: 600,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {recipe.name}
-                    </div>
-                    <div
-                      style={{
-                        color: 'rgba(255,255,255,0.35)',
-                        fontSize: 11,
-                        marginBottom: 6,
-                      }}
-                    >
-                      {recipe.description}
-                    </div>
-                    {/* 素材リスト */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {Object.entries(recipe.ingredients).map(([blockIdStr, required]) => {
-                        const bId = parseInt(blockIdStr) as BlockId;
-                        const have = items[bId] ?? 0;
-                        const enough = have >= required;
-
-                        return (
-                          <div
-                            key={blockIdStr}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: enough
-                                ? 'rgba(100, 255, 100, 0.08)'
-                                : 'rgba(255, 80, 80, 0.08)',
-                              border: `1px solid ${enough ? 'rgba(100,255,100,0.2)' : 'rgba(255,80,80,0.2)'}`,
-                            }}
-                          >
-                            <img
-                              src={getTextureUrl(bId)}
-                              alt={getBlockName(bId)}
-                              style={{
-                                width: 16,
-                                height: 16,
-                                imageRendering: 'pixelated',
-                                objectFit: 'contain',
-                              }}
-                            />
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                fontFamily: 'monospace',
-                                color: enough ? '#8f8' : '#f88',
-                              }}
-                            >
-                              {have}/{required}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* クラフトボタン */}
+                  {/* レシピ名 */}
                   <div
                     style={{
-                      flexShrink: 0,
-                      padding: '8px 16px',
-                      borderRadius: 6,
-                      background: craftable
-                        ? 'linear-gradient(135deg, #4a9eff, #2d7ad8)'
-                        : 'rgba(255,255,255,0.05)',
-                      color: craftable ? '#fff' : 'rgba(255,255,255,0.3)',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      transition: 'all 0.15s',
-                      boxShadow: craftable ? '0 2px 8px rgba(74, 158, 255, 0.3)' : 'none',
+                      color: craftable ? '#E8E8E8' : '#999',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textAlign: 'center',
+                      textShadow: '1px 1px 1px rgba(0,0,0,0.5)',
+                      lineHeight: 1.2,
+                      maxWidth: 70,
+                      wordBreak: 'keep-all',
                     }}
                   >
-                    {justCrafted ? '✓' : 'クラフト'}
+                    {recipe.name}
+                  </div>
+
+                  {/* 素材バッジ */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 3,
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {Object.entries(recipe.ingredients).map(([blockIdStr, required]) => {
+                      const bId = parseInt(blockIdStr) as BlockId;
+                      const have = items[bId] ?? 0;
+                      const enough = have >= required;
+
+                      return (
+                        <div
+                          key={blockIdStr}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            padding: '1px 3px',
+                            borderRadius: 2,
+                            background: enough
+                              ? 'rgba(80, 200, 80, 0.2)'
+                              : 'rgba(200, 60, 60, 0.2)',
+                            border: `1px solid ${enough ? 'rgba(80,200,80,0.4)' : 'rgba(200,60,60,0.4)'}`,
+                          }}
+                        >
+                          <img
+                            src={getTextureUrl(bId)}
+                            alt=""
+                            draggable={false}
+                            style={{
+                              width: 12,
+                              height: 12,
+                              imageRendering: 'pixelated',
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                              color: enough ? '#8F8' : '#F88',
+                            }}
+                          >
+                            {have}/{required}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -442,48 +561,64 @@ export function CraftingScreen() {
         </div>
       </div>
 
-      {/* 操作ヒント */}
+      {/* ツールチップ */}
+      {hoveredItemId !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            pointerEvents: 'none',
+            zIndex: 300,
+            background: 'rgba(20, 10, 30, 0.92)',
+            border: '2px solid #5A3A8A',
+            borderRadius: 4,
+            padding: '6px 10px',
+            color: '#E8E8F8',
+            fontSize: 13,
+            fontWeight: 600,
+            textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          {getBlockName(hoveredItemId)}
+        </div>
+      )}
+
+      {/* 操作ヒント（下部） */}
       <div
         style={{
           position: 'fixed',
-          bottom: 24,
+          bottom: 20,
           left: '50%',
           transform: 'translateX(-50%)',
-          color: 'rgba(255,255,255,0.4)',
-          fontSize: 12,
           display: 'flex',
-          gap: 16,
+          gap: 20,
+          alignItems: 'center',
         }}
       >
-        <span>
+        <span
+          style={{
+            color: 'rgba(255,255,255,0.5)',
+            fontSize: 13,
+            textShadow: '1px 1px 2px rgba(0,0,0,0.6)',
+          }}
+        >
           <kbd
             style={{
               padding: '2px 8px',
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 3,
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.2)',
               fontFamily: 'monospace',
-              fontSize: 11,
+              fontSize: 12,
+              fontWeight: 700,
             }}
           >
             E
           </kbd>{' '}
-          閉じる
-        </span>
-        <span>
-          <kbd
-            style={{
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              fontFamily: 'monospace',
-              fontSize: 11,
-            }}
-          >
-            ESC
-          </kbd>{' '}
-          閉じる
+          もどる
         </span>
       </div>
     </div>
