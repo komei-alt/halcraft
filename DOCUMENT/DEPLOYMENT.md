@@ -23,8 +23,10 @@ Mac Studio (or MacBook Air)
 [外部アクセス]
 ユーザー → halcraft.rosch.jp → Cloudflare Tunnel → NAS:4000 (Nginx)
 
-[社内アクセス]
-ブラウザ → http://192.168.100.100:4000
+[社内アクセス（スプリットDNS）]
+ブラウザ → halcraft.rosch.jp
+  → Tailscale Split DNS → NAS dnsmasq (192.168.100.100:53)
+  → NAS Nginx リバースプロキシ (:443) → halcraft コンテナ (:4000)
 ```
 
 ---
@@ -47,8 +49,46 @@ Mac Studio (or MacBook Air)
 | コンテナ名 | イメージ | ポート | 用途 |
 |-----------|---------|--------|------|
 | `halcraft` | `halcraft:latest` | 4000:80 | Nginx SPA 配信 |
+| `dnsmasq` | `drpsychick/dnsmasq` | 53:53 | ローカルDNS解決 |
 
 > DB は不要。ゲーム状態はクライアントサイドの Zustand で管理。
+
+---
+
+## 3.5 スプリットDNS（ローカル直接アクセス）
+
+社内ネットワークでは Cloudflare Tunnel を経由せず NAS に直接アクセスする。
+
+### 構成
+
+1. **NAS dnsmasq コンテナ** (`/volume1/docker/dnsmasq/dnsmasq.conf`)
+   - `halcraft.rosch.jp` → `192.168.100.100`
+   - `os.rosch.co.jp` → `192.168.100.100`
+   - `core.rosch.co.jp` → `192.168.100.100`
+   - 上流DNS: RTX1210 ルーター (`192.168.100.1`)
+
+2. **Tailscale Split DNS**
+   - `rosch.jp` → `192.168.100.100` (NAS dnsmasq)
+   - `rosch.co.jp` → `192.168.100.100` (NAS dnsmasq)
+
+3. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/halcraft.conf`)
+   - `halcraft.rosch.jp:443` → `localhost:4000`
+
+### 管理コマンド
+
+```bash
+# dnsmasq ステータス確認
+ssh nas "sudo /usr/local/bin/docker ps | grep dnsmasq"
+
+# dnsmasq ログ確認
+ssh nas "sudo /usr/local/bin/docker logs dnsmasq --tail 20"
+
+# dnsmasq 設定変更後の再起動
+ssh nas "sudo /usr/local/bin/docker restart dnsmasq"
+
+# DNS解決テスト
+nslookup halcraft.rosch.jp
+```
 
 ---
 
@@ -147,4 +187,4 @@ ssh nas "sudo /usr/local/bin/docker image prune -f"
 
 ---
 
-*最終更新: 2026-03-22*
+*最終更新: 2026-03-22 v1.1*
