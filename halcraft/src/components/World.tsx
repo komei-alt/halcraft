@@ -47,6 +47,10 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
+
+          // 非標準形状（松明等）はInstancedMeshではなく個別描画
+          const blockDef = BLOCK_DEFS[blockId];
+          if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
 
           const worldX = cx * CHUNK_SIZE + lx;
@@ -117,8 +121,8 @@ function BlockTypeInstances({
         map={texture}
         transparent={blockDef.transparent}
         opacity={blockDef.transparent ? 0.6 : 1}
-        emissive={blockDef.emissive ? new THREE.Color(0x333333) : undefined}
-        emissiveIntensity={blockDef.emissive ? 0.5 : 0}
+        emissive={blockDef.emissiveColor ?? (blockDef.emissive ? new THREE.Color(0x333333) : undefined)}
+        emissiveIntensity={blockDef.emissiveIntensity ?? (blockDef.emissive ? 0.5 : 0)}
         roughness={0.85}
       />
     </instancedMesh>

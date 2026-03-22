@@ -7,6 +7,8 @@ import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
+import { BlockLights } from './components/BlockLights';
+import { TorchRenderer } from './components/TorchRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
@@ -29,6 +31,8 @@ function GameCanvas() {
       <Suspense fallback={null}>
         <Environment />
         <World />
+        <TorchRenderer />
+        <BlockLights />
         <Player />
         <BlockInteraction />
         <MobManager />

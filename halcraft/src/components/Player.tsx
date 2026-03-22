@@ -7,7 +7,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
-import { HOTBAR_BLOCKS, BLOCK_IDS } from '../types/blocks';
+import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 
 // 定数
 const MOVE_SPEED = 6;
@@ -52,7 +52,11 @@ export function Player() {
   // ブロックが固体（通行不可）かチェック
   const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
     const blockId = getBlock(bx, by, bz);
-    return blockId !== BLOCK_IDS.AIR;
+    if (blockId === BLOCK_IDS.AIR) return false;
+    // 松明などnoCollision=trueのブロックは通過可能
+    const def = BLOCK_DEFS[blockId];
+    if (def?.noCollision) return false;
+    return true;
   }, [getBlock]);
 
   // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定

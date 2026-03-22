@@ -1,12 +1,20 @@
 // ダメージオーバーレイ + ゲームオーバー画面
 // ダメージ時の赤フラッシュと、HP0時のゲームオーバー画面を表示
 
+import { useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 
 export function DamageOverlay() {
   const isDamageFlash = usePlayerStore((s) => s.isDamageFlash);
   const isDead = usePlayerStore((s) => s.isDead);
   const respawn = usePlayerStore((s) => s.respawn);
+
+  // ゲームオーバー時にPointerLockを解除してマウスカーソルを表示
+  useEffect(() => {
+    if (isDead && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }, [isDead]);
 
   const handleRespawn = () => {
     respawn();

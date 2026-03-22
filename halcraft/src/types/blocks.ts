@@ -1,6 +1,8 @@
 // ブロック種別の定義
 // ハルクラのすべてのブロック型を管理する
 
+import * as THREE from 'three';
+
 /** ブロックIDの定数定義 */
 export const BLOCK_IDS = {
   AIR: 0,
@@ -17,6 +19,7 @@ export const BLOCK_IDS = {
   ELECTRIC: 11,
   SPAWNER: 12,
   STAIRS: 13,
+  TORCH: 14,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -33,6 +36,20 @@ export interface BlockInfo {
   unbreakable: boolean;
   /** 発光するか */
   emissive: boolean;
+  /** 発光色（emissive=true の場合） */
+  emissiveColor?: THREE.Color;
+  /** 発光強度 */
+  emissiveIntensity?: number;
+  /** ポイントライトの色（光源ブロックの場合） */
+  lightColor?: THREE.Color;
+  /** ポイントライトの強度 */
+  lightIntensity?: number;
+  /** ポイントライトの到達距離 */
+  lightDistance?: number;
+  /** 非標準形状か（松明など、1x1x1ボックスではないもの） */
+  nonStandard?: boolean;
+  /** 当たり判定がないか（松明のように通過できるもの） */
+  noCollision?: boolean;
 }
 
 /** 全ブロックの定義テーブル */
@@ -116,6 +133,11 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: true,
+    emissiveColor: new THREE.Color(0x6633cc),
+    emissiveIntensity: 0.6,
+    lightColor: new THREE.Color(0x8844ff),
+    lightIntensity: 1.5,
+    lightDistance: 12,
   },
   [BLOCK_IDS.ELECTRIC]: {
     id: BLOCK_IDS.ELECTRIC,
@@ -124,6 +146,11 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: true,
+    emissiveColor: new THREE.Color(0x00ddff),
+    emissiveIntensity: 1.0,
+    lightColor: new THREE.Color(0x44eeff),
+    lightIntensity: 3.0,
+    lightDistance: 18,
   },
   [BLOCK_IDS.SPAWNER]: {
     id: BLOCK_IDS.SPAWNER,
@@ -132,6 +159,11 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: true,
+    emissiveColor: new THREE.Color(0xff4422),
+    emissiveIntensity: 0.5,
+    lightColor: new THREE.Color(0xff6633),
+    lightIntensity: 1.0,
+    lightDistance: 8,
   },
   [BLOCK_IDS.STAIRS]: {
     id: BLOCK_IDS.STAIRS,
@@ -140,6 +172,21 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+  },
+  [BLOCK_IDS.TORCH]: {
+    id: BLOCK_IDS.TORCH,
+    name: '松明',
+    texture: 'torch.png',
+    transparent: true,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xff8833),
+    emissiveIntensity: 1.0,
+    lightColor: new THREE.Color(0xffaa44),
+    lightIntensity: 2.5,
+    lightDistance: 15,
+    nonStandard: true,
+    noCollision: true,
   },
 };
 
@@ -153,7 +200,7 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.GLASS,
   BLOCK_IDS.ENCHANT,
   BLOCK_IDS.ELECTRIC,
-  BLOCK_IDS.STAIRS,
+  BLOCK_IDS.TORCH,
 ];
 
 /** チャンクサイズ定数 */
