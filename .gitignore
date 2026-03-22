@@ -24,3 +24,6 @@ halcraft/dist/
 
 # Docker
 docker-compose.override.yml
+
+# AI Skills (symlinks to shared skills)
+.agent/skills/
