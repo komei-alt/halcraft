@@ -62,6 +62,12 @@ body {
   80% { transform: translateX(2px); }
 }
 
+/* ダメージフラッシュアニメーション */
+@keyframes damageFlash {
+  0% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
 /* クラフト画面のスクロールバーのスタイル */
 #inventory-panel::-webkit-scrollbar,
 #recipes-panel::-webkit-scrollbar {

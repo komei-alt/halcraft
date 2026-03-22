@@ -26,6 +26,10 @@ export function Player() {
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const onGround = useRef(false);
 
+  // 落下ダメージ追跡
+  const lastGroundY = useRef(40);
+  const wasFalling = useRef(false);
+
   // キー入力状態
   const keys = useRef({
     forward: false,
@@ -41,6 +45,9 @@ export function Player() {
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const applyFallDamage = usePlayerStore((s) => s.applyFallDamage);
+  const isDead = usePlayerStore((s) => s.isDead);
+  const respawn = usePlayerStore((s) => s.respawn);
 
   // ブロックが固体（通行不可）かチェック
   const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
@@ -156,6 +163,9 @@ export function Player() {
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {
+    // 死亡中は動けない
+    if (isDead) return;
+
     const dt = Math.min(delta, 0.05); // フレーム落ち対策
     const vel = velocity.current;
     const pos = position.current;
@@ -192,16 +202,31 @@ export function Player() {
       if (Math.abs(vel.z) < 0.01) vel.z = 0;
     }
 
+    // --- 落下追跡（Y軸衝突判定の前に） ---
+    const isFallingNow = vel.y < -0.5;
+    if (onGround.current && !isFallingNow) {
+      // 地上にいる → 落下開始位置を更新
+      lastGroundY.current = pos.y;
+    }
+    wasFalling.current = isFallingNow;
+
     // --- 軸分離衝突判定 ---
     // Y軸（上下）
     const newY = pos.y + vel.y * dt;
     if (checkCollision(pos.x, newY, pos.z)) {
       // 落下中に衝突 → 接地
       if (vel.y < 0) {
+        // 落下ダメージを計算
+        const fallDistance = lastGroundY.current - newY;
+        if (fallDistance > 0 && wasFalling.current) {
+          applyFallDamage(fallDistance);
+        }
         onGround.current = true;
         // 足元のブロック上面にスナップ
         const footBlockY = Math.floor(pos.y + vel.y * dt);
         pos.y = footBlockY + 1;
+        // 着地後の落下開始位置をリセット
+        lastGroundY.current = pos.y;
       }
       vel.y = 0;
     } else {
@@ -249,6 +274,8 @@ export function Player() {
     if (pos.y < -20) {
       pos.set(8, 40, 8);
       vel.set(0, 0, 0);
+      lastGroundY.current = 40;
+      respawn();
     }
   });
 

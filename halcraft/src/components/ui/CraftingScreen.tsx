@@ -1,31 +1,25 @@
 // クラフト画面UIコンポーネント
-// お子さんのデザイン画を踏襲した石グレーのグリッドベースUI
-// 左: インベントリグリッド + 上部ホットバー
-// 右: クラフトレシピグリッド
-// Eキーで開閉、アイテム選択でホットバーに反映
+// 全ブロックを無限に出せるクリエイティブモード風の画面
+// Eキーで開閉、クリックでインベントリに追加
 
 import { useEffect, useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
-import { CRAFTING_RECIPES } from '../../types/crafting';
 import {
   BLOCK_DEFS,
   HOTBAR_BLOCKS,
   type BlockId,
+  BLOCK_IDS,
 } from '../../types/blocks';
 
 // === 定数 ===
-/** インベントリグリッドの列数 */
-const INVENTORY_COLS = 9;
-/** インベントリグリッドの行数 */
-const INVENTORY_ROWS = 4;
-/** クラフトレシピグリッドの列数 */
-const RECIPE_COLS = 4;
 /** グリッドセルのサイズ (px) */
-const CELL_SIZE = 52;
+const CELL_SIZE = 56;
 /** グリッドセル間のギャップ (px) */
-const CELL_GAP = 3;
+const CELL_GAP = 4;
+/** 1回クリックで追加する個数 */
+const ADD_AMOUNT = 64;
 
 // === ヘルパー ===
 
@@ -79,24 +73,28 @@ const cellStyle = (isSelected: boolean, isHoverable: boolean): React.CSSProperti
   justifyContent: 'center',
   position: 'relative' as const,
   cursor: isHoverable ? 'pointer' : 'default',
-  transition: 'background 0.1s',
+  transition: 'background 0.1s, transform 0.1s',
   imageRendering: 'pixelated' as const,
 });
+
+/** 全ブロック一覧（AIR, BEDROCKを除く） */
+const ALL_BLOCKS = Object.values(BLOCK_DEFS)
+  .filter((def) => def.id !== BLOCK_IDS.AIR && def.id !== BLOCK_IDS.BEDROCK)
+  .map((def) => def.id);
 
 // === コンポーネント ===
 
 export function CraftingScreen() {
   const phase = useGameStore((s) => s.phase);
   const items = useInventoryStore((s) => s.items);
-  const canCraft = useInventoryStore((s) => s.canCraft);
-  const craft = useInventoryStore((s) => s.craft);
+  const addItem = useInventoryStore((s) => s.addItem);
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [craftedRecipeId, setCraftedRecipeId] = useState<string | null>(null);
   const [hoveredItemId, setHoveredItemId] = useState<BlockId | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [addedBlockId, setAddedBlockId] = useState<BlockId | null>(null);
 
   // Eキーでクラフト画面の開閉
   const handleKeyDown = useCallback(
@@ -129,24 +127,19 @@ export function CraftingScreen() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // クラフト実行
-  const handleCraft = useCallback(
-    (recipeId: string) => {
-      const recipe = CRAFTING_RECIPES.find((r) => r.id === recipeId);
-      if (!recipe) return;
-      if (canCraft(recipe)) {
-        craft(recipe);
-        setCraftedRecipeId(recipeId);
-        setTimeout(() => setCraftedRecipeId(null), 500);
-      }
+  // ブロックをインベントリに追加（無限）
+  const handleAddBlock = useCallback(
+    (blockId: BlockId) => {
+      addItem(blockId, ADD_AMOUNT);
+      setAddedBlockId(blockId);
+      setTimeout(() => setAddedBlockId(null), 300);
     },
-    [canCraft, craft],
+    [addItem],
   );
 
   // ホットバースロットにアイテムをセット
   const handleSelectItem = useCallback(
     (blockId: BlockId) => {
-      // ホットバーのブロック一覧の中からこのブロックのインデックスを探す
       const hotbarIndex = HOTBAR_BLOCKS.indexOf(blockId);
       if (hotbarIndex >= 0) {
         selectSlot(hotbarIndex);
@@ -250,8 +243,8 @@ export function CraftingScreen() {
                   onMouseLeave={handleItemMouseLeave}
                   style={{
                     ...cellStyle(isSelected, true),
-                    width: CELL_SIZE - 4,
-                    height: CELL_SIZE - 4,
+                    width: CELL_SIZE - 8,
+                    height: CELL_SIZE - 8,
                     border: isSelected
                       ? '2px solid #FFFFFF'
                       : `2px solid ${CELL_BORDER_LIGHT}`,
@@ -310,15 +303,14 @@ export function CraftingScreen() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${INVENTORY_COLS}, ${CELL_SIZE}px)`,
+              gridTemplateColumns: `repeat(9, ${CELL_SIZE}px)`,
               gap: CELL_GAP,
             }}
           >
-            {Array.from({ length: INVENTORY_COLS * INVENTORY_ROWS }).map((_, cellIdx) => {
+            {Array.from({ length: 36 }).map((_, cellIdx) => {
               const entry = inventoryEntries[cellIdx];
 
               if (!entry) {
-                // 空セル
                 return (
                   <div
                     key={`inv-empty-${cellIdx}`}
@@ -376,7 +368,7 @@ export function CraftingScreen() {
         </div>
 
         {/* ============================ */}
-        {/* 右パネル: クラフトレシピ      */}
+        {/* 右パネル: 全ブロック一覧     */}
         {/* ============================ */}
         <div style={{ ...stonePanelStyle, minWidth: 320 }}>
           {/* パネルタイトル */}
@@ -385,35 +377,42 @@ export function CraftingScreen() {
               color: '#E8E8E8',
               fontSize: 14,
               fontWeight: 700,
-              marginBottom: 10,
+              marginBottom: 6,
               textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
               fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
             }}
           >
-            ⚒️ クラフト
+            🔧 クラフト — クリックで追加
+          </div>
+          <div
+            style={{
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 11,
+              marginBottom: 12,
+              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            }}
+          >
+            クリックすると×{ADD_AMOUNT}個追加されます
           </div>
 
-          {/* レシピグリッド */}
+          {/* ブロック一覧グリッド */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${RECIPE_COLS}, 1fr)`,
+              gridTemplateColumns: `repeat(4, 1fr)`,
               gap: CELL_GAP + 2,
             }}
           >
-            {CRAFTING_RECIPES.map((recipe) => {
-              const craftable = canCraft(recipe);
-              const justCrafted = craftedRecipeId === recipe.id;
-              const texUrl = getTextureUrl(recipe.result);
+            {ALL_BLOCKS.map((blockId) => {
+              const texUrl = getTextureUrl(blockId);
+              const name = getBlockName(blockId);
+              const justAdded = addedBlockId === blockId;
 
               return (
                 <div
-                  key={recipe.id}
-                  onClick={() => handleCraft(recipe.id)}
-                  onMouseMove={(e) => {
-                    setHoveredItemId(recipe.result);
-                    setTooltipPos({ x: e.clientX + 14, y: e.clientY - 10 });
-                  }}
+                  key={blockId}
+                  onClick={() => handleAddBlock(blockId)}
+                  onMouseMove={(e) => handleItemMouseMove(e, blockId)}
                   onMouseLeave={handleItemMouseLeave}
                   style={{
                     display: 'flex',
@@ -422,27 +421,20 @@ export function CraftingScreen() {
                     gap: 4,
                     padding: 8,
                     borderRadius: 4,
-                    cursor: craftable ? 'pointer' : 'not-allowed',
-                    background: justCrafted
+                    cursor: 'pointer',
+                    background: justAdded
                       ? 'rgba(80, 200, 80, 0.25)'
-                      : craftable
-                        ? 'rgba(0,0,0,0.15)'
-                        : 'rgba(0,0,0,0.25)',
-                    border: justCrafted
+                      : 'rgba(0,0,0,0.15)',
+                    border: justAdded
                       ? `2px solid #6F6`
-                      : craftable
-                        ? `2px solid ${CELL_BORDER_LIGHT}`
-                        : `2px solid ${STONE_SHADOW}`,
-                    borderBottomColor: justCrafted ? '#4A4' : CELL_BORDER_DARK,
-                    borderRightColor: justCrafted ? '#4A4' : CELL_BORDER_DARK,
+                      : `2px solid ${CELL_BORDER_LIGHT}`,
+                    borderBottomColor: justAdded ? '#4A4' : CELL_BORDER_DARK,
+                    borderRightColor: justAdded ? '#4A4' : CELL_BORDER_DARK,
                     transition: 'all 0.15s',
-                    opacity: craftable ? 1 : 0.5,
-                    animation: justCrafted ? 'craftPop 0.4s ease' : 'none',
+                    animation: justAdded ? 'craftPop 0.3s ease' : 'none',
                   }}
                   onMouseEnter={(e) => {
-                    if (craftable) {
-                      (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.1)';
-                    }
+                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.1)';
                   }}
                 >
                   {/* アイテムアイコン */}
@@ -451,13 +443,13 @@ export function CraftingScreen() {
                       ...cellStyle(false, false),
                       width: 56,
                       height: 56,
-                      background: craftable ? CELL_BG : STONE_SHADOW,
+                      background: CELL_BG,
                     }}
                   >
                     {texUrl && (
                       <img
                         src={texUrl}
-                        alt={recipe.name}
+                        alt={name}
                         draggable={false}
                         style={{
                           width: 40,
@@ -467,28 +459,27 @@ export function CraftingScreen() {
                         }}
                       />
                     )}
-                    {recipe.resultCount > 1 && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          bottom: 1,
-                          right: 3,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: '#FFF',
-                          textShadow: '1px 1px 2px #000',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        ×{recipe.resultCount}
-                      </span>
-                    )}
+                    {/* 無限マーク */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 1,
+                        right: 3,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: '#8F8',
+                        textShadow: '1px 1px 2px #000',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      ∞
+                    </span>
                   </div>
 
-                  {/* レシピ名 */}
+                  {/* ブロック名 */}
                   <div
                     style={{
-                      color: craftable ? '#E8E8E8' : '#999',
+                      color: '#E8E8E8',
                       fontSize: 10,
                       fontWeight: 600,
                       textAlign: 'center',
@@ -498,61 +489,7 @@ export function CraftingScreen() {
                       wordBreak: 'keep-all',
                     }}
                   >
-                    {recipe.name}
-                  </div>
-
-                  {/* 素材バッジ */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 3,
-                      flexWrap: 'wrap',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {Object.entries(recipe.ingredients).map(([blockIdStr, required]) => {
-                      const bId = parseInt(blockIdStr) as BlockId;
-                      const have = items[bId] ?? 0;
-                      const enough = have >= required;
-
-                      return (
-                        <div
-                          key={blockIdStr}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            padding: '1px 3px',
-                            borderRadius: 2,
-                            background: enough
-                              ? 'rgba(80, 200, 80, 0.2)'
-                              : 'rgba(200, 60, 60, 0.2)',
-                            border: `1px solid ${enough ? 'rgba(80,200,80,0.4)' : 'rgba(200,60,60,0.4)'}`,
-                          }}
-                        >
-                          <img
-                            src={getTextureUrl(bId)}
-                            alt=""
-                            draggable={false}
-                            style={{
-                              width: 12,
-                              height: 12,
-                              imageRendering: 'pixelated',
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: 9,
-                              fontWeight: 700,
-                              fontFamily: 'monospace',
-                              color: enough ? '#8F8' : '#F88',
-                            }}
-                          >
-                            {have}/{required}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {name}
                   </div>
                 </div>
               );
