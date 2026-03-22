@@ -11,7 +11,7 @@ description: ハルクラを Synology NAS にデプロイする
 - SSH: `ssh nas` でパスワードなしアクセス可能
 - NAS上のプロジェクトパス: `/volume1/docker/halcraft`
 - ポート: `4000` (Nginx)
-- URL: `https://halcraft.roshco.jp` (Cloudflare Tunnel 経由)
+- URL: `https://halcraft.rosch.jp` (Cloudflare Tunnel 経由)
 
 ## 手順
 
@@ -75,7 +75,7 @@ curl -s -o /dev/null -w '%{http_code}' http://192.168.100.100:4000
 ### 7. 外部アクセス確認（Cloudflare Tunnel 設定後）
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}' https://halcraft.roshco.jp
+curl -s -o /dev/null -w '%{http_code}' https://halcraft.rosch.jp
 ```
 
 ## トラブルシューティング

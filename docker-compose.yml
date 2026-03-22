@@ -3,7 +3,7 @@
 # ============================================
 #
 # Synology NAS 上で Nginx コンテナとして稼働。
-# Cloudflare Tunnel 経由で halcraft.roshco.jp から公開。
+# Cloudflare Tunnel 経由で halcraft.rosch.jp から公開。
 #
 # 使い方:
 #   起動:         sudo docker compose up -d

@@ -48,7 +48,7 @@ Game: ハルクラ (HalCraft)
 | 地形生成 | simplex-noise | プロシージャル地形の生成（FBMアルゴリズム） |
 | ID 生成 | uuid | エンティティのユニーク ID |
 | コンテナ | Docker + Nginx | 本番デプロイ（Synology NAS） |
-| 公開 | Cloudflare Tunnel | 外部アクセス（halcraft.roshco.jp） |
+| 公開 | Cloudflare Tunnel | 外部アクセス（halcraft.rosch.jp） |
 
 > **注**: Rapier物理エンジンは初期実装で使用していたが、ブロックワールドとの相性問題により
 > カスタムAABB衝突判定に置き換えた。パフォーマンスと精度の両面で改善。
@@ -275,7 +275,7 @@ infra: NASデプロイ用Dockerfile追加
 | 項目 | 値 |
 |------|-----|
 | ホスティング | Synology NAS (Docker + Nginx) |
-| URL | `https://halcraft.roshco.jp` |
+| URL | `https://halcraft.rosch.jp` |
 | ポート | `:4000` (コンテナ内 `:80`) |
 | DNS | Cloudflare Tunnel 経由 |
 
