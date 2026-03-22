@@ -1,10 +1,10 @@
-// モブ（敵キャラ）の状態管理ストア
-// ゾンビのスポーン・AI・物理を管理
+// モブ（敵キャラ・味方キャラ）の状態管理ストア
+// ゾンビのスポーン・AI・物理、プロトタイプ味方モブを管理
 
 import { create } from 'zustand';
 
 /** モブの種類 */
-export type MobType = 'zombie';
+export type MobType = 'zombie' | 'prototype';
 
 /** モブのデータ */
 export interface MobData {
@@ -27,6 +27,8 @@ export interface MobData {
   hitTimer: number;
   /** 消滅タイマー（夜明けで燃える演出用） */
   burnTimer: number;
+  /** 味方フラグ */
+  isAlly: boolean;
 }
 
 /** 最大同時スポーン数 */
@@ -40,6 +42,10 @@ const DESPAWN_DISTANCE = 40;
 const SPAWN_INTERVAL = 5;
 /** ゾンビのHP */
 const ZOMBIE_HP = 10;
+/** プロトタイプのHP（味方は頑丈） */
+const PROTOTYPE_HP = 50;
+/** プロトタイプの追従距離 */
+const PROTOTYPE_FOLLOW_DISTANCE = 8;
 
 let nextMobId = 0;
 
@@ -71,6 +77,9 @@ interface MobState {
   /** 夜のスポーンロジック */
   trySpawnZombie: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
+  /** プロトタイプ味方モブのスポーンロジック（常時1体） */
+  trySpawnPrototype: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
 }
@@ -80,16 +89,18 @@ export const useMobStore = create<MobState>((set, get) => ({
   lastSpawnTime: 0,
 
   spawnMob: (type, x, y, z) => {
+    const hp = type === 'prototype' ? PROTOTYPE_HP : ZOMBIE_HP;
     const mob: MobData = {
       id: `mob_${nextMobId++}`,
       type,
       x, y, z,
-      hp: ZOMBIE_HP,
-      maxHp: ZOMBIE_HP,
+      hp,
+      maxHp: hp,
       vx: 0, vy: 0, vz: 0,
       rotation: 0,
       hitTimer: 0,
       burnTimer: 0,
+      isAlly: type === 'prototype',
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -156,9 +167,26 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ lastSpawnTime: now });
   },
 
+  trySpawnPrototype: (playerX, playerZ, surfaceYFn) => {
+    const state = get();
+    // 既にプロトタイプが存在する場合はスポーンしない
+    const hasPrototype = state.mobs.some((m) => m.type === 'prototype');
+    if (hasPrototype) return;
+
+    // プレイヤーの近くにスポーン
+    const angle = Math.random() * Math.PI * 2;
+    const spawnX = playerX + Math.cos(angle) * PROTOTYPE_FOLLOW_DISTANCE;
+    const spawnZ = playerZ + Math.sin(angle) * PROTOTYPE_FOLLOW_DISTANCE;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+
+    get().spawnMob('prototype', spawnX, spawnY, spawnZ);
+  },
+
   despawnFarMobs: (playerX, playerZ) => {
     set((state) => ({
       mobs: state.mobs.filter((m) => {
+        // 味方モブは自動削除しない（再スポーンで対応）
+        if (m.isAlly) return true;
         const dx = m.x - playerX;
         const dz = m.z - playerZ;
         return Math.sqrt(dx * dx + dz * dz) < DESPAWN_DISTANCE;

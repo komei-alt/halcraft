@@ -136,6 +136,8 @@ export function BlockInteraction() {
     let closestDist = ATTACK_REACH;
 
     for (const mob of mobs) {
+      // 味方モブは攻撃対象から除外
+      if (mob.isAlly) continue;
       // モブの中心位置
       const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
 

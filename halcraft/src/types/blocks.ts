@@ -20,6 +20,7 @@ export const BLOCK_IDS = {
   SPAWNER: 12,
   STAIRS: 13,
   TORCH: 14,
+  BED: 15,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -185,6 +186,16 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     lightColor: new THREE.Color(0xffaa44),
     lightIntensity: 2.5,
     lightDistance: 15,
+    nonStandard: true,
+    noCollision: true,
+  },
+  [BLOCK_IDS.BED]: {
+    id: BLOCK_IDS.BED,
+    name: 'ベッド',
+    texture: 'bed.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
     nonStandard: true,
     noCollision: true,
   },

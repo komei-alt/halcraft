@@ -9,6 +9,7 @@ import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
+import { BedRenderer } from './components/BedRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
@@ -32,6 +33,7 @@ function GameCanvas() {
         <Environment />
         <World />
         <TorchRenderer />
+        <BedRenderer />
         <BlockLights />
         <Player />
         <BlockInteraction />

@@ -94,4 +94,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.GRASS,
     resultCount: 1,
   },
+  {
+    id: 'bed',
+    name: 'ベッド',
+    description: '木材と草から作るふかふかのベッド',
+    ingredients: { [BLOCK_IDS.WOOD]: 3, [BLOCK_IDS.GRASS]: 3 },
+    result: BLOCK_IDS.BED,
+    resultCount: 1,
+  },
 ];
