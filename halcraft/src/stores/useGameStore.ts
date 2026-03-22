@@ -2,6 +2,7 @@
 // ゲームフェーズ（メニュー・プレイ中・ポーズ）と昼夜サイクルを管理
 
 import { create } from 'zustand';
+import { usePlayerStore } from './usePlayerStore';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
 
@@ -45,7 +46,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   dayCount: 1,
   isNight: false,
 
-  startGame: () => set({ phase: 'playing', gameTime: 0.0, dayCount: 1 }),
+  startGame: () => {
+    set({ phase: 'playing', gameTime: 0.0, dayCount: 1 });
+    // ゲーム開始時に5秒間の無敵時間を付与
+    usePlayerStore.setState({ invincibleUntil: Date.now() + 5000 });
+  },
 
   togglePause: () => {
     const current = get().phase;

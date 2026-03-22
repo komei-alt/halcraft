@@ -53,7 +53,6 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   const isDamaged = mob.hitTimer > 0;
 
   // アニメーション計算
-  const walkCycle = Math.sin(animTime * 3) * 0.3;        // ゆっくりとした歩行
   const bobHeight = Math.sin(animTime * 2) * 0.08;       // 上下の浮遊感
   const bodySwing = Math.sin(animTime * 1.5) * 0.03;     // 体の微揺れ
   const hatJiggle = Math.sin(animTime * 2.5) * 0.05;     // 帽子の揺れ
@@ -143,8 +142,8 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
     color: new THREE.Color(0x111111), roughness: 0.8,
   }), []);
 
-  // スケール: プレイヤーより大きめ（約2.5倍）
-  const SCALE = 2.5;
+  // スケール: プレイヤーと同程度（視界を遮らないサイズ）
+  const SCALE = 0.7;
 
   return (
     <group
@@ -337,47 +336,51 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
       </group>
 
       {/* --- 蜘蛛の脚（8本、360度放射状配置） --- */}
-      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
-        const phase = legPhases[i];
-        const legAngle = walkCycle * Math.sin(animTime * 3 + phase);
+      {/* 脚の原点を蜘蛛腹部の中心に配置 */}
+      <group position={[0, 1.1, 0]}>
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
+          const phase = legPhases[i];
+          const legAnim = Math.sin(animTime * 3 + phase) * 0.15;
 
-        // 8本を360度に均等配置（45度間隔）
-        // 前方(0)から時計回り: 前右、右、後右、後、後左、左、前左、前
-        const radialAngle = (i * Math.PI * 2) / 8; // Y軸回転角度
+          // 45度間隔で放射配置（前方向を避けて左右・後ろに偏る蜘蛛配置）
+          // 前右45°、右90°、後右135°、後180°、後左225°、左270°、前左315°、前0°
+          const radialAngle = (i * Math.PI * 2) / 8 + Math.PI / 8; // 22.5度オフセット
 
-        // 脚の広がり角度（水平方向に大きく広げる）
-        const spreadAngle = 0.9; // ラジアン（約50度外側に広がる）
+          // 脚のパラメータ
+          const upperLen = 0.7;    // 上肢の長さ（外斜め上に伸びる）
+          const lowerLen = 1.0;    // 下肢の長さ（関節から地面へ）
+          const upperAngle = 0.5;  // 上肢の持ち上げ角度（水平=0、上向き=正）
 
-        // 上肢の長さとサイズ
-        const upperLen = 0.6;  // 付け根→関節
-        const lowerLen = 0.7;  // 関節→地面
+          // 脚の付け根位置を腹部表面（半径0.45の球面上）に配置
+          const attachX = Math.sin(radialAngle) * 0.45;
+          const attachZ = Math.cos(radialAngle) * 0.45;
 
-        return (
-          <group key={`leg-${i}`} position={[0, 1.05, 0]} rotation={[0, radialAngle, 0]}>
-            {/* 脚全体を外側に広げる（X-Z平面で外側に傾ける） */}
-            <group rotation={[0, 0, spreadAngle + legAngle * 0.12]}>
-              {/* 上肢（付け根→関節：斜め外向き上方） */}
-              <mesh position={[upperLen / 2, 0.08, 0]} material={legMat}>
-                <boxGeometry args={[upperLen, 0.08, 0.08]} />
-              </mesh>
-              {/* 肘関節 */}
-              <mesh position={[upperLen, 0.1, 0]} material={jointMat}>
-                <sphereGeometry args={[0.06, 6, 6]} />
-              </mesh>
-              {/* 下肢（関節→地面：下方向に伸びる） */}
-              <group position={[upperLen, 0.1, 0]} rotation={[0, 0, -1.6 - legAngle * 0.2]}>
-                <mesh position={[0, -lowerLen / 2, 0]} material={legMat}>
-                  <boxGeometry args={[0.07, lowerLen, 0.07]} />
+          return (
+            <group key={`leg-${i}`} position={[attachX, 0, attachZ]} rotation={[0, radialAngle, 0]}>
+              {/* 上肢：外側斜め上に伸びる */}
+              <group rotation={[legAnim * 0.4, 0, upperAngle + legAnim]}>
+                <mesh position={[upperLen / 2, 0, 0]} material={legMat}>
+                  <boxGeometry args={[upperLen, 0.08, 0.08]} />
                 </mesh>
-                {/* 足先 */}
-                <mesh position={[0.02, -lowerLen * 0.9, 0]} material={spiderDarkMat}>
-                  <boxGeometry args={[0.1, 0.05, 0.1]} />
+                {/* 肘関節 */}
+                <mesh position={[upperLen, 0, 0]} material={jointMat}>
+                  <sphereGeometry args={[0.06, 6, 6]} />
                 </mesh>
+                {/* 下肢：関節から地面に向かって垂直に降りる */}
+                <group position={[upperLen, 0, 0]} rotation={[0, 0, -(Math.PI / 2 + upperAngle + 0.3 + legAnim * 0.5)]}>
+                  <mesh position={[0, -lowerLen / 2, 0]} material={legMat}>
+                    <boxGeometry args={[0.06, lowerLen, 0.06]} />
+                  </mesh>
+                  {/* 足先（接地パッド） */}
+                  <mesh position={[0, -lowerLen + 0.03, 0]} material={spiderDarkMat}>
+                    <boxGeometry args={[0.12, 0.04, 0.12]} />
+                  </mesh>
+                </group>
               </group>
             </group>
-          </group>
-        );
-      })}
+          );
+        })}
+      </group>
 
       {/* --- 下部のカラフルな装飾 --- */}
       <group position={[0, 0.65, 0.1]}>

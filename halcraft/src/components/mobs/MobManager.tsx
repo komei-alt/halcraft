@@ -22,14 +22,14 @@ const MOB_HEIGHT = 1.8;
 const MOB_RADIUS = 0.3;
 
 /** プロトタイプ（味方）の定数 */
-const PROTOTYPE_SPEED = 2.0;         // プレイヤー追従速度
-const PROTOTYPE_FOLLOW_MIN = 4;      // これ以上離れたら追従開始
-const PROTOTYPE_FOLLOW_MAX = 20;     // これ以上離れたらテレポート
-const PROTOTYPE_ATTACK_RANGE = 2.5;  // ゾンビへの攻撃範囲
+const PROTOTYPE_SPEED = 2.5;         // プレイヤー追従速度
+const PROTOTYPE_FOLLOW_MIN = 7;      // これ以上離れたら追従開始（視界を遮らない距離）
+const PROTOTYPE_FOLLOW_MAX = 25;     // これ以上離れたらテレポート
+const PROTOTYPE_ATTACK_RANGE = 3.0;  // ゾンビへの攻撃範囲
 const PROTOTYPE_ATTACK_DAMAGE = 5;   // ゾンビへの攻撃ダメージ
 const PROTOTYPE_ATTACK_COOLDOWN = 0.8;
-const PROTOTYPE_HEIGHT = 4.5;        // 大きいサイズ
-const PROTOTYPE_RADIUS = 1.0;
+const PROTOTYPE_HEIGHT = 1.8;        // スケール0.7に合わせた衝突高さ
+const PROTOTYPE_RADIUS = 0.4;        // スケール0.7に合わせた衝突半径
 
 export function MobManager() {
   const { camera } = useThree();
@@ -108,6 +108,8 @@ export function MobManager() {
     const dt = Math.min(delta, 0.05);
     const gameState = useGameStore.getState();
     const playerState = usePlayerStore.getState();
+
+
 
     if (gameState.phase !== 'playing' || playerState.isDead) return;
 

@@ -1,0 +1,29 @@
+# ============================================
+# ハルクラ (HalCraft) - Docker Compose
+# ============================================
+#
+# Synology NAS 上で Nginx コンテナとして稼働。
+# Cloudflare Tunnel 経由で halcraft.roshco.jp から公開。
+#
+# 使い方:
+#   起動:         sudo docker compose up -d
+#   再ビルド:     sudo docker compose up -d --build
+#   ログ確認:     sudo docker compose logs -f halcraft
+#   停止:         sudo docker compose down
+
+services:
+  halcraft:
+    build:
+      context: ./halcraft
+      dockerfile: Dockerfile
+    image: halcraft:latest
+    container_name: halcraft
+    restart: always
+    ports:
+      - "4000:80"
+    networks:
+      - halcraft-net
+
+networks:
+  halcraft-net:
+    driver: bridge

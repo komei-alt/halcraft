@@ -23,6 +23,9 @@ interface PlayerState {
   /** 死亡状態か */
   isDead: boolean;
 
+  /** 無敵終了時刻（Date.now()より小さいと無敵切れ） */
+  invincibleUntil: number;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -48,6 +51,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   selectedSlot: 0,
   isDamageFlash: false,
   isDead: false,
+  invincibleUntil: 0,
 
   getSelectedBlock: () => {
     return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
@@ -60,6 +64,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   takeDamage: (amount) => {
+    // 無敵時間中はダメージを受けない
+    if (Date.now() < get().invincibleUntil) return;
     const newHp = Math.max(0, get().hp - amount);
     set({
       hp: newHp,
@@ -90,6 +96,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
+      invincibleUntil: Date.now() + 5000, // 5秒間無敵
     });
   },
 }));

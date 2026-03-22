@@ -44,7 +44,7 @@ const SPAWN_INTERVAL = 5;
 const ZOMBIE_HP = 10;
 /** プロトタイプのHP（味方は頑丈） */
 const PROTOTYPE_HP = 50;
-/** プロトタイプの追従距離 */
+/** プロトタイプの追従距離（スポーン位置） */
 const PROTOTYPE_FOLLOW_DISTANCE = 8;
 
 let nextMobId = 0;
@@ -177,7 +177,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     const angle = Math.random() * Math.PI * 2;
     const spawnX = playerX + Math.cos(angle) * PROTOTYPE_FOLLOW_DISTANCE;
     const spawnZ = playerZ + Math.sin(angle) * PROTOTYPE_FOLLOW_DISTANCE;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
 
     get().spawnMob('prototype', spawnX, spawnY, spawnZ);
   },

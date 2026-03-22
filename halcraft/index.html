@@ -1,10 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>halcraft</title>
+
+    <!-- モバイル対応 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- SEO -->
+    <title>ハルクラ — HalCraft</title>
+    <meta name="description" content="7歳のハルが描いたイラストで作ったオリジナルのマインクラフト風3Dサンドボックスゲーム。ブラウザで遊べる！" />
+    <meta name="theme-color" content="#1a1a2e" />
+
+    <!-- OGP -->
+    <meta property="og:title" content="ハルクラ — HalCraft" />
+    <meta property="og:description" content="7歳のハルが描いたイラストで作ったオリジナルのマインクラフト風3Dサンドボックスゲーム" />
+    <meta property="og:type" content="website" />
+
+    <!-- タッチ操作の最適化 -->
+    <style>
+      /* タッチデバイスでのダブルタップズームやコンテキストメニューを無効化 */
+      * {
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
