@@ -95,6 +95,12 @@ body {
   100% { opacity: 0; }
 }
 
+/* 死亡時ドクロマークの点滅アニメーション */
+@keyframes skull-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
 /* クラフト画面のスクロールバーのスタイル */
 #inventory-panel::-webkit-scrollbar,
 #recipes-panel::-webkit-scrollbar {

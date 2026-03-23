@@ -492,6 +492,20 @@ io.on('connection', (socket) => {
     console.log(`[PvP] ${attacker.name} → ${connectedPlayers.get(targetId)?.name || 'unknown'} (${amount}ダメージ)`);
   });
 
+  // プレイヤー死亡通知（全プレイヤーにブロードキャスト）
+  socket.on('player:died', () => {
+    socket.broadcast.emit('player:died', { id: socket.id });
+    const player = connectedPlayers.get(socket.id);
+    console.log(`[死亡] ${player?.name || 'unknown'} がやられた`);
+  });
+
+  // プレイヤー復活通知（全プレイヤーにブロードキャスト）
+  socket.on('player:respawned', () => {
+    socket.broadcast.emit('player:respawned', { id: socket.id });
+    const player = connectedPlayers.get(socket.id);
+    console.log(`[復活] ${player?.name || 'unknown'} が復活`);
+  });
+
   // ── WebRTC シグナリング ──
   socket.on('voice:offer', (data) => {
     const t = io.sockets.sockets.get(data.targetId);

@@ -1,11 +1,12 @@
 // ============================================
 // RemotePlayers — 他プレイヤーの一括描画
-// useMultiplayerStore のリモートプレイヤーを VoxelAvatar + NameTag で表示
+// useMultiplayerStore のリモートプレイヤーを VoxelAvatar で表示
+// 死亡時は倒れる＋パーツ崩壊アニメーション
 // ============================================
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
 import { VoxelAvatar } from './VoxelAvatar';
 
 export function RemotePlayers() {
@@ -36,15 +37,7 @@ export function RemotePlayers() {
 function RemotePlayerModel({
   player,
 }: {
-  player: {
-    id: string;
-    name: string;
-    color: string;
-    position: [number, number, number];
-    rotation: [number, number];
-    targetPosition: [number, number, number];
-    speaking: boolean;
-  };
+  player: RemotePlayer;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const prevPosRef = useRef<[number, number, number]>([...player.position]);
@@ -65,16 +58,25 @@ function RemotePlayerModel({
     // Y軸回転（体の向き）
     groupRef.current.rotation.y = player.rotation[0];
 
-    // 移動検知
-    const dx = player.position[0] - prevPosRef.current[0];
-    const dz = player.position[2] - prevPosRef.current[2];
-    isMoving.current = Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005;
+    // 移動検知（死亡中は常に false）
+    if (player.isDead) {
+      isMoving.current = false;
+    } else {
+      const dx = player.position[0] - prevPosRef.current[0];
+      const dz = player.position[2] - prevPosRef.current[2];
+      isMoving.current = Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005;
+    }
     prevPosRef.current = [...player.position];
   });
 
   return (
     <group ref={groupRef}>
-      <VoxelAvatar color={player.color} isMoving={isMoving.current} />
+      <VoxelAvatar
+        color={player.color}
+        isMoving={isMoving.current}
+        isDead={player.isDead}
+        deathTime={player.deathTime}
+      />
     </group>
   );
 }

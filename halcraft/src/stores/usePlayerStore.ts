@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
+import { getSocket } from '../utils/socket';
 
 /** 落下ダメージの閾値（これ以上落ちるとダメージ） */
 const FALL_DAMAGE_THRESHOLD = 3;
@@ -79,6 +80,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isDamageFlash: true,
       isDead: newHp <= 0,
     });
+    // 死亡時にサーバーへ通知
+    if (newHp <= 0) {
+      const socket = getSocket();
+      socket?.emit('player:died');
+    }
     // フラッシュを一定時間後にリセット
     setTimeout(() => set({ isDamageFlash: false }), 300);
   },
@@ -103,8 +109,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
-      invincibleUntil: Date.now() + 5000, // 5秒間無敵
+      invincibleUntil: Date.now() + 5000,
     });
+    // サーバーへ復活通知
+    const socket = getSocket();
+    socket?.emit('player:respawned');
   },
 
   togglePlaceMode: () => {

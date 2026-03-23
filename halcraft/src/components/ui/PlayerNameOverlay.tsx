@@ -29,6 +29,8 @@ interface LabelElements {
   nameSpan: HTMLSpanElement;
   arrow: HTMLDivElement;
   iconSpan: HTMLSpanElement;
+  /** ドクロマーク（死亡時表示） */
+  skullSpan: HTMLSpanElement;
   type: LabelType;
 }
 
@@ -74,7 +76,19 @@ export function PlayerNameOverlay() {
       will-change: transform;
       white-space: nowrap;
       top: 0; left: 0;
+      transition: opacity 0.2s;
     `;
+
+    // ドクロマーク（死亡時のみ表示）
+    const skullSpan = document.createElement('span');
+    skullSpan.textContent = '☠️';
+    skullSpan.style.cssText = `
+      font-size: 16px;
+      line-height: 1;
+      display: none;
+      animation: skull-pulse 1s ease-in-out infinite;
+    `;
+    container.appendChild(skullSpan);
 
     // アイコン（味方: ♥、プレイヤー: 発話時🎙️）
     const iconSpan = document.createElement('span');
@@ -103,6 +117,7 @@ export function PlayerNameOverlay() {
         1px 1px 2px rgba(0,0,0,0.9);
       letter-spacing: 0.5px;
       line-height: 1;
+      transition: color 0.3s;
     `;
     container.appendChild(nameSpan);
 
@@ -120,7 +135,7 @@ export function PlayerNameOverlay() {
     container.appendChild(arrow);
 
     overlayRef.current?.appendChild(container);
-    const elements: LabelElements = { container, nameSpan, arrow, iconSpan, type };
+    const elements: LabelElements = { container, nameSpan, arrow, iconSpan, skullSpan, type };
     labelsRef.current.set(id, elements);
     return elements;
   }, []);
@@ -142,6 +157,7 @@ export function PlayerNameOverlay() {
     cam: THREE.Camera,
     screenW: number, screenH: number,
     speaking: boolean,
+    dead: boolean,
   ) => {
     // 3D頭上座標
     projVec.current.set(worldX, worldY + headOffset, worldZ);
@@ -159,10 +175,20 @@ export function PlayerNameOverlay() {
     const fontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, 14 + (10 - dist) * 0.3));
     label.nameSpan.style.fontSize = `${fontSize}px`;
 
-    // 発話状態（プレイヤーのみ）
+    // 死亡/発話状態（プレイヤーのみ）
     if (label.type === 'player') {
-      label.iconSpan.style.display = speaking ? 'inline' : 'none';
-      label.nameSpan.style.color = speaking ? '#2ecc71' : '#ffffff';
+      if (dead) {
+        // ドクロマーク表示、名前を赤く、取り消し線
+        label.skullSpan.style.display = 'inline';
+        label.iconSpan.style.display = 'none';
+        label.nameSpan.style.color = '#ff4444';
+        label.nameSpan.style.textDecoration = 'line-through';
+      } else {
+        label.skullSpan.style.display = 'none';
+        label.iconSpan.style.display = speaking ? 'inline' : 'none';
+        label.nameSpan.style.color = speaking ? '#2ecc71' : '#ffffff';
+        label.nameSpan.style.textDecoration = 'none';
+      }
     }
 
     // 画面内判定
@@ -241,6 +267,7 @@ export function PlayerNameOverlay() {
         2.4, // プレイヤーの頭上
         camera, screenW, screenH,
         player.speaking,
+        player.isDead,
       );
     }
 
@@ -258,6 +285,7 @@ export function PlayerNameOverlay() {
         mob.x, mob.y, mob.z,
         4.2, // プロトタイプの頭上（大きいモブ）
         camera, screenW, screenH,
+        false,
         false,
       );
     }

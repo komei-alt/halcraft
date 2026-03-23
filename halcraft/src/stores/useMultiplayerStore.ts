@@ -25,6 +25,10 @@ export interface RemotePlayer {
   targetRotation: [number, number];
   /** ボイスチャットで発話中か */
   speaking: boolean;
+  /** 死亡状態 */
+  isDead: boolean;
+  /** 死亡開始時刻（アニメーション用、Date.now()） */
+  deathTime: number;
 }
 
 interface MultiplayerState {
@@ -234,6 +238,8 @@ function setupSocketListeners(
           targetPosition: [...p.position],
           targetRotation: [...p.rotation],
           speaking: false,
+          isDead: false,
+          deathTime: 0,
         });
       }
     }
@@ -248,6 +254,8 @@ function setupSocketListeners(
       targetPosition: [...data.position],
       targetRotation: [...data.rotation],
       speaking: false,
+      isDead: false,
+      deathTime: 0,
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);
@@ -328,5 +336,29 @@ function setupSocketListeners(
   socket.on('player:attacked', (data: { amount: number; knockbackX: number; knockbackZ: number; attackerName: string }) => {
     usePlayerStore.getState().takeDamage(data.amount);
     console.log(`[PvP] ${data.attackerName} から ${data.amount} ダメージ！`);
+  });
+
+  // リモートプレイヤーの死亡
+  socket.on('player:died', (data: { id: string }) => {
+    const players = new Map(get().remotePlayers);
+    const player = players.get(data.id);
+    if (player) {
+      player.isDead = true;
+      player.deathTime = Date.now();
+      set({ remotePlayers: new Map(players) });
+      console.log(`[Multiplayer] ${player.name} がやられた！`);
+    }
+  });
+
+  // リモートプレイヤーのリスポーン
+  socket.on('player:respawned', (data: { id: string }) => {
+    const players = new Map(get().remotePlayers);
+    const player = players.get(data.id);
+    if (player) {
+      player.isDead = false;
+      player.deathTime = 0;
+      set({ remotePlayers: new Map(players) });
+      console.log(`[Multiplayer] ${player.name} が復活！`);
+    }
   });
 }
