@@ -225,6 +225,21 @@ function setupSocketListeners(
     useGameStore.getState().setMultiplayer(false);
   });
 
+  // サーバーバージョン変更検知（デプロイ後に自動リロード）
+  let knownServerVersion: string | null = null;
+  socket.on('server:version', (data: { version: string }) => {
+    if (knownServerVersion === null) {
+      // 初回接続: バージョンを記憶
+      knownServerVersion = data.version;
+    } else if (knownServerVersion !== data.version) {
+      // バージョンが変わった → デプロイされた → 強制リロード
+      console.log(`[Multiplayer] サーバー更新検知: ${knownServerVersion} → ${data.version}`);
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+    }
+  });
+
   // プレイヤー一覧受信
   socket.on('players:list', (data: {
     players: Array<{ id: string; name: string; color: string; position: [number, number, number]; rotation: [number, number] }>;

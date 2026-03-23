@@ -19,6 +19,9 @@ const PORT = process.env.PORT || 4001;
 const MAX_PLAYERS = 10;
 const DATA_DIR = path.join(__dirname, 'data');
 
+// サーバー起動バージョン（デプロイ検知用）
+const SERVER_VERSION = Date.now().toString();
+
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketIO(httpServer, {
@@ -402,6 +405,9 @@ io.on('connection', (socket) => {
   }
 
   console.log(`[接続] ${socket.id} (${connectedPlayers.size + 1}/${MAX_PLAYERS})`);
+
+  // サーバーバージョンを送信（デプロイ検知用）
+  socket.emit('server:version', { version: SERVER_VERSION });
 
   socket.on('player:join', (data) => {
     const rawName = String(data.name || '').replace(/<[^>]*>/g, '').trim();
