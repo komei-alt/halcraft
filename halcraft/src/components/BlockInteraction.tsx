@@ -8,11 +8,12 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
-import { useInventoryStore } from '../stores/useInventoryStore';
+import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
+import { BlockBreakEffect } from './BlockBreakEffect';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -61,7 +62,7 @@ export function BlockInteraction() {
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const setBlock = useWorldStore((s) => s.setBlock);
   const getSelectedBlock = usePlayerStore((s) => s.getSelectedBlock);
-  const addItem = useInventoryStore((s) => s.addItem);
+  const dropItem = useDroppedItemStore((s) => s.dropItem);
   const damageMob = useMobStore((s) => s.damageMob);
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
@@ -153,7 +154,9 @@ export function BlockInteraction() {
           if (t) {
             const blockId = getBlock(t.x, t.y, t.z);
             if (breakBlock(t.x, t.y, t.z)) {
-              addItem(blockId);
+              // パーティクルエフェクト + ドロップアイテム
+              BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
+              dropItem(blockId, t.x, t.y, t.z);
             }
           }
         }
@@ -227,7 +230,9 @@ export function BlockInteraction() {
         if (!t) return;
         const blockId = getBlock(t.x, t.y, t.z);
         if (breakBlock(t.x, t.y, t.z)) {
-          addItem(blockId);
+          // パーティクルエフェクト + ドロップアイテム
+          BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
+          dropItem(blockId, t.x, t.y, t.z);
         }
       }
     } else if (e.button === 2) {
@@ -237,7 +242,7 @@ export function BlockInteraction() {
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, addItem, damageMob, findTargetMob, camera]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, findTargetMob, camera]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

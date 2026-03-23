@@ -8,6 +8,8 @@ import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
+import { BlockBreakEffect } from './components/BlockBreakEffect';
+import { DroppedItems } from './components/DroppedItems';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
@@ -49,6 +51,8 @@ function GameCanvas() {
         <BlockLights />
         <Player />
         <BlockInteraction />
+        <BlockBreakEffect />
+        <DroppedItems />
         <MobManager />
       </Suspense>
     </Canvas>
