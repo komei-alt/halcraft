@@ -9,13 +9,18 @@ import { isTouchDevice, requestFullscreen } from '../../utils/device';
 import { initAudio } from '../../utils/sounds';
 import { InstallBanner } from './mobile/InstallBanner';
 
+/** localStorage のキー */
+const PLAYER_NAME_KEY = 'halcraft-player-name';
+
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => {
+    try { return localStorage.getItem(PLAYER_NAME_KEY) || ''; } catch { return ''; }
+  });
   const [isJoining, setIsJoining] = useState(false);
 
   const isTouch = isTouchDevice();
@@ -28,6 +33,7 @@ export function StartScreen() {
 
     setIsJoining(true);
     const trimmedName = name.trim();
+    try { localStorage.setItem(PLAYER_NAME_KEY, trimmedName); } catch { /* noop */ }
 
     // ゲーム開始 + マルチプレイ接続
     // フルスクリーンを試みる（対応ブラウザのみ）
@@ -44,6 +50,7 @@ export function StartScreen() {
     if (e.key === 'Enter' && isValidName && !isJoining) {
       setIsJoining(true);
       const trimmedName = name.trim();
+      try { localStorage.setItem(PLAYER_NAME_KEY, trimmedName); } catch { /* noop */ }
       requestFullscreen();
       initAudio();
       startGame();
