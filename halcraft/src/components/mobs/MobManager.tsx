@@ -14,7 +14,8 @@ import { Prototype } from './Prototype';
 
 /** ゾンビの定数 */
 const ZOMBIE_SPEED = 2.5;
-const ZOMBIE_ATTACK_RANGE = 1.2;
+const ZOMBIE_STOP_RANGE = 1.0;       // この距離で停止（ブロックに潜り込まない）
+const ZOMBIE_ATTACK_RANGE = 1.5;     // 攻撃判定（XZ距離で判定）
 const ZOMBIE_ATTACK_DAMAGE = 2;
 const ZOMBIE_ATTACK_COOLDOWN = 1.0; // 秒
 const MOB_GRAVITY = -20;
@@ -23,11 +24,12 @@ const MOB_RADIUS = 0.3;
 
 /** プロトタイプ（味方）の定数 */
 const PROTOTYPE_SPEED = 2.5;         // プレイヤー追従速度
-const PROTOTYPE_FOLLOW_MIN = 7;      // これ以上離れたら追従開始（視界を遮らない距離）
+const PROTOTYPE_FOLLOW_MIN = 4;      // これ以上離れたら追従開始
 const PROTOTYPE_FOLLOW_MAX = 25;     // これ以上離れたらテレポート
-const PROTOTYPE_ATTACK_RANGE = 3.0;  // ゾンビへの攻撃範囲
-const PROTOTYPE_ATTACK_DAMAGE = 5;   // ゾンビへの攻撃ダメージ
-const PROTOTYPE_ATTACK_COOLDOWN = 0.8;
+const PROTOTYPE_DETECT_RANGE = 20;   // ゾンビ索敵範囲
+const PROTOTYPE_ATTACK_RANGE = 2.5;  // ゾンビへの攻撃範囲
+const PROTOTYPE_ATTACK_DAMAGE = 6;   // ゾンビへの攻撃ダメージ
+const PROTOTYPE_ATTACK_COOLDOWN = 0.6;
 const PROTOTYPE_HEIGHT = 1.8;        // スケール0.7に合わせた衝突高さ
 const PROTOTYPE_RADIUS = 0.4;        // スケール0.7に合わせた衝突半径
 
@@ -175,17 +177,27 @@ export function MobManager() {
           m.vy = 0;
         }
 
-        // 近くのゾンビを探す
+        // 近くのゾンビを探す（プレイヤー付近のゾンビも優先的に検知）
         let targetZombie: typeof m | null = null;
-        let closestDist = PROTOTYPE_ATTACK_RANGE * 3; // 索敵範囲
+        let closestDist = PROTOTYPE_DETECT_RANGE;
 
         for (const other of currentMobs) {
           if (other.type === 'zombie') {
+            // プロトタイプからの距離
             const odx = other.x - m.x;
             const odz = other.z - m.z;
             const oDist = Math.sqrt(odx * odx + odz * odz);
-            if (oDist < closestDist) {
-              closestDist = oDist;
+
+            // プレイヤーからの距離も考慮（プレイヤーに近いゾンビを優先）
+            const pdx = other.x - playerX;
+            const pdz = other.z - playerZ;
+            const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
+
+            // プレイヤーに近いゾンビほど優先度を上げる（距離にペナルティ軽減）
+            const priority = oDist + Math.max(0, pDist - 5) * 0.5;
+
+            if (oDist < PROTOTYPE_DETECT_RANGE && priority < closestDist) {
+              closestDist = priority;
               targetZombie = other;
             }
           }
@@ -196,19 +208,24 @@ export function MobManager() {
           const tdx = targetZombie.x - m.x;
           const tdz = targetZombie.z - m.z;
           const tDist = Math.sqrt(tdx * tdx + tdz * tdz);
-          m.rotation = Math.atan2(tdx, tdz);
+
+          if (tDist > 0.1) {
+            m.rotation = Math.atan2(tdx, tdz);
+          }
 
           if (tDist > PROTOTYPE_ATTACK_RANGE) {
+            // 戦闘移動（高速で接近）
             const nx = tdx / tDist;
             const nz = tdz / tDist;
-            m.vx = nx * PROTOTYPE_SPEED * 1.5;
-            m.vz = nz * PROTOTYPE_SPEED * 1.5;
+            const chaseSpeed = PROTOTYPE_SPEED * 2.0;
+            m.vx = nx * chaseSpeed;
+            m.vz = nz * chaseSpeed;
           } else {
             m.vx = 0;
             m.vz = 0;
 
             // 攻撃
-            if (protoAttackCooldown.current <= 0) {
+            if (protoAttackCooldown.current <= 0 && tDist > 0.01) {
               const kbX = tdx / tDist;
               const kbZ = tdz / tDist;
               useMobStore.getState().damageMob(targetZombie.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
@@ -290,23 +307,27 @@ export function MobManager() {
       // 敵モブ（ゾンビ）のAI
       // =======================================
 
-      // --- AI: プレイヤーに向かって歩く ---
+      // --- AI: プレイヤーに向かって歩く（XZ平面のみ） ---
       const dx = playerX - m.x;
       const dz = playerZ - m.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
+      const distXZ = Math.sqrt(dx * dx + dz * dz);
 
-      if (dist > 0.5) {
+      if (distXZ > ZOMBIE_STOP_RANGE) {
         m.rotation = Math.atan2(dx, dz);
 
         if (m.hitTimer <= 0) {
-          const nx = dx / dist;
-          const nz = dz / dist;
+          const nx = dx / distXZ;
+          const nz = dz / distXZ;
           m.vx = nx * ZOMBIE_SPEED;
           m.vz = nz * ZOMBIE_SPEED;
         }
       } else {
         m.vx = 0;
         m.vz = 0;
+        // プレイヤーの方を向き続ける
+        if (distXZ > 0.1) {
+          m.rotation = Math.atan2(dx, dz);
+        }
       }
 
       // --- 重力 ---
@@ -357,13 +378,11 @@ export function MobManager() {
         m.vz *= 0.9;
       }
 
-      // --- プレイヤーとの接触判定 ---
-      const playerDx = m.x - playerX;
+      // --- プレイヤーとの接触判定（XZ距離 + Y範囲チェック） ---
       const playerDy = m.y - playerY;
-      const playerDz = m.z - playerZ;
-      const playerDist = Math.sqrt(playerDx * playerDx + playerDy * playerDy + playerDz * playerDz);
+      const yClose = Math.abs(playerDy) < MOB_HEIGHT + 0.5; // Y軸方向で近い
 
-      if (playerDist < ZOMBIE_ATTACK_RANGE && attackCooldown.current <= 0) {
+      if (distXZ < ZOMBIE_ATTACK_RANGE && yClose && attackCooldown.current <= 0) {
         playerWasHit = true;
         attackCooldown.current = ZOMBIE_ATTACK_COOLDOWN;
       }
