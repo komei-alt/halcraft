@@ -2,13 +2,17 @@
 # ハルクラ (HalCraft) - Docker Compose
 # ============================================
 #
-# Synology NAS 上で Nginx コンテナとして稼働。
+# Synology NAS 上で稼働。
 # Cloudflare Tunnel 経由で halcraft.rosch.jp から公開。
+#
+# 構成:
+#   - halcraft: ゲーム本体（Nginx）
+#   - deploy-webhook: GitHub push → 自動デプロイ
 #
 # 使い方:
 #   起動:         sudo docker compose up -d
 #   再ビルド:     sudo docker compose up -d --build
-#   ログ確認:     sudo docker compose logs -f halcraft
+#   ログ確認:     sudo docker compose logs -f
 #   停止:         sudo docker compose down
 
 services:
@@ -21,6 +25,29 @@ services:
     restart: always
     ports:
       - "4000:80"
+    networks:
+      - halcraft-net
+
+  deploy-webhook:
+    build:
+      context: ./deploy-webhook
+      dockerfile: Dockerfile
+    image: halcraft-webhook:latest
+    container_name: halcraft-webhook
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      - WEBHOOK_PORT=9000
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+    volumes:
+      # Docker ソケット（ビルド・再起動に必要）
+      - /var/run/docker.sock:/var/run/docker.sock
+      # リポジトリ（git pull 用）
+      - /volume1/docker/halcraft-repo:/volume1/docker/halcraft-repo
+      # デプロイログ
+      - /var/log:/var/log
+    working_dir: /volume1/docker/halcraft-repo
     networks:
       - halcraft-net
 
