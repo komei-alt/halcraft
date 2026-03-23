@@ -16,6 +16,7 @@ import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
+import { SoundManager } from './components/SoundManager';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
@@ -24,6 +25,7 @@ import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
+import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
@@ -58,6 +60,7 @@ function GameCanvas() {
         <DroppedItems />
         <MobManager />
         <RemotePlayers />
+        <SoundManager />
       </Suspense>
     </Canvas>
   );
@@ -81,6 +84,7 @@ export default function App() {
   return (
     <>
       <StartScreen />
+      <MaintenanceOverlay />
       {phase !== 'menu' && (
         <>
           <GameCanvas />

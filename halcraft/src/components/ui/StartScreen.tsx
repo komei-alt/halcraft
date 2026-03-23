@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
+import { initAudio } from '../../utils/sounds';
 import { InstallBanner } from './mobile/InstallBanner';
 
 export function StartScreen() {
@@ -32,6 +33,9 @@ export function StartScreen() {
     // フルスクリーンを試みる（対応ブラウザのみ）
     requestFullscreen();
 
+    // サウンドエンジン初期化（ユーザーインタラクション時に必要）
+    initAudio();
+
     startGame();
     join(trimmedName);
   }, [isValidName, isJoining, name, startGame, join]);
@@ -41,6 +45,7 @@ export function StartScreen() {
       setIsJoining(true);
       const trimmedName = name.trim();
       requestFullscreen();
+      initAudio();
       startGame();
       join(trimmedName);
     }

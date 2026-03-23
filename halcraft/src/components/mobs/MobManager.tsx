@@ -11,6 +11,7 @@ import { getTerrainHeight } from '../../utils/terrain';
 import { BLOCK_IDS } from '../../types/blocks';
 import { Zombie } from './Zombie';
 import { Prototype } from './Prototype';
+import { playHurtSound } from '../../utils/sounds';
 
 /** ゾンビの定数 */
 const ZOMBIE_SPEED = 2.5;
@@ -396,6 +397,7 @@ export function MobManager() {
     // プレイヤーへのダメージ適用
     if (playerWasHit) {
       takeDamage(ZOMBIE_ATTACK_DAMAGE);
+      playHurtSound();
     }
 
     setMobs(updatedMobs);

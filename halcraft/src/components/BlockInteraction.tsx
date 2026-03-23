@@ -15,6 +15,7 @@ import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { BlockBreakEffect } from './BlockBreakEffect';
+import { playHitSound } from '../utils/sounds';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -152,6 +153,7 @@ export function BlockInteraction() {
         if (targetMobId) {
           const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
           damageMob(targetMobId, ATTACK_DAMAGE, attackDir.x, attackDir.z);
+          playHitSound();
         } else {
           const t = targetRef.current;
           if (t) {
@@ -229,6 +231,7 @@ export function BlockInteraction() {
         // モブを殴る
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
         damageMob(targetMobId, ATTACK_DAMAGE, dir.x, dir.z);
+        playHitSound();
       } else {
         // ブロック破壊
         const t = targetRef.current;
