@@ -24,15 +24,18 @@ const MOB_HEIGHT = 1.8;
 const MOB_RADIUS = 0.3;
 
 /** プロトタイプ（味方）の定数 */
-const PROTOTYPE_SPEED = 2.5;         // プレイヤー追従速度
+const PROTOTYPE_SPEED = 3.0;         // プレイヤー追従速度（速めに）
 const PROTOTYPE_FOLLOW_MIN = 4;      // これ以上離れたら追従開始
-const PROTOTYPE_FOLLOW_MAX = 25;     // これ以上離れたらテレポート
+const PROTOTYPE_FOLLOW_MAX = 15;     // これ以上離れたらテレポート（短縮）
 const PROTOTYPE_DETECT_RANGE = 20;   // ゾンビ索敵範囲
 const PROTOTYPE_ATTACK_RANGE = 2.5;  // ゾンビへの攻撃範囲
 const PROTOTYPE_ATTACK_DAMAGE = 6;   // ゾンビへの攻撃ダメージ
 const PROTOTYPE_ATTACK_COOLDOWN = 0.6;
 const PROTOTYPE_HEIGHT = 3.6;        // スケール0.48に合わせた衝突高さ（2倍サイズ）
-const PROTOTYPE_RADIUS = 0.6;        // スケール0.48に合わせた衝突半径
+const PROTOTYPE_RADIUS = 0.45;       // 衝突半径（狭い場所でも通れるように）
+const PROTOTYPE_JUMP_VEL = 10;       // ジャンプ速度（2ブロック越え可能）
+const PROTOTYPE_STUCK_TIME = 2.0;    // スタック判定時間（秒）
+const PROTOTYPE_STUCK_DIST = 0.5;    // この距離以下の移動ならスタックとみなす
 
 export function MobManager() {
   const { camera } = useThree();
@@ -50,6 +53,9 @@ export function MobManager() {
   const attackCooldown = useRef(0);
   // プロトタイプの攻撃クールダウン
   const protoAttackCooldown = useRef(0);
+  // スタック検出用
+  const protoStuckTimer = useRef(0);
+  const protoLastPos = useRef({ x: 0, z: 0 });
   // 前フレームの夜判定
   const wasNight = useRef(false);
 
@@ -167,15 +173,32 @@ export function MobManager() {
         const dzP = playerZ - m.z;
         const distP = Math.sqrt(dxP * dxP + dzP * dzP);
 
-        // テレポート（遠すぎたらプレイヤーの近くに瞬間移動）
-        if (distP > PROTOTYPE_FOLLOW_MAX) {
-          const angle = Math.random() * Math.PI * 2;
-          m.x = playerX + Math.cos(angle) * PROTOTYPE_FOLLOW_MIN;
-          m.z = playerZ + Math.sin(angle) * PROTOTYPE_FOLLOW_MIN;
-          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 1;
+        // --- スタック検出 ---
+        const movedDx = m.x - protoLastPos.current.x;
+        const movedDz = m.z - protoLastPos.current.z;
+        const movedDist = Math.sqrt(movedDx * movedDx + movedDz * movedDz);
+        const isMoving = Math.abs(m.vx) > 0.1 || Math.abs(m.vz) > 0.1;
+
+        if (isMoving && movedDist < PROTOTYPE_STUCK_DIST * dt * 60) {
+          // 動こうとしているのに動けていない
+          protoStuckTimer.current += dt;
+        } else {
+          protoStuckTimer.current = 0;
+        }
+        protoLastPos.current = { x: m.x, z: m.z };
+
+        // テレポート（遠すぎるか、スタックしている場合）
+        const shouldTeleport = distP > PROTOTYPE_FOLLOW_MAX || protoStuckTimer.current > PROTOTYPE_STUCK_TIME;
+        if (shouldTeleport) {
+          const angle = Math.atan2(dzP, dxP) + (Math.random() - 0.5) * 1.0;
+          const tpDist = Math.min(distP, PROTOTYPE_FOLLOW_MIN);
+          m.x = playerX - Math.cos(angle) * tpDist;
+          m.z = playerZ - Math.sin(angle) * tpDist;
+          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
           m.vx = 0;
           m.vz = 0;
           m.vy = 0;
+          protoStuckTimer.current = 0;
         }
 
         // 近くのゾンビを探す（プレイヤー付近のゾンビも優先的に検知）
@@ -266,26 +289,44 @@ export function MobManager() {
           m.y = newYP;
         }
 
-        // X軸衝突
+        // X軸衝突（段差2ブロック対応）
         const newXP = m.x + m.vx * dt;
         if (checkMobCollisionSize(newXP, m.y, m.z, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
+          // 1ブロック段差チェック
           if (!checkMobCollisionSize(newXP, m.y + 1, m.z, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
-            m.vy = 6;
+            m.vy = PROTOTYPE_JUMP_VEL;
+            m.x = newXP;
+          // 2ブロック段差チェック
+          } else if (!checkMobCollisionSize(newXP, m.y + 2, m.z, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
+            m.vy = PROTOTYPE_JUMP_VEL * 1.3;
             m.x = newXP;
           } else {
+            // 越えられない壁 → 自動ジャンプで試みる
+            if (m.vy === 0) {
+              m.vy = PROTOTYPE_JUMP_VEL;
+            }
             m.vx = 0;
           }
         } else {
           m.x = newXP;
         }
 
-        // Z軸衝突
+        // Z軸衝突（段差2ブロック対応）
         const newZP = m.z + m.vz * dt;
         if (checkMobCollisionSize(m.x, m.y, newZP, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
+          // 1ブロック段差チェック
           if (!checkMobCollisionSize(m.x, m.y + 1, newZP, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
-            m.vy = 6;
+            m.vy = PROTOTYPE_JUMP_VEL;
+            m.z = newZP;
+          // 2ブロック段差チェック
+          } else if (!checkMobCollisionSize(m.x, m.y + 2, newZP, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
+            m.vy = PROTOTYPE_JUMP_VEL * 1.3;
             m.z = newZP;
           } else {
+            // 越えられない壁 → 自動ジャンプで試みる
+            if (m.vy === 0) {
+              m.vy = PROTOTYPE_JUMP_VEL;
+            }
             m.vz = 0;
           }
         } else {
