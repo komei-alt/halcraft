@@ -31,8 +31,8 @@ const PROTOTYPE_DETECT_RANGE = 20;   // ゾンビ索敵範囲
 const PROTOTYPE_ATTACK_RANGE = 2.5;  // ゾンビへの攻撃範囲
 const PROTOTYPE_ATTACK_DAMAGE = 6;   // ゾンビへの攻撃ダメージ
 const PROTOTYPE_ATTACK_COOLDOWN = 0.6;
-const PROTOTYPE_HEIGHT = 1.8;        // スケール0.7に合わせた衝突高さ
-const PROTOTYPE_RADIUS = 0.4;        // スケール0.7に合わせた衝突半径
+const PROTOTYPE_HEIGHT = 3.6;        // スケール0.48に合わせた衝突高さ（2倍サイズ）
+const PROTOTYPE_RADIUS = 0.6;        // スケール0.48に合わせた衝突半径
 
 export function MobManager() {
   const { camera } = useThree();

@@ -24,14 +24,25 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   // モデルのクローン（複数インスタンスに対応）
   const clonedScene = useMemo(() => {
     const clone = scene.clone(true);
-    // マテリアルのクローン（ダメージ表現で個別に変更するため）
+    // マテリアルのクローン + depthWrite強制有効化（地面透過バグ修正）
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         if (Array.isArray(child.material)) {
-          child.material = child.material.map((m) => m.clone());
+          child.material = child.material.map((m) => {
+            const cloned = m.clone();
+            cloned.depthWrite = true;
+            cloned.depthTest = true;
+            cloned.transparent = false;
+            return cloned;
+          });
         } else {
           child.material = child.material.clone();
+          child.material.depthWrite = true;
+          child.material.depthTest = true;
+          child.material.transparent = false;
         }
+        // レンダリング順序を明示的に設定
+        child.renderOrder = 0;
       }
     });
     return clone;
@@ -80,11 +91,11 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   }, [isDamaged, clonedScene, originalColors]);
 
   // アニメーション計算
-  const bobHeight = Math.sin(animTime * 2) * 0.08; // 上下の浮遊感
+  const bobHeight = Math.sin(animTime * 2) * 0.05; // 上下の浮遊感（控えめに）
 
   // モデルのバウンディングボックスからスケールを計算
-  // 原モデル: Yサイズ約7.5ユニット → ゲーム内で約1.8ユニットにする
-  const SCALE = 0.24;
+  // 原モデル: Yサイズ約7.5ユニット → ゲーム内で約3.6ユニット（2倍サイズ）
+  const SCALE = 0.48;
 
   return (
     <group
@@ -96,43 +107,42 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
       <primitive
         object={clonedScene}
         scale={[SCALE, SCALE, SCALE]}
-        // Nomad のモデルは Y 軸が下方向に伸びているので回転で調整
-        rotation={[Math.PI, 0, 0]}
-        // モデルの中心を足元に合わせるオフセット
-        position={[0, 1.7, 0]}
+        // モデルの中心を足元に合わせるオフセット（接地）
+        // 原点がモデル中心にあるため、高さの半分を持ち上げる
+        position={[0, 1.8, 0]}
       />
 
       {/* --- 味方インジケーター（名前バー + 緑のアイコン） --- */}
-      <group position={[0, 3.2, 0]}>
+      <group position={[0, 4.2, 0]}>
         {/* 名前背景 */}
         <mesh>
-          <planeGeometry args={[1.0, 0.15]} />
-          <meshBasicMaterial color={0x000000} transparent opacity={0.5} side={THREE.DoubleSide} />
+          <planeGeometry args={[1.2, 0.18]} />
+          <meshBasicMaterial color={0x000000} transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
         {/* 名前テキスト代わりのインジケーター */}
         <mesh position={[0, 0, 0.001]}>
-          <planeGeometry args={[0.9, 0.1]} />
-          <meshBasicMaterial color={0x44ff44} transparent opacity={0.6} side={THREE.DoubleSide} />
+          <planeGeometry args={[1.0, 0.12]} />
+          <meshBasicMaterial color={0x44ff44} transparent opacity={0.6} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
         {/* ♥ ハートマーク（味方の証） */}
-        <mesh position={[0.55, 0, 0.002]}>
-          <planeGeometry args={[0.12, 0.12]} />
-          <meshBasicMaterial color={0xff4488} side={THREE.DoubleSide} />
+        <mesh position={[0.65, 0, 0.002]}>
+          <planeGeometry args={[0.14, 0.14]} />
+          <meshBasicMaterial color={0xff4488} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
       </group>
 
       {/* HPバー（頭上） */}
       {mob.hp < mob.maxHp && (
-        <group position={[0, 3.0, 0]}>
+        <group position={[0, 3.9, 0]}>
           {/* 背景 */}
           <mesh>
-            <planeGeometry args={[0.8, 0.08]} />
-            <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} />
+            <planeGeometry args={[1.0, 0.1]} />
+            <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
           {/* HP量 */}
-          <mesh position={[-(0.8 - 0.8 * (mob.hp / mob.maxHp)) / 2, 0, 0.001]}>
-            <planeGeometry args={[0.8 * (mob.hp / mob.maxHp), 0.06]} />
-            <meshBasicMaterial color={0x44cc44} side={THREE.DoubleSide} />
+          <mesh position={[-(1.0 - 1.0 * (mob.hp / mob.maxHp)) / 2, 0, 0.001]}>
+            <planeGeometry args={[1.0 * (mob.hp / mob.maxHp), 0.08]} />
+            <meshBasicMaterial color={0x44cc44} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         </group>
       )}
