@@ -342,7 +342,7 @@ function setupSocketListeners(
   socket.on('player:died', (data: { id: string }) => {
     const players = new Map(get().remotePlayers);
     const player = players.get(data.id);
-    if (player) {
+    if (player && !player.isDead) {
       player.isDead = true;
       player.deathTime = Date.now();
       set({ remotePlayers: new Map(players) });

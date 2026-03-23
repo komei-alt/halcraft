@@ -72,6 +72,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   takeDamage: (amount) => {
+    // 死亡中はダメージを受けない
+    if (get().isDead) return;
     // 無敵時間中はダメージを受けない
     if (Date.now() < get().invincibleUntil) return;
     const newHp = Math.max(0, get().hp - amount);
