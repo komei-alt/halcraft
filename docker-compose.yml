@@ -47,7 +47,6 @@ services:
       - /volume1/docker/halcraft-repo:/volume1/docker/halcraft-repo
       # デプロイログ
       - /var/log:/var/log
-    working_dir: /volume1/docker/halcraft-repo
     networks:
       - halcraft-net
 
