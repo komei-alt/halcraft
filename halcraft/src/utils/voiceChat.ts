@@ -377,20 +377,28 @@ class VoiceChatManager {
     // iOS Safari 対応
     audioElement.setAttribute('playsinline', '');
     audioElement.setAttribute('webkit-playsinline', '');
-    // iOS: ミュート状態でも再生できるようにボリュームを設定
     audioElement.volume = 1.0;
+    // DOM に追加しないと一部ブラウザで再生できない（Mac Safari, Firefox等）
+    audioElement.style.display = 'none';
+    document.body.appendChild(audioElement);
 
     pc.ontrack = (event) => {
-      console.log(`[VoiceChat] リモート音声受信: ${peerId}`);
+      console.log(`[VoiceChat] リモート音声受信: ${peerId}, tracks: ${event.streams[0]?.getTracks().length}`);
       // iOS Safari 互換性: 新しい MediaStream を明示的に作成
       const remoteStream = new MediaStream();
-      event.streams[0].getTracks().forEach((track) => remoteStream.addTrack(track));
+      event.streams[0].getTracks().forEach((track) => {
+        console.log(`[VoiceChat]   track: ${track.kind} enabled=${track.enabled} muted=${track.muted}`);
+        remoteStream.addTrack(track);
+      });
       audioElement.srcObject = remoteStream;
-      // iOS Safari 対策: ユーザーインタラクション後に再生
+      // 再生試行
       const playPromise = audioElement.play();
       if (playPromise) {
-        playPromise.catch(() => {
-          // 自動再生がブロックされた場合は次のタッチ/クリックで再試行
+        playPromise.then(() => {
+          console.log(`[VoiceChat] 音声再生開始: ${peerId}`);
+        }).catch((err) => {
+          console.warn(`[VoiceChat] 自動再生ブロック: ${peerId}`, err);
+          // 次のタッチ/クリックで再試行
           const playHandler = () => {
             audioElement.play().catch(() => {});
             document.removeEventListener('touchstart', playHandler);

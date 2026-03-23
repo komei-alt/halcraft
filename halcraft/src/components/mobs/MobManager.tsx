@@ -60,8 +60,6 @@ export function MobManager() {
   const protoLastPos = useRef({ x: 0, z: 0 });
   // 前フレームの夜判定
   const wasNight = useRef(false);
-  // モブ同期タイマー（100msごとにサーバーへ送信）
-  const mobSyncTimer = useRef(0);
 
   // ブロック衝突チェック（モブ用）
   const checkMobCollision = (px: number, py: number, pz: number): boolean => {
@@ -126,13 +124,9 @@ export function MobManager() {
 
     if (gameState.phase !== 'playing' || playerState.isDead) return;
 
-    // マルチプレイ時、非オーナーはAI計算をスキップ（描画はする）
-    const mpState = useMultiplayerStore.getState();
-    const isMultiplayer = mpState.connected;
-    const isMobOwner = !isMultiplayer || mpState.isMobOwner;
-
-    // 非オーナーはアニメーション時間だけ更新して描画は任せる
-    if (!isMobOwner) {
+    // マルチプレイ時はサーバーがAI計算するのでスキップ（描画のみ）
+    const isMultiplayer = useMultiplayerStore.getState().connected;
+    if (isMultiplayer) {
       animTime.current += dt;
       return;
     }
@@ -457,27 +451,6 @@ export function MobManager() {
     }
 
     setMobs(updatedMobs);
-
-    // マルチプレイ時: 100msごとにモブ状態をサーバーへ送信
-    if (isMultiplayer && isMobOwner) {
-      mobSyncTimer.current += dt;
-      if (mobSyncTimer.current >= 0.1) {
-        mobSyncTimer.current = 0;
-        const syncData = updatedMobs.map((m) => ({
-          id: m.id,
-          type: m.type,
-          x: m.x,
-          y: m.y,
-          z: m.z,
-          rotation: m.rotation,
-          hp: m.hp,
-          maxHp: m.maxHp,
-          hitTimer: m.hitTimer,
-          isAlly: m.isAlly,
-        }));
-        mpState.sendMobSync(syncData);
-      }
-    }
   });
 
   return (

@@ -27,6 +27,11 @@ const STEP_SIZE = REACH / RAY_STEPS;
 const ATTACK_REACH = 3.5;
 /** 攻撃ダメージ */
 const ATTACK_DAMAGE = 3;
+/** プレイヤーへの攻撃ダメージ */
+const PVP_DAMAGE = 3;
+/** プレイヤーの当たり判定サイズ */
+const PLAYER_HIT_RADIUS = 0.5;
+const PLAYER_HIT_HEIGHT = 1.7;
 
 interface TargetBlock {
   /** 照準先のブロック座標 */
@@ -148,21 +153,28 @@ export function BlockInteraction() {
 
       // 破壊
       if (consumeBreakBlock()) {
-        // まずモブ攻撃をチェック
-        const targetMobId = findTargetMob();
-        if (targetMobId) {
+        // まずプレイヤー攻撃をチェック → モブ攻撃 → ブロック破壊
+        const targetPlayerId = findTargetPlayer();
+        if (targetPlayerId) {
           const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-          damageMob(targetMobId, ATTACK_DAMAGE, attackDir.x, attackDir.z);
+          useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, PVP_DAMAGE, attackDir.x, attackDir.z);
           playHitSound();
         } else {
-          const t = targetRef.current;
-          if (t) {
-            const blockId = getBlock(t.x, t.y, t.z);
-            if (breakBlock(t.x, t.y, t.z)) {
-              // パーティクルエフェクト + ドロップアイテム
-              BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
-              dropItem(blockId, t.x, t.y, t.z);
-              sendBlockBreak(t.x, t.y, t.z);
+          const targetMobId = findTargetMob();
+          if (targetMobId) {
+            const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            damageMob(targetMobId, ATTACK_DAMAGE, attackDir.x, attackDir.z);
+            playHitSound();
+          } else {
+            const t = targetRef.current;
+            if (t) {
+              const blockId = getBlock(t.x, t.y, t.z);
+              if (breakBlock(t.x, t.y, t.z)) {
+                // パーティクルエフェクト + ドロップアイテム
+                BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
+                dropItem(blockId, t.x, t.y, t.z);
+                sendBlockBreak(t.x, t.y, t.z);
+              }
             }
           }
         }
@@ -179,6 +191,45 @@ export function BlockInteraction() {
       }
     }
   });
+
+  // 照準先のリモートプレイヤーを検索
+  const findTargetPlayer = useCallback((): string | null => {
+    const multiState = useMultiplayerStore.getState();
+    if (!multiState.connected) return null;
+
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const origin = camera.position.clone();
+    const remotePlayers = multiState.remotePlayers;
+
+    let closestPlayerId: string | null = null;
+    let closestDist = ATTACK_REACH;
+
+    for (const [, player] of remotePlayers) {
+      // プレイヤーの中心位置（足元 + 身長の半分）
+      const playerCenter = new THREE.Vector3(
+        player.position[0],
+        player.position[1] + PLAYER_HIT_HEIGHT * 0.5,
+        player.position[2],
+      );
+
+      // レイとプレイヤーの距離を計算
+      const toPlayer = playerCenter.clone().sub(origin);
+      const projection = toPlayer.dot(dir);
+
+      if (projection < 0 || projection > ATTACK_REACH) continue;
+
+      const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projection));
+      const distance = closestPoint.distanceTo(playerCenter);
+
+      // ヒット判定
+      if (distance < PLAYER_HIT_RADIUS + 0.3 && projection < closestDist) {
+        closestDist = projection;
+        closestPlayerId = player.id;
+      }
+    }
+
+    return closestPlayerId;
+  }, [camera]);
 
   // 照準先のモブを検索
   const findTargetMob = useCallback((): string | null => {
@@ -224,24 +275,33 @@ export function BlockInteraction() {
     if (usePlayerStore.getState().isDead) return;
 
     if (e.button === 0) {
-      // 左クリック: まずモブ攻撃をチェック → なければブロック破壊
-      const targetMobId = findTargetMob();
+      // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック破壊
+      const targetPlayerId = findTargetPlayer();
 
-      if (targetMobId) {
-        // モブを殴る
+      if (targetPlayerId) {
+        // プレイヤーを殴る
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        damageMob(targetMobId, ATTACK_DAMAGE, dir.x, dir.z);
+        useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, PVP_DAMAGE, dir.x, dir.z);
         playHitSound();
       } else {
-        // ブロック破壊
-        const t = targetRef.current;
-        if (!t) return;
-        const blockId = getBlock(t.x, t.y, t.z);
-        if (breakBlock(t.x, t.y, t.z)) {
-          // パーティクルエフェクト + ドロップアイテム
-          BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
-          dropItem(blockId, t.x, t.y, t.z);
-          sendBlockBreak(t.x, t.y, t.z);
+        const targetMobId = findTargetMob();
+
+        if (targetMobId) {
+          // モブを殴る
+          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          damageMob(targetMobId, ATTACK_DAMAGE, dir.x, dir.z);
+          playHitSound();
+        } else {
+          // ブロック破壊
+          const t = targetRef.current;
+          if (!t) return;
+          const blockId = getBlock(t.x, t.y, t.z);
+          if (breakBlock(t.x, t.y, t.z)) {
+            // パーティクルエフェクト + ドロップアイテム
+            BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
+            dropItem(blockId, t.x, t.y, t.z);
+            sendBlockBreak(t.x, t.y, t.z);
+          }
         }
       }
     } else if (e.button === 2) {
@@ -252,7 +312,7 @@ export function BlockInteraction() {
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, findTargetMob, camera, sendBlockBreak, sendBlockPlace]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, findTargetMob, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録
