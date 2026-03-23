@@ -10,6 +10,38 @@ import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { isTouchDevice } from '../../utils/device';
 
+// --- SVG アイコン ---
+const MicIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="1" width="6" height="11" rx="3" />
+    <path d="M5 10a7 7 0 0 0 14 0" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+  </svg>
+);
+
+const SpeakerIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+  </svg>
+);
+
+const SpeakerMutedIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <line x1="23" y1="9" x2="17" y2="15" />
+    <line x1="17" y1="9" x2="23" y2="15" />
+  </svg>
+);
+
+const HourglassIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 2h12v5l-4 4 4 4v5H6v-5l4-4-4-4z" />
+  </svg>
+);
+
 export function VoiceChatUI() {
   const phase = useGameStore((s) => s.phase);
   const connected = useMultiplayerStore((s) => s.connected);
@@ -65,7 +97,7 @@ export function VoiceChatUI() {
       id="voice-chat-panel"
       style={{
         position: 'fixed',
-        top: isTouch ? 12 : 16,
+        top: isTouch ? 56 : 16,
         right: isTouch ? 12 : 16,
         display: 'flex',
         flexDirection: 'column',
@@ -109,7 +141,7 @@ export function VoiceChatUI() {
                 ? 'rgba(231, 76, 60, 0.8)'
                 : 'rgba(255,255,255,0.15)',
               color: '#fff',
-              fontSize: isTouch ? 18 : 16,
+              fontSize: isTouch ? 20 : 16,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -119,7 +151,7 @@ export function VoiceChatUI() {
             }}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
-            {isMuted ? '🔇' : '🔊'}
+            {isMuted ? <SpeakerMutedIcon size={isTouch ? 22 : 18} /> : <SpeakerIcon size={isTouch ? 22 : 18} />}
           </button>
         )}
 
@@ -161,7 +193,7 @@ export function VoiceChatUI() {
             : 'ボイスチャットに参加'
           }
         >
-          {vcState === 'connecting' ? '⏳' : '🎙️'}
+          {vcState === 'connecting' ? <HourglassIcon size={isTouch ? 24 : 20} /> : <MicIcon size={isTouch ? 24 : 20} />}
         </button>
       </div>
 
@@ -175,7 +207,7 @@ export function VoiceChatUI() {
           letterSpacing: 1,
         }}
       >
-        {vcState === 'connected' && (isMuted ? '🔇 ミュート中' : '🎙️ ボイスON')}
+        {vcState === 'connected' && (isMuted ? 'ミュート中' : 'ボイスON')}
         {vcState === 'connecting' && '接続中...'}
         {vcState === 'disconnected' && ''}
       </span>
