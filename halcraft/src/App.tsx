@@ -16,6 +16,7 @@ import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
+import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
@@ -60,6 +61,7 @@ function GameCanvas() {
         <DroppedItems />
         <MobManager />
         <RemotePlayers />
+        <PlayerNameOverlay />
         <SoundManager />
       </Suspense>
     </Canvas>

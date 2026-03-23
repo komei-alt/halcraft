@@ -112,24 +112,7 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
         position={[0, 1.8, 0]}
       />
 
-      {/* --- 味方インジケーター（名前バー + 緑のアイコン） --- */}
-      <group position={[0, 4.2, 0]}>
-        {/* 名前背景 */}
-        <mesh>
-          <planeGeometry args={[1.2, 0.18]} />
-          <meshBasicMaterial color={0x000000} transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
-        </mesh>
-        {/* 名前テキスト代わりのインジケーター */}
-        <mesh position={[0, 0, 0.001]}>
-          <planeGeometry args={[1.0, 0.12]} />
-          <meshBasicMaterial color={0x44ff44} transparent opacity={0.6} side={THREE.DoubleSide} depthWrite={false} />
-        </mesh>
-        {/* ♥ ハートマーク（味方の証） */}
-        <mesh position={[0.65, 0, 0.002]}>
-          <planeGeometry args={[0.14, 0.14]} />
-          <meshBasicMaterial color={0xff4488} side={THREE.DoubleSide} depthWrite={false} />
-        </mesh>
-      </group>
+
 
       {/* HPバー（頭上） */}
       {mob.hp < mob.maxHp && (

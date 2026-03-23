@@ -7,7 +7,6 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { VoxelAvatar } from './VoxelAvatar';
-import { NameTag } from './NameTag';
 
 export function RemotePlayers() {
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
@@ -76,7 +75,6 @@ function RemotePlayerModel({
   return (
     <group ref={groupRef}>
       <VoxelAvatar color={player.color} isMoving={isMoving.current} />
-      <NameTag name={player.name} speaking={player.speaking} />
     </group>
   );
 }
