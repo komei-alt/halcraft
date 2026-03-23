@@ -3,6 +3,7 @@
 // デスクトップ＆モバイル両対応
 
 import { Canvas } from '@react-three/fiber';
+import * as THREE from 'three';
 import { Suspense, useState, useCallback } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
@@ -31,7 +32,7 @@ function GameCanvas() {
 
   return (
     <Canvas
-      shadows
+      shadows={{ type: THREE.PCFShadowMap }}
       camera={{
         fov: isTouch ? 65 : 70,
         near: 0.1,
