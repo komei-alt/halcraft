@@ -1,6 +1,6 @@
 // メンテナンスオーバーレイ
 // サーバーとの接続が切れた時（デプロイ中など）に表示する
-// 復帰を検知したら自動リロード
+// 復帰を検知したら再起動を促すメッセージを表示
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -10,9 +10,13 @@ const CHECK_INTERVAL = 5000;
 const FAIL_THRESHOLD = 2;
 /** ヘルスチェック用の軽量URLパス */
 const HEALTH_URL = '/manifest.json';
+/** サーバー復帰後の追加待機秒数（コンテナ完全起動を待つ） */
+const RECOVERY_WAIT_SECONDS = 8;
 
 export function MaintenanceOverlay() {
   const [isOffline, setIsOffline] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [countdown, setCountdown] = useState(RECOVERY_WAIT_SECONDS);
   const failCount = useRef(0);
   const wasOffline = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -25,11 +29,13 @@ export function MaintenanceOverlay() {
       });
       if (res.ok) {
         failCount.current = 0;
-        if (wasOffline.current) {
-          // サーバー復帰 → 自動リロード
-          window.location.reload();
+        if (wasOffline.current && !isRecovering) {
+          // サーバー復帰検知 → カウントダウン開始
+          setIsRecovering(true);
         }
-        setIsOffline(false);
+        if (!wasOffline.current) {
+          setIsOffline(false);
+        }
       } else {
         failCount.current++;
       }
@@ -41,7 +47,27 @@ export function MaintenanceOverlay() {
       wasOffline.current = true;
       setIsOffline(true);
     }
-  }, []);
+  }, [isRecovering]);
+
+  // 復帰カウントダウン
+  useEffect(() => {
+    if (!isRecovering) return;
+
+    setCountdown(RECOVERY_WAIT_SECONDS);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          // カウントダウン終了 → リロード
+          window.location.reload();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isRecovering]);
 
   useEffect(() => {
     // ブラウザのオンライン/オフラインイベント
@@ -75,31 +101,61 @@ export function MaintenanceOverlay() {
       <div style={contentStyle}>
         {/* 回転するブロックアイコン */}
         <div style={blockContainerStyle}>
-          <div style={blockStyle}>
-            <div style={{ ...blockFaceStyle, ...blockFrontStyle }} />
-            <div style={{ ...blockFaceStyle, ...blockTopStyle }} />
-            <div style={{ ...blockFaceStyle, ...blockRightStyle }} />
+          <div style={isRecovering ? blockStyleDone : blockStyle}>
+            <div style={{ ...blockFaceStyle, ...(isRecovering ? blockFrontDoneStyle : blockFrontStyle) }} />
+            <div style={{ ...blockFaceStyle, ...(isRecovering ? blockTopDoneStyle : blockTopStyle) }} />
+            <div style={{ ...blockFaceStyle, ...(isRecovering ? blockRightDoneStyle : blockRightStyle) }} />
           </div>
         </div>
 
-        <h1 style={titleStyle}>
-          🔧 アップデート中！
-        </h1>
-        <p style={messageStyle}>
-          ハルが作ったゲームを
-          <br />
-          新しくしています…
-        </p>
-        <p style={subMessageStyle}>
-          もうすぐ遊べるよ！
-        </p>
+        {isRecovering ? (
+          <>
+            <h1 style={titleDoneStyle}>
+              ✅ アップデート完了！
+            </h1>
+            <p style={messageStyle}>
+              新しいバージョンの準備ができたよ！
+            </p>
+            <p style={countdownStyle}>
+              {countdown} 秒後に自動リロード…
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={reloadButtonStyle}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(145deg, #4da3ff, #2980e0)';
+                (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(145deg, #3498db, #2980b9)';
+                (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+              }}
+            >
+              🔄 今すぐリロード
+            </button>
+          </>
+        ) : (
+          <>
+            <h1 style={titleStyle}>
+              🔧 アップデート中！
+            </h1>
+            <p style={messageStyle}>
+              ハルが作ったゲームを
+              <br />
+              新しくしています…
+            </p>
+            <p style={subMessageStyle}>
+              もうすぐ遊べるよ！
+            </p>
 
-        {/* ドットローディング */}
-        <div style={dotsContainerStyle}>
-          <span style={{ ...dotStyle, animationDelay: '0s' }}>●</span>
-          <span style={{ ...dotStyle, animationDelay: '0.3s' }}>●</span>
-          <span style={{ ...dotStyle, animationDelay: '0.6s' }}>●</span>
-        </div>
+            {/* ドットローディング */}
+            <div style={dotsContainerStyle}>
+              <span style={{ ...dotStyle, animationDelay: '0s' }}>●</span>
+              <span style={{ ...dotStyle, animationDelay: '0.3s' }}>●</span>
+              <span style={{ ...dotStyle, animationDelay: '0.6s' }}>●</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* CSS アニメーション */}
@@ -144,6 +200,11 @@ const blockStyle: React.CSSProperties = {
   margin: '10px auto',
 };
 
+const blockStyleDone: React.CSSProperties = {
+  ...blockStyle,
+  animation: 'blockBounce 0.6s ease-out forwards',
+};
+
 const blockFaceStyle: React.CSSProperties = {
   position: 'absolute',
   width: '60px',
@@ -167,12 +228,34 @@ const blockRightStyle: React.CSSProperties = {
   transform: 'rotateY(90deg) translateZ(30px)',
 };
 
+// 復帰時は青色に変更
+const blockFrontDoneStyle: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #3498db, #5dade2)',
+  transform: 'translateZ(30px)',
+};
+
+const blockTopDoneStyle: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #5dade2, #85c1e9)',
+  transform: 'rotateX(90deg) translateZ(30px)',
+};
+
+const blockRightDoneStyle: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #2980b9, #4a9fd5)',
+  transform: 'rotateY(90deg) translateZ(30px)',
+};
+
 const titleStyle: React.CSSProperties = {
   fontSize: '28px',
   fontWeight: 'bold',
   color: '#ffffff',
   marginBottom: '16px',
   textShadow: '0 2px 8px rgba(0,0,0,0.5)',
+};
+
+const titleDoneStyle: React.CSSProperties = {
+  ...titleStyle,
+  color: '#5dade2',
+  animation: 'fadeInUp 0.5s ease-out',
 };
 
 const messageStyle: React.CSSProperties = {
@@ -186,6 +269,29 @@ const subMessageStyle: React.CSSProperties = {
   fontSize: '14px',
   color: '#7b8fb2',
   marginBottom: '30px',
+};
+
+const countdownStyle: React.CSSProperties = {
+  fontSize: '16px',
+  color: '#7b8fb2',
+  marginBottom: '24px',
+  animation: 'fadeInUp 0.5s ease-out 0.2s both',
+};
+
+const reloadButtonStyle: React.CSSProperties = {
+  padding: '14px 36px',
+  fontSize: '18px',
+  fontWeight: 700,
+  color: '#fff',
+  background: 'linear-gradient(145deg, #3498db, #2980b9)',
+  border: '3px solid #5dade2',
+  borderRadius: 12,
+  cursor: 'pointer',
+  fontFamily: "'Rounded Mplus 1c', 'Noto Sans JP', sans-serif",
+  textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
+  boxShadow: '0 4px 16px rgba(52, 152, 219, 0.4)',
+  transition: 'all 0.2s',
+  animation: 'fadeInUp 0.5s ease-out 0.4s both',
 };
 
 const dotsContainerStyle: React.CSSProperties = {
@@ -209,9 +315,18 @@ const animationCSS = `
     75%  { transform: rotateX(270deg) rotateY(90deg); }
     100% { transform: rotateX(360deg) rotateY(360deg); }
   }
+  @keyframes blockBounce {
+    0%   { transform: rotateX(0deg) rotateY(0deg) scale(1); }
+    50%  { transform: rotateX(0deg) rotateY(0deg) scale(1.2); }
+    100% { transform: rotateX(0deg) rotateY(0deg) scale(1); }
+  }
   @keyframes dotPulse {
     0%, 100% { opacity: 0.3; transform: scale(0.8); }
     50%      { opacity: 1; transform: scale(1.2); }
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   @import url('https://fonts.googleapis.com/css2?family=Rounded+Mplus+1c:wght@700&display=swap');
 `;
