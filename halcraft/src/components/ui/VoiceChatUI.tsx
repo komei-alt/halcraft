@@ -89,6 +89,19 @@ export function VoiceChatUI() {
     setIsMuted(newMuted);
   }, []);
 
+  // タッチ用ハンドラ（モバイルでは onClick が発火しないため）
+  const handleTouchToggleVoice = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleToggleVoice();
+  }, [handleToggleVoice]);
+
+  const handleTouchToggleMute = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleToggleMute();
+  }, [handleToggleMute]);
+
   // ゲームプレイ中 + マルチプレイ接続中のみ表示
   if (phase !== 'playing' || !connected) return null;
 
@@ -131,7 +144,8 @@ export function VoiceChatUI() {
         {vcState === 'connected' && (
           <button
             id="voice-mute-button"
-            onClick={handleToggleMute}
+            onClick={isTouch ? undefined : handleToggleMute}
+            onTouchStart={isTouch ? handleTouchToggleMute : undefined}
             style={{
               width: isTouch ? 44 : 40,
               height: isTouch ? 44 : 40,
@@ -148,6 +162,8 @@ export function VoiceChatUI() {
               justifyContent: 'center',
               transition: 'background 0.2s',
               backdropFilter: 'blur(8px)',
+              touchAction: 'none',
+              WebkitTapHighlightColor: 'transparent',
             }}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
@@ -158,7 +174,8 @@ export function VoiceChatUI() {
         {/* マイクON/OFFボタン */}
         <button
           id="voice-toggle-button"
-          onClick={handleToggleVoice}
+          onClick={isTouch ? undefined : handleToggleVoice}
+          onTouchStart={isTouch ? handleTouchToggleVoice : undefined}
           disabled={vcState === 'connecting'}
           style={{
             width: isTouch ? 48 : 44,
@@ -181,6 +198,8 @@ export function VoiceChatUI() {
             justifyContent: 'center',
             transition: 'all 0.3s',
             backdropFilter: 'blur(8px)',
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
             // 発話中のパルスアニメーション
             boxShadow: isSpeaking
               ? '0 0 12px rgba(46, 204, 113, 0.6), 0 0 24px rgba(46, 204, 113, 0.3)'
