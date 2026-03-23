@@ -2,7 +2,6 @@
 // Nomad Sculpt で作成した GLB モデルを使用
 
 import { useRef, useMemo, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
