@@ -1,0 +1,271 @@
+// ============================================
+// マルチプレイ状態管理ストア
+// リモートプレイヤーの位置・名前・色を管理
+// ============================================
+
+import { create } from 'zustand';
+import type { Socket } from 'socket.io-client';
+import { connectToServer, disconnectFromServer, getSocket } from '../utils/socket';
+import { useWorldStore } from './useWorldStore';
+import type { BlockId } from '../types/blocks';
+
+/** リモートプレイヤーの状態 */
+export interface RemotePlayer {
+  id: string;
+  name: string;
+  color: string;
+  position: [number, number, number];
+  rotation: [number, number]; // [yaw, pitch]
+  /** 補間用の目標位置 */
+  targetPosition: [number, number, number];
+  targetRotation: [number, number];
+}
+
+interface MultiplayerState {
+  /** 接続状態 */
+  connected: boolean;
+
+  /** 自分のソケットID */
+  myId: string | null;
+
+  /** 自分の名前 */
+  playerName: string;
+
+  /** リモートプレイヤー一覧 */
+  remotePlayers: Map<string, RemotePlayer>;
+
+  /** プレイヤー数 */
+  playerCount: number;
+
+  /** サーバー満員フラグ */
+  serverFull: boolean;
+
+  /** 名前を設定 */
+  setPlayerName: (name: string) => void;
+
+  /** サーバーに接続＆参加 */
+  join: (name: string) => void;
+
+  /** サーバーから切断 */
+  leave: () => void;
+
+  /** 自分の位置を送信 */
+  sendPosition: (position: [number, number, number], rotation: [number, number]) => void;
+
+  /** ブロック破壊を送信 */
+  sendBlockBreak: (x: number, y: number, z: number) => void;
+
+  /** ブロック設置を送信 */
+  sendBlockPlace: (x: number, y: number, z: number, blockId: BlockId) => void;
+
+  /** リモートプレイヤーの補間更新（毎フレーム） */
+  interpolateRemotePlayers: (dt: number) => void;
+}
+
+/** 位置同期の間隔（ms） */
+const SYNC_INTERVAL = 50; // 20fps
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+let lastSentPos: [number, number, number] | null = null;
+
+export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
+  connected: false,
+  myId: null,
+  playerName: '',
+  remotePlayers: new Map(),
+  playerCount: 0,
+  serverFull: false,
+
+  setPlayerName: (name) => set({ playerName: name }),
+
+  join: (name) => {
+    const socket = connectToServer();
+    setupSocketListeners(socket, set, get);
+    socket.emit('player:join', { name });
+  },
+
+  leave: () => {
+    if (syncTimer) {
+      clearInterval(syncTimer);
+      syncTimer = null;
+    }
+    lastSentPos = null;
+    disconnectFromServer();
+    set({
+      connected: false,
+      myId: null,
+      remotePlayers: new Map(),
+      playerCount: 0,
+      serverFull: false,
+    });
+  },
+
+  sendPosition: (position, rotation) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+
+    // 動いていない場合は送信しない
+    if (lastSentPos &&
+      Math.abs(position[0] - lastSentPos[0]) < 0.01 &&
+      Math.abs(position[1] - lastSentPos[1]) < 0.01 &&
+      Math.abs(position[2] - lastSentPos[2]) < 0.01) {
+      return;
+    }
+
+    socket.emit('player:move', { position, rotation });
+    lastSentPos = [...position];
+  },
+
+  sendBlockBreak: (x, y, z) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('block:break', { x, y, z });
+  },
+
+  sendBlockPlace: (x, y, z, blockId) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('block:place', { x, y, z, blockId });
+  },
+
+  interpolateRemotePlayers: (dt) => {
+    const players = get().remotePlayers;
+    if (players.size === 0) return;
+
+    const lerpFactor = Math.min(1, dt * 10);
+    let changed = false;
+
+    for (const [, player] of players) {
+      // 位置補間
+      const dx = player.targetPosition[0] - player.position[0];
+      const dy = player.targetPosition[1] - player.position[1];
+      const dz = player.targetPosition[2] - player.position[2];
+
+      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(dz) > 0.01) {
+        player.position[0] += dx * lerpFactor;
+        player.position[1] += dy * lerpFactor;
+        player.position[2] += dz * lerpFactor;
+        changed = true;
+      }
+
+      // 回転補間
+      const dYaw = player.targetRotation[0] - player.rotation[0];
+      if (Math.abs(dYaw) > 0.01) {
+        // 最短回転
+        const norm = ((dYaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+        player.rotation[0] += norm * lerpFactor;
+        changed = true;
+      }
+    }
+
+    // 変更がある場合のみ新しい Map を作って再レンダリング
+    if (changed) {
+      set({ remotePlayers: new Map(players) });
+    }
+  },
+}));
+
+/**
+ * Socket.IO イベントリスナーを設定
+ */
+function setupSocketListeners(
+  socket: Socket,
+  set: (partial: Partial<MultiplayerState>) => void,
+  get: () => MultiplayerState,
+) {
+  // 接続完了
+  socket.on('connect', () => {
+    set({ connected: true });
+
+    // 位置同期タイマー開始
+    if (syncTimer) clearInterval(syncTimer);
+    syncTimer = setInterval(() => {
+      // Player.tsx から呼ばれる sendPosition を定期実行するのではなく
+      // Player 側で useFrame 内から sendPosition を呼ぶ
+    }, SYNC_INTERVAL);
+  });
+
+  // 切断
+  socket.on('disconnect', () => {
+    set({ connected: false });
+  });
+
+  // プレイヤー一覧受信
+  socket.on('players:list', (data: {
+    players: Array<{ id: string; name: string; color: string; position: [number, number, number]; rotation: [number, number] }>;
+    yourId: string;
+  }) => {
+    const newPlayers = new Map<string, RemotePlayer>();
+    for (const p of data.players) {
+      if (p.id !== data.yourId) {
+        newPlayers.set(p.id, {
+          ...p,
+          targetPosition: [...p.position],
+          targetRotation: [...p.rotation],
+        });
+      }
+    }
+    set({ myId: data.yourId, remotePlayers: newPlayers });
+  });
+
+  // 新プレイヤー参加
+  socket.on('player:joined', (data: { id: string; name: string; color: string; position: [number, number, number]; rotation: [number, number] }) => {
+    const players = new Map(get().remotePlayers);
+    players.set(data.id, {
+      ...data,
+      targetPosition: [...data.position],
+      targetRotation: [...data.rotation],
+    });
+    set({ remotePlayers: players });
+    console.log(`[Multiplayer] ${data.name} が参加`);
+  });
+
+  // プレイヤー退出
+  socket.on('player:left', (data: { id: string }) => {
+    const players = new Map(get().remotePlayers);
+    players.delete(data.id);
+    set({ remotePlayers: players });
+  });
+
+  // プレイヤー移動
+  socket.on('player:moved', (data: { id: string; position: [number, number, number]; rotation: [number, number] }) => {
+    const players = get().remotePlayers;
+    const player = players.get(data.id);
+    if (player) {
+      player.targetPosition = data.position;
+      player.targetRotation = data.rotation;
+    }
+  });
+
+  // ブロック変更（他プレイヤーの操作）
+  socket.on('block:changed', (data: { x: number; y: number; z: number; blockId: number }) => {
+    const { setBlock, breakBlock } = useWorldStore.getState();
+    if (data.blockId === 0) {
+      breakBlock(data.x, data.y, data.z);
+    } else {
+      setBlock(data.x, data.y, data.z, data.blockId as BlockId);
+    }
+  });
+
+  // ワールド変更の一括適用（参加時）
+  socket.on('world:changes', (data: { changes: Array<{ x: number; y: number; z: number; blockId: number }> }) => {
+    const { setBlock, breakBlock } = useWorldStore.getState();
+    for (const change of data.changes) {
+      if (change.blockId === 0) {
+        breakBlock(change.x, change.y, change.z);
+      } else {
+        setBlock(change.x, change.y, change.z, change.blockId as BlockId);
+      }
+    }
+    console.log(`[Multiplayer] ${data.changes.length} 件のワールド変更を適用`);
+  });
+
+  // プレイヤー数
+  socket.on('player:count', (count: number) => {
+    set({ playerCount: count });
+  });
+
+  // サーバー満員
+  socket.on('server:full', () => {
+    set({ serverFull: true });
+  });
+}

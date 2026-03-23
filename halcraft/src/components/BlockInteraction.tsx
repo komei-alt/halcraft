@@ -10,6 +10,7 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
+import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -64,6 +65,8 @@ export function BlockInteraction() {
   const getSelectedBlock = usePlayerStore((s) => s.getSelectedBlock);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
   const damageMob = useMobStore((s) => s.damageMob);
+  const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
+  const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
@@ -157,6 +160,7 @@ export function BlockInteraction() {
               // パーティクルエフェクト + ドロップアイテム
               BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
               dropItem(blockId, t.x, t.y, t.z);
+              sendBlockBreak(t.x, t.y, t.z);
             }
           }
         }
@@ -168,6 +172,7 @@ export function BlockInteraction() {
         if (t && t.hasPlaceTarget) {
           const selectedBlock = getSelectedBlock();
           setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+          sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
         }
       }
     }
@@ -233,6 +238,7 @@ export function BlockInteraction() {
           // パーティクルエフェクト + ドロップアイテム
           BlockBreakEffect.spawnEffect(blockId, t.x, t.y, t.z);
           dropItem(blockId, t.x, t.y, t.z);
+          sendBlockBreak(t.x, t.y, t.z);
         }
       }
     } else if (e.button === 2) {
@@ -241,8 +247,9 @@ export function BlockInteraction() {
       if (!t || !t.hasPlaceTarget) return;
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+      sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, findTargetMob, camera]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, findTargetMob, camera, sendBlockBreak, sendBlockPlace]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

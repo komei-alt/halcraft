@@ -15,6 +15,7 @@ import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { MobManager } from './components/mobs/MobManager';
+import { RemotePlayers } from './components/RemotePlayers';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
@@ -55,6 +56,7 @@ function GameCanvas() {
         <BlockBreakEffect />
         <DroppedItems />
         <MobManager />
+        <RemotePlayers />
       </Suspense>
     </Canvas>
   );

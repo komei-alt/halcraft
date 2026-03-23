@@ -8,6 +8,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -60,6 +61,10 @@ export function Player() {
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const sendPosition = useMultiplayerStore((s) => s.sendPosition);
+
+  // マルチプレイ位置送信のスロットリング
+  const lastSendTime = useRef(0);
   const applyFallDamage = usePlayerStore((s) => s.applyFallDamage);
   const isDead = usePlayerStore((s) => s.isDead);
   const respawn = usePlayerStore((s) => s.respawn);
@@ -317,6 +322,16 @@ export function Player() {
       pos.y + PLAYER_HEIGHT - 0.1,
       pos.z,
     );
+
+    // --- マルチプレイ位置送信（50ms間隔） ---
+    const now = performance.now();
+    if (now - lastSendTime.current > 50) {
+      sendPosition(
+        [pos.x, pos.y, pos.z],
+        [euler.current.y, euler.current.x],
+      );
+      lastSendTime.current = now;
+    }
 
     // --- 落下リスポーン ---
     if (pos.y < -20) {

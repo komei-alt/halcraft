@@ -1,22 +1,52 @@
 // スタート画面コンポーネント
-// クリック/タップでゲーム開始 + PointerLock（デスクトップのみ）
+// 名前入力 + クリック/タップでゲーム開始 + マルチプレイ接続
 // デバイスに応じて操作説明を切り替え
 
+import { useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
+import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice } from '../../utils/device';
 
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
+  const join = useMultiplayerStore((s) => s.join);
+  const serverFull = useMultiplayerStore((s) => s.serverFull);
 
-  if (phase !== 'menu') return null;
+  const [name, setName] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
 
   const isTouch = isTouchDevice();
+  const isValidName = name.trim().length >= 1 && name.trim().length <= 8;
+
+  const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    // 入力フィールドのクリックでゲーム開始しないようにする
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+    if (!isValidName || isJoining) return;
+
+    setIsJoining(true);
+    const trimmedName = name.trim();
+
+    // ゲーム開始 + マルチプレイ接続
+    startGame();
+    join(trimmedName);
+  }, [isValidName, isJoining, name, startGame, join]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && isValidName && !isJoining) {
+      setIsJoining(true);
+      const trimmedName = name.trim();
+      startGame();
+      join(trimmedName);
+    }
+  }, [isValidName, isJoining, name, startGame, join]);
+
+  if (phase !== 'menu') return null;
 
   return (
     <div
       id="start-screen"
-      onClick={startGame}
+      onClick={handleStart}
       style={{
         position: 'fixed',
         inset: 0,
@@ -26,7 +56,7 @@ export function StartScreen() {
         justifyContent: 'center',
         background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
         zIndex: 200,
-        cursor: 'pointer',
+        cursor: isValidName ? 'pointer' : 'default',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
         padding: '0 20px',
       }}
@@ -57,27 +87,114 @@ export function StartScreen() {
         HALCRAFT
       </p>
 
+      {/* 名前入力 */}
+      <div
+        style={{
+          marginTop: 40,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <label
+          style={{
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: isTouch ? 13 : 15,
+            letterSpacing: 2,
+          }}
+        >
+          なまえを入力してね
+        </label>
+        <input
+          id="player-name-input"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 8))}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="ハル"
+          maxLength={8}
+          autoComplete="off"
+          autoFocus={!isTouch}
+          style={{
+            width: isTouch ? 200 : 240,
+            padding: '12px 16px',
+            fontSize: isTouch ? 18 : 22,
+            fontWeight: 700,
+            textAlign: 'center',
+            background: 'rgba(255,255,255,0.08)',
+            border: '2px solid',
+            borderColor: isValidName
+              ? 'rgba(66, 165, 245, 0.6)'
+              : 'rgba(255,255,255,0.15)',
+            borderRadius: 10,
+            color: '#fff',
+            outline: 'none',
+            letterSpacing: 4,
+            transition: 'border-color 0.3s, box-shadow 0.3s',
+            boxShadow: isValidName
+              ? '0 0 20px rgba(66, 165, 245, 0.2)'
+              : 'none',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+          }}
+        />
+        <span
+          style={{
+            color: 'rgba(255,255,255,0.3)',
+            fontSize: 11,
+          }}
+        >
+          {name.trim().length}/8
+        </span>
+      </div>
+
+      {/* サーバー満員表示 */}
+      {serverFull && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: '8px 20px',
+            background: 'rgba(231, 76, 60, 0.2)',
+            border: '1px solid rgba(231, 76, 60, 0.4)',
+            borderRadius: 6,
+            color: '#e74c3c',
+            fontSize: 14,
+          }}
+        >
+          サーバーが満員です（最大10人）
+        </div>
+      )}
+
       {/* 開始ボタン */}
       <div
         style={{
-          marginTop: 48,
+          marginTop: 24,
           padding: isTouch ? '14px 36px' : '16px 48px',
-          background: 'rgba(255,255,255,0.1)',
-          border: '1px solid rgba(255,255,255,0.25)',
+          background: isValidName
+            ? 'rgba(66, 165, 245, 0.2)'
+            : 'rgba(255,255,255,0.05)',
+          border: '1px solid',
+          borderColor: isValidName
+            ? 'rgba(66, 165, 245, 0.5)'
+            : 'rgba(255,255,255,0.1)',
           borderRadius: 8,
-          color: '#fff',
+          color: isValidName ? '#fff' : 'rgba(255,255,255,0.3)',
           fontSize: isTouch ? 16 : 20,
           letterSpacing: 2,
-          animation: 'pulse 2s ease-in-out infinite',
+          animation: isValidName ? 'pulse 2s ease-in-out infinite' : 'none',
+          transition: 'all 0.3s',
+          pointerEvents: isValidName ? 'auto' : 'none',
         }}
       >
-        {isTouch ? 'タップでスタート' : 'クリックでスタート'}
+        {isJoining ? '接続中...' : (isTouch ? 'タップでスタート' : 'クリックでスタート')}
       </div>
 
       {/* 操作説明 */}
       <div
         style={{
-          marginTop: 40,
+          marginTop: 32,
           display: 'flex',
           flexDirection: isTouch ? 'column' : 'row',
           gap: isTouch ? 8 : 24,
