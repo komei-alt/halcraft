@@ -1,5 +1,6 @@
 // モブマネージャーコンポーネント
 // ゾンビのスポーン、AI（追尾）、物理、プレイヤーへの接触ダメージを管理
+// マルチプレイ時: オーナーのみAI計算、非オーナーは描画のみ
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
@@ -7,6 +8,7 @@ import { useMobStore, type MobData } from '../../stores/useMobStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
+import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { getTerrainHeight } from '../../utils/terrain';
 import { BLOCK_IDS } from '../../types/blocks';
 import { Zombie } from './Zombie';
@@ -58,6 +60,8 @@ export function MobManager() {
   const protoLastPos = useRef({ x: 0, z: 0 });
   // 前フレームの夜判定
   const wasNight = useRef(false);
+  // モブ同期タイマー（100msごとにサーバーへ送信）
+  const mobSyncTimer = useRef(0);
 
   // ブロック衝突チェック（モブ用）
   const checkMobCollision = (px: number, py: number, pz: number): boolean => {
@@ -121,6 +125,17 @@ export function MobManager() {
 
 
     if (gameState.phase !== 'playing' || playerState.isDead) return;
+
+    // マルチプレイ時、非オーナーはAI計算をスキップ（描画はする）
+    const mpState = useMultiplayerStore.getState();
+    const isMultiplayer = mpState.connected;
+    const isMobOwner = !isMultiplayer || mpState.isMobOwner;
+
+    // 非オーナーはアニメーション時間だけ更新して描画は任せる
+    if (!isMobOwner) {
+      animTime.current += dt;
+      return;
+    }
 
     animTime.current += dt;
     attackCooldown.current = Math.max(0, attackCooldown.current - dt);
@@ -442,6 +457,27 @@ export function MobManager() {
     }
 
     setMobs(updatedMobs);
+
+    // マルチプレイ時: 100msごとにモブ状態をサーバーへ送信
+    if (isMultiplayer && isMobOwner) {
+      mobSyncTimer.current += dt;
+      if (mobSyncTimer.current >= 0.1) {
+        mobSyncTimer.current = 0;
+        const syncData = updatedMobs.map((m) => ({
+          id: m.id,
+          type: m.type,
+          x: m.x,
+          y: m.y,
+          z: m.z,
+          rotation: m.rotation,
+          hp: m.hp,
+          maxHp: m.maxHp,
+          hitTimer: m.hitTimer,
+          isAlly: m.isAlly,
+        }));
+        mpState.sendMobSync(syncData);
+      }
+    }
   });
 
   return (

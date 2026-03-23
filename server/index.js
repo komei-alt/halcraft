@@ -2,6 +2,7 @@
 // HalCraft — マルチプレイサーバー
 // Express + Socket.IO
 // 最大10人同時接続、ブロック変更永続化
+// 時間同期 + 全モブ同期（味方+敵）
 // ============================================
 
 import express from 'express';
@@ -36,6 +37,72 @@ const SKIN_COLORS = [
   '#1abc9c', '#e67e22', '#e91e63', '#00bcd4', '#8bc34a',
 ];
 
+// ── 時間同期 ──
+const DAY_DURATION_SECONDS = 600;
+let serverGameTime = 0.0;
+let serverDayCount = 1;
+let lastTimeUpdate = Date.now();
+
+function updateServerTime() {
+  const now = Date.now();
+  const deltaSec = (now - lastTimeUpdate) / 1000;
+  lastTimeUpdate = now;
+
+  const increment = deltaSec / DAY_DURATION_SECONDS;
+  serverGameTime += increment;
+  if (serverGameTime >= 1.0) {
+    serverGameTime -= 1.0;
+    serverDayCount++;
+  }
+}
+
+// 50ms間隔で時間更新、1秒ごとにブロードキャスト
+let timeTickCounter = 0;
+setInterval(() => {
+  updateServerTime();
+  timeTickCounter++;
+  if (timeTickCounter >= 20) {
+    timeTickCounter = 0;
+    io.emit('time:sync', {
+      gameTime: serverGameTime,
+      dayCount: serverDayCount,
+      isNight: serverGameTime >= 0.5,
+    });
+  }
+}, 50);
+
+// ── モブ同期 ──
+// オーナー方式: 最古参プレイヤーが全モブのAI/物理を計算
+// 他クライアントはオーナーが送信する位置を受信して表示のみ
+let mobOwnerId = null;
+
+function getMobOwner() {
+  if (connectedPlayers.size === 0) return null;
+  return connectedPlayers.keys().next().value;
+}
+
+function assignMobOwner() {
+  const newOwner = getMobOwner();
+  if (newOwner === mobOwnerId) return; // 変化なし
+
+  mobOwnerId = newOwner;
+  if (!mobOwnerId) return;
+
+  const ownerSocket = io.sockets.sockets.get(mobOwnerId);
+  if (ownerSocket) {
+    ownerSocket.emit('mob:you-are-owner');
+    console.log(`[モブ同期] オーナー変更: ${mobOwnerId}`);
+  }
+
+  // 他のクライアントにはオーナーでないことを通知
+  for (const [id] of connectedPlayers) {
+    if (id !== mobOwnerId) {
+      const s = io.sockets.sockets.get(id);
+      if (s) s.emit('mob:not-owner');
+    }
+  }
+}
+
 // ── API ──
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -50,7 +117,6 @@ app.get('/api/health', (_req, res) => {
 const connectedPlayers = new Map();
 
 io.on('connection', (socket) => {
-  // 満員チェック
   if (connectedPlayers.size >= MAX_PLAYERS) {
     socket.emit('server:full', { message: 'サーバーが満員です（最大10人）' });
     socket.disconnect();
@@ -61,19 +127,16 @@ io.on('connection', (socket) => {
 
   // プレイヤー入室
   socket.on('player:join', (data) => {
-    // 名前のサニタイズ（1-8文字、HTMLタグ除去）
     const rawName = String(data.name || '').replace(/<[^>]*>/g, '').trim();
     const name = rawName.slice(0, 8) || 'ゲスト';
-
-    // スキンカラーをランダム割り当て
     const colorIndex = Math.floor(Math.random() * SKIN_COLORS.length);
 
     const player = {
       id: socket.id,
       name,
       color: SKIN_COLORS[colorIndex],
-      position: [8, 40, 8], // スポーン位置
-      rotation: [0, 0],     // [yaw, pitch]
+      position: [8, 40, 8],
+      rotation: [0, 0],
     };
 
     connectedPlayers.set(socket.id, player);
@@ -84,17 +147,26 @@ io.on('connection', (socket) => {
       yourId: socket.id,
     });
 
-    // 既存のブロック変更を送信
+    // ブロック変更を送信
     const changes = worldChanges.getAllChanges();
     if (changes.length > 0) {
       socket.emit('world:changes', { changes });
     }
 
-    // 他のプレイヤーに通知
-    socket.broadcast.emit('player:joined', player);
+    // 時間同期
+    updateServerTime();
+    socket.emit('time:sync', {
+      gameTime: serverGameTime,
+      dayCount: serverDayCount,
+      isNight: serverGameTime >= 0.5,
+    });
 
-    // 全員にプレイヤー数更新
+    // 他プレイヤーに通知
+    socket.broadcast.emit('player:joined', player);
     io.emit('player:count', connectedPlayers.size);
+
+    // モブオーナー割り当て
+    assignMobOwner();
 
     console.log(`[参加] ${name} (${connectedPlayers.size}/${MAX_PLAYERS})`);
   });
@@ -117,7 +189,7 @@ io.on('connection', (socket) => {
   // ブロック破壊
   socket.on('block:break', (data) => {
     const { x, y, z } = data;
-    worldChanges.setBlock(x, y, z, 0); // 0 = AIR
+    worldChanges.setBlock(x, y, z, 0);
     socket.broadcast.emit('block:changed', { x, y, z, blockId: 0 });
   });
 
@@ -128,46 +200,75 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('block:changed', { x, y, z, blockId });
   });
 
-  // ── WebRTC シグナリング（ボイスチャット用） ──
+  // ── モブ同期 ──
 
-  // WebRTC オファーを特定のピアに転送
+  // オーナーが全モブの状態を一括送信（100ms間隔想定）
+  socket.on('mob:sync', (data) => {
+    // オーナーからのみ受け付ける
+    if (socket.id !== mobOwnerId) return;
+    // 全モブの状態を他のクライアントにブロードキャスト
+    // data.mobs: [{ id, type, x, y, z, rotation, hp, maxHp, hitTimer, isAlly, vx, vy, vz }]
+    socket.broadcast.emit('mob:sync', { mobs: data.mobs });
+  });
+
+  // 非オーナーがモブにダメージを与えた場合、オーナーに通知
+  socket.on('mob:damage', (data) => {
+    if (!mobOwnerId || socket.id === mobOwnerId) return;
+    const ownerSocket = io.sockets.sockets.get(mobOwnerId);
+    if (ownerSocket) {
+      ownerSocket.emit('mob:damage', {
+        mobId: data.mobId,
+        amount: data.amount,
+        knockbackX: data.knockbackX,
+        knockbackZ: data.knockbackZ,
+        attackerId: socket.id,
+      });
+    }
+  });
+
+  // 非オーナーのプレイヤーがゾンビに攻撃された（ダメージ判定はオーナーが行う）
+  // オーナーが他プレイヤーへのダメージを通知
+  socket.on('mob:player-damage', (data) => {
+    if (socket.id !== mobOwnerId) return;
+    const targetSocket = io.sockets.sockets.get(data.targetPlayerId);
+    if (targetSocket) {
+      targetSocket.emit('mob:take-damage', {
+        amount: data.amount,
+      });
+    }
+  });
+
+  // ── WebRTC シグナリング ──
+
   socket.on('voice:offer', (data) => {
-    const { targetId, offer } = data;
-    const targetSocket = io.sockets.sockets.get(targetId);
+    const targetSocket = io.sockets.sockets.get(data.targetId);
     if (targetSocket) {
-      targetSocket.emit('voice:offer', { fromId: socket.id, offer });
+      targetSocket.emit('voice:offer', { fromId: socket.id, offer: data.offer });
     }
   });
 
-  // WebRTC アンサーを特定のピアに転送
   socket.on('voice:answer', (data) => {
-    const { targetId, answer } = data;
-    const targetSocket = io.sockets.sockets.get(targetId);
+    const targetSocket = io.sockets.sockets.get(data.targetId);
     if (targetSocket) {
-      targetSocket.emit('voice:answer', { fromId: socket.id, answer });
+      targetSocket.emit('voice:answer', { fromId: socket.id, answer: data.answer });
     }
   });
 
-  // ICE candidate を特定のピアに転送
   socket.on('voice:ice-candidate', (data) => {
-    const { targetId, candidate } = data;
-    const targetSocket = io.sockets.sockets.get(targetId);
+    const targetSocket = io.sockets.sockets.get(data.targetId);
     if (targetSocket) {
-      targetSocket.emit('voice:ice-candidate', { fromId: socket.id, candidate });
+      targetSocket.emit('voice:ice-candidate', { fromId: socket.id, candidate: data.candidate });
     }
   });
 
-  // ボイスチャット参加通知（他全員に）
   socket.on('voice:joined', () => {
     socket.broadcast.emit('voice:peer-joined', { peerId: socket.id });
   });
 
-  // ボイスチャット退出通知
   socket.on('voice:left', () => {
     socket.broadcast.emit('voice:peer-left', { peerId: socket.id });
   });
 
-  // 発話状態の更新（名前タグのインジケーター用）
   socket.on('voice:speaking', (data) => {
     socket.broadcast.emit('voice:speaking', { id: socket.id, speaking: data.speaking });
   });
@@ -176,10 +277,18 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const player = connectedPlayers.get(socket.id);
     const name = player?.name || 'unknown';
-    connectedPlayers.delete(socket.id);
 
+    connectedPlayers.delete(socket.id);
     io.emit('player:left', { id: socket.id });
     io.emit('player:count', connectedPlayers.size);
+
+    // オーナーが切断 → 再割り当て
+    if (socket.id === mobOwnerId) {
+      mobOwnerId = null;
+      if (connectedPlayers.size > 0) {
+        assignMobOwner();
+      }
+    }
 
     console.log(`[退出] ${name} (${connectedPlayers.size}/${MAX_PLAYERS})`);
   });
@@ -198,7 +307,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   `);
 });
 
-// Graceful Shutdown
 const shutdown = () => {
   console.log('\n[Server] シャットダウン中...');
   worldChanges.dispose();

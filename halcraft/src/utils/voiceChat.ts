@@ -110,7 +110,7 @@ class VoiceChatManager {
       });
 
       // 発話検出の設定
-      this.setupSpeakingDetection();
+      await this.setupSpeakingDetection();
 
       // Socket.IO シグナリングイベントを登録
       this.attachSocketListeners();
@@ -189,10 +189,14 @@ class VoiceChatManager {
   // ── 発話検出 ──
 
   /** 発話検出用の AudioContext + Analyser をセットアップ */
-  private setupSpeakingDetection(): void {
+  private async setupSpeakingDetection(): Promise<void> {
     if (!this.localStream) return;
 
+    // iOS Safari: AudioContext はユーザーインタラクション内で resume が必要
     this.audioContext = new AudioContext();
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
     const source = this.audioContext.createMediaStreamSource(this.localStream);
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
@@ -370,18 +374,32 @@ class VoiceChatManager {
     // リモート音声ストリームを受信 → Audio要素で再生
     const audioElement = document.createElement('audio');
     audioElement.autoplay = true;
-    // iOS Safari では playsinline が必要
+    // iOS Safari 対応
     audioElement.setAttribute('playsinline', '');
+    audioElement.setAttribute('webkit-playsinline', '');
+    // iOS: ミュート状態でも再生できるようにボリュームを設定
+    audioElement.volume = 1.0;
 
     pc.ontrack = (event) => {
       console.log(`[VoiceChat] リモート音声受信: ${peerId}`);
-      audioElement.srcObject = event.streams[0];
+      // iOS Safari 互換性: 新しい MediaStream を明示的に作成
+      const remoteStream = new MediaStream();
+      event.streams[0].getTracks().forEach((track) => remoteStream.addTrack(track));
+      audioElement.srcObject = remoteStream;
       // iOS Safari 対策: ユーザーインタラクション後に再生
-      audioElement.play().catch(() => {
-        // 自動再生がブロックされた場合は次のタッチで再試行
-        document.addEventListener('touchstart', () => audioElement.play(), { once: true });
-        document.addEventListener('click', () => audioElement.play(), { once: true });
-      });
+      const playPromise = audioElement.play();
+      if (playPromise) {
+        playPromise.catch(() => {
+          // 自動再生がブロックされた場合は次のタッチ/クリックで再試行
+          const playHandler = () => {
+            audioElement.play().catch(() => {});
+            document.removeEventListener('touchstart', playHandler);
+            document.removeEventListener('click', playHandler);
+          };
+          document.addEventListener('touchstart', playHandler, { once: false });
+          document.addEventListener('click', playHandler, { once: false });
+        });
+      }
     };
 
     pc.onconnectionstatechange = () => {

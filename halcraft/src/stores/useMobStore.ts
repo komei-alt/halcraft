@@ -82,6 +82,12 @@ interface MobState {
 
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
+
+  /** サーバーからのモブ状態同期（非オーナー画用） */
+  syncFromServer: (serverMobs: Array<{
+    id: string; type: string; x: number; y: number; z: number;
+    rotation: number; hp: number; maxHp: number; hitTimer: number; isAlly: boolean;
+  }>) => void;
 }
 
 export const useMobStore = create<MobState>((set, get) => ({
@@ -192,5 +198,26 @@ export const useMobStore = create<MobState>((set, get) => ({
         return Math.sqrt(dx * dx + dz * dz) < DESPAWN_DISTANCE;
       }),
     }));
+  },
+
+  syncFromServer: (serverMobs) => {
+    // サーバーから受信したモブ状態で全置き換え
+    const newMobs: MobData[] = serverMobs.map((sm) => ({
+      id: sm.id,
+      type: sm.type as MobType,
+      x: sm.x,
+      y: sm.y,
+      z: sm.z,
+      hp: sm.hp,
+      maxHp: sm.maxHp,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      rotation: sm.rotation,
+      hitTimer: sm.hitTimer,
+      burnTimer: 0,
+      isAlly: sm.isAlly,
+    }));
+    set({ mobs: newMobs });
   },
 }));

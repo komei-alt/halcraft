@@ -38,6 +38,15 @@ interface GameState {
 
   /** 時間を進める (deltaSeconds: 実時間の経過秒数) */
   advanceTime: (deltaSeconds: number) => void;
+
+  /** サーバーからの時間同期 */
+  syncTime: (gameTime: number, dayCount: number, isNight: boolean) => void;
+
+  /** マルチプレイ接続中か（時間同期にサーバーを使う） */
+  isMultiplayer: boolean;
+
+  /** マルチプレイ状態を設定 */
+  setMultiplayer: (value: boolean) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -45,6 +54,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameTime: 0.0, // 朝スタート
   dayCount: 1,
   isNight: false,
+  isMultiplayer: false,
 
   startGame: () => {
     set({ phase: 'playing', gameTime: 0.0, dayCount: 1 });
@@ -61,8 +71,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameOver: () => set({ phase: 'gameover' }),
   returnToMenu: () => set({ phase: 'menu' }),
 
+  setMultiplayer: (value) => set({ isMultiplayer: value }),
+
   advanceTime: (deltaSeconds) => {
     if (get().phase !== 'playing') return;
+    // マルチプレイ中はサーバーからの同期に任せる
+    if (get().isMultiplayer) return;
 
     const timeIncrement = deltaSeconds / DAY_DURATION_SECONDS;
     let newTime = get().gameTime + timeIncrement;
@@ -81,5 +95,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       dayCount: newDayCount,
       isNight,
     });
+  },
+
+  syncTime: (gameTime, dayCount, isNight) => {
+    set({ gameTime, dayCount, isNight });
   },
 }));

@@ -1,12 +1,16 @@
 // ============================================
 // マルチプレイ状態管理ストア
 // リモートプレイヤーの位置・名前・色を管理
+// 時間同期 + モブ同期（オーナー方式）
 // ============================================
 
 import { create } from 'zustand';
 import type { Socket } from 'socket.io-client';
 import { connectToServer, disconnectFromServer, getSocket } from '../utils/socket';
 import { useWorldStore } from './useWorldStore';
+import { useGameStore } from './useGameStore';
+import { useMobStore } from './useMobStore';
+import { usePlayerStore } from './usePlayerStore';
 import type { BlockId } from '../types/blocks';
 
 /** リモートプレイヤーの状態 */
@@ -42,6 +46,9 @@ interface MultiplayerState {
   /** サーバー満員フラグ */
   serverFull: boolean;
 
+  /** モブのオーナーか（AI/物理を計算する責任者） */
+  isMobOwner: boolean;
+
   /** 名前を設定 */
   setPlayerName: (name: string) => void;
 
@@ -65,11 +72,14 @@ interface MultiplayerState {
 
   /** リモートプレイヤーの発話状態を更新 */
   setRemoteSpeaking: (playerId: string, speaking: boolean) => void;
+
+  /** モブにダメージを送信（非オーナー → オーナーへ転送） */
+  sendMobDamage: (mobId: string, amount: number, knockbackX: number, knockbackZ: number) => void;
+
+  /** モブ状態を送信（オーナーが100msごとに呼ぶ） */
+  sendMobSync: (mobs: Array<{ id: string; type: string; x: number; y: number; z: number; rotation: number; hp: number; maxHp: number; hitTimer: number; isAlly: boolean }>) => void;
 }
 
-/** 位置同期の間隔（ms） */
-const SYNC_INTERVAL = 50; // 20fps
-let syncTimer: ReturnType<typeof setInterval> | null = null;
 let lastSentPos: [number, number, number] | null = null;
 
 export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
@@ -79,6 +89,7 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   remotePlayers: new Map(),
   playerCount: 0,
   serverFull: false,
+  isMobOwner: false,
 
   setPlayerName: (name) => set({ playerName: name }),
 
@@ -89,18 +100,16 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   },
 
   leave: () => {
-    if (syncTimer) {
-      clearInterval(syncTimer);
-      syncTimer = null;
-    }
     lastSentPos = null;
     disconnectFromServer();
+    useGameStore.getState().setMultiplayer(false);
     set({
       connected: false,
       myId: null,
       remotePlayers: new Map(),
       playerCount: 0,
       serverFull: false,
+      isMobOwner: false,
     });
   },
 
@@ -168,6 +177,18 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     }
   },
 
+  sendMobDamage: (mobId, amount, knockbackX, knockbackZ) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('mob:damage', { mobId, amount, knockbackX, knockbackZ });
+  },
+
+  sendMobSync: (mobs) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('mob:sync', { mobs });
+  },
+
   setRemoteSpeaking: (playerId, speaking) => {
     const players = get().remotePlayers;
     const player = players.get(playerId);
@@ -189,18 +210,13 @@ function setupSocketListeners(
   // 接続完了
   socket.on('connect', () => {
     set({ connected: true });
-
-    // 位置同期タイマー開始
-    if (syncTimer) clearInterval(syncTimer);
-    syncTimer = setInterval(() => {
-      // Player.tsx から呼ばれる sendPosition を定期実行するのではなく
-      // Player 側で useFrame 内から sendPosition を呼ぶ
-    }, SYNC_INTERVAL);
+    useGameStore.getState().setMultiplayer(true);
   });
 
   // 切断
   socket.on('disconnect', () => {
-    set({ connected: false });
+    set({ connected: false, isMobOwner: false });
+    useGameStore.getState().setMultiplayer(false);
   });
 
   // プレイヤー一覧受信
@@ -283,5 +299,48 @@ function setupSocketListeners(
   // サーバー満員
   socket.on('server:full', () => {
     set({ serverFull: true });
+  });
+
+  // ── 時間同期 ──
+  socket.on('time:sync', (data: { gameTime: number; dayCount: number; isNight: boolean }) => {
+    useGameStore.getState().syncTime(data.gameTime, data.dayCount, data.isNight);
+  });
+
+  // ── モブ同期 ──
+
+  // オーナーに任命された
+  socket.on('mob:you-are-owner', () => {
+    set({ isMobOwner: true });
+    console.log('[Multiplayer] モブオーナーに任命されました');
+  });
+
+  // オーナーではなくなった
+  socket.on('mob:not-owner', () => {
+    set({ isMobOwner: false });
+    console.log('[Multiplayer] モブオーナーではなくなりました');
+  });
+
+  // モブ状態の受信（非オーナーが受信）
+  socket.on('mob:sync', (data: { mobs: Array<{
+    id: string; type: string; x: number; y: number; z: number;
+    rotation: number; hp: number; maxHp: number; hitTimer: number; isAlly: boolean;
+  }> }) => {
+    if (get().isMobOwner) return; // オーナーは自分で計算するので無視
+    const { syncFromServer } = useMobStore.getState();
+    syncFromServer(data.mobs);
+  });
+
+  // 非オーナーからの攻撃がオーナーに転送されてきた
+  socket.on('mob:damage', (data: {
+    mobId: string; amount: number; knockbackX: number; knockbackZ: number; attackerId: string;
+  }) => {
+    if (!get().isMobOwner) return;
+    const { damageMob } = useMobStore.getState();
+    damageMob(data.mobId, data.amount, data.knockbackX, data.knockbackZ);
+  });
+
+  // オーナーが計算した他プレイヤーへのダメージ
+  socket.on('mob:take-damage', (data: { amount: number }) => {
+    usePlayerStore.getState().takeDamage(data.amount);
   });
 }
