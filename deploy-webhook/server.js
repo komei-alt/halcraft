@@ -45,8 +45,8 @@ function deploy() {
   exec(`
     cd ${REPO_DIR} && \
     git pull origin main && \
-    /usr/local/bin/docker compose build --no-cache && \
-    /usr/local/bin/docker compose up -d --force-recreate
+    docker compose -f ${REPO_DIR}/docker-compose.yml build --no-cache halcraft && \
+    docker compose -f ${REPO_DIR}/docker-compose.yml up -d --force-recreate halcraft
   `, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error) {
       log(`❌ デプロイ失敗: ${error.message}`);
