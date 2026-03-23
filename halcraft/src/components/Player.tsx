@@ -54,6 +54,10 @@ export function Player() {
   // タッチデバイス判定（初回のみ）
   const isTouch = useRef(isTouchDevice());
 
+  // 再利用用ベクトル（GCプレッシャー削減）
+  const moveDir = useRef(new THREE.Vector3());
+  const moveEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
   const applyFallDamage = usePlayerStore((s) => s.applyFallDamage);
@@ -233,10 +237,11 @@ export function Player() {
     }
 
     if (Math.abs(inputX) > 0.1 || Math.abs(inputZ) > 0.1) {
-      const moveDir = new THREE.Vector3(inputX, 0, inputZ).normalize();
-      moveDir.applyEuler(new THREE.Euler(0, euler.current.y, 0, 'YXZ'));
-      vel.x = moveDir.x * speed;
-      vel.z = moveDir.z * speed;
+      moveDir.current.set(inputX, 0, inputZ).normalize();
+      moveEuler.current.set(0, euler.current.y, 0);
+      moveDir.current.applyEuler(moveEuler.current);
+      vel.x = moveDir.current.x * speed;
+      vel.z = moveDir.current.z * speed;
     } else {
       // 入力なし → 減速
       vel.x *= 0.85;

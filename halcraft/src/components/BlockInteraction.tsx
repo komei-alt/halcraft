@@ -70,10 +70,16 @@ export function BlockInteraction() {
   // タッチデバイス判定（初回のみ）
   const isTouch = useRef(isTouchDevice());
 
+  // 再利用用ベクトル（GCプレッシャー削減）
+  const rayDir = useRef(new THREE.Vector3());
+  const rayOrigin = useRef(new THREE.Vector3());
+
   // レイマーチングで照準先のブロックを検出
   useFrame(() => {
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    const origin = camera.position.clone();
+    rayDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    rayOrigin.current.copy(camera.position);
+    const dir = rayDir.current;
+    const origin = rayOrigin.current;
 
     let found: TargetBlock | null = null;
 

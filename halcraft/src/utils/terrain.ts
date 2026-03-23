@@ -2,7 +2,7 @@
 // simplex-noise を使って自然な起伏のある地形を生成する
 
 import { createNoise2D } from 'simplex-noise';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 
 // シード固定のノイズ関数を生成
 const noise2D = createNoise2D(() => 0.5);
@@ -87,6 +87,18 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 }
 
 /**
+ * 隣接ブロックが「透過的」かどうかを判定するヘルパー
+ * 空気・透明ブロック・非標準形状ブロック（松明等）を透過扱いにする
+ */
+function isBlockTransparent(blockId: BlockId): boolean {
+  if (blockId === BLOCK_IDS.AIR) return true;
+  const def = BLOCK_DEFS[blockId];
+  if (!def) return true;
+  // 透明ブロック（ガラス等）や非標準形状（松明等）は透過扱い
+  return def.transparent || !!def.nonStandard;
+}
+
+/**
  * チャンク内の特定ブロックの隣接面が露出しているかチェック
  * 露出面のみレンダリングして描画負荷を下げるための関数
  */
@@ -96,10 +108,14 @@ export function isBlockExposed(
   ly: number,
   lz: number,
 ): boolean {
+  const blockId = chunk[lx][ly][lz];
   // 空気ブロックは描画しない
-  if (chunk[lx][ly][lz] === BLOCK_IDS.AIR) return false;
+  if (blockId === BLOCK_IDS.AIR) return false;
 
-  // 6方向のうち1つでも空気に接していたら露出あり
+  // 自身が透明ブロックかどうか
+  const selfTransparent = isBlockTransparent(blockId);
+
+  // 6方向のうち1つでも隣接面が見えるなら露出あり
   const neighbors = [
     [lx - 1, ly, lz],
     [lx + 1, ly, lz],
@@ -118,9 +134,13 @@ export function isBlockExposed(
     ) {
       return true;
     }
-    if (chunk[nx][ny][nz] === BLOCK_IDS.AIR) {
-      return true;
-    }
+    const neighborId = chunk[nx][ny][nz];
+    // 隣接が空気なら露出
+    if (neighborId === BLOCK_IDS.AIR) return true;
+    // 隣接が透明ブロックで、自身が不透明なら露出（ガラス越しに見える）
+    if (!selfTransparent && isBlockTransparent(neighborId)) return true;
+    // 自身も透明ブロックの場合、異なる種類の透明ブロックに接していれば露出
+    if (selfTransparent && neighborId !== blockId && isBlockTransparent(neighborId)) return true;
   }
 
   return false;

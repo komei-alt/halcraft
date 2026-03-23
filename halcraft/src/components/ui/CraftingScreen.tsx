@@ -441,7 +441,12 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                   key={blockId}
                   onClick={() => handleAddBlock(blockId)}
                   onMouseMove={(e) => handleItemMouseMove(e, blockId)}
-                  onMouseLeave={handleItemMouseLeave}
+                  onMouseLeave={(e) => {
+                    handleItemMouseLeave();
+                    (e.currentTarget as HTMLDivElement).style.background = justAdded
+                      ? 'rgba(80, 200, 80, 0.25)'
+                      : 'rgba(0,0,0,0.15)';
+                  }}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',

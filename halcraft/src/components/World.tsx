@@ -89,13 +89,20 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
 
 /** マテリアル共通プロパティを生成 */
 function createMaterialProps(blockDef: BlockInfo) {
-  return {
+  const props: Record<string, unknown> = {
     transparent: blockDef.transparent,
     opacity: blockDef.transparent ? 0.6 : 1,
-    emissive: blockDef.emissiveColor ?? (blockDef.emissive ? new THREE.Color(0x333333) : undefined),
-    emissiveIntensity: blockDef.emissiveIntensity ?? (blockDef.emissive ? 0.5 : 0),
     roughness: 0.85,
   };
+  // emissive が有効な場合のみプロパティに含める（undefinedを渡すと警告が出る）
+  if (blockDef.emissiveColor) {
+    props.emissive = blockDef.emissiveColor;
+    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
+  } else if (blockDef.emissive) {
+    props.emissive = new THREE.Color(0x333333);
+    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
+  }
+  return props;
 }
 
 /**

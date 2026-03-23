@@ -19,6 +19,7 @@ const NIGHT_SUN_COLOR = new THREE.Color(0x334488);
 /** 夕焼けの色 */
 const SUNSET_SKY = new THREE.Color(0xff7733);
 const SUNSET_FOG = new THREE.Color(0xff6622);
+const SUNSET_SUN_COLOR = new THREE.Color(0xff6622);
 
 /** 色補間ヘルパー */
 function lerpColor(a: THREE.Color, b: THREE.Color, t: number): THREE.Color {
@@ -85,7 +86,7 @@ export function Environment() {
       fogColor = lerpColor(DAY_FOG, SUNSET_FOG, t);
       sunIntensity = 1.8 - t * 1.2;
       ambientIntensity = 0.6 - t * 0.35;
-      sunColor = lerpColor(DAY_SUN_COLOR, new THREE.Color(0xff6622), t);
+      sunColor = lerpColor(DAY_SUN_COLOR, SUNSET_SUN_COLOR, t);
     } else if (gameTime < 0.55) {
       // 日没 (0.5 ~ 0.55)
       const t = (gameTime - 0.5) / 0.05;
@@ -93,7 +94,7 @@ export function Environment() {
       fogColor = lerpColor(SUNSET_FOG, NIGHT_FOG, t);
       sunIntensity = 0.6 - t * 0.4;
       ambientIntensity = 0.25 - t * 0.1;
-      sunColor = lerpColor(new THREE.Color(0xff6622), NIGHT_SUN_COLOR, t);
+      sunColor = lerpColor(SUNSET_SUN_COLOR, NIGHT_SUN_COLOR, t);
     } else {
       // 夜 (0.55 ~ 1.0)
       skyColor = NIGHT_SKY;

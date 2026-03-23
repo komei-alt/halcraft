@@ -61,11 +61,25 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   // 各脚のアニメーション（8本の脚、位相をずらして波のように動く）
   const legPhases = useMemo(() => [0, 0.8, 1.6, 2.4, 0.4, 1.2, 2.0, 2.8], []);
 
+  // Glow マテリアルの ref（毎フレーム再生成を防ぐ）
+  const spiderGlowMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  if (!spiderGlowMatRef.current) {
+    spiderGlowMatRef.current = new THREE.MeshStandardMaterial({
+      color: SPIDER_GLOW, emissive: SPIDER_GLOW, emissiveIntensity: 0.5,
+      roughness: 0.4, metalness: 0.2, transparent: true, opacity: 0.9,
+    });
+  }
+  const spiderGlowMat = spiderGlowMatRef.current;
+
   // 腹部の発光アニメーション
   useFrame(() => {
     if (glowRef.current) {
       const mat = glowRef.current.material as THREE.MeshStandardMaterial;
       mat.emissiveIntensity = glowPulse;
+    }
+    // spiderGlowMat の発光強度も更新
+    if (spiderGlowMatRef.current) {
+      spiderGlowMatRef.current.emissiveIntensity = glowPulse;
     }
   });
 
@@ -110,10 +124,7 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   const spiderBodyMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: isDamaged ? DAMAGED_COLOR : SPIDER_BODY, roughness: 0.7, metalness: 0.1,
   }), [isDamaged]);
-  const spiderGlowMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: SPIDER_GLOW, emissive: SPIDER_GLOW, emissiveIntensity: glowPulse,
-    roughness: 0.4, metalness: 0.2, transparent: true, opacity: 0.9,
-  }), [glowPulse]);
+  // spiderGlowMat は上のuseRef + useFrameで管理（毎フレーム再生成を防止）
   const spiderDarkMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: SPIDER_DARK, roughness: 0.9,
   }), []);
