@@ -1,6 +1,7 @@
 // ============================================
 // NameTag — プレイヤー頭上の名前表示
 // Canvas テクスチャ + Sprite で Billboard 表示
+// 発話中はグリーンのインジケーター表示
 // ============================================
 
 import { useMemo } from 'react';
@@ -8,13 +9,16 @@ import * as THREE from 'three';
 
 interface NameTagProps {
   name: string;
+  /** ボイスチャットで発話中か */
+  speaking?: boolean;
 }
 
 /**
  * Canvasテクスチャで名前タグを生成し、Spriteとして表示。
  * 常にカメラを向くBillboard動作。
+ * 発話中はグリーンの枠・アイコンで視覚的にフィードバック。
  */
-export function NameTag({ name }: NameTagProps) {
+export function NameTag({ name, speaking = false }: NameTagProps) {
   const { texture, aspectRatio } = useMemo(() => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
@@ -22,16 +26,32 @@ export function NameTag({ name }: NameTagProps) {
     canvas.height = 64;
 
     // 背景（角丸矩形）
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    roundRect(ctx, 4, 12, canvas.width - 8, canvas.height - 24, 8);
-    ctx.fill();
+    if (speaking) {
+      // 発話中: グリーンの枠付き
+      ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
+      roundRect(ctx, 2, 10, canvas.width - 4, canvas.height - 20, 10);
+      ctx.fill();
 
-    // テキスト
+      ctx.strokeStyle = 'rgba(46, 204, 113, 0.8)';
+      ctx.lineWidth = 2;
+      roundRect(ctx, 2, 10, canvas.width - 4, canvas.height - 20, 10);
+      ctx.stroke();
+    } else {
+      // 通常: 半透明黒背景
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      roundRect(ctx, 4, 12, canvas.width - 8, canvas.height - 24, 8);
+      ctx.fill();
+    }
+
+    // 名前テキスト
     ctx.font = 'bold 22px "Segoe UI", "Hiragino Sans", system-ui, sans-serif';
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = speaking ? '#2ecc71' : '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+
+    // 発話中は🎙️アイコン付き
+    const displayText = speaking ? `🎙️ ${name}` : name;
+    ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.needsUpdate = true;
@@ -40,7 +60,7 @@ export function NameTag({ name }: NameTagProps) {
       texture: tex,
       aspectRatio: canvas.width / canvas.height,
     };
-  }, [name]);
+  }, [name, speaking]);
 
   const spriteMat = useMemo(
     () =>

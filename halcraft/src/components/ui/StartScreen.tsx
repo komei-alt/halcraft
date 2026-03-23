@@ -5,7 +5,8 @@
 import { useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
-import { isTouchDevice } from '../../utils/device';
+import { isTouchDevice, requestFullscreen } from '../../utils/device';
+import { InstallBanner } from './mobile/InstallBanner';
 
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
@@ -28,6 +29,9 @@ export function StartScreen() {
     const trimmedName = name.trim();
 
     // ゲーム開始 + マルチプレイ接続
+    // フルスクリーンを試みる（対応ブラウザのみ）
+    requestFullscreen();
+
     startGame();
     join(trimmedName);
   }, [isValidName, isJoining, name, startGame, join]);
@@ -36,6 +40,7 @@ export function StartScreen() {
     if (e.key === 'Enter' && isValidName && !isJoining) {
       setIsJoining(true);
       const trimmedName = name.trim();
+      requestFullscreen();
       startGame();
       join(trimmedName);
     }
@@ -220,6 +225,9 @@ export function StartScreen() {
           </>
         )}
       </div>
+
+      {/* iOS Safari用：ホーム画面に追加の案内バナー */}
+      <InstallBanner />
     </div>
   );
 }

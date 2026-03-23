@@ -19,6 +19,8 @@ export interface RemotePlayer {
   /** 補間用の目標位置 */
   targetPosition: [number, number, number];
   targetRotation: [number, number];
+  /** ボイスチャットで発話中か */
+  speaking: boolean;
 }
 
 interface MultiplayerState {
@@ -60,6 +62,9 @@ interface MultiplayerState {
 
   /** リモートプレイヤーの補間更新（毎フレーム） */
   interpolateRemotePlayers: (dt: number) => void;
+
+  /** リモートプレイヤーの発話状態を更新 */
+  setRemoteSpeaking: (playerId: string, speaking: boolean) => void;
 }
 
 /** 位置同期の間隔（ms） */
@@ -162,6 +167,15 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       set({ remotePlayers: new Map(players) });
     }
   },
+
+  setRemoteSpeaking: (playerId, speaking) => {
+    const players = get().remotePlayers;
+    const player = players.get(playerId);
+    if (player && player.speaking !== speaking) {
+      player.speaking = speaking;
+      set({ remotePlayers: new Map(players) });
+    }
+  },
 }));
 
 /**
@@ -201,6 +215,7 @@ function setupSocketListeners(
           ...p,
           targetPosition: [...p.position],
           targetRotation: [...p.rotation],
+          speaking: false,
         });
       }
     }
@@ -214,6 +229,7 @@ function setupSocketListeners(
       ...data,
       targetPosition: [...data.position],
       targetRotation: [...data.rotation],
+      speaking: false,
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);

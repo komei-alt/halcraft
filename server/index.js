@@ -128,6 +128,50 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('block:changed', { x, y, z, blockId });
   });
 
+  // ── WebRTC シグナリング（ボイスチャット用） ──
+
+  // WebRTC オファーを特定のピアに転送
+  socket.on('voice:offer', (data) => {
+    const { targetId, offer } = data;
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (targetSocket) {
+      targetSocket.emit('voice:offer', { fromId: socket.id, offer });
+    }
+  });
+
+  // WebRTC アンサーを特定のピアに転送
+  socket.on('voice:answer', (data) => {
+    const { targetId, answer } = data;
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (targetSocket) {
+      targetSocket.emit('voice:answer', { fromId: socket.id, answer });
+    }
+  });
+
+  // ICE candidate を特定のピアに転送
+  socket.on('voice:ice-candidate', (data) => {
+    const { targetId, candidate } = data;
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (targetSocket) {
+      targetSocket.emit('voice:ice-candidate', { fromId: socket.id, candidate });
+    }
+  });
+
+  // ボイスチャット参加通知（他全員に）
+  socket.on('voice:joined', () => {
+    socket.broadcast.emit('voice:peer-joined', { peerId: socket.id });
+  });
+
+  // ボイスチャット退出通知
+  socket.on('voice:left', () => {
+    socket.broadcast.emit('voice:peer-left', { peerId: socket.id });
+  });
+
+  // 発話状態の更新（名前タグのインジケーター用）
+  socket.on('voice:speaking', (data) => {
+    socket.broadcast.emit('voice:speaking', { id: socket.id, speaking: data.speaking });
+  });
+
   // 切断
   socket.on('disconnect', () => {
     const player = connectedPlayers.get(socket.id);

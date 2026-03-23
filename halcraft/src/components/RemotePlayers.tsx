@@ -44,6 +44,7 @@ function RemotePlayerModel({
     position: [number, number, number];
     rotation: [number, number];
     targetPosition: [number, number, number];
+    speaking: boolean;
   };
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -75,7 +76,7 @@ function RemotePlayerModel({
   return (
     <group ref={groupRef}>
       <VoxelAvatar color={player.color} isMoving={isMoving.current} />
-      <NameTag name={player.name} />
+      <NameTag name={player.name} speaking={player.speaking} />
     </group>
   );
 }

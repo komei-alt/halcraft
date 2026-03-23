@@ -23,6 +23,7 @@ import { DamageOverlay } from './components/ui/DamageOverlay';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
+import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
@@ -88,6 +89,7 @@ export default function App() {
           <HealthBar />
           <TimeDisplay />
           <DamageOverlay />
+          <VoiceChatUI />
           <CraftingScreen
             externalOpen={isTouch ? craftingOpen : undefined}
             onClose={handleCloseCrafting}

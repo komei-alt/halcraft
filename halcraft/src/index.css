@@ -10,6 +10,8 @@
 html, body, #root {
   width: 100%;
   height: 100%;
+  /* iOS Safari のアドレスバー表示/非表示に動的対応 */
+  height: 100dvh;
   overflow: hidden;
   background: #000;
   font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
