@@ -19,8 +19,8 @@ import {
 } from '../utils/touchInput';
 
 // 定数
-const MOVE_SPEED = 6;
-const SPRINT_SPEED = 10;
+const MOVE_SPEED = 4.5;
+const SPRINT_SPEED = 7.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = -25;
 const MOUSE_SENSITIVITY = 0.002;
