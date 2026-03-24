@@ -14,6 +14,8 @@ import { getTerrainHeight } from '../../utils/terrain';
 import { BLOCK_IDS } from '../../types/blocks';
 import { Zombie } from './Zombie';
 import { Prototype } from './Prototype';
+import { Chicken } from './Chicken';
+import { Spider } from './Spider';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
 import { MobDeathEffect } from '../MobDeathEffect';
 
@@ -35,6 +37,23 @@ const ZOMBIE_FLANK_CHANCE = 0.3;
 /** 回り込みの角度（ラジアン） */
 const ZOMBIE_FLANK_ANGLE = Math.PI * 0.4;
 
+/** ニワトリの定数 */
+const CHICKEN_SPEED = 1.5;
+const CHICKEN_FLEE_RANGE = 5;           // この距離以内でプレイヤーから逃げる
+const CHICKEN_FLEE_SPEED = 3.0;
+const CHICKEN_WANDER_INTERVAL = 3;      // 秒ごとに方向転換
+const CHICKEN_HEIGHT = 0.6;
+const CHICKEN_RADIUS = 0.2;
+
+/** クモの定数 */
+const SPIDER_SPEED = 3.5;               // ゾンビより速い
+const SPIDER_STOP_RANGE = 0.8;
+const SPIDER_ATTACK_RANGE = 1.3;
+const SPIDER_ATTACK_DAMAGE = 3;
+const SPIDER_ATTACK_COOLDOWN = 0.8;
+const SPIDER_HEIGHT = 0.6;              // 低い体高
+const SPIDER_RADIUS = 0.4;
+
 /** プロトタイプ（味方）の定数 */
 const PROTOTYPE_SPEED = 3.0;         // プレイヤー追従速度（速めに）
 const PROTOTYPE_FOLLOW_MIN = 4;      // これ以上離れたら追従開始
@@ -55,6 +74,8 @@ export function MobManager() {
   const setMobs = useMobStore((s) => s.setMobs);
   const trySpawnZombie = useMobStore((s) => s.trySpawnZombie);
   const trySpawnPrototype = useMobStore((s) => s.trySpawnPrototype);
+  const trySpawnChicken = useMobStore((s) => s.trySpawnChicken);
+  const trySpawnSpider = useMobStore((s) => s.trySpawnSpider);
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
   const getBlock = useWorldStore((s) => s.getBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
@@ -76,6 +97,11 @@ export function MobManager() {
   const wasNight = useRef(false);
   // ゾンビ回り込みタイマー
   const flankTimer = useRef(0);
+  // クモ攻撃クールダウン
+  const spiderAttackCooldown = useRef(0);
+  // ニワトリの方向転換タイマー
+  const chickenWanderTimers = useRef(new Map<string, number>());
+  const chickenWanderDirs = useRef(new Map<string, number>());
 
   // ブロック衝突チェック（モブ用）
   const checkMobCollision = (px: number, py: number, pz: number): boolean => {
@@ -150,6 +176,7 @@ export function MobManager() {
     animTime.current += dt;
     attackCooldown.current = Math.max(0, attackCooldown.current - dt);
     protoAttackCooldown.current = Math.max(0, protoAttackCooldown.current - dt);
+    spiderAttackCooldown.current = Math.max(0, spiderAttackCooldown.current - dt);
 
     // 攻撃クールダウンとHP回復を毎フレーム更新
     updateAttackCooldown(dt);
@@ -162,15 +189,21 @@ export function MobManager() {
 
     // 夜→昼の切り替わりで敵モブ削除（味方は残す）
     if (wasNight.current && !isNight) {
-      // ゾンビだけ削除
+      // ゾンビとクモを削除
       const currentState = useMobStore.getState();
       useMobStore.getState().setMobs(currentState.mobs.filter((m) => m.isAlly));
     }
     wasNight.current = isNight;
 
-    // 夜間のみゾンビスポーン
+    // 夜間のみゾンビ・クモスポーン
     if (isNight) {
       trySpawnZombie(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+      trySpawnSpider(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+    }
+
+    // 昼間はニワトリスポーン
+    if (!isNight) {
+      trySpawnChicken(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
     }
 
     // プロトタイプ味方モブは常時スポーン（昼夜問わず）
@@ -194,6 +227,183 @@ export function MobManager() {
 
       // ヒットタイマーの減算
       m.hitTimer = Math.max(0, m.hitTimer - dt);
+
+      // =======================================
+      // ニワトリのAI（パッシブ・逃げる）
+      // =======================================
+      if (m.type === 'chicken') {
+        const dxC = playerX - m.x;
+        const dzC = playerZ - m.z;
+        const distC = Math.sqrt(dxC * dxC + dzC * dzC);
+
+        // ワンダータイマー管理
+        let wanderTimer = chickenWanderTimers.current.get(m.id) ?? 0;
+        let wanderDir = chickenWanderDirs.current.get(m.id) ?? Math.random() * Math.PI * 2;
+        wanderTimer += dt;
+
+        if (distC < CHICKEN_FLEE_RANGE) {
+          // プレイヤーから逃げる
+          const fleeX = -dxC;
+          const fleeZ = -dzC;
+          const fleeDist = Math.sqrt(fleeX * fleeX + fleeZ * fleeZ);
+          if (fleeDist > 0.01) {
+            m.rotation = Math.atan2(fleeX, fleeZ);
+            m.vx = (fleeX / fleeDist) * CHICKEN_FLEE_SPEED;
+            m.vz = (fleeZ / fleeDist) * CHICKEN_FLEE_SPEED;
+          }
+        } else if (wanderTimer > CHICKEN_WANDER_INTERVAL) {
+          // ランダムに方向転換
+          wanderDir = Math.random() * Math.PI * 2;
+          wanderTimer = 0;
+          chickenWanderDirs.current.set(m.id, wanderDir);
+        } else {
+          // ゆっくり歩き回る
+          m.rotation = wanderDir;
+          m.vx = Math.sin(wanderDir) * CHICKEN_SPEED * 0.5;
+          m.vz = Math.cos(wanderDir) * CHICKEN_SPEED * 0.5;
+          // たまに止まる
+          if (Math.sin(animTime.current * 0.3 + parseInt(m.id.replace('mob_', ''), 10)) > 0.3) {
+            m.vx = 0;
+            m.vz = 0;
+          }
+        }
+        chickenWanderTimers.current.set(m.id, wanderTimer);
+
+        // 重力
+        m.vy += MOB_GRAVITY * dt;
+        if (m.vy < -30) m.vy = -30;
+
+        // Y衝突
+        const newYC = m.y + m.vy * dt;
+        if (checkMobCollisionSize(m.x, newYC, m.z, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
+          if (m.vy < 0) m.y = Math.floor(newYC) + 1;
+          m.vy = 0;
+        } else {
+          m.y = newYC;
+        }
+
+        // X衝突（段差1ブロック対応）
+        const newXC = m.x + m.vx * dt;
+        if (checkMobCollisionSize(newXC, m.y, m.z, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
+          if (!checkMobCollisionSize(newXC, m.y + 1, m.z, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
+            m.vy = 4;
+            m.x = newXC;
+          } else {
+            m.vx = 0;
+            // 壁にぶつかったら方向転換
+            chickenWanderDirs.current.set(m.id, wanderDir + Math.PI);
+          }
+        } else {
+          m.x = newXC;
+        }
+
+        // Z衝突
+        const newZC = m.z + m.vz * dt;
+        if (checkMobCollisionSize(m.x, m.y, newZC, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
+          if (!checkMobCollisionSize(m.x, m.y + 1, newZC, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
+            m.vy = 4;
+            m.z = newZC;
+          } else {
+            m.vz = 0;
+            chickenWanderDirs.current.set(m.id, wanderDir + Math.PI);
+          }
+        } else {
+          m.z = newZC;
+        }
+
+        // 落下削除
+        if (m.y < -20) continue;
+
+        updatedMobs.push(m);
+        continue;
+      }
+
+      // =======================================
+      // クモのAI（攻撃的・速い・低い）
+      // =======================================
+      if (m.type === 'spider') {
+        const dxS = playerX - m.x;
+        const dzS = playerZ - m.z;
+        const distS = Math.sqrt(dxS * dxS + dzS * dzS);
+
+        if (distS > SPIDER_STOP_RANGE) {
+          if (distS > 0.1) {
+            m.rotation = Math.atan2(dxS, dzS);
+          }
+          if (m.hitTimer <= 0) {
+            const nxS = dxS / distS;
+            const nzS = dzS / distS;
+            m.vx = nxS * SPIDER_SPEED;
+            m.vz = nzS * SPIDER_SPEED;
+          }
+        } else {
+          m.vx = 0;
+          m.vz = 0;
+          if (distS > 0.1) m.rotation = Math.atan2(dxS, dzS);
+        }
+
+        // 重力
+        m.vy += MOB_GRAVITY * dt;
+        if (m.vy < -30) m.vy = -30;
+
+        // Y衝突
+        const newYS = m.y + m.vy * dt;
+        if (checkMobCollisionSize(m.x, newYS, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+          if (m.vy < 0) m.y = Math.floor(newYS) + 1;
+          m.vy = 0;
+        } else {
+          m.y = newYS;
+        }
+
+        // X衝突（段差1ブロック対応）
+        const newXS = m.x + m.vx * dt;
+        if (checkMobCollisionSize(newXS, m.y, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+          if (m.hitTimer <= 0 && !checkMobCollisionSize(newXS, m.y + 1, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+            m.vy = 5;
+            m.x = newXS;
+          } else {
+            m.vx = 0;
+          }
+        } else {
+          m.x = newXS;
+        }
+
+        // Z衝突
+        const newZS = m.z + m.vz * dt;
+        if (checkMobCollisionSize(m.x, m.y, newZS, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+          if (m.hitTimer <= 0 && !checkMobCollisionSize(m.x, m.y + 1, newZS, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+            m.vy = 5;
+            m.z = newZS;
+          } else {
+            m.vz = 0;
+          }
+        } else {
+          m.z = newZS;
+        }
+
+        // ノックバック減衰
+        if (m.hitTimer > 0) {
+          m.vx *= 0.85;
+          m.vz *= 0.85;
+        }
+
+        // プレイヤー攻撃判定
+        const playerDyS = m.y - playerY;
+        const yCloseS = Math.abs(playerDyS) < SPIDER_HEIGHT + 0.5;
+        if (distS < SPIDER_ATTACK_RANGE && yCloseS && spiderAttackCooldown.current <= 0) {
+          const kbDirX = playerX - m.x;
+          const kbDirZ = playerZ - m.z;
+          takeDamage(SPIDER_ATTACK_DAMAGE, kbDirX, kbDirZ);
+          playHurtSound();
+          spiderAttackCooldown.current = SPIDER_ATTACK_COOLDOWN;
+        }
+
+        // 落下削除
+        if (m.y < -20) continue;
+
+        updatedMobs.push(m);
+        continue;
+      }
 
       if (m.type === 'prototype') {
         // =======================================
@@ -531,8 +741,8 @@ export function MobManager() {
       const distance = Math.sqrt(ddx * ddx + ddz * ddz);
       playMobDeathSound(distance);
 
-      // アイテムドロップ（ゾンビのみ）
-      if (event.type === 'zombie') {
+      // アイテムドロップ（ゾンビ・クモ）
+      if (event.type === 'zombie' || event.type === 'spider') {
         // ランダムドロップテーブル
         const roll = Math.random();
         if (roll < 0.4) {
@@ -558,6 +768,10 @@ export function MobManager() {
             return <Zombie key={mob.id} mob={mob} animTime={animTime.current} />;
           case 'prototype':
             return <Prototype key={mob.id} mob={mob} animTime={animTime.current} />;
+          case 'chicken':
+            return <Chicken key={mob.id} mob={mob} animTime={animTime.current} />;
+          case 'spider':
+            return <Spider key={mob.id} mob={mob} animTime={animTime.current} />;
           default:
             return null;
         }

@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 
 /** モブの種類 */
-export type MobType = 'zombie' | 'prototype';
+export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider';
 
 /** モブのデータ */
 export interface MobData {
@@ -56,6 +56,16 @@ const ZOMBIE_HP = 10;
 const PROTOTYPE_HP = 50;
 /** プロトタイプの追従距離（スポーン位置） */
 const PROTOTYPE_FOLLOW_DISTANCE = 8;
+/** ニワトリのHP */
+const CHICKEN_HP = 4;
+/** ニワトリの最大同時数 */
+const MAX_CHICKENS = 6;
+/** ニワトリのスポーン間隔（秒） */
+const CHICKEN_SPAWN_INTERVAL = 8;
+/** クモのHP */
+const SPIDER_HP = 8;
+/** クモの最大同時数 */
+const MAX_SPIDERS = 5;
 
 let nextMobId = 0;
 
@@ -90,6 +100,12 @@ interface MobState {
   /** プロトタイプ味方モブのスポーンロジック（常時1体） */
   trySpawnPrototype: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
+  /** 昼間のニワトリスポーン */
+  trySpawnChicken: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+
+  /** 夜間のクモスポーン */
+  trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
 
@@ -106,10 +122,18 @@ interface MobState {
 export const useMobStore = create<MobState>((set, get) => ({
   mobs: [],
   lastSpawnTime: 0,
+  _lastChickenSpawnTime: 0,
+  _lastSpiderSpawnTime: 0,
   _deathEvents: [] as MobDeathEvent[],
 
   spawnMob: (type, x, y, z) => {
-    const hp = type === 'prototype' ? PROTOTYPE_HP : ZOMBIE_HP;
+    const hpMap: Record<MobType, number> = {
+      zombie: ZOMBIE_HP,
+      prototype: PROTOTYPE_HP,
+      chicken: CHICKEN_HP,
+      spider: SPIDER_HP,
+    };
+    const hp = hpMap[type] ?? ZOMBIE_HP;
     const mob: MobData = {
       id: `mob_${nextMobId++}`,
       type,
@@ -117,10 +141,10 @@ export const useMobStore = create<MobState>((set, get) => ({
       hp,
       maxHp: hp,
       vx: 0, vy: 0, vz: 0,
-      rotation: 0,
+      rotation: Math.random() * Math.PI * 2,
       hitTimer: 0,
       burnTimer: 0,
-      isAlly: type === 'prototype',
+      isAlly: type === 'prototype' || type === 'chicken',
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -215,6 +239,44 @@ export const useMobStore = create<MobState>((set, get) => ({
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
 
     get().spawnMob('prototype', spawnX, spawnY, spawnZ);
+  },
+
+  trySpawnChicken: (playerX, playerZ, surfaceYFn) => {
+    const state = get();
+    const chickenCount = state.mobs.filter((m) => m.type === 'chicken').length;
+    if (chickenCount >= MAX_CHICKENS) return;
+
+    const now = performance.now() / 1000;
+    const lastTime = (state as MobState & { _lastChickenSpawnTime: number })._lastChickenSpawnTime;
+    if (now - lastTime < CHICKEN_SPAWN_INTERVAL) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const spawnX = playerX + Math.cos(angle) * distance;
+    const spawnZ = playerZ + Math.sin(angle) * distance;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+
+    get().spawnMob('chicken', spawnX, spawnY, spawnZ);
+    set({ _lastChickenSpawnTime: now } as Partial<MobState>);
+  },
+
+  trySpawnSpider: (playerX, playerZ, surfaceYFn) => {
+    const state = get();
+    const spiderCount = state.mobs.filter((m) => m.type === 'spider').length;
+    if (spiderCount >= MAX_SPIDERS) return;
+
+    const now = performance.now() / 1000;
+    const lastTime = (state as MobState & { _lastSpiderSpawnTime: number })._lastSpiderSpawnTime;
+    if (now - lastTime < SPAWN_INTERVAL) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const spawnX = playerX + Math.cos(angle) * distance;
+    const spawnZ = playerZ + Math.sin(angle) * distance;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+
+    get().spawnMob('spider', spawnX, spawnY, spawnZ);
+    set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
   },
 
   despawnFarMobs: (playerX, playerZ) => {

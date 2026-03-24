@@ -11,6 +11,8 @@ import type { MobType } from '../stores/useMobStore';
 const MOB_COLORS: Record<MobType, THREE.Color> = {
   zombie: new THREE.Color(0x4a6741),      // ゾンビ色（暗い緑）
   prototype: new THREE.Color(0x8888cc),   // プロトタイプ色（青紫）
+  chicken: new THREE.Color(0xf5f5f0),     // ニワトリ色（白）
+  spider: new THREE.Color(0x2a2a2a),      // クモ色（黒）
 };
 
 /** パーティクル1個 */
