@@ -1,5 +1,5 @@
 // プレイヤー状態の管理ストア
-// HP、選択中のブロック（ホットバー）、ダメージ状態を管理
+// HP、選択中のブロック（ホットバー）、ダメージ状態、攻撃クールダウンを管理
 
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
@@ -9,6 +9,15 @@ import { getSocket } from '../utils/socket';
 const FALL_DAMAGE_THRESHOLD = 3;
 /** 落下1ブロックあたりのダメージ量 */
 const FALL_DAMAGE_PER_BLOCK = 1;
+
+/** 攻撃クールダウン時間（秒） */
+const ATTACK_COOLDOWN = 0.4;
+/** HP自然回復の待機時間（最後にダメージを受けてから、秒） */
+const REGEN_DELAY = 30;
+/** HP自然回復量（毎秒） */
+const REGEN_RATE = 0.5;
+/** カメラシェイク減衰速度 */
+const SHAKE_DECAY = 8;
 
 interface PlayerState {
   /** 体力 */
@@ -30,11 +39,29 @@ interface PlayerState {
   /** モバイル用: ブロック設置モードか（false=破壊モード） */
   isPlaceMode: boolean;
 
+  /** 攻撃クールダウン残り時間（秒、0=攻撃可能） */
+  attackCooldown: number;
+
+  /** 攻撃チャージ率（0-1、1=フルチャージ） */
+  attackCharge: number;
+
+  /** カメラシェイク強度（0-1） */
+  cameraShake: number;
+
+  /** 最後にダメージを受けた時刻（自然回復用） */
+  lastDamageTime: number;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
   /** スロット選択（0-8） */
   selectSlot: (slot: number) => void;
+
+  /** 攻撃を実行しダメージ倍率を返す（0=クールダウン中で攻撃不可） */
+  performAttack: () => number;
+
+  /** 攻撃クールダウンを毎フレーム更新 */
+  updateAttackCooldown: (dt: number) => void;
 
   /** ダメージを受ける */
   takeDamage: (amount: number) => void;
@@ -50,6 +77,9 @@ interface PlayerState {
 
   /** 設置/破壊モードを切り替え */
   togglePlaceMode: () => void;
+
+  /** HP自然回復の更新（毎フレーム呼び出す） */
+  updateRegen: (dt: number) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -60,6 +90,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isDead: false,
   invincibleUntil: 0,
   isPlaceMode: false,
+  attackCooldown: 0,
+  attackCharge: 1,
+  cameraShake: 0,
+  lastDamageTime: 0,
 
   getSelectedBlock: () => {
     return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
@@ -68,6 +102,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   selectSlot: (slot) => {
     if (slot >= 0 && slot < HOTBAR_BLOCKS.length) {
       set({ selectedSlot: slot });
+    }
+  },
+
+  performAttack: () => {
+    const state = get();
+    // チャージ率をダメージ倍率として返す（最低0.2倍）
+    const charge = state.attackCharge;
+    const multiplier = 0.2 + charge * 0.8;
+
+    // クールダウン開始
+    set({
+      attackCooldown: ATTACK_COOLDOWN,
+      attackCharge: 0,
+      cameraShake: 0.3 + charge * 0.4,
+    });
+
+    return multiplier;
+  },
+
+  updateAttackCooldown: (dt) => {
+    const state = get();
+    const newCooldown = Math.max(0, state.attackCooldown - dt);
+    const newCharge = newCooldown <= 0 ? 1 : Math.min(1, 1 - newCooldown / ATTACK_COOLDOWN);
+    const newShake = Math.max(0, state.cameraShake - SHAKE_DECAY * dt);
+    // 変更がある場合のみ更新
+    if (newCooldown !== state.attackCooldown || newShake !== state.cameraShake) {
+      set({
+        attackCooldown: newCooldown,
+        attackCharge: newCharge,
+        cameraShake: newShake,
+      });
     }
   },
 
@@ -81,6 +146,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: newHp,
       isDamageFlash: true,
       isDead: newHp <= 0,
+      lastDamageTime: performance.now() / 1000,
+      cameraShake: Math.min(1, 0.5 + amount * 0.1),
     });
     // 死亡時にサーバーへ通知
     if (newHp <= 0) {
@@ -120,6 +187,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   togglePlaceMode: () => {
     set((state) => ({ isPlaceMode: !state.isPlaceMode }));
+  },
+
+  updateRegen: (dt) => {
+    const state = get();
+    if (state.isDead) return;
+    if (state.hp >= state.maxHp) return;
+    const now = performance.now() / 1000;
+    if (now - state.lastDamageTime < REGEN_DELAY) return;
+    const newHp = Math.min(state.maxHp, state.hp + REGEN_RATE * dt);
+    set({ hp: newHp });
   },
 }));
 

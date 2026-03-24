@@ -9,11 +9,13 @@ import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { useDroppedItemStore } from '../../stores/useDroppedItemStore';
 import { getTerrainHeight } from '../../utils/terrain';
 import { BLOCK_IDS } from '../../types/blocks';
 import { Zombie } from './Zombie';
 import { Prototype } from './Prototype';
-import { playHurtSound } from '../../utils/sounds';
+import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
+import { MobDeathEffect } from '../MobDeathEffect';
 
 /** ゾンビの定数 */
 const ZOMBIE_SPEED = 2.5;
@@ -48,6 +50,10 @@ export function MobManager() {
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
   const getBlock = useWorldStore((s) => s.getBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
+  const updateAttackCooldown = usePlayerStore((s) => s.updateAttackCooldown);
+  const updateRegen = usePlayerStore((s) => s.updateRegen);
+  const consumeDeathEvents = useMobStore((s) => s.consumeDeathEvents);
+  const dropItem = useDroppedItemStore((s) => s.dropItem);
 
   // アニメーション時間
   const animTime = useRef(0);
@@ -134,6 +140,10 @@ export function MobManager() {
     animTime.current += dt;
     attackCooldown.current = Math.max(0, attackCooldown.current - dt);
     protoAttackCooldown.current = Math.max(0, protoAttackCooldown.current - dt);
+
+    // 攻撃クールダウンとHP回復を毎フレーム更新
+    updateAttackCooldown(dt);
+    updateRegen(dt);
 
     const isNight = gameState.isNight;
     const playerX = camera.position.x;
@@ -451,6 +461,36 @@ export function MobManager() {
     }
 
     setMobs(updatedMobs);
+
+    // --- 死亡イベントの処理（エフェクト・サウンド・ドロップ） ---
+    const deathEvents = consumeDeathEvents();
+    for (const event of deathEvents) {
+      // パーティクルエフェクト
+      MobDeathEffect.spawnEffect(event.type, event.x, event.y, event.z);
+
+      // 死亡サウンド（プレイヤーからの距離を計算）
+      const ddx = event.x - playerX;
+      const ddz = event.z - playerZ;
+      const distance = Math.sqrt(ddx * ddx + ddz * ddz);
+      playMobDeathSound(distance);
+
+      // アイテムドロップ（ゾンビのみ）
+      if (event.type === 'zombie') {
+        // ランダムドロップテーブル
+        const roll = Math.random();
+        if (roll < 0.4) {
+          // 40%: 鉄ブロック
+          dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
+        } else if (roll < 0.7) {
+          // 30%: 木ブロック
+          dropItem(BLOCK_IDS.WOOD, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
+        } else if (roll < 0.85) {
+          // 15%: エンチャントブロック
+          dropItem(BLOCK_IDS.ENCHANT, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
+        }
+        // 15%: ドロップなし
+      }
+    }
   });
 
   return (

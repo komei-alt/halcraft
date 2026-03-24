@@ -306,3 +306,68 @@ export function playZombieGrunt(distance: number): void {
   osc1.stop(now + duration);
   osc2.stop(now + duration);
 }
+
+// ============================================
+// 6. モブ死亡音（撃破時の爽快な音）
+// ============================================
+
+export function playMobDeathSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('mobDeath', 100)) return;
+
+  // 距離による音量減衰
+  const maxDist = 25;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.4 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  // 低音爆発（破裂感）
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, now);
+  osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(volume, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  osc.connect(oscGain);
+  oscGain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.2);
+
+  // 高音キラリ（撃破感）
+  const sparkle = ctx.createOscillator();
+  sparkle.type = 'sine';
+  sparkle.frequency.setValueAtTime(800, now + 0.02);
+  sparkle.frequency.exponentialRampToValueAtTime(1200, now + 0.12);
+
+  const sparkleGain = ctx.createGain();
+  sparkleGain.gain.setValueAtTime(volume * 0.3, now + 0.02);
+  sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+  sparkle.connect(sparkleGain);
+  sparkleGain.connect(ctx.destination);
+  sparkle.start(now + 0.02);
+  sparkle.stop(now + 0.15);
+
+  // ノイズバースト（破片が飛び散る音）
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.setValueAtTime(1500, now);
+  noiseFilter.Q.setValueAtTime(1, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(volume * 0.35, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.12);
+}

@@ -10,6 +10,8 @@ import { World } from './components/World';
 import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
 import { BlockBreakEffect } from './components/BlockBreakEffect';
+import { DamagePopup } from './components/DamagePopup';
+import { MobDeathEffect } from './components/MobDeathEffect';
 import { DroppedItems } from './components/DroppedItems';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
@@ -22,6 +24,7 @@ import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
 import { DamageOverlay } from './components/ui/DamageOverlay';
+import { AttackIndicator } from './components/ui/AttackIndicator';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
@@ -58,6 +61,8 @@ function GameCanvas() {
         <Player />
         <BlockInteraction />
         <BlockBreakEffect />
+        <DamagePopup />
+        <MobDeathEffect />
         <DroppedItems />
         <MobManager />
         <RemotePlayers />
@@ -95,6 +100,7 @@ export default function App() {
           <HealthBar />
           <TimeDisplay />
           <DamageOverlay />
+          <AttackIndicator />
           <VoiceChatUI />
           <CraftingScreen
             externalOpen={isTouch ? craftingOpen : undefined}

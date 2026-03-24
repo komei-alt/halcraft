@@ -68,6 +68,7 @@ export function Player() {
   const applyFallDamage = usePlayerStore((s) => s.applyFallDamage);
   const isDead = usePlayerStore((s) => s.isDead);
   const respawn = usePlayerStore((s) => s.respawn);
+  const cameraShake = usePlayerStore((s) => s.cameraShake);
 
   // ブロックが固体（通行不可）かチェック
   const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
@@ -316,10 +317,17 @@ export function Player() {
       }
     }
 
-    // --- カメラ追従（目の高さ） ---
+    // --- カメラ追従（目の高さ + シェイク） ---
+    let shakeX = 0;
+    let shakeY = 0;
+    if (cameraShake > 0.01) {
+      const shakeIntensity = cameraShake * 0.08;
+      shakeX = (Math.random() - 0.5) * shakeIntensity;
+      shakeY = (Math.random() - 0.5) * shakeIntensity;
+    }
     camera.position.set(
-      pos.x,
-      pos.y + PLAYER_HEIGHT - 0.1,
+      pos.x + shakeX,
+      pos.y + PLAYER_HEIGHT - 0.1 + shakeY,
       pos.z,
     );
 

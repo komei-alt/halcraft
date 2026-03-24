@@ -31,6 +31,16 @@ export interface MobData {
   isAlly: boolean;
 }
 
+/** モブ死亡イベント */
+export interface MobDeathEvent {
+  /** 死亡したモブの種類 */
+  type: MobType;
+  /** 死亡位置 */
+  x: number;
+  y: number;
+  z: number;
+}
+
 /** 最大同時スポーン数 */
 const MAX_MOBS = 10;
 /** スポーン距離（プレイヤーからの距離） */
@@ -88,11 +98,15 @@ interface MobState {
     id: string; type: string; x: number; y: number; z: number;
     rotation: number; hp: number; maxHp: number; hitTimer: number; isAlly: boolean;
   }>) => void;
+
+  /** 蓄積された死亡イベントを取り出す（消費） */
+  consumeDeathEvents: () => MobDeathEvent[];
 }
 
 export const useMobStore = create<MobState>((set, get) => ({
   mobs: [],
   lastSpawnTime: 0,
+  _deathEvents: [] as MobDeathEvent[],
 
   spawnMob: (type, x, y, z) => {
     const hp = type === 'prototype' ? PROTOTYPE_HP : ZOMBIE_HP;
@@ -114,12 +128,17 @@ export const useMobStore = create<MobState>((set, get) => ({
   },
 
   damageMob: (id, amount, knockbackX, knockbackZ) => {
+    const deathEvents: MobDeathEvent[] = [];
     set((state) => ({
       mobs: state.mobs
         .map((m) => {
           if (m.id !== id) return m;
           const newHp = m.hp - amount;
-          if (newHp <= 0) return null;
+          if (newHp <= 0) {
+            // 死亡イベントを記録
+            deathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
+            return null;
+          }
           return {
             ...m,
             hp: newHp,
@@ -131,6 +150,11 @@ export const useMobStore = create<MobState>((set, get) => ({
         })
         .filter((m): m is MobData => m !== null),
     }));
+    // 死亡イベントを蓄積
+    if (deathEvents.length > 0) {
+      const store = get() as MobState & { _deathEvents: MobDeathEvent[] };
+      (store as MobState & { _deathEvents: MobDeathEvent[] })._deathEvents.push(...deathEvents);
+    }
   },
 
   removeMob: (id) => {
@@ -219,5 +243,12 @@ export const useMobStore = create<MobState>((set, get) => ({
       isAlly: sm.isAlly,
     }));
     set({ mobs: newMobs });
+  },
+
+  consumeDeathEvents: () => {
+    const store = get() as MobState & { _deathEvents: MobDeathEvent[] };
+    const events = [...store._deathEvents];
+    store._deathEvents.length = 0;
+    return events;
   },
 }));
