@@ -7,7 +7,8 @@ import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
 /** GLBモデルのパス */
-const MODEL_PATH = '/models/prototype.glb';
+/** 最適化済みモデル（ポリゴン削減版）。元は prototype_original.glb にバックアップ */
+const MODEL_PATH = '/models/prototype_optimized.glb';
 
 /** ダメージ時の色 */
 const DAMAGED_COLOR = new THREE.Color(0xff6666);
