@@ -128,36 +128,38 @@ export const useMobStore = create<MobState>((set, get) => ({
   },
 
   damageMob: (id, amount, knockbackX, knockbackZ) => {
-    const deathEvents: MobDeathEvent[] = [];
-    set((state) => ({
-      mobs: state.mobs
+    const newDeathEvents: MobDeathEvent[] = [];
+    set((state) => {
+      const updatedMobs = state.mobs
         .map((m) => {
           if (m.id !== id) return m;
           const newHp = m.hp - amount;
           if (newHp <= 0) {
             // 死亡イベントを記録
-            deathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
+            newDeathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
             return null;
           }
           // モブタイプごとのノックバック耐性
           const kbResistance = m.type === 'prototype' ? 0.3 : 0.7 + Math.random() * 0.3;
-          const kbMultiplier = kbResistance * (5 + Math.random() * 4);
+          const kbMultiplier = kbResistance * (4 + Math.random() * 3);
           return {
             ...m,
             hp: newHp,
             vx: knockbackX * kbMultiplier,
-            vy: 3 + Math.random() * 3,
+            vy: 2 + Math.random() * 2,
             vz: knockbackZ * kbMultiplier,
             hitTimer: 0.3,
           };
         })
-        .filter((m): m is MobData => m !== null),
-    }));
-    // 死亡イベントを蓄積
-    if (deathEvents.length > 0) {
-      const store = get() as MobState & { _deathEvents: MobDeathEvent[] };
-      (store as MobState & { _deathEvents: MobDeathEvent[] })._deathEvents.push(...deathEvents);
-    }
+        .filter((m): m is MobData => m !== null);
+
+      // 死亡イベントをstateに蓄積（正しいZustandパターン）
+      const currentDeathEvents = (state as MobState & { _deathEvents: MobDeathEvent[] })._deathEvents;
+      return {
+        mobs: updatedMobs,
+        _deathEvents: [...currentDeathEvents, ...newDeathEvents],
+      };
+    });
   },
 
   removeMob: (id) => {
@@ -249,9 +251,11 @@ export const useMobStore = create<MobState>((set, get) => ({
   },
 
   consumeDeathEvents: () => {
-    const store = get() as MobState & { _deathEvents: MobDeathEvent[] };
-    const events = [...store._deathEvents];
-    store._deathEvents.length = 0;
+    const state = get() as MobState & { _deathEvents: MobDeathEvent[] };
+    const events = [...state._deathEvents];
+    if (events.length > 0) {
+      set({ _deathEvents: [] } as Partial<MobState>);
+    }
     return events;
   },
 }));

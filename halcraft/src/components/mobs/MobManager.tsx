@@ -457,8 +457,9 @@ export function MobManager() {
       // --- X軸衝突 ---
       const newX = m.x + m.vx * dt;
       if (checkMobCollision(newX, m.y, m.z)) {
-        if (!checkMobCollision(newX, m.y + 1, m.z)) {
-          m.vy = 6;
+        // ヒットタイマー中（ノックバック中）はジャンプさせない
+        if (m.hitTimer <= 0 && !checkMobCollision(newX, m.y + 1, m.z)) {
+          m.vy = 4;
           m.x = newX;
         } else {
           m.vx = 0;
@@ -470,8 +471,9 @@ export function MobManager() {
       // --- Z軸衝突 ---
       const newZ = m.z + m.vz * dt;
       if (checkMobCollision(m.x, m.y, newZ)) {
-        if (!checkMobCollision(m.x, m.y + 1, newZ)) {
-          m.vy = 6;
+        // ヒットタイマー中（ノックバック中）はジャンプさせない
+        if (m.hitTimer <= 0 && !checkMobCollision(m.x, m.y + 1, newZ)) {
+          m.vy = 4;
           m.z = newZ;
         } else {
           m.vz = 0;
@@ -480,10 +482,10 @@ export function MobManager() {
         m.z = newZ;
       }
 
-      // --- ヒットタイマー中のノックバック減衰 ---
+      // --- ヒットタイマー中のノックバック減衰（強めに減衰して素早く着地） ---
       if (m.hitTimer > 0) {
-        m.vx *= 0.9;
-        m.vz *= 0.9;
+        m.vx *= 0.85;
+        m.vz *= 0.85;
       }
 
       // --- プレイヤーとの接触判定（XZ距離 + Y範囲チェック） ---
@@ -510,7 +512,12 @@ export function MobManager() {
       playHurtSound();
     }
 
-    setMobs(updatedMobs);
+    // setMobs前に、damageMob で同フレーム中に削除されたモブを除外
+    // （damageMobとMobManagerのsetMobsのレースコンディション防止）
+    const latestMobIds = new Set(useMobStore.getState().mobs.map((m) => m.id));
+    const safeUpdatedMobs = updatedMobs.filter((m) => latestMobIds.has(m.id));
+
+    setMobs(safeUpdatedMobs);
 
     // --- 死亡イベントの処理（エフェクト・サウンド・ドロップ） ---
     const deathEvents = consumeDeathEvents();

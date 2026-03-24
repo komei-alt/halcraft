@@ -33,6 +33,9 @@ const PVP_DAMAGE = 3;
 /** プレイヤーの当たり判定サイズ */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
+/** プレイヤー体AABBの定数（ブロック設置衝突チェック用） */
+const PLACE_PLAYER_RADIUS = 0.25;
+const PLACE_PLAYER_HEIGHT = 1.7;
 
 interface TargetBlock {
   /** 照準先のブロック座標 */
@@ -75,6 +78,36 @@ export function BlockInteraction() {
   const performAttack = usePlayerStore((s) => s.performAttack);
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
+
+  // 設置先ブロックがプレイヤーの体と重なるかチェック
+  const wouldBlockOverlapPlayer = useCallback((bx: number, by: number, bz: number): boolean => {
+    const px = camera.position.x;
+    const py = camera.position.y - PLACE_PLAYER_HEIGHT + 0.1; // 足元Y
+    const pz = camera.position.z;
+
+    // プレイヤーAABB
+    const pMinX = px - PLACE_PLAYER_RADIUS;
+    const pMaxX = px + PLACE_PLAYER_RADIUS;
+    const pMinY = py;
+    const pMaxY = py + PLACE_PLAYER_HEIGHT;
+    const pMinZ = pz - PLACE_PLAYER_RADIUS;
+    const pMaxZ = pz + PLACE_PLAYER_RADIUS;
+
+    // ブロックAABB
+    const bMinX = bx;
+    const bMaxX = bx + 1;
+    const bMinY = by;
+    const bMaxY = by + 1;
+    const bMinZ = bz;
+    const bMaxZ = bz + 1;
+
+    // AABB重なり判定
+    return (
+      pMaxX > bMinX && pMinX < bMaxX &&
+      pMaxY > bMinY && pMinY < bMaxY &&
+      pMaxZ > bMinZ && pMinZ < bMaxZ
+    );
+  }, [camera]);
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
@@ -192,9 +225,12 @@ export function BlockInteraction() {
       if (consumePlaceBlock()) {
         const t = targetRef.current;
         if (t && t.hasPlaceTarget) {
-          const selectedBlock = getSelectedBlock();
-          setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
-          sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+          // プレイヤーの体と重ならないかチェック
+          if (!wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) {
+            const selectedBlock = getSelectedBlock();
+            setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+            sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+          }
         }
       }
     }
@@ -322,11 +358,13 @@ export function BlockInteraction() {
       // 右クリック: ブロック設置
       const t = targetRef.current;
       if (!t || !t.hasPlaceTarget) return;
+      // プレイヤーの体と重ならないかチェック
+      if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return;
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録
