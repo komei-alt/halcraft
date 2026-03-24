@@ -195,7 +195,7 @@ export function World() {
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
-    initChunks(2);
+    initChunks(4);
   }, [initChunks]);
 
   // 生成済みチャンクのキーからcx,czを取得

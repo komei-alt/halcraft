@@ -21,6 +21,7 @@ export const BLOCK_IDS = {
   STAIRS: 13,
   TORCH: 14,
   BED: 15,
+  LEAVES: 16,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -215,6 +216,14 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     nonStandard: true,
     noCollision: true,
+  },
+  [BLOCK_IDS.LEAVES]: {
+    id: BLOCK_IDS.LEAVES,
+    name: '葉っぱブロック',
+    texture: 'leaves.png',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
   },
 };
 

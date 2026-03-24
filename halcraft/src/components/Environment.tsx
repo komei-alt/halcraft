@@ -37,7 +37,7 @@ export function Environment() {
   // 初期設定
   useEffect(() => {
     scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 40, 80);
+    scene.fog = new THREE.Fog(0x87ceeb, 60, 130);
   }, [scene]);
 
   // 毎フレーム昼夜サイクルを更新
