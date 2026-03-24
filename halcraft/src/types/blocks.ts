@@ -221,7 +221,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.LEAVES,
     name: '葉っぱブロック',
     texture: 'leaves.png',
-    transparent: true,
+    transparent: false,
     unbreakable: false,
     emissive: false,
   },

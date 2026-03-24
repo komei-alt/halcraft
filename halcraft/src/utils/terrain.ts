@@ -57,9 +57,9 @@ function shouldPlaceTree(worldX: number, worldZ: number): boolean {
   // 細かい配置ノイズ（個別の木の位置決め）
   const placement = treeNoise(worldX * 0.5 + 100, worldZ * 0.5 + 100);
 
-  // density > 0 の領域に木を集中させ、placement が高い場所にのみ配置
-  // → 森っぽいクラスターと空き地ができる
-  return density > -0.2 && placement > 0.6;
+  // density > 0.1 の領域に木を集中させ、placement が高い場所にのみ配置
+  // → 森っぽいクラスターと開けた草地がバランスよくできる
+  return density > 0.1 && placement > 0.7;
 }
 
 /**
