@@ -23,6 +23,63 @@ function getBlockTexture(textureName: string): THREE.Texture {
   return texture;
 }
 
+/** マテリアルキャッシュ（ブロック定義のテクスチャ名をキーにキャッシュ） */
+const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+const faceMaterialCache = new Map<string, THREE.MeshStandardMaterial[]>();
+
+/** 共有boxGeometry（全InstancedMeshで再利用） */
+const sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+function getMaterialProps(blockDef: BlockInfo): Record<string, unknown> {
+  const props: Record<string, unknown> = {
+    transparent: blockDef.transparent,
+    opacity: blockDef.transparent ? 0.6 : 1,
+    roughness: 0.85,
+  };
+  if (blockDef.emissiveColor) {
+    props.emissive = blockDef.emissiveColor;
+    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
+  } else if (blockDef.emissive) {
+    props.emissive = new THREE.Color(0x333333);
+    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
+  }
+  return props;
+}
+
+function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
+  const key = blockDef.texture;
+  if (materialCache.has(key)) return materialCache.get(key)!;
+  const mat = new THREE.MeshStandardMaterial({
+    map: getBlockTexture(blockDef.texture),
+    ...getMaterialProps(blockDef),
+  });
+  materialCache.set(key, mat);
+  return mat;
+}
+
+function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
+  if (!blockDef.faceTextures) return null;
+  const key = `${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
+  if (faceMaterialCache.has(key)) return faceMaterialCache.get(key)!;
+
+  const { top, side, bottom } = blockDef.faceTextures;
+  const topTex = getBlockTexture(top);
+  const sideTex = getBlockTexture(side);
+  const bottomTex = getBlockTexture(bottom);
+  const props = getMaterialProps(blockDef);
+
+  const mats = [
+    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
+    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
+    new THREE.MeshStandardMaterial({ map: topTex, ...props }),
+    new THREE.MeshStandardMaterial({ map: bottomTex, ...props }),
+    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
+    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
+  ];
+  faceMaterialCache.set(key, mats);
+  return mats;
+}
+
 interface ChunkRendererProps {
   cx: number;
   cz: number;
@@ -36,30 +93,49 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
 
   const chunkData = getChunk(cx, cz);
 
-  // ブロックタイプごとの描画データを計算
+  // ブロックタイプごとの描画データを計算（Float32Arrayで高速化）
   const blockGroups = useMemo(() => {
-    if (!chunkData) return new Map<BlockId, THREE.Vector3[]>();
+    if (!chunkData) return new Map<BlockId, Float32Array>();
 
-    const groups = new Map<BlockId, THREE.Vector3[]>();
-
+    // まずカウントしてからTypedArrayを確保
+    const counts = new Map<BlockId, number>();
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
+          const blockDef = BLOCK_DEFS[blockId];
+          if (blockDef?.nonStandard) continue;
+          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+          counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
+        }
+      }
+    }
 
-          // 非標準形状（松明等）はInstancedMeshではなく個別描画
+    const groups = new Map<BlockId, Float32Array>();
+    const offsets = new Map<BlockId, number>();
+    for (const [blockId, count] of counts) {
+      groups.set(blockId, new Float32Array(count * 3));
+      offsets.set(blockId, 0);
+    }
+
+    const baseX = cx * CHUNK_SIZE;
+    const baseZ = cz * CHUNK_SIZE;
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          const blockId = chunkData[lx][ly][lz];
+          if (blockId === BLOCK_IDS.AIR) continue;
           const blockDef = BLOCK_DEFS[blockId];
           if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
 
-          const worldX = cx * CHUNK_SIZE + lx;
-          const worldZ = cz * CHUNK_SIZE + lz;
-
-          if (!groups.has(blockId)) {
-            groups.set(blockId, []);
-          }
-          groups.get(blockId)!.push(new THREE.Vector3(worldX, ly, worldZ));
+          const arr = groups.get(blockId)!;
+          const off = offsets.get(blockId)!;
+          arr[off] = baseX + lx;
+          arr[off + 1] = ly;
+          arr[off + 2] = baseZ + lz;
+          offsets.set(blockId, off + 3);
         }
       }
     }
@@ -72,14 +148,14 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
 
   return (
     <group>
-      {Array.from(blockGroups.entries()).map(([blockId, positions]) => {
+      {Array.from(blockGroups.entries()).map(([blockId, positionData]) => {
         const def = BLOCK_DEFS[blockId];
-        if (!def || positions.length === 0) return null;
+        if (!def || positionData.length === 0) return null;
         return (
           <BlockTypeInstances
             key={`${cx}-${cz}-${blockId}-${version}`}
             blockDef={def}
-            positions={positions}
+            positionData={positionData}
           />
         );
       })}
@@ -87,104 +163,39 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
   );
 }
 
-/** マテリアル共通プロパティを生成 */
-function createMaterialProps(blockDef: BlockInfo) {
-  const props: Record<string, unknown> = {
-    transparent: blockDef.transparent,
-    opacity: blockDef.transparent ? 0.6 : 1,
-    roughness: 0.85,
-  };
-  // emissive が有効な場合のみプロパティに含める（undefinedを渡すと警告が出る）
-  if (blockDef.emissiveColor) {
-    props.emissive = blockDef.emissiveColor;
-    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
-  } else if (blockDef.emissive) {
-    props.emissive = new THREE.Color(0x333333);
-    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
-  }
-  return props;
-}
-
-/**
- * 面別テクスチャ用のマテリアル配列を生成
- * Three.js の boxGeometry の面順序: +X, -X, +Y, -Y, +Z, -Z
- * つまり: 右, 左, 上, 下, 前, 後
- */
-function useFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
-  return useMemo(() => {
-    if (!blockDef.faceTextures) return null;
-
-    const { top, side, bottom } = blockDef.faceTextures;
-    const topTex = getBlockTexture(top);
-    const sideTex = getBlockTexture(side);
-    const bottomTex = getBlockTexture(bottom);
-    const props = createMaterialProps(blockDef);
-
-    // boxGeometry の面順序: +X(右), -X(左), +Y(上), -Y(下), +Z(前), -Z(後)
-    return [
-      new THREE.MeshStandardMaterial({ map: sideTex, ...props }),   // 右
-      new THREE.MeshStandardMaterial({ map: sideTex, ...props }),   // 左
-      new THREE.MeshStandardMaterial({ map: topTex, ...props }),    // 上
-      new THREE.MeshStandardMaterial({ map: bottomTex, ...props }), // 下
-      new THREE.MeshStandardMaterial({ map: sideTex, ...props }),   // 前
-      new THREE.MeshStandardMaterial({ map: sideTex, ...props }),   // 後
-    ];
-  }, [blockDef]);
-}
-
-/** 1ブロック種のインスタンスをまとめて描画 */
+/** 1ブロック種のインスタンスをまとめて描画（キャッシュ済みマテリアル使用） */
 function BlockTypeInstances({
   blockDef,
-  positions,
+  positionData,
 }: {
   blockDef: BlockInfo;
-  positions: THREE.Vector3[];
+  positionData: Float32Array;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const texture = useMemo(() => getBlockTexture(blockDef.texture), [blockDef.texture]);
-  const faceMaterials = useFaceMaterials(blockDef);
+  const faceMaterials = getCachedFaceMaterials(blockDef);
+  const material = faceMaterials ?? getCachedMaterial(blockDef);
+  const count = positionData.length / 3;
 
   useEffect(() => {
     if (!meshRef.current) return;
     const dummy = new THREE.Object3D();
-    positions.forEach((pos, i) => {
-      dummy.position.set(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
+    for (let i = 0; i < count; i++) {
+      const off = i * 3;
+      dummy.position.set(positionData[off] + 0.5, positionData[off + 1] + 0.5, positionData[off + 2] + 0.5);
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
-    });
+    }
     meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [positions]);
-
-  const materialProps = useMemo(() => createMaterialProps(blockDef), [blockDef]);
-
-  // 面別テクスチャがある場合はマテリアル配列を使用
-  if (faceMaterials) {
-    return (
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, positions.length]}
-        material={faceMaterials}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[1, 1, 1]} />
-      </instancedMesh>
-    );
-  }
+  }, [positionData, count]);
 
   return (
     <instancedMesh
       ref={meshRef}
-      args={[undefined, undefined, positions.length]}
+      args={[sharedBoxGeometry, undefined, count]}
+      material={material}
       castShadow
       receiveShadow
-    >
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial
-        map={texture}
-        {...materialProps}
-      />
-    </instancedMesh>
+    />
   );
 }
 

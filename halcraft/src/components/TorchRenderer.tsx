@@ -14,6 +14,32 @@ interface TorchPosition {
   z: number;
 }
 
+// 共有マテリアル（全松明で再利用）
+const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
+const holderMaterial = new THREE.MeshStandardMaterial({
+  color: 0x444444, roughness: 0.7,
+  emissive: new THREE.Color(0x331100), emissiveIntensity: 0.3,
+});
+const flameMaterial = new THREE.MeshStandardMaterial({
+  color: 0xff6600, emissive: new THREE.Color(0xff4400), emissiveIntensity: 2.0,
+  transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false,
+});
+const innerFlameMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffaa00, emissive: new THREE.Color(0xffcc22), emissiveIntensity: 3.0,
+  transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false,
+});
+const glowMaterial = new THREE.MeshBasicMaterial({
+  color: 0xff8844, transparent: true, opacity: 0.15,
+  side: THREE.DoubleSide, depthWrite: false,
+});
+
+// 共有ジオメトリ
+const stickGeom = new THREE.BoxGeometry(0.12, 0.6, 0.12);
+const holderGeom = new THREE.BoxGeometry(0.16, 0.08, 0.16);
+const flameGeom = new THREE.ConeGeometry(0.10, 0.28, 6);
+const innerFlameGeom = new THREE.ConeGeometry(0.06, 0.20, 5);
+const glowGeom = new THREE.SphereGeometry(0.18, 8, 8);
+
 /** ワールド内のすべての松明を描画 */
 export function TorchRenderer() {
   const chunks = useWorldStore((s) => s.chunks);
@@ -57,7 +83,7 @@ export function TorchRenderer() {
   );
 }
 
-/** 個別の松明3Dモデル */
+/** 個別の松明3Dモデル（共有マテリアル・ジオメトリ使用） */
 function TorchModel({ position }: { position: [number, number, number] }) {
   const flameRef = useRef<THREE.Mesh>(null);
   const flameRef2 = useRef<THREE.Mesh>(null);
@@ -69,7 +95,6 @@ function TorchModel({ position }: { position: [number, number, number] }) {
     const t = clock.getElapsedTime() + timeOffset;
 
     if (flameRef.current) {
-      // 炎のゆらゆら動き
       flameRef.current.position.x = Math.sin(t * 6) * 0.02;
       flameRef.current.position.z = Math.cos(t * 8) * 0.02;
       const scale = 1 + Math.sin(t * 10) * 0.15;
@@ -89,65 +114,16 @@ function TorchModel({ position }: { position: [number, number, number] }) {
 
   return (
     <group position={position}>
-      {/* 棒の部分（茶色の木） */}
-      <mesh position={[0, 0.3, 0]}>
-        <boxGeometry args={[0.12, 0.6, 0.12]} />
-        <meshStandardMaterial
-          color={0x8B6914}
-          roughness={0.9}
-        />
-      </mesh>
-
-      {/* 受け部分（灰色・黒の炭のような部分） */}
-      <mesh position={[0, 0.58, 0]}>
-        <boxGeometry args={[0.16, 0.08, 0.16]} />
-        <meshStandardMaterial
-          color={0x444444}
-          roughness={0.7}
-          emissive={new THREE.Color(0x331100)}
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-
-      {/* メインの炎（オレンジ色） */}
-      <mesh ref={flameRef} position={[0, 0.75, 0]}>
-        <coneGeometry args={[0.10, 0.28, 6]} />
-        <meshStandardMaterial
-          color={0xff6600}
-          emissive={new THREE.Color(0xff4400)}
-          emissiveIntensity={2.0}
-          transparent
-          opacity={0.9}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* 内側の炎（明るいオレンジ〜黄色） */}
-      <mesh ref={flameRef2} position={[0, 0.72, 0]}>
-        <coneGeometry args={[0.06, 0.20, 5]} />
-        <meshStandardMaterial
-          color={0xffaa00}
-          emissive={new THREE.Color(0xffcc22)}
-          emissiveIntensity={3.0}
-          transparent
-          opacity={0.8}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* グロー（炎まわりの光のにじみ） */}
-      <mesh ref={glowRef} position={[0, 0.72, 0]}>
-        <sphereGeometry args={[0.18, 8, 8]} />
-        <meshBasicMaterial
-          color={0xff8844}
-          transparent
-          opacity={0.15}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
+      {/* 棒の部分 */}
+      <mesh position={[0, 0.3, 0]} geometry={stickGeom} material={stickMaterial} />
+      {/* 受け部分 */}
+      <mesh position={[0, 0.58, 0]} geometry={holderGeom} material={holderMaterial} />
+      {/* メインの炎 */}
+      <mesh ref={flameRef} position={[0, 0.75, 0]} geometry={flameGeom} material={flameMaterial} />
+      {/* 内側の炎 */}
+      <mesh ref={flameRef2} position={[0, 0.72, 0]} geometry={innerFlameGeom} material={innerFlameMaterial} />
+      {/* グロー */}
+      <mesh ref={glowRef} position={[0, 0.72, 0]} geometry={glowGeom} material={glowMaterial} />
     </group>
   );
 }

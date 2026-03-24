@@ -10,6 +10,8 @@ import { useWorldStore } from '../stores/useWorldStore';
 
 /** 光源の最大同時描画数（パフォーマンス考慮） */
 const MAX_LIGHTS = 16;
+/** 光源を収集する最大距離 */
+const LIGHT_COLLECT_RANGE = 30;
 
 interface LightSource {
   x: number;
@@ -23,18 +25,38 @@ export function BlockLights() {
   const chunks = useWorldStore((s) => s.chunks);
   const chunkVersions = useWorldStore((s) => s.chunkVersions);
   const cameraRef = useRef<THREE.Vector3>(new THREE.Vector3());
+  const sortedLights = useRef<LightSource[]>([]);
 
-  // カメラ位置を毎フレーム追跡
+  // カメラ位置を毎フレーム追跡し、光源をソート
   useFrame(({ camera }) => {
     cameraRef.current.copy(camera.position);
+    // 毎フレームソートする必要はないが、光源リストが変わったらソート
+    const cx = camera.position.x;
+    const cy = camera.position.y;
+    const cz = camera.position.z;
+    const sources = allLightSources;
+    // 距離でソートして近い順にMAX_LIGHTS個取得
+    sortedLights.current = sources
+      .filter((s) => {
+        const dx = s.x - cx;
+        const dy = s.y - cy;
+        const dz = s.z - cz;
+        return dx * dx + dy * dy + dz * dz < LIGHT_COLLECT_RANGE * LIGHT_COLLECT_RANGE;
+      })
+      .sort((a, b) => {
+        const da = (a.x - cx) ** 2 + (a.y - cy) ** 2 + (a.z - cz) ** 2;
+        const db = (b.x - cx) ** 2 + (b.y - cy) ** 2 + (b.z - cz) ** 2;
+        return da - db;
+      })
+      .slice(0, MAX_LIGHTS);
   });
 
-  // 全チャンクから発光ブロックを収集
+  // 全チャンクから発光ブロックを収集（チャンク変更時のみ再計算）
   const allLightSources = useMemo(() => {
     const sources: LightSource[] = [];
 
     chunks.forEach((chunkData, key) => {
-      const [cx, cz] = key.split(',').map(Number);
+      const [chunkCx, chunkCz] = key.split(',').map(Number);
 
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
@@ -45,13 +67,10 @@ export function BlockLights() {
             const def = BLOCK_DEFS[blockId];
             if (!def?.lightColor) continue;
 
-            const worldX = cx * CHUNK_SIZE + lx;
-            const worldZ = cz * CHUNK_SIZE + lz;
-
             sources.push({
-              x: worldX,
+              x: chunkCx * CHUNK_SIZE + lx,
               y: ly,
-              z: worldZ,
+              z: chunkCz * CHUNK_SIZE + lz,
               blockId,
             });
           }
@@ -65,7 +84,7 @@ export function BlockLights() {
 
   return (
     <group>
-      {allLightSources.slice(0, MAX_LIGHTS).map((source) => {
+      {sortedLights.current.map((source) => {
         const def = BLOCK_DEFS[source.blockId];
         if (!def?.lightColor) return null;
 

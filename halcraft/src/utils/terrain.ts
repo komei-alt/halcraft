@@ -29,11 +29,19 @@ function fbm(x: number, z: number, octaves: number, lacunarity: number, persiste
   return value / maxValue; // -1 ~ 1 に正規化
 }
 
+/** 地形高さキャッシュ（同じ座標の再計算を避ける） */
+const heightCache = new Map<number, number>();
+const HEIGHT_CACHE_KEY = (x: number, z: number) => x * 65537 + z;
+
 /**
  * ワールド座標 (x, z) から地形の高さ(Y)を計算する
- * 結果は整数（ブロック単位）
+ * 結果は整数（ブロック単位）、キャッシュ済み
  */
 export function getTerrainHeight(worldX: number, worldZ: number): number {
+  const key = HEIGHT_CACHE_KEY(worldX, worldZ);
+  const cached = heightCache.get(key);
+  if (cached !== undefined) return cached;
+
   // 大まかな地形（丘や谷）
   const baseHeight = fbm(worldX * 0.01, worldZ * 0.01, 4, 2.0, 0.5);
   // 細かい凹凸
@@ -41,7 +49,9 @@ export function getTerrainHeight(worldX: number, worldZ: number): number {
 
   // 基準の高さ（海抜）を 20 として、上下に 12 ブロック程度の高低差
   const height = 20 + Math.floor(baseHeight * 10 + detail * 3);
-  return Math.max(1, Math.min(height, WORLD_HEIGHT - 1));
+  const result = Math.max(1, Math.min(height, WORLD_HEIGHT - 1));
+  heightCache.set(key, result);
+  return result;
 }
 
 /** 1チャンク分のブロックデータ配列を返す */
@@ -344,6 +354,13 @@ function isBlockTransparent(blockId: BlockId): boolean {
   return def.transparent || !!def.nonStandard;
 }
 
+/** 6方向のオフセット（配列生成を避けるため定数化） */
+const NEIGHBOR_OFFSETS = [
+  [-1, 0, 0], [1, 0, 0],
+  [0, -1, 0], [0, 1, 0],
+  [0, 0, -1], [0, 0, 1],
+] as const;
+
 /**
  * チャンク内の特定ブロックの隣接面が露出しているかチェック
  * 露出面のみレンダリングして描画負荷を下げるための関数
@@ -355,37 +372,23 @@ export function isBlockExposed(
   lz: number,
 ): boolean {
   const blockId = chunk[lx][ly][lz];
-  // 空気ブロックは描画しない
   if (blockId === BLOCK_IDS.AIR) return false;
 
-  // 自身が透明ブロックかどうか
   const selfTransparent = isBlockTransparent(blockId);
 
-  // 6方向のうち1つでも隣接面が見えるなら露出あり
-  const neighbors = [
-    [lx - 1, ly, lz],
-    [lx + 1, ly, lz],
-    [lx, ly - 1, lz],
-    [lx, ly + 1, lz],
-    [lx, ly, lz - 1],
-    [lx, ly, lz + 1],
-  ];
+  for (let i = 0; i < 6; i++) {
+    const [dx, dy, dz] = NEIGHBOR_OFFSETS[i];
+    const nx = lx + dx;
+    const ny = ly + dy;
+    const nz = lz + dz;
 
-  for (const [nx, ny, nz] of neighbors) {
     // チャンク外は「空気」扱い（境界面は描画）
-    if (
-      nx < 0 || nx >= CHUNK_SIZE ||
-      ny < 0 || ny >= WORLD_HEIGHT ||
-      nz < 0 || nz >= CHUNK_SIZE
-    ) {
+    if (nx < 0 || nx >= CHUNK_SIZE || ny < 0 || ny >= WORLD_HEIGHT || nz < 0 || nz >= CHUNK_SIZE) {
       return true;
     }
     const neighborId = chunk[nx][ny][nz];
-    // 隣接が空気なら露出
     if (neighborId === BLOCK_IDS.AIR) return true;
-    // 隣接が透明ブロックで、自身が不透明なら露出（ガラス越しに見える）
     if (!selfTransparent && isBlockTransparent(neighborId)) return true;
-    // 自身も透明ブロックの場合、異なる種類の透明ブロックに接していれば露出
     if (selfTransparent && neighborId !== blockId && isBlockTransparent(neighborId)) return true;
   }
 

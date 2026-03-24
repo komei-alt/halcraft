@@ -21,10 +21,11 @@ const SUNSET_SKY = new THREE.Color(0xff7733);
 const SUNSET_FOG = new THREE.Color(0xff6622);
 const SUNSET_SUN_COLOR = new THREE.Color(0xff6622);
 
-/** 色補間ヘルパー */
-function lerpColor(a: THREE.Color, b: THREE.Color, t: number): THREE.Color {
-  return a.clone().lerp(b, t);
-}
+/** 再利用用オブジェクト（GCプレッシャー削減） */
+const _skyColor = new THREE.Color();
+const _fogColor = new THREE.Color();
+const _sunColor = new THREE.Color();
+const _sunPosition = new THREE.Vector3();
 
 export function Environment() {
   const { scene } = useThree();
@@ -47,82 +48,71 @@ export function Environment() {
 
     const gameTime = useGameStore.getState().gameTime;
 
-    // 時間帯に応じた環境を計算
-    // 0.0=朝, 0.2=午前, 0.25=正午, 0.4=午後, 0.45=夕方, 0.5=日没, 0.75=深夜
-    let skyColor: THREE.Color;
-    let fogColor: THREE.Color;
+    // 時間帯に応じた環境を計算（再利用オブジェクトで0アロケーション）
     let sunIntensity: number;
     let ambientIntensity: number;
-    let sunColor: THREE.Color;
-    let sunPosition: THREE.Vector3;
 
     if (gameTime < 0.05) {
-      // 夜明け (0.0 ~ 0.05)
       const t = gameTime / 0.05;
-      skyColor = lerpColor(NIGHT_SKY, SUNSET_SKY, t);
-      fogColor = lerpColor(NIGHT_FOG, SUNSET_FOG, t);
+      _skyColor.copy(NIGHT_SKY).lerp(SUNSET_SKY, t);
+      _fogColor.copy(NIGHT_FOG).lerp(SUNSET_FOG, t);
       sunIntensity = 0.3 + t * 0.8;
       ambientIntensity = 0.15 + t * 0.3;
-      sunColor = lerpColor(NIGHT_SUN_COLOR, DAY_SUN_COLOR, t);
+      _sunColor.copy(NIGHT_SUN_COLOR).lerp(DAY_SUN_COLOR, t);
     } else if (gameTime < 0.1) {
-      // 朝焼け→昼 (0.05 ~ 0.1)
       const t = (gameTime - 0.05) / 0.05;
-      skyColor = lerpColor(SUNSET_SKY, DAY_SKY, t);
-      fogColor = lerpColor(SUNSET_FOG, DAY_FOG, t);
+      _skyColor.copy(SUNSET_SKY).lerp(DAY_SKY, t);
+      _fogColor.copy(SUNSET_FOG).lerp(DAY_FOG, t);
       sunIntensity = 1.1 + t * 0.7;
       ambientIntensity = 0.45 + t * 0.15;
-      sunColor = DAY_SUN_COLOR;
+      _sunColor.copy(DAY_SUN_COLOR);
     } else if (gameTime < 0.4) {
-      // 昼間 (0.1 ~ 0.4)
-      skyColor = DAY_SKY;
-      fogColor = DAY_FOG;
+      _skyColor.copy(DAY_SKY);
+      _fogColor.copy(DAY_FOG);
       sunIntensity = 1.8;
       ambientIntensity = 0.6;
-      sunColor = DAY_SUN_COLOR;
+      _sunColor.copy(DAY_SUN_COLOR);
     } else if (gameTime < 0.5) {
-      // 夕暮れ (0.4 ~ 0.5)
       const t = (gameTime - 0.4) / 0.1;
-      skyColor = lerpColor(DAY_SKY, SUNSET_SKY, t);
-      fogColor = lerpColor(DAY_FOG, SUNSET_FOG, t);
+      _skyColor.copy(DAY_SKY).lerp(SUNSET_SKY, t);
+      _fogColor.copy(DAY_FOG).lerp(SUNSET_FOG, t);
       sunIntensity = 1.8 - t * 1.2;
       ambientIntensity = 0.6 - t * 0.35;
-      sunColor = lerpColor(DAY_SUN_COLOR, SUNSET_SUN_COLOR, t);
+      _sunColor.copy(DAY_SUN_COLOR).lerp(SUNSET_SUN_COLOR, t);
     } else if (gameTime < 0.55) {
-      // 日没 (0.5 ~ 0.55)
       const t = (gameTime - 0.5) / 0.05;
-      skyColor = lerpColor(SUNSET_SKY, NIGHT_SKY, t);
-      fogColor = lerpColor(SUNSET_FOG, NIGHT_FOG, t);
+      _skyColor.copy(SUNSET_SKY).lerp(NIGHT_SKY, t);
+      _fogColor.copy(SUNSET_FOG).lerp(NIGHT_FOG, t);
       sunIntensity = 0.6 - t * 0.4;
       ambientIntensity = 0.25 - t * 0.1;
-      sunColor = lerpColor(SUNSET_SUN_COLOR, NIGHT_SUN_COLOR, t);
+      _sunColor.copy(SUNSET_SUN_COLOR).lerp(NIGHT_SUN_COLOR, t);
     } else {
-      // 夜 (0.55 ~ 1.0)
-      skyColor = NIGHT_SKY;
-      fogColor = NIGHT_FOG;
+      _skyColor.copy(NIGHT_SKY);
+      _fogColor.copy(NIGHT_FOG);
       sunIntensity = 0.15;
       ambientIntensity = 0.12;
-      sunColor = NIGHT_SUN_COLOR;
+      _sunColor.copy(NIGHT_SUN_COLOR);
     }
 
     // 太陽の位置を時間に連動（円弧を描く）
     const sunAngle = gameTime * Math.PI * 2;
-    sunPosition = new THREE.Vector3(
+    _sunPosition.set(
       Math.cos(sunAngle) * 60,
       Math.sin(sunAngle) * 80 + 10,
       30,
     );
 
     // シーンに適用
-    (scene.background as THREE.Color).copy(skyColor);
+    (scene.background as THREE.Color).copy(_skyColor);
     if (scene.fog instanceof THREE.Fog) {
-      scene.fog.color.copy(fogColor);
+      scene.fog.color.copy(_fogColor);
     }
 
     // ライト更新
     if (sunRef.current) {
-      sunRef.current.position.copy(sunPosition);
+      sunRef.current.position.copy(_sunPosition);
       sunRef.current.intensity = sunIntensity;
-      sunRef.current.color.copy(sunColor);
+      sunRef.current.color.copy(_sunColor);
     }
     if (ambientRef.current) {
       ambientRef.current.intensity = ambientIntensity;
@@ -143,8 +133,8 @@ export function Environment() {
         position={[50, 80, 30]}
         intensity={1.8}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-far={120}
         shadow-camera-near={0.5}
         shadow-camera-left={-30}
