@@ -95,6 +95,12 @@ body {
   100% { opacity: 0; }
 }
 
+/* HP回復中のハートパルス */
+@keyframes heartPulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.15); filter: brightness(1.4); }
+}
+
 /* 死亡時ドクロマークの点滅アニメーション */
 @keyframes skull-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }

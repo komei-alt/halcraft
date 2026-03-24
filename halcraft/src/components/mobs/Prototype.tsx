@@ -3,6 +3,7 @@
 
 import { useRef, useMemo, useEffect } from 'react';
 import { useGLTF } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
@@ -19,7 +20,9 @@ interface PrototypeProps {
 
 export function Prototype({ mob, animTime }: PrototypeProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const hpBarRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF(MODEL_PATH);
+  const { camera } = useThree();
 
   // モデルのクローン（複数インスタンスに対応）
   const clonedScene = useMemo(() => {
@@ -93,6 +96,13 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   // アニメーション計算
   const bobHeight = Math.sin(animTime * 2) * 0.05; // 上下の浮遊感（控えめに）
 
+  // HPバーをカメラに向ける
+  useFrame(() => {
+    if (hpBarRef.current) {
+      hpBarRef.current.lookAt(camera.position);
+    }
+  });
+
   // モデルのバウンディングボックスからスケールを計算
   // 原モデル: Yサイズ約7.5ユニット → ゲーム内で約3.6ユニット（2倍サイズ）
   const SCALE = 0.48;
@@ -114,9 +124,9 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
 
 
 
-      {/* HPバー（頭上） */}
+      {/* HPバー（頭上・ビルボード） */}
       {mob.hp < mob.maxHp && (
-        <group position={[0, 3.9, 0]}>
+        <group ref={hpBarRef} position={[0, 3.9, 0]}>
           {/* 背景 */}
           <mesh>
             <planeGeometry args={[1.0, 0.1]} />
@@ -125,7 +135,11 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
           {/* HP量 */}
           <mesh position={[-(1.0 - 1.0 * (mob.hp / mob.maxHp)) / 2, 0, 0.001]}>
             <planeGeometry args={[1.0 * (mob.hp / mob.maxHp), 0.08]} />
-            <meshBasicMaterial color={0x44cc44} side={THREE.DoubleSide} depthWrite={false} />
+            <meshBasicMaterial
+              color={mob.hp / mob.maxHp > 0.5 ? 0x44cc44 : mob.hp / mob.maxHp > 0.25 ? 0xcccc44 : 0xcc4444}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
           </mesh>
         </group>
       )}

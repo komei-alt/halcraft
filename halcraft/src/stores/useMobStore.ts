@@ -139,12 +139,15 @@ export const useMobStore = create<MobState>((set, get) => ({
             deathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
             return null;
           }
+          // モブタイプごとのノックバック耐性
+          const kbResistance = m.type === 'prototype' ? 0.3 : 0.7 + Math.random() * 0.3;
+          const kbMultiplier = kbResistance * (5 + Math.random() * 4);
           return {
             ...m,
             hp: newHp,
-            vx: knockbackX * 8,
-            vy: 5,
-            vz: knockbackZ * 8,
+            vx: knockbackX * kbMultiplier,
+            vy: 3 + Math.random() * 3,
+            vz: knockbackZ * kbMultiplier,
             hitTimer: 0.3,
           };
         })

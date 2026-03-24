@@ -2,6 +2,7 @@
 // ボクセルスタイルの3Dモデル、AIで歩行、プレイヤーに接触するとダメージ
 
 import { useRef, useMemo } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
@@ -20,13 +21,19 @@ interface ZombieProps {
 
 export function Zombie({ mob, animTime }: ZombieProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const hpBarRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
 
   // ダメージ中は赤くフラッシュ
   const isDamaged = mob.hitTimer > 0;
 
-  // 歩行アニメーション
-  const walkCycle = Math.sin(animTime * 6) * 0.4;
-  const armSwing = Math.sin(animTime * 6) * 0.6;
+  // 歩行アニメーション（移動中のみ）
+  const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
+  const walkCycle = isMoving ? Math.sin(animTime * 6) * 0.4 : 0;
+  const armSwing = isMoving ? Math.sin(animTime * 6) * 0.6 : Math.sin(animTime * 1.5) * 0.08;
+
+  // ダメージ時の傾き（ヒット感）
+  const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 20) * 0.15 : 0;
 
   // 体の色（ダメージ中は赤）
   const bodyColor = isDamaged ? ZOMBIE_DAMAGED_COLOR : ZOMBIE_BODY_COLOR;
@@ -43,63 +50,73 @@ export function Zombie({ mob, animTime }: ZombieProps) {
     emissiveIntensity: 0.8,
   }), []);
 
+  // HPバーをカメラの方に向ける
+  useFrame(() => {
+    if (hpBarRef.current) {
+      hpBarRef.current.lookAt(camera.position);
+    }
+  });
+
   return (
     <group
       ref={groupRef}
       position={[mob.x, mob.y, mob.z]}
       rotation={[0, mob.rotation, 0]}
     >
-      {/* 体（胴体） */}
-      <mesh position={[0, 0.9, 0]} material={shirtMat}>
-        <boxGeometry args={[0.5, 0.6, 0.3]} />
-      </mesh>
-
-      {/* 頭 */}
-      <mesh position={[0, 1.45, 0]} material={bodyMat}>
-        <boxGeometry args={[0.4, 0.4, 0.4]} />
-      </mesh>
-
-      {/* 目（左） */}
-      <mesh position={[-0.1, 1.48, 0.21]} material={eyeMat}>
-        <boxGeometry args={[0.08, 0.06, 0.02]} />
-      </mesh>
-
-      {/* 目（右） */}
-      <mesh position={[0.1, 1.48, 0.21]} material={eyeMat}>
-        <boxGeometry args={[0.08, 0.06, 0.02]} />
-      </mesh>
-
-      {/* 左腕（前に伸ばす） */}
-      <group position={[-0.35, 0.9, 0]} rotation={[-1.2 + armSwing * 0.3, 0, 0]}>
-        <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
-          <boxGeometry args={[0.2, 0.5, 0.2]} />
+      {/* 体（胴体） — ダメージ時に少し傾く */}
+      <group rotation={[hitTilt, 0, hitTilt * 0.5]}>
+        {/* 体（胴体） */}
+        <mesh position={[0, 0.9, 0]} material={shirtMat}>
+          <boxGeometry args={[0.5, 0.6, 0.3]} />
         </mesh>
+
+        {/* 頭 */}
+        <mesh position={[0, 1.45, 0]} material={bodyMat}>
+          <boxGeometry args={[0.4, 0.4, 0.4]} />
+        </mesh>
+
+        {/* 目（左） */}
+        <mesh position={[-0.1, 1.48, 0.21]} material={eyeMat}>
+          <boxGeometry args={[0.08, 0.06, 0.02]} />
+        </mesh>
+
+        {/* 目（右） */}
+        <mesh position={[0.1, 1.48, 0.21]} material={eyeMat}>
+          <boxGeometry args={[0.08, 0.06, 0.02]} />
+        </mesh>
+
+        {/* 左腕（前に伸ばす） */}
+        <group position={[-0.35, 0.9, 0]} rotation={[-1.2 + armSwing * 0.3, 0, 0]}>
+          <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
+            <boxGeometry args={[0.2, 0.5, 0.2]} />
+          </mesh>
+        </group>
+
+        {/* 右腕（前に伸ばす） */}
+        <group position={[0.35, 0.9, 0]} rotation={[-1.2 - armSwing * 0.3, 0, 0]}>
+          <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
+            <boxGeometry args={[0.2, 0.5, 0.2]} />
+          </mesh>
+        </group>
+
+        {/* 左脚 */}
+        <group position={[-0.12, 0.55, 0]} rotation={[walkCycle, 0, 0]}>
+          <mesh position={[0, -0.25, 0]} material={pantsMat}>
+            <boxGeometry args={[0.22, 0.5, 0.25]} />
+          </mesh>
+        </group>
+
+        {/* 右脚 */}
+        <group position={[0.12, 0.55, 0]} rotation={[-walkCycle, 0, 0]}>
+          <mesh position={[0, -0.25, 0]} material={pantsMat}>
+            <boxGeometry args={[0.22, 0.5, 0.25]} />
+          </mesh>
+        </group>
       </group>
 
-      {/* 右腕（前に伸ばす） */}
-      <group position={[0.35, 0.9, 0]} rotation={[-1.2 - armSwing * 0.3, 0, 0]}>
-        <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
-          <boxGeometry args={[0.2, 0.5, 0.2]} />
-        </mesh>
-      </group>
-
-      {/* 左脚 */}
-      <group position={[-0.12, 0.55, 0]} rotation={[walkCycle, 0, 0]}>
-        <mesh position={[0, -0.25, 0]} material={pantsMat}>
-          <boxGeometry args={[0.22, 0.5, 0.25]} />
-        </mesh>
-      </group>
-
-      {/* 右脚 */}
-      <group position={[0.12, 0.55, 0]} rotation={[-walkCycle, 0, 0]}>
-        <mesh position={[0, -0.25, 0]} material={pantsMat}>
-          <boxGeometry args={[0.22, 0.5, 0.25]} />
-        </mesh>
-      </group>
-
-      {/* HPバー（頭上） */}
+      {/* HPバー（頭上・ビルボード — 常にカメラの方を向く） */}
       {mob.hp < mob.maxHp && (
-        <group position={[0, 1.85, 0]}>
+        <group ref={hpBarRef} position={[0, 1.85, 0]}>
           {/* 背景 */}
           <mesh>
             <planeGeometry args={[0.6, 0.08]} />
@@ -108,7 +125,10 @@ export function Zombie({ mob, animTime }: ZombieProps) {
           {/* HP量 */}
           <mesh position={[-(0.6 - 0.6 * (mob.hp / mob.maxHp)) / 2, 0, 0.001]}>
             <planeGeometry args={[0.6 * (mob.hp / mob.maxHp), 0.06]} />
-            <meshBasicMaterial color={0x44cc44} side={THREE.DoubleSide} />
+            <meshBasicMaterial
+              color={mob.hp / mob.maxHp > 0.5 ? 0x44cc44 : mob.hp / mob.maxHp > 0.25 ? 0xcccc44 : 0xcc4444}
+              side={THREE.DoubleSide}
+            />
           </mesh>
         </group>
       )}
