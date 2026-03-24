@@ -13,6 +13,29 @@ interface BedPosition {
   z: number;
 }
 
+// === 共有マテリアル（全ベッドで再利用） ===
+const woodFrameMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.85 });
+const woodDarkMat = new THREE.MeshStandardMaterial({ color: 0x6B4F10, roughness: 0.9 });
+const blanketMat = new THREE.MeshStandardMaterial({
+  color: 0xCC2222, roughness: 0.7,
+  emissive: new THREE.Color(0x220000), emissiveIntensity: 0.15,
+});
+const blanketFoldMat = new THREE.MeshStandardMaterial({ color: 0xAA1818, roughness: 0.7 });
+const pillowMat = new THREE.MeshStandardMaterial({ color: 0xF0EDE0, roughness: 0.95 });
+const sheetMat = new THREE.MeshStandardMaterial({ color: 0xF5F0E8, roughness: 0.95 });
+const headboardMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.8 });
+
+// === 共有ジオメトリ ===
+const baseGeom = new THREE.BoxGeometry(0.9, 0.12, 0.9);
+const legGeom = new THREE.BoxGeometry(0.1, 0.08, 0.1);
+const headboardGeom = new THREE.BoxGeometry(0.92, 0.38, 0.06);
+const footboardGeom = new THREE.BoxGeometry(0.92, 0.22, 0.06);
+const mattressGeom = new THREE.BoxGeometry(0.82, 0.1, 0.78);
+const blanketGeom = new THREE.BoxGeometry(0.84, 0.08, 0.6);
+const blanketFoldGeom = new THREE.BoxGeometry(0.84, 0.04, 0.06);
+const pillowGeom = new THREE.BoxGeometry(0.6, 0.1, 0.18);
+const pillowBulgeGeom = new THREE.BoxGeometry(0.5, 0.04, 0.14);
+
 /** ワールド内のすべてのベッドを描画 */
 export function BedRenderer() {
   const chunks = useWorldStore((s) => s.chunks);
@@ -56,114 +79,31 @@ export function BedRenderer() {
   );
 }
 
-// === マテリアル定数（再利用のためキャッシュ） ===
-const woodFrameColor = new THREE.Color(0x8B6914);
-const woodDarkColor = new THREE.Color(0x6B4F10);
-const blanketColor = new THREE.Color(0xCC2222);
-const blanketEmissive = new THREE.Color(0x220000);
-const pillowColor = new THREE.Color(0xF0EDE0);
-const sheetColor = new THREE.Color(0xF5F0E8);
-
-/** 個別のベッド3Dモデル */
+/** 個別のベッド3Dモデル（共有マテリアル・ジオメトリ使用） */
 function BedModel({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      {/* ===== 木製フレーム（ベースボード） ===== */}
       {/* 底板 */}
-      <mesh position={[0, 0.1, 0]}>
-        <boxGeometry args={[0.9, 0.12, 0.9]} />
-        <meshStandardMaterial
-          color={woodFrameColor}
-          roughness={0.85}
-        />
-      </mesh>
-
+      <mesh position={[0, 0.1, 0]} geometry={baseGeom} material={woodFrameMat} />
       {/* 4本の脚 */}
-      {/* 左前脚 */}
-      <mesh position={[-0.38, 0.04, -0.38]}>
-        <boxGeometry args={[0.1, 0.08, 0.1]} />
-        <meshStandardMaterial color={woodDarkColor} roughness={0.9} />
-      </mesh>
-      {/* 右前脚 */}
-      <mesh position={[0.38, 0.04, -0.38]}>
-        <boxGeometry args={[0.1, 0.08, 0.1]} />
-        <meshStandardMaterial color={woodDarkColor} roughness={0.9} />
-      </mesh>
-      {/* 左後脚 */}
-      <mesh position={[-0.38, 0.04, 0.38]}>
-        <boxGeometry args={[0.1, 0.08, 0.1]} />
-        <meshStandardMaterial color={woodDarkColor} roughness={0.9} />
-      </mesh>
-      {/* 右後脚 */}
-      <mesh position={[0.38, 0.04, 0.38]}>
-        <boxGeometry args={[0.1, 0.08, 0.1]} />
-        <meshStandardMaterial color={woodDarkColor} roughness={0.9} />
-      </mesh>
-
-      {/* ヘッドボード（頭側の板） */}
-      <mesh position={[0, 0.32, 0.42]}>
-        <boxGeometry args={[0.92, 0.38, 0.06]} />
-        <meshStandardMaterial
-          color={woodFrameColor}
-          roughness={0.8}
-        />
-      </mesh>
-
-      {/* フットボード（足元側の板・低め） */}
-      <mesh position={[0, 0.24, -0.42]}>
-        <boxGeometry args={[0.92, 0.22, 0.06]} />
-        <meshStandardMaterial
-          color={woodFrameColor}
-          roughness={0.8}
-        />
-      </mesh>
-
-      {/* ===== マットレス（白いシーツ） ===== */}
-      <mesh position={[0, 0.2, -0.02]}>
-        <boxGeometry args={[0.82, 0.1, 0.78]} />
-        <meshStandardMaterial
-          color={sheetColor}
-          roughness={0.95}
-        />
-      </mesh>
-
-      {/* ===== 赤い布団（ブランケット） ===== */}
-      <mesh position={[0, 0.28, -0.1]}>
-        <boxGeometry args={[0.84, 0.08, 0.6]} />
-        <meshStandardMaterial
-          color={blanketColor}
-          roughness={0.7}
-          emissive={blanketEmissive}
-          emissiveIntensity={0.15}
-        />
-      </mesh>
-
-      {/* 布団の折り返し部分（少し濃い赤） */}
-      <mesh position={[0, 0.29, 0.22]}>
-        <boxGeometry args={[0.84, 0.04, 0.06]} />
-        <meshStandardMaterial
-          color={new THREE.Color(0xAA1818)}
-          roughness={0.7}
-        />
-      </mesh>
-
-      {/* ===== 白い枕 ===== */}
-      <mesh position={[0, 0.3, 0.3]}>
-        <boxGeometry args={[0.6, 0.1, 0.18]} />
-        <meshStandardMaterial
-          color={pillowColor}
-          roughness={0.95}
-        />
-      </mesh>
-
-      {/* 枕の膨らみ（少し上に凸） */}
-      <mesh position={[0, 0.34, 0.3]}>
-        <boxGeometry args={[0.5, 0.04, 0.14]} />
-        <meshStandardMaterial
-          color={pillowColor}
-          roughness={0.95}
-        />
-      </mesh>
+      <mesh position={[-0.38, 0.04, -0.38]} geometry={legGeom} material={woodDarkMat} />
+      <mesh position={[0.38, 0.04, -0.38]} geometry={legGeom} material={woodDarkMat} />
+      <mesh position={[-0.38, 0.04, 0.38]} geometry={legGeom} material={woodDarkMat} />
+      <mesh position={[0.38, 0.04, 0.38]} geometry={legGeom} material={woodDarkMat} />
+      {/* ヘッドボード */}
+      <mesh position={[0, 0.32, 0.42]} geometry={headboardGeom} material={headboardMat} />
+      {/* フットボード */}
+      <mesh position={[0, 0.24, -0.42]} geometry={footboardGeom} material={headboardMat} />
+      {/* マットレス */}
+      <mesh position={[0, 0.2, -0.02]} geometry={mattressGeom} material={sheetMat} />
+      {/* 布団 */}
+      <mesh position={[0, 0.28, -0.1]} geometry={blanketGeom} material={blanketMat} />
+      {/* 布団の折り返し */}
+      <mesh position={[0, 0.29, 0.22]} geometry={blanketFoldGeom} material={blanketFoldMat} />
+      {/* 枕 */}
+      <mesh position={[0, 0.3, 0.3]} geometry={pillowGeom} material={pillowMat} />
+      {/* 枕の膨らみ */}
+      <mesh position={[0, 0.34, 0.3]} geometry={pillowBulgeGeom} material={pillowMat} />
     </group>
   );
 }

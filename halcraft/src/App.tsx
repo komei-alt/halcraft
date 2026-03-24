@@ -46,9 +46,12 @@ function GameCanvas() {
         near: 0.1,
         far: isTouch ? 120 : 200,
       }}
+      dpr={isTouch ? [1, 1.5] : [1, 2]}
       gl={{
         antialias: false,
         powerPreference: isTouch ? 'default' : 'high-performance',
+        stencil: false,
+        depth: true,
       }}
       style={{ position: 'fixed', inset: 0 }}
     >

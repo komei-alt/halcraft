@@ -121,6 +121,10 @@ export function BlockInteraction() {
   // 再利用用ベクトル（GCプレッシャー削減）
   const rayDir = useRef(new THREE.Vector3());
   const rayOrigin = useRef(new THREE.Vector3());
+  const attackDir = useRef(new THREE.Vector3());
+  const tempOrigin = useRef(new THREE.Vector3());
+  const tempToTarget = useRef(new THREE.Vector3());
+  const tempClosest = useRef(new THREE.Vector3());
 
   // レイマーチングで照準先のブロックを検出
   useFrame(() => {
@@ -195,18 +199,18 @@ export function BlockInteraction() {
         const targetPlayerId = findTargetPlayer();
         if (targetPlayerId) {
           const multiplier = performAttack();
-          const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
           const actualDamage = Math.round(PVP_DAMAGE * multiplier);
-          useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.x, attackDir.z);
+          useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
           playHitSound();
         } else {
           const targetMob = findTargetMobData();
           if (targetMob) {
             const multiplier = performAttack();
-            const attackDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
             const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
             const isCritical = multiplier >= 0.9;
-            damageMob(targetMob.id, actualDamage, attackDir.x, attackDir.z);
+            damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
             DamagePopup.spawn(actualDamage, targetMob.x, targetMob.y, targetMob.z, isCritical);
             playHitSound();
           } else {
@@ -244,31 +248,35 @@ export function BlockInteraction() {
     const multiState = useMultiplayerStore.getState();
     if (!multiState.connected) return null;
 
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    const origin = camera.position.clone();
+    attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const dir = attackDir.current;
+    tempOrigin.current.copy(camera.position);
+    const origin = tempOrigin.current;
     const remotePlayers = multiState.remotePlayers;
 
     let closestPlayerId: string | null = null;
     let closestDist = ATTACK_REACH;
 
     for (const [, player] of remotePlayers) {
-      // プレイヤーの中心位置（足元 + 身長の半分）
-      const playerCenter = new THREE.Vector3(
-        player.position[0],
-        player.position[1] + PLAYER_HIT_HEIGHT * 0.5,
-        player.position[2],
+      tempToTarget.current.set(
+        player.position[0] - origin.x,
+        player.position[1] + PLAYER_HIT_HEIGHT * 0.5 - origin.y,
+        player.position[2] - origin.z,
       );
 
-      // レイとプレイヤーの距離を計算
-      const toPlayer = playerCenter.clone().sub(origin);
-      const projection = toPlayer.dot(dir);
-
+      const projection = tempToTarget.current.dot(dir);
       if (projection < 0 || projection > ATTACK_REACH) continue;
 
-      const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projection));
-      const distance = closestPoint.distanceTo(playerCenter);
+      tempClosest.current.copy(origin).addScaledVector(dir, projection);
+      // 距離計算（tempToTargetはtarget-originなので、target = origin + tempToTarget）
+      const targetX = origin.x + tempToTarget.current.x;
+      const targetY = origin.y + tempToTarget.current.y;
+      const targetZ = origin.z + tempToTarget.current.z;
+      const dx = tempClosest.current.x - targetX;
+      const dy = tempClosest.current.y - targetY;
+      const dz = tempClosest.current.z - targetZ;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      // ヒット判定
       if (distance < PLAYER_HIT_RADIUS + 0.3 && projection < closestDist) {
         closestDist = projection;
         closestPlayerId = player.id;
@@ -280,29 +288,28 @@ export function BlockInteraction() {
 
   // 照準先のモブを検索（データごと返す版）
   const findTargetMobData = useCallback((): { id: string; x: number; y: number; z: number } | null => {
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    const origin = camera.position.clone();
+    attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const dir = attackDir.current;
+    tempOrigin.current.copy(camera.position);
+    const origin = tempOrigin.current;
     const mobs = useMobStore.getState().mobs;
 
     let closestMob: { id: string; x: number; y: number; z: number } | null = null;
     let closestDist = ATTACK_REACH;
 
     for (const mob of mobs) {
-      // 味方モブは攻撃対象から除外
       if (mob.isAlly) continue;
-      // モブの中心位置
-      const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
 
-      // レイとモブの距離を計算（カプセル近似）
-      const toMob = mobCenter.clone().sub(origin);
-      const projection = toMob.dot(dir);
-
+      tempToTarget.current.set(mob.x - origin.x, mob.y + 0.9 - origin.y, mob.z - origin.z);
+      const projection = tempToTarget.current.dot(dir);
       if (projection < 0 || projection > ATTACK_REACH) continue;
 
-      const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projection));
-      const distance = closestPoint.distanceTo(mobCenter);
+      tempClosest.current.copy(origin).addScaledVector(dir, projection);
+      const dx = tempClosest.current.x - mob.x;
+      const dy = tempClosest.current.y - (mob.y + 0.9);
+      const dz = tempClosest.current.z - mob.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      // ヒット判定（半径0.6のシリンダー）
       if (distance < 0.8 && projection < closestDist) {
         closestDist = projection;
         closestMob = { id: mob.id, x: mob.x, y: mob.y, z: mob.z };
@@ -328,9 +335,9 @@ export function BlockInteraction() {
       if (targetPlayerId) {
         // プレイヤーを殴る
         const multiplier = performAttack();
-        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         const actualDamage = Math.round(PVP_DAMAGE * multiplier);
-        useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, dir.x, dir.z);
+        useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
         playHitSound();
       } else {
         const targetMob = findTargetMobData();
@@ -338,10 +345,10 @@ export function BlockInteraction() {
         if (targetMob) {
           // モブを殴る
           const multiplier = performAttack();
-          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
           const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
           const isCritical = multiplier >= 0.9;
-          damageMob(targetMob.id, actualDamage, dir.x, dir.z);
+          damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
           DamagePopup.spawn(actualDamage, targetMob.x, targetMob.y, targetMob.z, isCritical);
           playHitSound();
         } else {
