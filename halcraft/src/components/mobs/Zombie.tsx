@@ -1,8 +1,8 @@
 // ゾンビモブコンポーネント
 // ボクセルスタイルの3Dモデル、AIで歩行、プレイヤーに接触するとダメージ
 
-import { useRef, useMemo } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useMemo } from 'react';
+import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
@@ -20,10 +20,6 @@ interface ZombieProps {
 }
 
 export function Zombie({ mob, animTime }: ZombieProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const hpBarRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
-
   // ダメージ中は赤くフラッシュ
   const isDamaged = mob.hitTimer > 0;
 
@@ -50,16 +46,12 @@ export function Zombie({ mob, animTime }: ZombieProps) {
     emissiveIntensity: 0.8,
   }), []);
 
-  // HPバーをカメラの方に向ける
-  useFrame(() => {
-    if (hpBarRef.current) {
-      hpBarRef.current.lookAt(camera.position);
-    }
-  });
+  // HPバーの色計算
+  const hpRatio = mob.hp / mob.maxHp;
+  const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
 
   return (
     <group
-      ref={groupRef}
       position={[mob.x, mob.y, mob.z]}
       rotation={[0, mob.rotation, 0]}
     >
@@ -114,23 +106,20 @@ export function Zombie({ mob, animTime }: ZombieProps) {
         </group>
       </group>
 
-      {/* HPバー（頭上・ビルボード — 常にカメラの方を向く） */}
+      {/* HPバー（頭上・Billboard — dreiで軽量ビルボード化） */}
       {mob.hp < mob.maxHp && (
-        <group ref={hpBarRef} position={[0, 1.85, 0]}>
+        <Billboard position={[0, 1.85, 0]}>
           {/* 背景 */}
           <mesh>
             <planeGeometry args={[0.6, 0.08]} />
             <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} />
           </mesh>
           {/* HP量 */}
-          <mesh position={[-(0.6 - 0.6 * (mob.hp / mob.maxHp)) / 2, 0, 0.001]}>
-            <planeGeometry args={[0.6 * (mob.hp / mob.maxHp), 0.06]} />
-            <meshBasicMaterial
-              color={mob.hp / mob.maxHp > 0.5 ? 0x44cc44 : mob.hp / mob.maxHp > 0.25 ? 0xcccc44 : 0xcc4444}
-              side={THREE.DoubleSide}
-            />
+          <mesh position={[-(0.6 - 0.6 * hpRatio) / 2, 0, 0.001]}>
+            <planeGeometry args={[0.6 * hpRatio, 0.06]} />
+            <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} />
           </mesh>
-        </group>
+        </Billboard>
       )}
     </group>
   );

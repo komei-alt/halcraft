@@ -33,8 +33,7 @@ const PVP_DAMAGE = 3;
 /** プレイヤーの当たり判定サイズ */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
-/** プレイヤー体AABBの定数（ブロック設置衝突チェック用） */
-const PLACE_PLAYER_RADIUS = 0.25;
+/** プレイヤー体AABBの高さ（ブロック設置衝突チェック用） */
 const PLACE_PLAYER_HEIGHT = 1.7;
 
 interface TargetBlock {
@@ -80,18 +79,22 @@ export function BlockInteraction() {
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
+  // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
   const wouldBlockOverlapPlayer = useCallback((bx: number, by: number, bz: number): boolean => {
     const px = camera.position.x;
-    const py = camera.position.y - PLACE_PLAYER_HEIGHT + 0.1; // 足元Y
+    // camera.position.y = pos.y + 1.6 なので、足元は camera.y - 1.6
+    const footY = camera.position.y - 1.6;
     const pz = camera.position.z;
 
-    // プレイヤーAABB
-    const pMinX = px - PLACE_PLAYER_RADIUS;
-    const pMaxX = px + PLACE_PLAYER_RADIUS;
-    const pMinY = py;
-    const pMaxY = py + PLACE_PLAYER_HEIGHT;
-    const pMinZ = pz - PLACE_PLAYER_RADIUS;
-    const pMaxZ = pz + PLACE_PLAYER_RADIUS;
+    // マージン付きプレイヤーAABB（少し大きめにして確実にブロック）
+    const margin = 0.1;
+    const radius = 0.4; // PLAYER_RADIUS(0.25)より余裕を持たせる
+    const pMinX = px - radius - margin;
+    const pMaxX = px + radius + margin;
+    const pMinY = footY - margin;
+    const pMaxY = footY + PLACE_PLAYER_HEIGHT + margin;
+    const pMinZ = pz - radius - margin;
+    const pMaxZ = pz + radius + margin;
 
     // ブロックAABB
     const bMinX = bx;

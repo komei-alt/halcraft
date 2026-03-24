@@ -8,8 +8,8 @@ import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 
-/** 光源の最大同時描画数 */
-const MAX_LIGHTS = 32;
+/** 光源の最大同時描画数（パフォーマンス考慮） */
+const MAX_LIGHTS = 16;
 
 interface LightSource {
   x: number;

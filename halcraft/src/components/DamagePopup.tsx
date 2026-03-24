@@ -133,13 +133,16 @@ export function DamagePopup() {
         const material = sprite.material as THREE.SpriteMaterial;
         material.opacity = Math.min(1, lifeRatio * 2);
 
-        // テクスチャ設定
+        // テクスチャ設定（変更時のみ更新）
         const cacheKey = `${popup.damage}_${popup.isCritical}`;
         if (!textureCache.current.has(cacheKey)) {
           textureCache.current.set(cacheKey, createDamageTexture(popup.damage, popup.isCritical));
         }
-        material.map = textureCache.current.get(cacheKey)!;
-        material.needsUpdate = true;
+        const newMap = textureCache.current.get(cacheKey)!;
+        if (material.map !== newMap) {
+          material.map = newMap;
+          material.needsUpdate = true;
+        }
 
         sprite.visible = true;
       } else {
