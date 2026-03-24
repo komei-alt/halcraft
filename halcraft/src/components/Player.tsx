@@ -69,6 +69,7 @@ export function Player() {
   const isDead = usePlayerStore((s) => s.isDead);
   const respawn = usePlayerStore((s) => s.respawn);
   const cameraShake = usePlayerStore((s) => s.cameraShake);
+  const consumeKnockback = usePlayerStore((s) => s.consumeKnockback);
 
   // ブロックが固体（通行不可）かチェック
   const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
@@ -225,6 +226,14 @@ export function Player() {
     vel.y += GRAVITY * dt;
     // 終端速度を制限
     if (vel.y < -40) vel.y = -40;
+
+    // --- ノックバック適用 ---
+    const kb = consumeKnockback();
+    if (kb.vx !== 0 || kb.vz !== 0) {
+      vel.x += kb.vx;
+      vel.z += kb.vz;
+      vel.y = Math.max(vel.y, 4); // 少し上に浮く
+    }
 
     // --- 水平入力 ---
     const speed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;

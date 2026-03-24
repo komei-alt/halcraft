@@ -22,10 +22,18 @@ const ZOMBIE_SPEED = 2.5;
 const ZOMBIE_STOP_RANGE = 1.0;       // この距離で停止（ブロックに潜り込まない）
 const ZOMBIE_ATTACK_RANGE = 1.5;     // 攻撃判定（XZ距離で判定）
 const ZOMBIE_ATTACK_DAMAGE = 2;
-const ZOMBIE_ATTACK_COOLDOWN = 1.0; // 秒
+const ZOMBIE_ATTACK_COOLDOWN = 1.0;  // 秒
 const MOB_GRAVITY = -20;
 const MOB_HEIGHT = 1.8;
 const MOB_RADIUS = 0.3;
+/** ゾンビ同士の分離半径 */
+const ZOMBIE_SEPARATION_RADIUS = 1.2;
+/** 分離力の強さ */
+const ZOMBIE_SEPARATION_FORCE = 2.0;
+/** 回り込み行動の確率（毎秒） */
+const ZOMBIE_FLANK_CHANCE = 0.3;
+/** 回り込みの角度（ラジアン） */
+const ZOMBIE_FLANK_ANGLE = Math.PI * 0.4;
 
 /** プロトタイプ（味方）の定数 */
 const PROTOTYPE_SPEED = 3.0;         // プレイヤー追従速度（速めに）
@@ -66,6 +74,8 @@ export function MobManager() {
   const protoLastPos = useRef({ x: 0, z: 0 });
   // 前フレームの夜判定
   const wasNight = useRef(false);
+  // ゾンビ回り込みタイマー
+  const flankTimer = useRef(0);
 
   // ブロック衝突チェック（モブ用）
   const checkMobCollision = (px: number, py: number, pz: number): boolean => {
@@ -174,7 +184,10 @@ export function MobManager() {
     if (currentMobs.length === 0) return;
 
     const updatedMobs: MobData[] = [];
-    let playerWasHit = false;
+    let hitMob: MobData | null = null; // 攻撃したゾンビの情報
+
+    // 回り込みタイマー更新
+    flankTimer.current += dt;
 
     for (const mob of currentMobs) {
       const m = { ...mob };
@@ -373,18 +386,52 @@ export function MobManager() {
       const dz = playerZ - m.z;
       const distXZ = Math.sqrt(dx * dx + dz * dz);
 
+      // --- ゾンビ同士の分離（重ならないように押し合う） ---
+      let sepX = 0;
+      let sepZ = 0;
+      for (const other of currentMobs) {
+        if (other.id === m.id || other.type !== 'zombie') continue;
+        const odx = m.x - other.x;
+        const odz = m.z - other.z;
+        const oDist = Math.sqrt(odx * odx + odz * odz);
+        if (oDist > 0.01 && oDist < ZOMBIE_SEPARATION_RADIUS) {
+          // 近いほど強く押す
+          const force = (ZOMBIE_SEPARATION_RADIUS - oDist) / ZOMBIE_SEPARATION_RADIUS;
+          sepX += (odx / oDist) * force * ZOMBIE_SEPARATION_FORCE;
+          sepZ += (odz / oDist) * force * ZOMBIE_SEPARATION_FORCE;
+        }
+      }
+
       if (distXZ > ZOMBIE_STOP_RANGE) {
-        m.rotation = Math.atan2(dx, dz);
+        // --- 回り込み行動（一定確率で斜めに接近） ---
+        let moveAngle = Math.atan2(dx, dz);
+        
+        // 各ゾンビに固有のオフセット（IDからハッシュ的に生成）
+        const mobHash = parseInt(m.id.replace('mob_', ''), 10) || 0;
+        const flankDir = (mobHash % 2 === 0) ? 1 : -1;
+        
+        // 近づくと回り込み確率が上がる
+        if (distXZ < 8 && distXZ > ZOMBIE_STOP_RANGE + 0.5) {
+          // 回り込み角度を距離に応じて調整
+          const flankIntensity = Math.max(0, 1 - distXZ / 8) * ZOMBIE_FLANK_ANGLE;
+          if (flankTimer.current > 1.0 / ZOMBIE_FLANK_CHANCE) {
+            // リセットは共通だが、各ゾンビが独自の方向に回り込む
+          }
+          moveAngle += flankDir * flankIntensity;
+        }
+
+        m.rotation = Math.atan2(dx, dz); // 顔はプレイヤーの方を向く
 
         if (m.hitTimer <= 0) {
-          const nx = dx / distXZ;
-          const nz = dz / distXZ;
-          m.vx = nx * ZOMBIE_SPEED;
-          m.vz = nz * ZOMBIE_SPEED;
+          const nx = Math.sin(moveAngle);
+          const nz = Math.cos(moveAngle);
+          m.vx = (nx * ZOMBIE_SPEED) + sepX;
+          m.vz = (nz * ZOMBIE_SPEED) + sepZ;
         }
       } else {
-        m.vx = 0;
-        m.vz = 0;
+        // 分離力のみ適用（停止中でも押し合う）
+        m.vx = sepX;
+        m.vz = sepZ;
         // プレイヤーの方を向き続ける
         if (distXZ > 0.1) {
           m.rotation = Math.atan2(dx, dz);
@@ -444,7 +491,7 @@ export function MobManager() {
       const yClose = Math.abs(playerDy) < MOB_HEIGHT + 0.5; // Y軸方向で近い
 
       if (distXZ < ZOMBIE_ATTACK_RANGE && yClose && attackCooldown.current <= 0) {
-        playerWasHit = true;
+        hitMob = m;
         attackCooldown.current = ZOMBIE_ATTACK_COOLDOWN;
       }
 
@@ -454,9 +501,12 @@ export function MobManager() {
       updatedMobs.push(m);
     }
 
-    // プレイヤーへのダメージ適用
-    if (playerWasHit) {
-      takeDamage(ZOMBIE_ATTACK_DAMAGE);
+    // プレイヤーへのダメージ適用（ノックバック方向付き）
+    if (hitMob) {
+      // ゾンビからプレイヤーへの方向をノックバック方向とする
+      const kbDirX = playerX - hitMob.x;
+      const kbDirZ = playerZ - hitMob.z;
+      takeDamage(ZOMBIE_ATTACK_DAMAGE, kbDirX, kbDirZ);
       playHurtSound();
     }
 

@@ -18,6 +18,10 @@ const REGEN_DELAY = 30;
 const REGEN_RATE = 0.5;
 /** カメラシェイク減衰速度 */
 const SHAKE_DECAY = 8;
+/** プレイヤーノックバック速度 */
+const KNOCKBACK_SPEED = 6;
+/** 被ダメージ無敵時間（ミリ秒） */
+const DAMAGE_INVINCIBLE_MS = 500;
 
 interface PlayerState {
   /** 体力 */
@@ -51,6 +55,13 @@ interface PlayerState {
   /** 最後にダメージを受けた時刻（自然回復用） */
   lastDamageTime: number;
 
+  /** ノックバック速度 XZ */
+  knockbackVx: number;
+  knockbackVz: number;
+
+  /** ダメージを受けた方向（ラジアン、画面上の角度） */
+  damageDirection: number | null;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -63,8 +74,8 @@ interface PlayerState {
   /** 攻撃クールダウンを毎フレーム更新 */
   updateAttackCooldown: (dt: number) => void;
 
-  /** ダメージを受ける */
-  takeDamage: (amount: number) => void;
+  /** ダメージを受ける（knockbackDir: ダメージ源からプレイヤーへの方向XZ） */
+  takeDamage: (amount: number, knockbackDirX?: number, knockbackDirZ?: number) => void;
 
   /** 落下ダメージを計算して適用 */
   applyFallDamage: (fallDistance: number) => void;
@@ -80,6 +91,9 @@ interface PlayerState {
 
   /** HP自然回復の更新（毎フレーム呼び出す） */
   updateRegen: (dt: number) => void;
+
+  /** ノックバック速度を消費してリセット */
+  consumeKnockback: () => { vx: number; vz: number };
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -94,6 +108,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   attackCharge: 1,
   cameraShake: 0,
   lastDamageTime: 0,
+  knockbackVx: 0,
+  knockbackVz: 0,
+  damageDirection: null,
 
   getSelectedBlock: () => {
     return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
@@ -136,18 +153,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  takeDamage: (amount) => {
+  takeDamage: (amount, knockbackDirX, knockbackDirZ) => {
     // 死亡中はダメージを受けない
     if (get().isDead) return;
     // 無敵時間中はダメージを受けない
     if (Date.now() < get().invincibleUntil) return;
     const newHp = Math.max(0, get().hp - amount);
+
+    // ノックバック計算
+    let kbVx = 0;
+    let kbVz = 0;
+    let dmgDir: number | null = null;
+    if (knockbackDirX !== undefined && knockbackDirZ !== undefined) {
+      const len = Math.sqrt(knockbackDirX * knockbackDirX + knockbackDirZ * knockbackDirZ);
+      if (len > 0.01) {
+        kbVx = (knockbackDirX / len) * KNOCKBACK_SPEED;
+        kbVz = (knockbackDirZ / len) * KNOCKBACK_SPEED;
+        // ダメージ方向（攻撃元の方向、ラジアン）
+        dmgDir = Math.atan2(-knockbackDirX, -knockbackDirZ);
+      }
+    }
+
     set({
       hp: newHp,
       isDamageFlash: true,
       isDead: newHp <= 0,
       lastDamageTime: performance.now() / 1000,
       cameraShake: Math.min(1, 0.5 + amount * 0.1),
+      knockbackVx: kbVx,
+      knockbackVz: kbVz,
+      damageDirection: dmgDir,
+      invincibleUntil: Date.now() + DAMAGE_INVINCIBLE_MS,
     });
     // 死亡時にサーバーへ通知
     if (newHp <= 0) {
@@ -155,7 +191,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       socket?.emit('player:died');
     }
     // フラッシュを一定時間後にリセット
-    setTimeout(() => set({ isDamageFlash: false }), 300);
+    setTimeout(() => set({ isDamageFlash: false, damageDirection: null }), 400);
   },
 
   applyFallDamage: (fallDistance) => {
@@ -197,6 +233,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (now - state.lastDamageTime < REGEN_DELAY) return;
     const newHp = Math.min(state.maxHp, state.hp + REGEN_RATE * dt);
     set({ hp: newHp });
+  },
+
+  consumeKnockback: () => {
+    const state = get();
+    const vx = state.knockbackVx;
+    const vz = state.knockbackVz;
+    if (vx !== 0 || vz !== 0) {
+      set({ knockbackVx: 0, knockbackVz: 0 });
+    }
+    return { vx, vz };
   },
 }));
 
