@@ -2,6 +2,7 @@
 // カスタム物理エンジン方式：ブロックとの直接AABB衝突判定
 // Rapierに依存しないため軽量で確実
 // デスクトップ（キーボード+マウス）とモバイル（タッチ）両対応
+// 飛行機搭乗時は飛行物理に切り替え
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback } from 'react';
@@ -9,6 +10,7 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { useVehicleStore, AIRPLANE_CONSTANTS } from '../stores/useVehicleStore';
 import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -47,7 +49,11 @@ export function Player() {
     right: false,
     jump: false,
     sprint: false,
+    interact: false, // Fキー（搭乗/降車）
   });
+
+  // Fキーの単発入力用（押した瞬間のみ反応）
+  const interactPressed = useRef(false);
 
   // 視点回転
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
@@ -58,6 +64,9 @@ export function Player() {
   // 再利用用ベクトル（GCプレッシャー削減）
   const moveDir = useRef(new THREE.Vector3());
   const moveEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+
+  // 飛行機の前方ベクトル（再利用）
+  const flyForward = useRef(new THREE.Vector3());
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
@@ -159,6 +168,12 @@ export function Player() {
         case 'KeyD': keys.current.right = true; break;
         case 'Space': keys.current.jump = true; e.preventDefault(); break;
         case 'ShiftLeft': keys.current.sprint = true; break;
+        case 'KeyF':
+          if (!keys.current.interact) {
+            keys.current.interact = true;
+            interactPressed.current = true;
+          }
+          break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const slot = parseInt(e.code.replace('Digit', '')) - 1;
@@ -173,6 +188,7 @@ export function Player() {
         case 'KeyD': keys.current.right = false; break;
         case 'Space': keys.current.jump = false; break;
         case 'ShiftLeft': keys.current.sprint = false; break;
+        case 'KeyF': keys.current.interact = false; break;
       }
     };
     const onWheel = (e: WheelEvent) => {
@@ -211,9 +227,175 @@ export function Player() {
     }
 
     // --- 入力のアクティブ判定 ---
-    // デスクトップ: PointerLock中のみ入力受付
-    // モバイル: 常に入力受付（タッチUIが制御）
     const isInputActive = isTouch.current ? true : !!document.pointerLockElement;
+
+    // --- 乗り物ストアの状態を取得 ---
+    const vehicleState = useVehicleStore.getState();
+    const airplane = vehicleState.airplane;
+    const isInAirplane = airplane.isBoarded;
+
+    // --- 搭乗/降車の処理（Fキー） ---
+    if (interactPressed.current && isInputActive) {
+      interactPressed.current = false;
+
+      if (isInAirplane) {
+        // 降車: 飛行機から降りる
+        vehicleState.dismountAirplane();
+        // プレイヤーを飛行機の横に配置
+        pos.x = airplane.x + 2;
+        pos.y = airplane.y;
+        pos.z = airplane.z;
+        vel.set(0, 0, 0);
+        onGround.current = false;
+        lastGroundY.current = pos.y;
+      } else if (airplane.spawned) {
+        // 搭乗: 飛行機に近いかチェック
+        const dx = pos.x - airplane.x;
+        const dy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
+        const dz = pos.z - airplane.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) {
+          vehicleState.boardAirplane();
+        }
+      }
+    }
+    // interactPressedをリセット（既に処理済み）
+    if (!keys.current.interact) {
+      interactPressed.current = false;
+    }
+
+    // ========================================
+    // 飛行機搭乗中の物理
+    // ========================================
+    if (isInAirplane) {
+      const {
+        MAX_SPEED, ACCELERATION, DECELERATION, TURN_SPEED,
+        VERTICAL_SPEED, PROPELLER_SPEED,
+      } = AIRPLANE_CONSTANTS;
+
+      let apSpeed = airplane.speed;
+      let apRotY = airplane.rotationY;
+      let apPitch = airplane.pitch;
+      let apRoll = airplane.roll;
+      let apX = airplane.x;
+      let apY = airplane.y;
+      let apZ = airplane.z;
+      let apPropAngle = airplane.propellerAngle;
+
+      // 入力取得
+      let inputForward: number;
+      let inputTurn: number;
+      let inputVertical: number;
+
+      if (isTouch.current) {
+        inputForward = -joystickInput.y; // 前後
+        inputTurn = -joystickInput.x;    // 左右旋回
+        inputVertical = mobileActions.jump ? 1 : 0; // 上昇
+      } else {
+        inputForward = isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
+        inputTurn = isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
+        inputVertical = isInputActive
+          ? (keys.current.jump ? 1 : 0) - (keys.current.sprint ? 1 : 0)
+          : 0;
+      }
+
+      // 加速/減速
+      if (inputForward > 0) {
+        apSpeed = Math.min(MAX_SPEED, apSpeed + ACCELERATION * dt);
+      } else if (inputForward < 0) {
+        apSpeed = Math.max(-MAX_SPEED * 0.3, apSpeed - ACCELERATION * 1.5 * dt);
+      } else {
+        // 自動減速
+        if (apSpeed > 0) {
+          apSpeed = Math.max(0, apSpeed - DECELERATION * dt);
+        } else {
+          apSpeed = Math.min(0, apSpeed + DECELERATION * dt);
+        }
+      }
+
+      // 旋回（速度が出ているほど旋回しやすい）
+      const turnFactor = Math.min(1, Math.abs(apSpeed) / 5);
+      apRotY += inputTurn * TURN_SPEED * dt * turnFactor;
+
+      // 上昇/下降
+      apY += inputVertical * VERTICAL_SPEED * dt;
+
+      // 前方への移動
+      flyForward.current.set(0, 0, 1);
+      flyForward.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), apRotY);
+      apX += flyForward.current.x * apSpeed * dt;
+      apZ += flyForward.current.z * apSpeed * dt;
+
+      // ビジュアル: ピッチとロール（滑らかに補間）
+      const targetPitch = inputForward > 0 ? -0.1 : inputForward < 0 ? 0.15 : 0;
+      const targetRoll = -inputTurn * 0.4;
+      apPitch += (targetPitch - apPitch) * 3 * dt;
+      apRoll += (targetRoll - apRoll) * 3 * dt;
+
+      // 最低高度: 地面には潜らない
+      // 簡易的な地面衝突チェック
+      const groundCheck = checkCollision(apX, apY - 1, apZ);
+      if (groundCheck && inputVertical <= 0) {
+        // 地面に近い場合、下がらない
+        if (apSpeed < 0.5) {
+          // 速度がほぼ0で地面にいる → 着陸状態
+        }
+        // Y位置を地面の上に補正
+        for (let checkY = Math.floor(apY); checkY < apY + 5; checkY++) {
+          if (!checkCollision(apX, checkY + 1, apZ)) {
+            apY = Math.max(apY, checkY + 2);
+            break;
+          }
+        }
+      }
+
+      // 落下防止（最低高度）
+      if (apY < 1) apY = 1;
+
+      // プロペラアニメーション
+      const propSpeed = Math.abs(apSpeed) / MAX_SPEED;
+      apPropAngle += PROPELLER_SPEED * (0.3 + propSpeed * 0.7) * dt;
+
+      // ストアに反映
+      vehicleState.updateAirplane({
+        x: apX,
+        y: apY,
+        z: apZ,
+        rotationY: apRotY,
+        pitch: apPitch,
+        roll: apRoll,
+        speed: apSpeed,
+        propellerAngle: apPropAngle,
+      });
+
+      // カメラを飛行機の上に配置（操縦席の視点）
+      // 少し後方から見下ろす三人称視点の方がいいか？
+      // → FPSなので操縦席視点
+      const cockpitOffset = new THREE.Vector3(0, 1.5, 0.5);
+      cockpitOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), apRotY);
+
+      pos.x = apX + cockpitOffset.x;
+      pos.y = apY + cockpitOffset.y;
+      pos.z = apZ + cockpitOffset.z;
+
+      camera.position.set(pos.x, pos.y, pos.z);
+
+      // マルチプレイ位置送信
+      const now = performance.now();
+      if (now - lastSendTime.current > 50) {
+        sendPosition(
+          [pos.x, pos.y, pos.z],
+          [euler.current.y, euler.current.x],
+        );
+        lastSendTime.current = now;
+      }
+
+      return; // 通常の物理処理をスキップ
+    }
+
+    // ========================================
+    // 通常の歩行物理（飛行機に乗っていない場合）
+    // ========================================
 
     // --- ジャンプ（重力適用前に処理） ---
     const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
