@@ -88,14 +88,16 @@ export default function App() {
   const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
   const airplaneSpawned = useVehicleStore((s) => s.airplane.spawned);
 
-  // ゲーム開始時に飛行機をスポーン（プレイヤーの初期位置近く）
+  // ゲーム開始時に飛行機をスポーン（プレイヤーの前方、家の外に配置）
   useEffect(() => {
     if (phase === 'playing' && !airplaneSpawned) {
-      // プレイヤー初期位置(8, 40, 8)の近く（x=12, z=12）に、地形高さ+2でスポーン
-      const spawnX = 12;
-      const spawnZ = 12;
+      // 家のドア前方の開けた場所にスポーン
+      // プレイヤーは (8, 40, 8) から落下 → z=8 付近に着地
+      // 飛行機は z=-5 付近に配置（家の前方、プレイヤーから約13ブロック離れる）
+      const spawnX = 7;
+      const spawnZ = -5;
       const terrainY = getTerrainHeight(spawnX, spawnZ);
-      spawnAirplane(spawnX, terrainY + 2, spawnZ);
+      spawnAirplane(spawnX, terrainY + 1.5, spawnZ);
     }
   }, [phase, airplaneSpawned, spawnAirplane]);
 
