@@ -24,6 +24,7 @@ import { SoundManager } from './components/SoundManager';
 import { Airplane } from './components/vehicles/Airplane';
 import { VehicleHUD } from './components/ui/VehicleHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
+import { getTerrainHeight } from './utils/terrain';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
@@ -90,8 +91,11 @@ export default function App() {
   // ゲーム開始時に飛行機をスポーン（プレイヤーの初期位置近く）
   useEffect(() => {
     if (phase === 'playing' && !airplaneSpawned) {
-      // プレイヤー初期位置(8, 40, 8)の近くにスポーン
-      spawnAirplane(15, 42, 15);
+      // プレイヤー初期位置(8, 40, 8)の近く（x=12, z=12）に、地形高さ+2でスポーン
+      const spawnX = 12;
+      const spawnZ = 12;
+      const terrainY = getTerrainHeight(spawnX, spawnZ);
+      spawnAirplane(spawnX, terrainY + 2, spawnZ);
     }
   }, [phase, airplaneSpawned, spawnAirplane]);
 
