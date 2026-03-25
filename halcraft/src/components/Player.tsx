@@ -222,10 +222,12 @@ export function Player() {
       onGround.current = false;
     }
 
-    // --- 重力 ---
-    vel.y += GRAVITY * dt;
-    // 終端速度を制限
-    if (vel.y < -40) vel.y = -40;
+    // --- 重力（空中の場合のみ適用） ---
+    if (!onGround.current) {
+      vel.y += GRAVITY * dt;
+      // 終端速度を制限
+      if (vel.y < -40) vel.y = -40;
+    }
 
     // --- ノックバック適用 ---
     const kb = consumeKnockback();

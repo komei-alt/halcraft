@@ -269,9 +269,12 @@ export function MobManager() {
         }
         chickenWanderTimers.current.set(m.id, wanderTimer);
 
-        // 重力
-        m.vy += MOB_GRAVITY * dt;
-        if (m.vy < -30) m.vy = -30;
+        // 重力（接地中はスキップ）
+        const chickenOnGround = m.vy === 0 && checkMobCollisionSize(m.x, m.y - 0.1, m.z, CHICKEN_RADIUS, CHICKEN_HEIGHT);
+        if (!chickenOnGround) {
+          m.vy += MOB_GRAVITY * dt;
+          if (m.vy < -30) m.vy = -30;
+        }
 
         // Y衝突
         const newYC = m.y + m.vy * dt;
@@ -342,9 +345,12 @@ export function MobManager() {
           if (distS > 0.1) m.rotation = Math.atan2(dxS, dzS);
         }
 
-        // 重力
-        m.vy += MOB_GRAVITY * dt;
-        if (m.vy < -30) m.vy = -30;
+        // 重力（接地中はスキップ）
+        const spiderOnGround = m.vy === 0 && checkMobCollisionSize(m.x, m.y - 0.1, m.z, SPIDER_RADIUS, SPIDER_HEIGHT);
+        if (!spiderOnGround) {
+          m.vy += MOB_GRAVITY * dt;
+          if (m.vy < -30) m.vy = -30;
+        }
 
         // Y衝突
         const newYS = m.y + m.vy * dt;
@@ -515,9 +521,12 @@ export function MobManager() {
           }
         }
 
-        // 重力
-        m.vy += MOB_GRAVITY * dt;
-        if (m.vy < -30) m.vy = -30;
+        // 重力（接地中はスキップ）
+        const protoOnGround = m.vy === 0 && checkMobCollisionSize(m.x, m.y - 0.1, m.z, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT);
+        if (!protoOnGround) {
+          m.vy += MOB_GRAVITY * dt;
+          if (m.vy < -30) m.vy = -30;
+        }
 
         // Y軸衝突（プロトタイプ用サイズ）
         const newYP = m.y + m.vy * dt;
@@ -648,9 +657,12 @@ export function MobManager() {
         }
       }
 
-      // --- 重力 ---
-      m.vy += MOB_GRAVITY * dt;
-      if (m.vy < -30) m.vy = -30;
+      // --- 重力（接地中はスキップ） ---
+      const zombieOnGround = m.vy === 0 && checkMobCollision(m.x, m.y - 0.1, m.z);
+      if (!zombieOnGround) {
+        m.vy += MOB_GRAVITY * dt;
+        if (m.vy < -30) m.vy = -30;
+      }
 
       // --- Y軸衝突 ---
       const newY = m.y + m.vy * dt;
