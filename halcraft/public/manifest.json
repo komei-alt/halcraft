@@ -1,7 +1,7 @@
 {
   "name": "ハルクラ — HalCraft",
   "short_name": "ハルクラ",
-  "description": "7歳のハルが描いたイラストで作ったオリジナルのマインクラフト風3Dサンドボックスゲーム",
+  "description": "HALが作ったオリジナルゲーム：ハルクラ。マルチプレイ＆ボイスチャット搭載",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "any",
