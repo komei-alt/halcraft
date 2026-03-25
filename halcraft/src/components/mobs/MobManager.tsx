@@ -276,7 +276,7 @@ export function MobManager() {
         // Y衝突
         const newYC = m.y + m.vy * dt;
         if (checkMobCollisionSize(m.x, newYC, m.z, CHICKEN_RADIUS, CHICKEN_HEIGHT)) {
-          if (m.vy < 0) m.y = Math.floor(newYC) + 1;
+          if (m.vy < 0) m.y = Math.floor(newYC) + 1.001;
           m.vy = 0;
         } else {
           m.y = newYC;
@@ -349,7 +349,7 @@ export function MobManager() {
         // Y衝突
         const newYS = m.y + m.vy * dt;
         if (checkMobCollisionSize(m.x, newYS, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
-          if (m.vy < 0) m.y = Math.floor(newYS) + 1;
+          if (m.vy < 0) m.y = Math.floor(newYS) + 1.001;
           m.vy = 0;
         } else {
           m.y = newYS;
@@ -524,7 +524,7 @@ export function MobManager() {
         if (checkMobCollisionSize(m.x, newYP, m.z, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT)) {
           if (m.vy < 0) {
             const footBlockY = Math.floor(newYP);
-            m.y = footBlockY + 1;
+            m.y = footBlockY + 1.001;
           }
           m.vy = 0;
         } else {
@@ -657,7 +657,7 @@ export function MobManager() {
       if (checkMobCollision(m.x, newY, m.z)) {
         if (m.vy < 0) {
           const footBlockY = Math.floor(newY);
-          m.y = footBlockY + 1;
+          m.y = footBlockY + 1.001;
         }
         m.vy = 0;
       } else {

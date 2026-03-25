@@ -113,14 +113,14 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
         scale={[SCALE, SCALE, SCALE]}
         // モデルの中心を足元に合わせるオフセット（接地）
         // 原点がモデル中心にあるため、高さの半分を持ち上げる
-        position={[0, 1.8, 0]}
+        position={[0, 2.4, 0]}
       />
 
 
 
       {/* HPバー（頭上・Billboard） */}
       {mob.hp < mob.maxHp && (
-        <Billboard position={[0, 3.9, 0]}>
+        <Billboard position={[0, 4.5, 0]}>
           {/* 背景 */}
           <mesh>
             <planeGeometry args={[1.0, 0.1]} />

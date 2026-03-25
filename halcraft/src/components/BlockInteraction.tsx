@@ -86,9 +86,9 @@ export function BlockInteraction() {
     const footY = camera.position.y - 1.6;
     const pz = camera.position.z;
 
-    // マージン付きプレイヤーAABB（少し大きめにして確実にブロック）
-    const margin = 0.1;
-    const radius = 0.4; // PLAYER_RADIUS(0.25)より余裕を持たせる
+    // マージン付きプレイヤーAABB（実際のPLAYER_RADIUSに近い値に設定）
+    const margin = 0.05;
+    const radius = 0.3; // PLAYER_RADIUS(0.25)に近い値
     const pMinX = px - radius - margin;
     const pMaxX = px + radius + margin;
     const pMinY = footY - margin;

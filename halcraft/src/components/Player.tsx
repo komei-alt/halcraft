@@ -285,9 +285,9 @@ export function Player() {
           applyFallDamage(fallDistance);
         }
         onGround.current = true;
-        // 足元のブロック上面にスナップ
-        const footBlockY = Math.floor(pos.y + vel.y * dt);
-        pos.y = footBlockY + 1;
+        // 足元のブロック上面にスナップ（微量上げて境界振動を防止）
+        const footBlockY = Math.floor(newY);
+        pos.y = footBlockY + 1.001;
         // 着地後の落下開始位置をリセット
         lastGroundY.current = pos.y;
       }
@@ -317,11 +317,10 @@ export function Player() {
     }
 
     // --- 接地チェック（静止時にも接地判定を維持） ---
-    if (vel.y === 0) {
+    if (vel.y === 0 && onGround.current) {
       // 足元にブロックがあるか確認（少し下をチェック）
-      if (checkCollision(pos.x, pos.y - 0.05, pos.z)) {
-        onGround.current = true;
-      } else {
+      if (!checkCollision(pos.x, pos.y - 0.1, pos.z)) {
+        // 足元にブロックがない → 空中に出た
         onGround.current = false;
       }
     }
