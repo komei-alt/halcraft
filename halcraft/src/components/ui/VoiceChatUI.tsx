@@ -110,7 +110,7 @@ export function VoiceChatUI() {
       id="voice-chat-panel"
       style={{
         position: 'fixed',
-        top: isTouch ? 56 : 16,
+        top: isTouch ? 76 : 64,
         right: isTouch ? 12 : 16,
         display: 'flex',
         flexDirection: 'column',
