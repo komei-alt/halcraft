@@ -1,7 +1,9 @@
 // 地形チャンクレンダリングコンポーネント
 // ブロックデータを InstancedMesh で効率的に描画する
+// カメラ距離ベースのチャンクカリングで描画負荷を大幅削減
 
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
@@ -193,35 +195,55 @@ function BlockTypeInstances({
       ref={meshRef}
       args={[sharedBoxGeometry, undefined, count]}
       material={material}
-      castShadow
       receiveShadow
     />
   );
 }
 
+/** カメラ視錐台カリング用の描画距離（ブロック単位） */
+const VISIBLE_DISTANCE = 5; // チャンク単位（近いチャンクだけ描画）
+
 /** ワールド全体の描画 */
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
   const chunks = useWorldStore((s) => s.chunks);
+  const { camera } = useThree();
+
+  // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
+  const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
+  const lastUpdateTime = useRef(0);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
     initChunks(RENDER_DISTANCE);
   }, [initChunks]);
 
-  // 生成済みチャンクのキーからcx,czを取得
-  const chunkCoords = useMemo(() => {
-    const coords: [number, number][] = [];
+  // カメラ位置ベースで可視チャンクを更新
+  useFrame(() => {
+    const now = performance.now();
+    if (now - lastUpdateTime.current < 500) return;
+    lastUpdateTime.current = now;
+
+    const camX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
+
+    const visible: [number, number][] = [];
     chunks.forEach((_, key) => {
       const [cx, cz] = key.split(',').map(Number);
-      coords.push([cx, cz]);
+      const dx = Math.abs(cx - camX);
+      const dz = Math.abs(cz - camZ);
+      // チェビシェフ距離で判定（正方形の範囲）
+      if (Math.max(dx, dz) <= VISIBLE_DISTANCE) {
+        visible.push([cx, cz]);
+      }
     });
-    return coords;
-  }, [chunks]);
+
+    setVisibleChunks(visible);
+  });
 
   return (
     <group>
-      {chunkCoords.map(([cx, cz]) => (
+      {visibleChunks.map(([cx, cz]) => (
         <ChunkRenderer key={`${cx},${cz}`} cx={cx} cz={cz} />
       ))}
     </group>
