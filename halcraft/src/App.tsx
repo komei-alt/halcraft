@@ -21,10 +21,11 @@ import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
-import { Airplane } from './components/vehicles/Airplane';
+import { Helicopter } from './components/vehicles/Helicopter';
 import { VehicleHUD } from './components/ui/VehicleHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
 import { getTerrainHeight } from './utils/terrain';
+import { HELIPORT_CENTER } from './utils/terrain';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
@@ -49,7 +50,7 @@ function GameCanvas() {
       camera={{
         fov: isTouch ? 65 : 70,
         near: 0.1,
-        far: isTouch ? 120 : 200,
+        far: isTouch ? 150 : 300,
       }}
       dpr={isTouch ? [1, 1.5] : [1, 2]}
       gl={{
@@ -73,7 +74,7 @@ function GameCanvas() {
         <MobDeathEffect />
         <DroppedItems />
         <MobManager />
-        <Airplane />
+        <Helicopter />
         <RemotePlayers />
         <PlayerNameOverlay />
         <SoundManager />
@@ -85,21 +86,18 @@ function GameCanvas() {
 export default function App() {
   const phase = useGameStore((s) => s.phase);
   const isTouch = isTouchDevice();
-  const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
-  const airplaneSpawned = useVehicleStore((s) => s.airplane.spawned);
+  const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
+  const helicopterSpawned = useVehicleStore((s) => s.helicopter.spawned);
 
-  // ゲーム開始時に飛行機をスポーン（プレイヤーの前方、家の外に配置）
+  // ゲーム開始時にヘリコプターをヘリポートにスポーン
   useEffect(() => {
-    if (phase === 'playing' && !airplaneSpawned) {
-      // 家のドア前方の開けた場所にスポーン
-      // プレイヤーは (8, 40, 8) から落下 → z=8 付近に着地
-      // 飛行機は z=-5 付近に配置（家の前方、プレイヤーから約13ブロック離れる）
-      const spawnX = 7;
-      const spawnZ = -5;
+    if (phase === 'playing' && !helicopterSpawned) {
+      const spawnX = HELIPORT_CENTER.x;
+      const spawnZ = HELIPORT_CENTER.z;
       const terrainY = getTerrainHeight(spawnX, spawnZ);
-      spawnAirplane(spawnX, terrainY + 1.5, spawnZ);
+      spawnHelicopter(spawnX, terrainY + 2.0, spawnZ);
     }
-  }, [phase, airplaneSpawned, spawnAirplane]);
+  }, [phase, helicopterSpawned, spawnHelicopter]);
 
   // クラフト画面の開閉状態（モバイル用：外部から制御）
   const [craftingOpen, setCraftingOpen] = useState(false);

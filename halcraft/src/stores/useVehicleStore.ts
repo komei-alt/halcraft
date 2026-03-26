@@ -1,14 +1,14 @@
-// 乗り物（飛行機等）の状態管理ストア
-// 搭乗状態、飛行機の位置・回転・速度を管理
+// 乗り物（ヘリコプター等）の状態管理ストア
+// 搭乗状態、ヘリコプターの位置・回転・速度を管理
 
 import { create } from 'zustand';
 
 /** 乗り物の種類 */
-export type VehicleType = 'airplane';
+export type VehicleType = 'helicopter';
 
-/** 飛行機の状態 */
-export interface AirplaneState {
-  /** 飛行機がスポーン済みか */
+/** ヘリコプターの状態 */
+export interface HelicopterState {
+  /** ヘリコプターがスポーン済みか */
   spawned: boolean;
   /** プレイヤーが搭乗中か */
   isBoarded: boolean;
@@ -26,56 +26,56 @@ export interface AirplaneState {
   speed: number;
   /** エンジンが動いているか */
   engineOn: boolean;
-  /** プロペラの回転角度（アニメーション用） */
-  propellerAngle: number;
+  /** ローターの回転角度（アニメーション用） */
+  rotorAngle: number;
 }
 
-/** 飛行機の定数 */
-export const AIRPLANE_CONSTANTS = {
+/** ヘリコプターの定数 */
+export const HELICOPTER_CONSTANTS = {
   /** 最大速度 */
-  MAX_SPEED: 30,
+  MAX_SPEED: 25,
   /** 加速度 */
-  ACCELERATION: 12,
+  ACCELERATION: 10,
   /** 減速度（入力なし時） */
-  DECELERATION: 5,
+  DECELERATION: 6,
   /** 旋回速度 */
-  TURN_SPEED: 1.5,
+  TURN_SPEED: 1.8,
   /** 上昇/下降速度 */
-  VERTICAL_SPEED: 8,
+  VERTICAL_SPEED: 10,
   /** 搭乗可能距離 */
   BOARD_DISTANCE: 3,
   /** 着陸判定高度（地面からこの高さ以下なら着陸扱い） */
   LANDING_HEIGHT: 2,
-  /** プロペラ回転速度 */
-  PROPELLER_SPEED: 15,
-  /** 飛行機のサイズ（衝突判定用） */
-  WIDTH: 4,
-  HEIGHT: 2,
+  /** ローター回転速度 */
+  ROTOR_SPEED: 20,
+  /** ヘリコプターのサイズ（衝突判定用） */
+  WIDTH: 3,
+  HEIGHT: 2.5,
   LENGTH: 5,
 } as const;
 
 interface VehicleState {
-  /** 飛行機の状態 */
-  airplane: AirplaneState;
+  /** ヘリコプターの状態 */
+  helicopter: HelicopterState;
 
-  /** 飛行機をスポーン */
-  spawnAirplane: (x: number, y: number, z: number) => void;
+  /** ヘリコプターをスポーン */
+  spawnHelicopter: (x: number, y: number, z: number) => void;
 
-  /** 飛行機に搭乗 */
-  boardAirplane: () => void;
+  /** ヘリコプターに搭乗 */
+  boardHelicopter: () => void;
 
-  /** 飛行機から降りる */
-  dismountAirplane: () => void;
+  /** ヘリコプターから降りる */
+  dismountHelicopter: () => void;
 
-  /** 飛行機の状態を更新 */
-  updateAirplane: (updates: Partial<AirplaneState>) => void;
+  /** ヘリコプターの状態を更新 */
+  updateHelicopter: (updates: Partial<HelicopterState>) => void;
 
   /** 搭乗中かどうか */
   isInVehicle: () => boolean;
 }
 
 export const useVehicleStore = create<VehicleState>((set, get) => ({
-  airplane: {
+  helicopter: {
     spawned: false,
     isBoarded: false,
     x: 0,
@@ -86,12 +86,12 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     roll: 0,
     speed: 0,
     engineOn: false,
-    propellerAngle: 0,
+    rotorAngle: 0,
   },
 
-  spawnAirplane: (x, y, z) => {
+  spawnHelicopter: (x, y, z) => {
     set({
-      airplane: {
+      helicopter: {
         spawned: true,
         isBoarded: false,
         x,
@@ -102,25 +102,25 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         roll: 0,
         speed: 0,
         engineOn: false,
-        propellerAngle: 0,
+        rotorAngle: 0,
       },
     });
   },
 
-  boardAirplane: () => {
+  boardHelicopter: () => {
     set((state) => ({
-      airplane: {
-        ...state.airplane,
+      helicopter: {
+        ...state.helicopter,
         isBoarded: true,
         engineOn: true,
       },
     }));
   },
 
-  dismountAirplane: () => {
+  dismountHelicopter: () => {
     set((state) => ({
-      airplane: {
-        ...state.airplane,
+      helicopter: {
+        ...state.helicopter,
         isBoarded: false,
         engineOn: false,
         speed: 0,
@@ -128,16 +128,16 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     }));
   },
 
-  updateAirplane: (updates) => {
+  updateHelicopter: (updates) => {
     set((state) => ({
-      airplane: {
-        ...state.airplane,
+      helicopter: {
+        ...state.helicopter,
         ...updates,
       },
     }));
   },
 
   isInVehicle: () => {
-    return get().airplane.isBoarded;
+    return get().helicopter.isBoarded;
   },
 }));

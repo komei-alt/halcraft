@@ -2,7 +2,7 @@
 // カスタム物理エンジン方式：ブロックとの直接AABB衝突判定
 // Rapierに依存しないため軽量で確実
 // デスクトップ（キーボード+マウス）とモバイル（タッチ）両対応
-// 飛行機搭乗時は飛行物理に切り替え
+// ヘリコプター搭乗時は飛行物理に切り替え
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback } from 'react';
@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
-import { useVehicleStore, AIRPLANE_CONSTANTS } from '../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS } from '../stores/useVehicleStore';
 import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -231,31 +231,50 @@ export function Player() {
 
     // --- 乗り物ストアの状態を取得 ---
     const vehicleState = useVehicleStore.getState();
-    const airplane = vehicleState.airplane;
-    const isInAirplane = airplane.isBoarded;
+    const heli = vehicleState.helicopter;
+    const isInHeli = heli.isBoarded;
 
     // --- 搭乗/降車の処理（Fキー） ---
     if (interactPressed.current && isInputActive) {
       interactPressed.current = false;
 
-      if (isInAirplane) {
-        // 降車: 飛行機から降りる
-        vehicleState.dismountAirplane();
-        // プレイヤーを飛行機の横に配置
-        pos.x = airplane.x + 2;
-        pos.y = airplane.y;
-        pos.z = airplane.z;
+      if (isInHeli) {
+        // 降車: ヘリコプターから降りる
+        vehicleState.dismountHelicopter();
+        // プレイヤーをヘリの横に配置し、地面まで降ろす
+        const dismountX = heli.x + 2;
+        const dismountZ = heli.z;
+        // ヘリの高度から下方向に地面を探す
+        let landingY = heli.y;
+        for (let checkY = Math.floor(heli.y); checkY >= 0; checkY--) {
+          if (checkCollision(dismountX, checkY, dismountZ)) {
+            // このブロックの上面に着地
+            landingY = checkY + 1.001;
+            break;
+          }
+          if (checkY === 0) {
+            // 地面が見つからない場合はY=1に配置
+            landingY = 1;
+          }
+        }
+        pos.x = dismountX;
+        pos.y = landingY;
+        pos.z = dismountZ;
         vel.set(0, 0, 0);
-        onGround.current = false;
+        onGround.current = true;
         lastGroundY.current = pos.y;
-      } else if (airplane.spawned) {
-        // 搭乗: 飛行機に近いかチェック
-        const dx = pos.x - airplane.x;
-        const dy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
-        const dz = pos.z - airplane.z;
+      } else if (heli.spawned) {
+        // 搭乗: ヘリに近いかチェック
+        const dx = pos.x - heli.x;
+        const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
+        const dz = pos.z - heli.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) {
-          vehicleState.boardAirplane();
+        if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) {
+          vehicleState.boardHelicopter();
+          // カメラの向きをヘリの正面に合わせる
+          euler.current.y = heli.rotationY;
+          euler.current.x = -0.1; // 少し下向き（前方が見やすい）
+          camera.quaternion.setFromEuler(euler.current);
         }
       }
     }
@@ -265,22 +284,22 @@ export function Player() {
     }
 
     // ========================================
-    // 飛行機搭乗中の物理
+    // ヘリコプター搭乗中の物理
     // ========================================
-    if (isInAirplane) {
+    if (isInHeli) {
       const {
         MAX_SPEED, ACCELERATION, DECELERATION, TURN_SPEED,
-        VERTICAL_SPEED, PROPELLER_SPEED,
-      } = AIRPLANE_CONSTANTS;
+        VERTICAL_SPEED, ROTOR_SPEED,
+      } = HELICOPTER_CONSTANTS;
 
-      let apSpeed = airplane.speed;
-      let apRotY = airplane.rotationY;
-      let apPitch = airplane.pitch;
-      let apRoll = airplane.roll;
-      let apX = airplane.x;
-      let apY = airplane.y;
-      let apZ = airplane.z;
-      let apPropAngle = airplane.propellerAngle;
+      let apSpeed = heli.speed;
+      let apRotY = heli.rotationY;
+      let apPitch = heli.pitch;
+      let apRoll = heli.roll;
+      let apX = heli.x;
+      let apY = heli.y;
+      let apZ = heli.z;
+      let apRotorAngle = heli.rotorAngle;
 
       // 入力取得
       let inputForward: number;
@@ -313,9 +332,13 @@ export function Player() {
         }
       }
 
-      // 旋回（速度が出ているほど旋回しやすい）
-      const turnFactor = Math.min(1, Math.abs(apSpeed) / 5);
-      apRotY += inputTurn * TURN_SPEED * dt * turnFactor;
+      // 旋回（ヘリは低速でも旋回可能、ホバリング中も回れる）
+      const turnFactor = Math.min(1, (Math.abs(apSpeed) + 2) / 5);
+      const turnDelta = inputTurn * TURN_SPEED * dt * turnFactor;
+      apRotY += turnDelta;
+
+      // カメラの向きも旋回に同期（マウスはこの上にオーバーライドで動く）
+      euler.current.y += turnDelta;
 
       // 上昇/下降
       apY += inputVertical * VERTICAL_SPEED * dt;
@@ -352,12 +375,12 @@ export function Player() {
       // 落下防止（最低高度）
       if (apY < 1) apY = 1;
 
-      // プロペラアニメーション
-      const propSpeed = Math.abs(apSpeed) / MAX_SPEED;
-      apPropAngle += PROPELLER_SPEED * (0.3 + propSpeed * 0.7) * dt;
+      // ローターアニメーション
+      const rotorSpeedFactor = Math.abs(apSpeed) / MAX_SPEED;
+      apRotorAngle += ROTOR_SPEED * (0.5 + rotorSpeedFactor * 0.5) * dt;
 
       // ストアに反映
-      vehicleState.updateAirplane({
+      vehicleState.updateHelicopter({
         x: apX,
         y: apY,
         z: apZ,
@@ -365,19 +388,19 @@ export function Player() {
         pitch: apPitch,
         roll: apRoll,
         speed: apSpeed,
-        propellerAngle: apPropAngle,
+        rotorAngle: apRotorAngle,
       });
 
-      // カメラを飛行機の上に配置（操縦席の視点）
-      // 少し後方から見下ろす三人称視点の方がいいか？
-      // → FPSなので操縦席視点
-      const cockpitOffset = new THREE.Vector3(0, 1.5, 0.5);
+      // カメラをヘリの上に配置（操縦席の視点）
+      const cockpitOffset = new THREE.Vector3(0, 1.8, 0.5);
       cockpitOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), apRotY);
 
       pos.x = apX + cockpitOffset.x;
       pos.y = apY + cockpitOffset.y;
       pos.z = apZ + cockpitOffset.z;
 
+      // カメラの向きをeulerから更新（旋回+マウスの合成結果を反映）
+      camera.quaternion.setFromEuler(euler.current);
       camera.position.set(pos.x, pos.y, pos.z);
 
       // マルチプレイ位置送信

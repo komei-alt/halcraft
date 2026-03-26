@@ -1,15 +1,15 @@
-// 飛行機操作HUD
+// ヘリコプター操作HUD
 // 搭乗中に速度・高度・操作ガイドを表示
 
 import { useVehicleStore } from '../../stores/useVehicleStore';
 
 export function VehicleHUD() {
-  const airplane = useVehicleStore((s) => s.airplane);
+  const helicopter = useVehicleStore((s) => s.helicopter);
 
-  if (!airplane.isBoarded) return null;
+  if (!helicopter.isBoarded) return null;
 
-  const speed = Math.abs(airplane.speed).toFixed(1);
-  const altitude = airplane.y.toFixed(1);
+  const speed = Math.abs(helicopter.speed).toFixed(1);
+  const altitude = helicopter.y.toFixed(1);
 
   return (
     <div style={{
@@ -102,7 +102,7 @@ export function VehicleHUD() {
         display: 'flex',
         gap: '12px',
       }}>
-        <span><b style={{ color: '#ffcc00' }}>W/S</b> 加速/減速</span>
+        <span><b style={{ color: '#ffcc00' }}>W/S</b> 前進/後退</span>
         <span><b style={{ color: '#ffcc00' }}>A/D</b> 旋回</span>
         <span><b style={{ color: '#ffcc00' }}>Space</b> 上昇</span>
         <span><b style={{ color: '#ffcc00' }}>Shift</b> 下降</span>

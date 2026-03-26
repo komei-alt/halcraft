@@ -1,5 +1,6 @@
 // プロシージャル地形生成ユーティリティ
 // simplex-noise を使って自然な起伏のある地形を生成する
+// ヘリポート・村を含む広い世界を構築
 
 import { createNoise2D } from 'simplex-noise';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
@@ -57,11 +58,49 @@ export function getTerrainHeight(worldX: number, worldZ: number): number {
 /** 1チャンク分のブロックデータ配列を返す */
 export type ChunkData = BlockId[][][]; // [x][y][z]
 
+// ========================================
+// 構造物の定数（ワールド座標）
+// ========================================
+
+/** ヘリポートの中心座標（家の近く、開けた場所） */
+export const HELIPORT_CENTER = { x: 15, z: -12 };
+/** ヘリポートのサイズ */
+const HELIPORT_SIZE = 9;
+
+/** 村の中心座標（ヘリで飛んでいく先） */
+export const VILLAGE_CENTER = { x: 80, z: 80 };
+/** 村の建物配置 */
+const VILLAGE_HOUSES = [
+  { dx: 0, dz: 0, w: 6, d: 6, h: 4 },   // 中央の大きな家
+  { dx: -10, dz: 2, w: 5, d: 5, h: 3 },  // 左の家
+  { dx: 10, dz: -2, w: 5, d: 5, h: 3 },  // 右の家
+  { dx: -5, dz: -10, w: 4, d: 4, h: 3 }, // 手前左の小屋
+  { dx: 5, dz: -10, w: 4, d: 4, h: 3 },  // 手前右の小屋
+  { dx: 0, dz: 12, w: 7, d: 5, h: 4 },   // 奥の大きな家
+];
+
 /**
  * ワールド座標 (x, z) で木を生やすかどうかを判定
  * ノイズベースで自然な密度分布を実現
+ * 構造物エリア（ヘリポート・村）では木を生やさない
  */
 function shouldPlaceTree(worldX: number, worldZ: number): boolean {
+  // ヘリポート周辺は木を除外
+  if (
+    Math.abs(worldX - HELIPORT_CENTER.x) < HELIPORT_SIZE + 3 &&
+    Math.abs(worldZ - HELIPORT_CENTER.z) < HELIPORT_SIZE + 3
+  ) {
+    return false;
+  }
+
+  // 村エリアは木を除外（広めにとる）
+  if (
+    Math.abs(worldX - VILLAGE_CENTER.x) < 25 &&
+    Math.abs(worldZ - VILLAGE_CENTER.z) < 25
+  ) {
+    return false;
+  }
+
   // 木の密度を決めるノイズ（大きなスケール）
   const density = treeNoise(worldX * 0.08, worldZ * 0.08);
   // 細かい配置ノイズ（個別の木の位置決め）
@@ -293,6 +332,283 @@ function placePlayerHouse(chunk: ChunkData, _cx: number, _cz: number): void {
 }
 
 /**
+ * ヘリポートを生成する
+ * 鉄ブロックの平らなパッド + 中央にHマーク + 周囲に松明
+ */
+function placeHeliport(chunk: ChunkData, cx: number, cz: number): void {
+  const halfSize = Math.floor(HELIPORT_SIZE / 2);
+
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const worldX = cx * CHUNK_SIZE + lx;
+      const worldZ = cz * CHUNK_SIZE + lz;
+
+      const relX = worldX - HELIPORT_CENTER.x;
+      const relZ = worldZ - HELIPORT_CENTER.z;
+
+      // ヘリポートの範囲内か
+      if (Math.abs(relX) > halfSize || Math.abs(relZ) > halfSize) continue;
+
+      const surfaceY = getTerrainHeight(worldX, worldZ);
+
+      // 地面をフラットにする（ヘリポートの基準高さ）
+      const padY = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z);
+
+      // 地面を平らにする
+      for (let y = Math.min(surfaceY, padY) - 1; y <= Math.max(surfaceY, padY) + 1; y++) {
+        if (y < 0 || y >= WORLD_HEIGHT) continue;
+        if (y < padY) {
+          chunk[lx][y][lz] = BLOCK_IDS.IRON;
+        } else if (y === padY) {
+          // パッドの表面
+          // Hマークを描く
+          const isH = 
+            // H の左縦棒
+            (relX === -2 && Math.abs(relZ) <= 2) ||
+            // H の右縦棒
+            (relX === 2 && Math.abs(relZ) <= 2) ||
+            // H の横棒
+            (relZ === 0 && Math.abs(relX) <= 2);
+          
+          if (isH) {
+            chunk[lx][y][lz] = BLOCK_IDS.ELECTRIC; // 光るHマーク
+          } else {
+            chunk[lx][y][lz] = BLOCK_IDS.IRON;
+          }
+        } else {
+          // 上の空間をクリア
+          chunk[lx][y][lz] = BLOCK_IDS.AIR;
+        }
+      }
+
+      // ヘリポートの上の木や障害物を除去
+      for (let y = padY + 1; y < padY + 10; y++) {
+        if (y >= 0 && y < WORLD_HEIGHT) {
+          chunk[lx][y][lz] = BLOCK_IDS.AIR;
+        }
+      }
+
+      // 角に松明を配置
+      if (
+        Math.abs(relX) === halfSize && Math.abs(relZ) === halfSize &&
+        padY + 1 < WORLD_HEIGHT
+      ) {
+        chunk[lx][padY + 1][lz] = BLOCK_IDS.TORCH;
+      }
+
+      // 辺の中央にも松明
+      if (
+        ((Math.abs(relX) === halfSize && relZ === 0) ||
+         (relX === 0 && Math.abs(relZ) === halfSize)) &&
+        padY + 1 < WORLD_HEIGHT
+      ) {
+        chunk[lx][padY + 1][lz] = BLOCK_IDS.TORCH;
+      }
+    }
+  }
+}
+
+/**
+ * 村の建物1棟を配置する
+ * 壁: 木ブロック、 床/屋根: 木ブロック、 窓: ガラス、 松明付き
+ */
+function placeVillageHouse(
+  chunk: ChunkData,
+  cx: number, cz: number,
+  centerWorldX: number, centerWorldZ: number,
+  width: number, depth: number, wallHeight: number,
+): void {
+  const startWX = centerWorldX - Math.floor(width / 2);
+  const startWZ = centerWorldZ - Math.floor(depth / 2);
+
+  // 建物の基準高さ
+  const floorY = getTerrainHeight(centerWorldX, centerWorldZ);
+
+  for (let wx = startWX; wx < startWX + width; wx++) {
+    for (let wz = startWZ; wz < startWZ + depth; wz++) {
+      // チャンク内のローカル座標
+      const lx = wx - cx * CHUNK_SIZE;
+      const lz = wz - cz * CHUNK_SIZE;
+
+      // チャンク範囲外はスキップ
+      if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+
+      const relX = wx - startWX;
+      const relZ = wz - startWZ;
+      const isEdgeX = relX === 0 || relX === width - 1;
+      const isEdgeZ = relZ === 0 || relZ === depth - 1;
+      const isEdge = isEdgeX || isEdgeZ;
+      const isDoor = relX === Math.floor(width / 2) && relZ === 0;
+
+      // 地面を整地
+      for (let y = floorY - 2; y <= floorY + wallHeight + 1; y++) {
+        if (y < 0 || y >= WORLD_HEIGHT) continue;
+        if (y < floorY) {
+          chunk[lx][y][lz] = BLOCK_IDS.DIRT;
+        } else if (y === floorY) {
+          chunk[lx][y][lz] = BLOCK_IDS.WOOD; // 床
+        } else if (y <= floorY + wallHeight) {
+          if (isEdge) {
+            // ドア穴
+            if (isDoor && y <= floorY + 2) {
+              chunk[lx][y][lz] = BLOCK_IDS.AIR;
+            }
+            // 窓（壁の中央付近、高さ2段目）
+            else if (
+              y === floorY + 2 &&
+              !isEdgeX && !isEdgeZ // 角でない壁
+                ? false // 内部は空気
+                : (isEdgeX && relZ === Math.floor(depth / 2)) ||
+                  (isEdgeZ && relX === Math.floor(width / 2))
+            ) {
+              chunk[lx][y][lz] = BLOCK_IDS.GLASS;
+            } else {
+              chunk[lx][y][lz] = BLOCK_IDS.WOOD; // 壁
+            }
+          } else {
+            chunk[lx][y][lz] = BLOCK_IDS.AIR; // 内部空間
+          }
+        } else if (y === floorY + wallHeight + 1) {
+          chunk[lx][y][lz] = BLOCK_IDS.WOOD; // 屋根
+        } else {
+          chunk[lx][y][lz] = BLOCK_IDS.AIR;
+        }
+      }
+
+      // 上の木や障害物を除去
+      for (let y = floorY + wallHeight + 2; y < floorY + wallHeight + 8; y++) {
+        if (y >= 0 && y < WORLD_HEIGHT) {
+          chunk[lx][y][lz] = BLOCK_IDS.AIR;
+        }
+      }
+    }
+  }
+
+  // 松明を配置（建物内の角）
+  const torchPositions = [
+    { wx: startWX + 1, wz: startWZ + 1 },
+    { wx: startWX + width - 2, wz: startWZ + depth - 2 },
+  ];
+  for (const tp of torchPositions) {
+    const lx = tp.wx - cx * CHUNK_SIZE;
+    const lz = tp.wz - cz * CHUNK_SIZE;
+    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE) {
+      const ty = floorY + 1;
+      if (ty < WORLD_HEIGHT) {
+        chunk[lx][ty][lz] = BLOCK_IDS.TORCH;
+      }
+    }
+  }
+}
+
+/**
+ * 村の道（芝→土の小道）を生成
+ */
+function placeVillagePaths(chunk: ChunkData, cx: number, cz: number): void {
+  // 村の中心から各家への道
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const worldX = cx * CHUNK_SIZE + lx;
+      const worldZ = cz * CHUNK_SIZE + lz;
+
+      const relX = worldX - VILLAGE_CENTER.x;
+      const relZ = worldZ - VILLAGE_CENTER.z;
+
+      // 村の範囲外はスキップ
+      if (Math.abs(relX) > 22 || Math.abs(relZ) > 22) continue;
+
+      // 道のパターン: 十字路 + 中心広場
+      const isPath =
+        // 中心の広場（3x3）
+        (Math.abs(relX) <= 1 && Math.abs(relZ) <= 1) ||
+        // 南北の道
+        (Math.abs(relX) <= 1 && Math.abs(relZ) <= 18) ||
+        // 東西の道
+        (Math.abs(relZ) <= 1 && Math.abs(relX) <= 16);
+
+      if (isPath) {
+        const surfaceY = getTerrainHeight(worldX, worldZ);
+        if (surfaceY >= 0 && surfaceY < WORLD_HEIGHT) {
+          chunk[lx][surfaceY][lz] = BLOCK_IDS.DIRT;
+          // 道の上の木を除去
+          for (let y = surfaceY + 1; y < surfaceY + 8; y++) {
+            if (y < WORLD_HEIGHT) {
+              chunk[lx][y][lz] = BLOCK_IDS.AIR;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 村全体を配置するヘルパー
+ */
+function placeVillage(chunk: ChunkData, cx: number, cz: number): void {
+  // 道を配置
+  placeVillagePaths(chunk, cx, cz);
+
+  // 各家を配置
+  for (const house of VILLAGE_HOUSES) {
+    placeVillageHouse(
+      chunk, cx, cz,
+      VILLAGE_CENTER.x + house.dx,
+      VILLAGE_CENTER.z + house.dz,
+      house.w, house.d, house.h,
+    );
+  }
+
+  // 村の中心に松明街灯を配置
+  const centerLX = VILLAGE_CENTER.x - cx * CHUNK_SIZE;
+  const centerLZ = VILLAGE_CENTER.z - cz * CHUNK_SIZE;
+  if (centerLX >= 0 && centerLX < CHUNK_SIZE && centerLZ >= 0 && centerLZ < CHUNK_SIZE) {
+    const surfaceY = getTerrainHeight(VILLAGE_CENTER.x, VILLAGE_CENTER.z);
+    // 街灯（木の幹 + 松明）
+    for (let h = 1; h <= 3; h++) {
+      if (surfaceY + h < WORLD_HEIGHT) {
+        chunk[centerLX][surfaceY + h][centerLZ] = BLOCK_IDS.RAW_WOOD;
+      }
+    }
+    if (surfaceY + 4 < WORLD_HEIGHT) {
+      chunk[centerLX][surfaceY + 4][centerLZ] = BLOCK_IDS.TORCH;
+    }
+  }
+}
+
+/**
+ * チャンクが構造物（ヘリポート・村）のエリアに含まれるかチェック
+ */
+function chunkContainsHeliport(cx: number, cz: number): boolean {
+  const chunkMinX = cx * CHUNK_SIZE;
+  const chunkMaxX = chunkMinX + CHUNK_SIZE;
+  const chunkMinZ = cz * CHUNK_SIZE;
+  const chunkMaxZ = chunkMinZ + CHUNK_SIZE;
+
+  const halfSize = Math.floor(HELIPORT_SIZE / 2) + 1;
+  return (
+    chunkMaxX > HELIPORT_CENTER.x - halfSize &&
+    chunkMinX < HELIPORT_CENTER.x + halfSize &&
+    chunkMaxZ > HELIPORT_CENTER.z - halfSize &&
+    chunkMinZ < HELIPORT_CENTER.z + halfSize
+  );
+}
+
+function chunkContainsVillage(cx: number, cz: number): boolean {
+  const chunkMinX = cx * CHUNK_SIZE;
+  const chunkMaxX = chunkMinX + CHUNK_SIZE;
+  const chunkMinZ = cz * CHUNK_SIZE;
+  const chunkMaxZ = chunkMinZ + CHUNK_SIZE;
+
+  return (
+    chunkMaxX > VILLAGE_CENTER.x - 25 &&
+    chunkMinX < VILLAGE_CENTER.x + 25 &&
+    chunkMaxZ > VILLAGE_CENTER.z - 25 &&
+    chunkMinZ < VILLAGE_CENTER.z + 25
+  );
+}
+
+/**
  * チャンク座標 (cx, cz) のチャンクデータを生成する
  * 地表は草ブロック、その下3層は土、それより下は岩盤
  * 地形生成後に木を自動配置する
@@ -337,6 +653,16 @@ export function generateChunk(cx: number, cz: number): ChunkData {
   // スポーン地点（0,0）付近のチャンクに家を配置
   if (cx === 0 && cz === 0) {
     placePlayerHouse(chunk, 0, 0);
+  }
+
+  // ヘリポートを配置
+  if (chunkContainsHeliport(cx, cz)) {
+    placeHeliport(chunk, cx, cz);
+  }
+
+  // 村を配置
+  if (chunkContainsVillage(cx, cz)) {
+    placeVillage(chunk, cx, cz);
   }
 
   return chunk;

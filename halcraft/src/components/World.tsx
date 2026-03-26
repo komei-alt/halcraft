@@ -3,7 +3,7 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId, type BlockInfo } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { isBlockExposed } from '../utils/terrain';
 
@@ -206,7 +206,7 @@ export function World() {
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
-    initChunks(4);
+    initChunks(RENDER_DISTANCE);
   }, [initChunks]);
 
   // 生成済みチャンクのキーからcx,czを取得
