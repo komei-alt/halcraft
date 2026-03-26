@@ -28,6 +28,8 @@ const GRAVITY = -25;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
+/** 再利用用Y軸ベクトル（GCプレッシャー防止） */
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 export function Player() {
   const { camera } = useThree();
@@ -345,7 +347,7 @@ export function Player() {
 
       // 前方への移動
       flyForward.current.set(0, 0, 1);
-      flyForward.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), apRotY);
+      flyForward.current.applyAxisAngle(Y_AXIS, apRotY);
       apX += flyForward.current.x * apSpeed * dt;
       apZ += flyForward.current.z * apSpeed * dt;
 
@@ -417,7 +419,7 @@ export function Player() {
     }
 
     // ========================================
-    // 通常の歩行物理（飛行機に乗っていない場合）
+    // 通常の歩行物理（ヘリコプターに乗っていない場合）
     // ========================================
 
     // --- ジャンプ（重力適用前に処理） ---

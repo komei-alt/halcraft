@@ -453,13 +453,12 @@ function placeVillageHouse(
             if (isDoor && y <= floorY + 2) {
               chunk[lx][y][lz] = BLOCK_IDS.AIR;
             }
-            // 窓（壁の中央付近、高さ2段目）
+            // 窓（壁の辺中央、高さ2段目、角ブロックは除外）
             else if (
               y === floorY + 2 &&
-              !isEdgeX && !isEdgeZ // 角でない壁
-                ? false // 内部は空気
-                : (isEdgeX && relZ === Math.floor(depth / 2)) ||
-                  (isEdgeZ && relX === Math.floor(width / 2))
+              !(isEdgeX && isEdgeZ) && // 角には窓を置かない
+              ((isEdgeX && relZ === Math.floor(depth / 2)) ||
+               (isEdgeZ && relX === Math.floor(width / 2)))
             ) {
               chunk[lx][y][lz] = BLOCK_IDS.GLASS;
             } else {

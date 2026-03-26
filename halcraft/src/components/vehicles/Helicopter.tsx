@@ -58,18 +58,22 @@ export function Helicopter() {
 
     // メインローターのアニメーション
     if (mainRotorRef.current) {
-      const speed = helicopter.isBoarded
-        ? HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.016
-        : HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.004; // 待機中はゆっくり回る
-      mainRotorRef.current.rotation.y += speed;
+      if (helicopter.isBoarded) {
+        // 搭乗中: ストアの rotorAngle を直接反映（入力速度に連動）
+        mainRotorRef.current.rotation.y = helicopter.rotorAngle;
+      } else {
+        // 待機中: ゆっくりアイドル回転
+        mainRotorRef.current.rotation.y += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.004;
+      }
     }
 
     // テールローターのアニメーション（メインより速く回る）
     if (tailRotorRef.current) {
-      const speed = helicopter.isBoarded
-        ? HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.024
-        : HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.006;
-      tailRotorRef.current.rotation.x += speed;
+      if (helicopter.isBoarded) {
+        tailRotorRef.current.rotation.x = helicopter.rotorAngle * 1.5;
+      } else {
+        tailRotorRef.current.rotation.x += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.006;
+      }
     }
   });
 

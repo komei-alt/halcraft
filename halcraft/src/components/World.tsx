@@ -219,15 +219,19 @@ export function World() {
   }, [initChunks]);
 
   // カメラ位置ベースで可視チャンクを更新
+  const prevChunkKey = useRef('');
+
   useFrame(() => {
     const now = performance.now();
-    if (now - lastUpdateTime.current < 500) return;
+    // 初回（lastUpdateTime === 0）は即座に実行、以降は500ms間隔
+    if (lastUpdateTime.current !== 0 && now - lastUpdateTime.current < 500) return;
     lastUpdateTime.current = now;
 
     const camX = Math.floor(camera.position.x / CHUNK_SIZE);
     const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     const visible: [number, number][] = [];
+    const keyParts: string[] = [];
     chunks.forEach((_, key) => {
       const [cx, cz] = key.split(',').map(Number);
       const dx = Math.abs(cx - camX);
@@ -235,8 +239,14 @@ export function World() {
       // チェビシェフ距離で判定（正方形の範囲）
       if (Math.max(dx, dz) <= VISIBLE_DISTANCE) {
         visible.push([cx, cz]);
+        keyParts.push(key);
       }
     });
+
+    // 前回と同じ構成ならstateを更新しない（不要な再レンダリング防止）
+    const newKey = keyParts.sort().join(';');
+    if (newKey === prevChunkKey.current) return;
+    prevChunkKey.current = newKey;
 
     setVisibleChunks(visible);
   });
