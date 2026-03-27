@@ -2,18 +2,35 @@
 // マイクラ風のハートアイコンでHPを表示
 // 回復中はキラキラパルスエフェクト
 
+import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 
-/** 回復中かどうかを判定 */
+/** 回復中かどうかを判定（定期ポーリングで更新） */
 function useIsRegenerating(): boolean {
   const hp = usePlayerStore((s) => s.hp);
   const maxHp = usePlayerStore((s) => s.maxHp);
   const lastDamageTime = usePlayerStore((s) => s.lastDamageTime);
   const isDead = usePlayerStore((s) => s.isDead);
+  const [isRegen, setIsRegen] = useState(false);
+  // タイマーで外部状態（performance.now）を定期ポーリングして同期するパターン
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (isDead || hp >= maxHp) {
+      setIsRegen(false);
+      return;
+    }
+    // 初回チェック
+    const check = () => {
+      const now = performance.now() / 1000;
+      setIsRegen(now - lastDamageTime >= 30);
+    };
+    check();
+    const timer = setInterval(check, 1000);
+    return () => clearInterval(timer);
+  }, [hp, maxHp, lastDamageTime, isDead]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  if (isDead || hp >= maxHp) return false;
-  const now = performance.now() / 1000;
-  return now - lastDamageTime >= 30; // REGEN_DELAYと同じ
+  return isRegen;
 }
 
 /** ハートアイコン（SVG） */

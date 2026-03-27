@@ -2,7 +2,7 @@
 // 画面下部にマイクラ風のブロック選択バーを表示
 // モバイルではタップで選択可能
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { HOTBAR_BLOCKS, BLOCK_DEFS } from '../../types/blocks';
 import { isTouchDevice } from '../../utils/device';
@@ -10,7 +10,6 @@ import { isTouchDevice } from '../../utils/device';
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
-  const [textures, setTextures] = useState<Map<number, string>>(new Map());
 
   const isTouch = isTouchDevice();
 
@@ -18,8 +17,8 @@ export function Hotbar() {
   const cellSize = isTouch ? 40 : 48;
   const imgSize = isTouch ? 28 : 36;
 
-  // テクスチャをdata URLに変換して表示用に準備
-  useEffect(() => {
+  // テクスチャをdata URLに変換して表示用に準備（初回のみ計算）
+  const textures = useMemo(() => {
     const map = new Map<number, string>();
     HOTBAR_BLOCKS.forEach((blockId) => {
       const def = BLOCK_DEFS[blockId];
@@ -27,7 +26,7 @@ export function Hotbar() {
         map.set(blockId, `/textures/blocks/${def.texture}`);
       }
     });
-    setTextures(map);
+    return map;
   }, []);
 
   return (

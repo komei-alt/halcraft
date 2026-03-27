@@ -58,10 +58,13 @@ export function PlayerNameOverlay() {
     document.body.appendChild(overlay);
     overlayRef.current = overlay;
 
+    // cleanup 時に使うためのローカル参照
+    const labels = labelsRef.current;
+
     return () => {
       overlay.remove();
       overlayRef.current = null;
-      labelsRef.current.clear();
+      labels.clear();
     };
   }, []);
 

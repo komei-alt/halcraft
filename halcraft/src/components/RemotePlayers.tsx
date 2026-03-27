@@ -4,7 +4,7 @@
 // 死亡時は倒れる＋パーツ崩壊アニメーション
 // ============================================
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
 import { VoxelAvatar } from './VoxelAvatar';
@@ -42,8 +42,8 @@ function RemotePlayerModel({
   const groupRef = useRef<THREE.Group>(null);
   const prevPosRef = useRef<[number, number, number]>([...player.position]);
 
-  // 移動中かどうか（歩行アニメーション用）
-  const isMoving = useRef(false);
+  // 移動中かどうか（歩行アニメーション用）— state でレンダリングに反映
+  const [isMoving, setIsMoving] = useState(false);
 
   useFrame(() => {
     if (!groupRef.current) return;
@@ -59,13 +59,13 @@ function RemotePlayerModel({
     groupRef.current.rotation.y = player.rotation[0];
 
     // 移動検知（死亡中は常に false）
-    if (player.isDead) {
-      isMoving.current = false;
-    } else {
+    let moving = false;
+    if (!player.isDead) {
       const dx = player.position[0] - prevPosRef.current[0];
       const dz = player.position[2] - prevPosRef.current[2];
-      isMoving.current = Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005;
+      moving = Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005;
     }
+    setIsMoving((prev: boolean) => prev !== moving ? moving : prev);
     prevPosRef.current = [...player.position];
   });
 
@@ -73,7 +73,7 @@ function RemotePlayerModel({
     <group ref={groupRef}>
       <VoxelAvatar
         color={player.color}
-        isMoving={isMoving.current}
+        isMoving={isMoving}
         isDead={player.isDead}
         deathTime={player.deathTime}
       />

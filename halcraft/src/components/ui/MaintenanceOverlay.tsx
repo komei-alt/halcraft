@@ -49,25 +49,29 @@ export function MaintenanceOverlay() {
     }
   }, [isRecovering]);
 
-  // 復帰カウントダウン
+  // 復帰カウントダウン — setInterval コールバックで外部タイマーと同期するパターン
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isRecovering) return;
 
-    setCountdown(RECOVERY_WAIT_SECONDS);
+    // isRecovering になった瞬間にカウントダウンを初期値にリセット
+    let current = RECOVERY_WAIT_SECONDS;
+    setCountdown(current);
+
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          // カウントダウン終了 → リロード
-          window.location.reload();
-          return 0;
-        }
-        return prev - 1;
-      });
+      current -= 1;
+      if (current <= 0) {
+        clearInterval(timer);
+        // カウントダウン終了 → リロード
+        window.location.reload();
+        return;
+      }
+      setCountdown(current);
     }, 1000);
 
     return () => clearInterval(timer);
   }, [isRecovering]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     // ブラウザのオンライン/オフラインイベント

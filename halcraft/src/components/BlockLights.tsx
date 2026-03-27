@@ -119,14 +119,17 @@ function LightWithFlicker({
 }) {
   const lightRef = useRef<THREE.PointLight>(null);
   const baseIntensity = intensity;
-  const timeOffset = useMemo(() => Math.random() * Math.PI * 2, []);
+  const timeOffsetRef = useRef<number | null>(null);
 
   useFrame(({ clock }) => {
+    if (timeOffsetRef.current === null) {
+      timeOffsetRef.current = Math.random() * Math.PI * 2;
+    }
     if (!lightRef.current) return;
 
     if (isTorch) {
       // 松明はゆらゆら揺れる炎のエフェクト
-      const t = clock.getElapsedTime() + timeOffset;
+      const t = clock.getElapsedTime() + timeOffsetRef.current;
       const flicker = Math.sin(t * 8) * 0.15 + Math.sin(t * 13) * 0.1 + Math.sin(t * 21) * 0.05;
       lightRef.current.intensity = baseIntensity + flicker * baseIntensity;
     }

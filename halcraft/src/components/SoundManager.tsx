@@ -29,9 +29,7 @@ export function SoundManager() {
 
   // タイマー管理
   const footstepTimer = useRef(0);
-  const zombieGruntTimer = useRef(
-    ZOMBIE_GRUNT_MIN_INTERVAL + Math.random() * (ZOMBIE_GRUNT_MAX_INTERVAL - ZOMBIE_GRUNT_MIN_INTERVAL)
-  );
+  const zombieGruntTimer = useRef(-1);
   const allySoundTimer = useRef(0);
 
   // 前フレームのカメラ位置（速度推定用）
@@ -49,6 +47,12 @@ export function SoundManager() {
     const cx = camera.position.x;
     const cy = camera.position.y;
     const cz = camera.position.z;
+
+    // --- zombieGruntTimer の lazy init ---
+    if (zombieGruntTimer.current < 0) {
+      zombieGruntTimer.current =
+        ZOMBIE_GRUNT_MIN_INTERVAL + Math.random() * (ZOMBIE_GRUNT_MAX_INTERVAL - ZOMBIE_GRUNT_MIN_INTERVAL);
+    }
 
     // --- 初回の位置初期化 ---
     if (!initialized.current) {

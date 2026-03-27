@@ -2,7 +2,7 @@
 // 昼夜サイクルに基づく空の色、太陽光、霧を管理
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 
@@ -35,11 +35,14 @@ export function Environment() {
 
   const advanceTime = useGameStore((s) => s.advanceTime);
 
-  // 初期設定
+  // scene の初期設定（マウント時に一度だけ実行）
+  // scene は R3F が管理する外部オブジェクトであり、副作用として初期化する必要がある
+  /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     scene.background = new THREE.Color(0x87ceeb);
     scene.fog = new THREE.Fog(0x87ceeb, 100, 250);
   }, [scene]);
+  /* eslint-enable react-hooks/immutability */
 
   // 毎フレーム昼夜サイクルを更新
   useFrame((_, delta) => {

@@ -88,11 +88,14 @@ function TorchModel({ position }: { position: [number, number, number] }) {
   const flameRef = useRef<THREE.Mesh>(null);
   const flameRef2 = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const timeOffset = useMemo(() => Math.random() * Math.PI * 2, []);
+  const timeOffsetRef = useRef<number | null>(null);
 
   // 炎のアニメーション
   useFrame(({ clock }) => {
-    const t = clock.getElapsedTime() + timeOffset;
+    if (timeOffsetRef.current === null) {
+      timeOffsetRef.current = Math.random() * Math.PI * 2;
+    }
+    const t = clock.getElapsedTime() + timeOffsetRef.current;
 
     if (flameRef.current) {
       flameRef.current.position.x = Math.sin(t * 6) * 0.02;

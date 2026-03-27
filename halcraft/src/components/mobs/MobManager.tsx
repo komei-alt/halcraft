@@ -3,7 +3,7 @@
 // マルチプレイ時: オーナーのみAI計算、非オーナーは描画のみ
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useMobStore, type MobData } from '../../stores/useMobStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
@@ -17,7 +17,7 @@ import { Prototype } from './Prototype';
 import { Chicken } from './Chicken';
 import { Spider } from './Spider';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
-import { MobDeathEffect } from '../MobDeathEffect';
+import { spawnMobDeathEffect } from '../../utils/effectTriggers';
 
 /** ゾンビの定数 */
 const ZOMBIE_SPEED = 2.5;
@@ -84,8 +84,9 @@ export function MobManager() {
   const consumeDeathEvents = useMobStore((s) => s.consumeDeathEvents);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
 
-  // アニメーション時間
-  const animTime = useRef(0);
+  // アニメーション時間（ref = 物理演算用、state = レンダリング用）
+  const animTimeRef = useRef(0);
+  const [animTimeValue, setAnimTimeValue] = useState(0);
   // 攻撃クールダウン（ゾンビからプレイヤーへ）
   const attackCooldown = useRef(0);
   // プロトタイプの攻撃クールダウン
@@ -169,11 +170,11 @@ export function MobManager() {
     // マルチプレイ時はサーバーがAI計算するのでスキップ（描画のみ）
     const isMultiplayer = useMultiplayerStore.getState().connected;
     if (isMultiplayer) {
-      animTime.current += dt;
+      animTimeRef.current += dt;
       return;
     }
 
-    animTime.current += dt;
+    animTimeRef.current += dt;
     attackCooldown.current = Math.max(0, attackCooldown.current - dt);
     protoAttackCooldown.current = Math.max(0, protoAttackCooldown.current - dt);
     spiderAttackCooldown.current = Math.max(0, spiderAttackCooldown.current - dt);
@@ -262,7 +263,7 @@ export function MobManager() {
           m.vx = Math.sin(wanderDir) * CHICKEN_SPEED * 0.5;
           m.vz = Math.cos(wanderDir) * CHICKEN_SPEED * 0.5;
           // たまに止まる
-          if (Math.sin(animTime.current * 0.3 + parseInt(m.id.replace('mob_', ''), 10)) > 0.3) {
+          if (Math.sin(animTimeRef.current * 0.3 + parseInt(m.id.replace('mob_', ''), 10)) > 0.3) {
             m.vx = 0;
             m.vz = 0;
           }
@@ -745,7 +746,7 @@ export function MobManager() {
     const deathEvents = consumeDeathEvents();
     for (const event of deathEvents) {
       // パーティクルエフェクト
-      MobDeathEffect.spawnEffect(event.type, event.x, event.y, event.z);
+      spawnMobDeathEffect(event.type, event.x, event.y, event.z);
 
       // 死亡サウンド（プレイヤーからの距離を計算）
       const ddx = event.x - playerX;
@@ -770,6 +771,9 @@ export function MobManager() {
         // 15%: ドロップなし
       }
     }
+
+    // レンダリング用stateに同期
+    setAnimTimeValue(animTimeRef.current);
   });
 
   return (
@@ -777,13 +781,13 @@ export function MobManager() {
       {mobs.map((mob) => {
         switch (mob.type) {
           case 'zombie':
-            return <Zombie key={mob.id} mob={mob} animTime={animTime.current} />;
+            return <Zombie key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'prototype':
-            return <Prototype key={mob.id} mob={mob} animTime={animTime.current} />;
+            return <Prototype key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'chicken':
-            return <Chicken key={mob.id} mob={mob} animTime={animTime.current} />;
+            return <Chicken key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'spider':
-            return <Spider key={mob.id} mob={mob} animTime={animTime.current} />;
+            return <Spider key={mob.id} mob={mob} animTime={animTimeValue} />;
           default:
             return null;
         }
