@@ -24,3 +24,6 @@ halcraft/dist/
 
 # Docker
 docker-compose.override.yml
+
+# サーバーのランタイムデータ（ゲームプレイ中に動的変更）
+server/data/
