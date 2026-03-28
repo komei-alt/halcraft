@@ -42,6 +42,9 @@ function getItemTexture(textureName: string): THREE.Texture {
   return texture;
 }
 
+/** 共有ジオメトリ（全ドロップアイテムで再利用） */
+const sharedItemGeometry = new THREE.BoxGeometry(1, 1, 1);
+
 /** 個別のドロップアイテム描画 */
 function DroppedItemRenderer({ item }: { item: DroppedItem }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -153,8 +156,7 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
   if (!def || !texture) return null;
 
   return (
-    <mesh ref={meshRef} position={[item.x, item.y, item.z]} scale={ITEM_SCALE}>
-      <boxGeometry args={[1, 1, 1]} />
+    <mesh ref={meshRef} position={[item.x, item.y, item.z]} scale={ITEM_SCALE} geometry={sharedItemGeometry}>
       <meshStandardMaterial
         map={texture}
         emissive={emissiveColor ?? undefined}

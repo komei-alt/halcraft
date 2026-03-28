@@ -48,20 +48,25 @@ interface TargetBlock {
   hasPlaceTarget: boolean;
 }
 
+/** ブロック選択ハイライト用の共有ジオメトリ */
+const highlightGeometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+const highlightMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.5,
+  depthTest: false,
+});
+
 /** ブロック選択ハイライトの表示 */
 function BlockHighlight({ target }: { target: TargetBlock | null }) {
   if (!target) return null;
   return (
-    <mesh position={[target.x + 0.5, target.y + 0.5, target.z + 0.5]}>
-      <boxGeometry args={[1.01, 1.01, 1.01]} />
-      <meshBasicMaterial
-        color={0xffffff}
-        wireframe
-        transparent
-        opacity={0.5}
-        depthTest={false}
-      />
-    </mesh>
+    <mesh
+      position={[target.x + 0.5, target.y + 0.5, target.z + 0.5]}
+      geometry={highlightGeometry}
+      material={highlightMaterial}
+    />
   );
 }
 

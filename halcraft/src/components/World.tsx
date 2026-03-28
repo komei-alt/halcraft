@@ -174,13 +174,14 @@ function BlockTypeInstances({
   positionData: Float32Array;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummyRef = useRef(new THREE.Object3D());
   const faceMaterials = getCachedFaceMaterials(blockDef);
   const material = faceMaterials ?? getCachedMaterial(blockDef);
   const count = positionData.length / 3;
 
   useEffect(() => {
     if (!meshRef.current) return;
-    const dummy = new THREE.Object3D();
+    const dummy = dummyRef.current;
     for (let i = 0; i < count; i++) {
       const off = i * 3;
       dummy.position.set(positionData[off] + 0.5, positionData[off + 1] + 0.5, positionData[off + 2] + 0.5);
@@ -212,6 +213,9 @@ export function World() {
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
   const lastUpdateTime = useRef(0);
+  // 再利用用配列（GCプレッシャー削減）
+  const visibleBuffer = useRef<[number, number][]>([]);
+  const keyBuffer = useRef<string[]>([]);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
@@ -230,8 +234,10 @@ export function World() {
     const camX = Math.floor(camera.position.x / CHUNK_SIZE);
     const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
-    const visible: [number, number][] = [];
-    const keyParts: string[] = [];
+    const visible = visibleBuffer.current;
+    const keyParts = keyBuffer.current;
+    visible.length = 0;
+    keyParts.length = 0;
     chunks.forEach((_, key) => {
       const [cx, cz] = key.split(',').map(Number);
       const dx = Math.abs(cx - camX);

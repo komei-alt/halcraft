@@ -3,7 +3,7 @@
 // マルチプレイ時: オーナーのみAI計算、非オーナーは描画のみ
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { useMobStore, type MobData } from '../../stores/useMobStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
@@ -86,6 +86,8 @@ export function MobManager() {
 
   // アニメーション時間（ref = 物理演算用、state = レンダリング用）
   const animTimeRef = useRef(0);
+  // 前回のアニメーション時刻（不要な再レンダリング防止）
+  const lastAnimSync = useRef(0);
   const [animTimeValue, setAnimTimeValue] = useState(0);
   // 攻撃クールダウン（ゾンビからプレイヤーへ）
   const attackCooldown = useRef(0);
@@ -105,7 +107,7 @@ export function MobManager() {
   const chickenWanderDirs = useRef(new Map<string, number>());
 
   // ブロック衝突チェック（モブ用）
-  const checkMobCollision = (px: number, py: number, pz: number): boolean => {
+  const checkMobCollision = useCallback((px: number, py: number, pz: number): boolean => {
     const minX = px - MOB_RADIUS;
     const maxX = px + MOB_RADIUS;
     const minY = py;
@@ -129,10 +131,10 @@ export function MobManager() {
       }
     }
     return false;
-  };
+  }, [getBlock]);
 
   // ブロック衝突チェック（サイズ可変版）
-  const checkMobCollisionSize = (px: number, py: number, pz: number, radius: number, height: number): boolean => {
+  const checkMobCollisionSize = useCallback((px: number, py: number, pz: number, radius: number, height: number): boolean => {
     const minX = px - radius;
     const maxX = px + radius;
     const minY = py;
@@ -156,7 +158,7 @@ export function MobManager() {
       }
     }
     return false;
-  };
+  }, [getBlock]);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
@@ -434,7 +436,8 @@ export function MobManager() {
         } else {
           protoStuckTimer.current = 0;
         }
-        protoLastPos.current = { x: m.x, z: m.z };
+        protoLastPos.current.x = m.x;
+        protoLastPos.current.z = m.z;
 
         // テレポート（遠すぎるか、スタックしている場合）
         const shouldTeleport = distP > PROTOTYPE_FOLLOW_MAX || protoStuckTimer.current > PROTOTYPE_STUCK_TIME;
@@ -772,8 +775,12 @@ export function MobManager() {
       }
     }
 
-    // レンダリング用stateに同期
-    setAnimTimeValue(animTimeRef.current);
+    // レンダリング用stateに同期（200msごとに制限して不要な再レンダリングを防止）
+    const syncInterval = 0.2;
+    if (animTimeRef.current - lastAnimSync.current >= syncInterval) {
+      lastAnimSync.current = animTimeRef.current;
+      setAnimTimeValue(animTimeRef.current);
+    }
   });
 
   return (

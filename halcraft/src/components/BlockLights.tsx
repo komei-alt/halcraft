@@ -2,7 +2,7 @@
 // 発光ブロック（電気、松明、エンチャント等）にポイントライトを配置する
 // パフォーマンスのため、プレイヤー近くの光源のみ描画
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
@@ -25,18 +25,25 @@ export function BlockLights() {
   const chunks = useWorldStore((s) => s.chunks);
   const chunkVersions = useWorldStore((s) => s.chunkVersions);
   const cameraRef = useRef<THREE.Vector3>(new THREE.Vector3());
-  const sortedLights = useRef<LightSource[]>([]);
+  const [sortedLights, setSortedLights] = useState<LightSource[]>([]);
+  const lastLightKey = useRef('');
 
-  // カメラ位置を毎フレーム追跡し、光源をソート
-  useFrame(({ camera }) => {
+  const lastLightUpdate = useRef(0);
+
+  // カメラ位置を追跡し、光源をソート（500msごとにスロットリング）
+  useFrame(({ camera, clock }) => {
     cameraRef.current.copy(camera.position);
-    // 毎フレームソートする必要はないが、光源リストが変わったらソート
+
+    const elapsed = clock.getElapsedTime();
+    if (elapsed - lastLightUpdate.current < 0.5) return;
+    lastLightUpdate.current = elapsed;
+
     const cx = camera.position.x;
     const cy = camera.position.y;
     const cz = camera.position.z;
     const sources = allLightSources;
     // 距離でソートして近い順にMAX_LIGHTS個取得
-    sortedLights.current = sources
+    const nearest = sources
       .filter((s) => {
         const dx = s.x - cx;
         const dy = s.y - cy;
@@ -49,6 +56,13 @@ export function BlockLights() {
         return da - db;
       })
       .slice(0, MAX_LIGHTS);
+
+    // 変化があった場合のみstateを更新（不要な再レンダリング防止）
+    const key = nearest.map((s) => `${s.x},${s.y},${s.z}`).join(';');
+    if (key !== lastLightKey.current) {
+      lastLightKey.current = key;
+      setSortedLights(nearest);
+    }
   });
 
   // 全チャンクから発光ブロックを収集（チャンク変更時のみ再計算）
@@ -84,7 +98,7 @@ export function BlockLights() {
 
   return (
     <group>
-      {sortedLights.current.map((source) => {
+      {sortedLights.map((source) => {
         const def = BLOCK_DEFS[source.blockId];
         if (!def?.lightColor) return null;
 

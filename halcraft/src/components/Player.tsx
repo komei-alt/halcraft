@@ -69,6 +69,8 @@ export function Player() {
 
   // 飛行機の前方ベクトル（再利用）
   const flyForward = useRef(new THREE.Vector3());
+  // ヘリコプター操縦席オフセット（GCプレッシャー防止）
+  const cockpitOffset = useRef(new THREE.Vector3());
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
@@ -394,12 +396,12 @@ export function Player() {
       });
 
       // カメラをヘリの上に配置（操縦席の視点）
-      const cockpitOffset = new THREE.Vector3(0, 1.8, 0.5);
-      cockpitOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), apRotY);
+      cockpitOffset.current.set(0, 1.8, 0.5);
+      cockpitOffset.current.applyAxisAngle(Y_AXIS, apRotY);
 
-      pos.x = apX + cockpitOffset.x;
-      pos.y = apY + cockpitOffset.y;
-      pos.z = apZ + cockpitOffset.z;
+      pos.x = apX + cockpitOffset.current.x;
+      pos.y = apY + cockpitOffset.current.y;
+      pos.z = apZ + cockpitOffset.current.z;
 
       // カメラの向きをeulerから更新（旋回+マウスの合成結果を反映）
       camera.quaternion.setFromEuler(euler.current);
