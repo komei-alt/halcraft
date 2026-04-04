@@ -245,21 +245,25 @@ export function Player() {
       if (isInHeli) {
         // 降車: ヘリコプターから降りる
         vehicleState.dismountHelicopter();
-        // プレイヤーをヘリの横に配置し、地面まで降ろす
-        const dismountX = heli.x + 2;
-        const dismountZ = heli.z;
+        // プレイヤーをヘリの横（右側）に配置（ヘリの向きを考慮）
+        const dismountOffset = 2.5;
+        const cosR = Math.cos(heli.rotationY + Math.PI / 2);
+        const sinR = Math.sin(heli.rotationY + Math.PI / 2);
+        const dismountX = heli.x + sinR * dismountOffset;
+        const dismountZ = heli.z + cosR * dismountOffset;
         // ヘリの高度から下方向に地面を探す
         let landingY = heli.y;
+        let foundGround = false;
         for (let checkY = Math.floor(heli.y); checkY >= 0; checkY--) {
           if (checkCollision(dismountX, checkY, dismountZ)) {
             // このブロックの上面に着地
             landingY = checkY + 1.001;
+            foundGround = true;
             break;
           }
-          if (checkY === 0) {
-            // 地面が見つからない場合はY=1に配置
-            landingY = 1;
-          }
+        }
+        if (!foundGround) {
+          landingY = 1;
         }
         pos.x = dismountX;
         pos.y = landingY;
@@ -267,6 +271,9 @@ export function Player() {
         vel.set(0, 0, 0);
         onGround.current = true;
         lastGroundY.current = pos.y;
+        // カメラの向きをヘリの向きに合わせてリセット
+        euler.current.x = 0;
+        camera.quaternion.setFromEuler(euler.current);
       } else if (heli.spawned) {
         // 搭乗: ヘリに近いかチェック
         const dx = pos.x - heli.x;
@@ -295,6 +302,10 @@ export function Player() {
         MAX_SPEED, ACCELERATION, DECELERATION, TURN_SPEED,
         VERTICAL_SPEED, ROTOR_SPEED,
       } = HELICOPTER_CONSTANTS;
+
+      // 搭乗中もクールダウンとノックバックを消費する（蓄積防止）
+      updateAttackCooldown(dt);
+      consumeKnockback();
 
       let apSpeed = heli.speed;
       let apRotY = heli.rotationY;
@@ -347,8 +358,8 @@ export function Player() {
       // 上昇/下降
       apY += inputVertical * VERTICAL_SPEED * dt;
 
-      // 前方への移動
-      flyForward.current.set(0, 0, 1);
+      // 前方への移動（Three.jsでは -Z が前方）
+      flyForward.current.set(0, 0, -1);
       flyForward.current.applyAxisAngle(Y_AXIS, apRotY);
       apX += flyForward.current.x * apSpeed * dt;
       apZ += flyForward.current.z * apSpeed * dt;
@@ -359,21 +370,21 @@ export function Player() {
       apPitch += (targetPitch - apPitch) * 3 * dt;
       apRoll += (targetRoll - apRoll) * 3 * dt;
 
-      // 最低高度: 地面には潜らない
-      // 簡易的な地面衝突チェック
-      const groundCheck = checkCollision(apX, apY - 1, apZ);
+      // 地面衝突チェック: ヘリのAABBで下方向をチェック
+      // ヘリの底面（現在のY位置 - ヘリの高さの半分）付近をチェック
+      const heliBottomY = apY - 0.5;
+      const groundCheck = checkCollision(apX, heliBottomY, apZ);
       if (groundCheck && inputVertical <= 0) {
-        // 地面に近い場合、下がらない
-        if (apSpeed < 0.5) {
-          // 速度がほぼ0で地面にいる → 着陸状態
-        }
-        // Y位置を地面の上に補正
-        for (let checkY = Math.floor(apY); checkY < apY + 5; checkY++) {
+        // 地面に衝突 → 現在の位置から安全な高さを探す
+        let safeY = apY;
+        for (let checkY = Math.floor(heliBottomY); checkY < Math.floor(heliBottomY) + 5; checkY++) {
           if (!checkCollision(apX, checkY + 1, apZ)) {
-            apY = Math.max(apY, checkY + 2);
+            // このcheckYの上にブロックがない → checkY + 1 の上が安全
+            safeY = checkY + 1 + 0.5; // ヘリの底面分を考慮
             break;
           }
         }
+        apY = Math.max(apY, safeY);
       }
 
       // 落下防止（最低高度）
@@ -395,8 +406,8 @@ export function Player() {
         rotorAngle: apRotorAngle,
       });
 
-      // カメラをヘリの上に配置（操縦席の視点）
-      cockpitOffset.current.set(0, 1.8, 0.5);
+      // カメラをヘリの上に配置（操縦席の視点、前方は -Z）
+      cockpitOffset.current.set(0, 1.8, -0.5);
       cockpitOffset.current.applyAxisAngle(Y_AXIS, apRotY);
 
       pos.x = apX + cockpitOffset.current.x;

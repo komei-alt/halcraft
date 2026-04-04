@@ -11,6 +11,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { useVehicleStore } from '../stores/useVehicleStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -271,6 +272,8 @@ export function BlockInteraction() {
     // --- モバイル: タッチによるブロック操作の処理 ---
     if (isTouch.current) {
       if (usePlayerStore.getState().isDead) return;
+      // ヘリコプター搭乗中はブロック操作を無効化
+      if (useVehicleStore.getState().helicopter.isBoarded) return;
 
       // 破壊
       if (consumeBreakBlock()) {
@@ -330,6 +333,8 @@ export function BlockInteraction() {
     if (!document.pointerLockElement) return;
     // 死亡中は操作不可
     if (usePlayerStore.getState().isDead) return;
+    // ヘリコプター搭乗中はブロック操作を無効化
+    if (useVehicleStore.getState().helicopter.isBoarded) return;
 
     if (e.button === 0) {
       // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック破壊

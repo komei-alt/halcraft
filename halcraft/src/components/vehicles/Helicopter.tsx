@@ -89,6 +89,8 @@ export function Helicopter() {
       rotation={[helicopter.pitch, helicopter.rotationY, helicopter.roll]}
       scale={1.3}
     >
+      {/* モデルを180度回転: ノーズが-Z（Three.js前方）を向くように */}
+      <group rotation={[0, Math.PI, 0]}>
       {/* === 胴体（メイン） === */}
       <mesh position={[0, 0.3, 0]} material={bodyMat}>
         <boxGeometry args={[1.6, 1.2, 2.8]} />
@@ -205,8 +207,9 @@ export function Helicopter() {
           <boxGeometry args={[0.06, 0.5, 0.06]} />
         </mesh>
       </group>
+      </group>
 
-      {/* === 搭乗プロンプト === */}
+      {/* === 搭乗プロンプト（回転ラッパーの外側に置く） === */}
       {!helicopter.isBoarded && (
         <Billboard position={[0, 3.5, 0]}>
           {/* 背景パネル */}
