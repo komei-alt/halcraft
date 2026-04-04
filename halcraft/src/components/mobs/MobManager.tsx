@@ -79,7 +79,6 @@ export function MobManager() {
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
   const getBlock = useWorldStore((s) => s.getBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
-  const updateAttackCooldown = usePlayerStore((s) => s.updateAttackCooldown);
   const updateRegen = usePlayerStore((s) => s.updateRegen);
   const consumeDeathEvents = useMobStore((s) => s.consumeDeathEvents);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
@@ -181,8 +180,7 @@ export function MobManager() {
     protoAttackCooldown.current = Math.max(0, protoAttackCooldown.current - dt);
     spiderAttackCooldown.current = Math.max(0, spiderAttackCooldown.current - dt);
 
-    // 攻撃クールダウンとHP回復を毎フレーム更新
-    updateAttackCooldown(dt);
+    // HP回復を毎フレーム更新（攻撃クールダウンはPlayer.tsxで処理）
     updateRegen(dt);
 
     const isNight = gameState.isNight;

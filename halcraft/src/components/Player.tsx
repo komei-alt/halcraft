@@ -81,7 +81,7 @@ export function Player() {
   const applyFallDamage = usePlayerStore((s) => s.applyFallDamage);
   const isDead = usePlayerStore((s) => s.isDead);
   const respawn = usePlayerStore((s) => s.respawn);
-  const cameraShake = usePlayerStore((s) => s.cameraShake);
+  const updateAttackCooldown = usePlayerStore((s) => s.updateAttackCooldown);
   const consumeKnockback = usePlayerStore((s) => s.consumeKnockback);
 
   // ブロックが固体（通行不可）かチェック
@@ -536,11 +536,16 @@ export function Player() {
       }
     }
 
+    // --- カメラシェイクの減衰（MobManagerに依存せず常にここで処理） ---
+    updateAttackCooldown(dt);
+
     // --- カメラ追従（目の高さ + シェイク） ---
+    // 最新のcameraShake値を取得（上のupdateAttackCooldownで減衰済み）
+    const currentShake = usePlayerStore.getState().cameraShake;
     let shakeX = 0;
     let shakeY = 0;
-    if (cameraShake > 0.01) {
-      const shakeIntensity = cameraShake * 0.08;
+    if (currentShake > 0.01) {
+      const shakeIntensity = currentShake * 0.08;
       shakeX = (Math.random() - 0.5) * shakeIntensity;
       shakeY = (Math.random() - 0.5) * shakeIntensity;
     }
