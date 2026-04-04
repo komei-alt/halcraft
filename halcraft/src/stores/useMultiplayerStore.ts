@@ -11,6 +11,7 @@ import { useWorldStore } from './useWorldStore';
 import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
+import { useVehicleStore } from './useVehicleStore';
 import type { BlockId } from '../types/blocks';
 
 /** リモートプレイヤーの状態 */
@@ -82,6 +83,18 @@ interface MultiplayerState {
   /** プレイヤーに攻撃を送信 */
   sendPlayerAttack: (targetId: string, amount: number, knockbackX: number, knockbackZ: number) => void;
 
+  /** ヘリコプター搭乗を送信 */
+  sendHelicopterBoard: () => void;
+
+  /** ヘリコプター降車を送信 */
+  sendHelicopterDismount: () => void;
+
+  /** ヘリコプター位置更新を送信 */
+  sendHelicopterMove: (data: {
+    x: number; y: number; z: number;
+    rotationY: number; pitch: number; roll: number;
+    speed: number; rotorAngle: number;
+  }) => void;
 
 }
 
@@ -191,6 +204,24 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     const socket = getSocket();
     if (!socket?.connected) return;
     socket.emit('player:attack', { targetId, amount, knockbackX, knockbackZ });
+  },
+
+  sendHelicopterBoard: () => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('helicopter:board');
+  },
+
+  sendHelicopterDismount: () => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('helicopter:dismount');
+  },
+
+  sendHelicopterMove: (data) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('helicopter:move', data);
   },
 
 
@@ -375,5 +406,46 @@ function setupSocketListeners(
       set({ remotePlayers: new Map(players) });
       console.log(`[Multiplayer] ${player.name} が復活！`);
     }
+  });
+
+  // ── ヘリコプター同期 ──
+  socket.on('helicopter:sync', (data: {
+    helicopter: {
+      spawned: boolean;
+      isBoarded: boolean;
+      pilotId: string | null;
+      pilotName: string | null;
+      x: number; y: number; z: number;
+      rotationY: number; pitch: number; roll: number;
+      speed: number; rotorAngle: number;
+    };
+  }) => {
+    const h = data.helicopter;
+    const myId = get().myId;
+    // 自分が操縦中の場合は位置更新を無視（自分の入力で動かす）
+    // ただし、降車イベント（isBoarded=false）は受け取る
+    if (h.pilotId === myId && h.isBoarded) return;
+
+    const vehicleStore = useVehicleStore.getState();
+    if (!h.spawned) return;
+
+    // ヘリがまだスポーンされてなければスポーン
+    if (!vehicleStore.helicopter.spawned) {
+      vehicleStore.spawnHelicopter(h.x, h.y, h.z);
+    }
+
+    // サーバーからの状態で上書き
+    vehicleStore.updateHelicopter({
+      isBoarded: h.isBoarded,
+      x: h.x,
+      y: h.y,
+      z: h.z,
+      rotationY: h.rotationY,
+      pitch: h.pitch,
+      roll: h.roll,
+      speed: h.speed,
+      rotorAngle: h.rotorAngle,
+      engineOn: h.isBoarded,
+    });
   });
 }

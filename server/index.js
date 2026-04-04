@@ -12,6 +12,40 @@ import { fileURLToPath } from 'url';
 import { WorldChanges } from './WorldChanges.js';
 import { getTerrainHeight } from './terrain.js';
 
+// ── ヘリコプター状態（サーバー側で単一管理） ──
+const HELIPORT_CENTER = { x: 15, z: -12 };
+let helicopterState = {
+  spawned: true,
+  isBoarded: false,
+  pilotId: null,      // 搭乗中のプレイヤーID
+  pilotName: null,     // 搭乗中のプレイヤー名
+  x: HELIPORT_CENTER.x,
+  y: getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2,
+  z: HELIPORT_CENTER.z,
+  rotationY: 0,
+  pitch: 0,
+  roll: 0,
+  speed: 0,
+  rotorAngle: 0,
+};
+
+function resetHelicopterToHeliport() {
+  helicopterState = {
+    spawned: true,
+    isBoarded: false,
+    pilotId: null,
+    pilotName: null,
+    x: HELIPORT_CENTER.x,
+    y: getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2,
+    z: HELIPORT_CENTER.z,
+    rotationY: 0,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    rotorAngle: 0,
+  };
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -441,6 +475,9 @@ io.on('connection', (socket) => {
       isNight: serverGameTime >= 0.5,
     });
 
+    // ヘリコプター状態を新規参加者に送信
+    socket.emit('helicopter:sync', { helicopter: helicopterState });
+
     socket.broadcast.emit('player:joined', player);
     io.emit('player:count', connectedPlayers.size);
     console.log(`[参加] ${name} (${connectedPlayers.size}/${MAX_PLAYERS})`);
@@ -498,6 +535,44 @@ io.on('connection', (socket) => {
     console.log(`[PvP] ${attacker.name} → ${connectedPlayers.get(targetId)?.name || 'unknown'} (${amount}ダメージ)`);
   });
 
+  // ── ヘリコプター同期 ──
+
+  // ヘリコプターに搭乗
+  socket.on('helicopter:board', () => {
+    if (helicopterState.isBoarded) return; // 既に誰かが乗っている
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    helicopterState.isBoarded = true;
+    helicopterState.pilotId = socket.id;
+    helicopterState.pilotName = player.name;
+    io.emit('helicopter:sync', { helicopter: helicopterState });
+    console.log(`[ヘリ] ${player.name} が搭乗`);
+  });
+
+  // ヘリコプターから降車
+  socket.on('helicopter:dismount', () => {
+    if (helicopterState.pilotId !== socket.id) return; // 自分が操縦者じゃない
+    const player = connectedPlayers.get(socket.id);
+    resetHelicopterToHeliport();
+    io.emit('helicopter:sync', { helicopter: helicopterState });
+    console.log(`[ヘリ] ${player?.name || 'unknown'} が降車 → ヘリポートにリセット`);
+  });
+
+  // ヘリコプター位置更新（操縦者のみ）
+  socket.on('helicopter:move', (data) => {
+    if (helicopterState.pilotId !== socket.id) return;
+    helicopterState.x = data.x;
+    helicopterState.y = data.y;
+    helicopterState.z = data.z;
+    helicopterState.rotationY = data.rotationY;
+    helicopterState.pitch = data.pitch;
+    helicopterState.roll = data.roll;
+    helicopterState.speed = data.speed;
+    helicopterState.rotorAngle = data.rotorAngle;
+    // 操縦者以外に送信
+    socket.broadcast.emit('helicopter:sync', { helicopter: helicopterState });
+  });
+
   // プレイヤー死亡通知（全プレイヤーにブロードキャスト）
   socket.on('player:died', () => {
     socket.broadcast.emit('player:died', { id: socket.id });
@@ -538,6 +613,14 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const player = connectedPlayers.get(socket.id);
     const name = player?.name || 'unknown';
+
+    // ヘリ操縦中に切断した場合、ヘリをリセット
+    if (helicopterState.pilotId === socket.id) {
+      resetHelicopterToHeliport();
+      io.emit('helicopter:sync', { helicopter: helicopterState });
+      console.log(`[ヘリ] ${name} が切断 → ヘリポートにリセット`);
+    }
+
     connectedPlayers.delete(socket.id);
     attackCooldowns.delete(socket.id);
 

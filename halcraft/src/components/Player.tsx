@@ -75,6 +75,9 @@ export function Player() {
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
   const sendPosition = useMultiplayerStore((s) => s.sendPosition);
+  const sendHelicopterBoard = useMultiplayerStore((s) => s.sendHelicopterBoard);
+  const sendHelicopterDismount = useMultiplayerStore((s) => s.sendHelicopterDismount);
+  const sendHelicopterMove = useMultiplayerStore((s) => s.sendHelicopterMove);
 
   // マルチプレイ位置送信のスロットリング
   const lastSendTime = useRef(0);
@@ -245,6 +248,7 @@ export function Player() {
       if (isInHeli) {
         // 降車: ヘリコプターから降りる
         vehicleState.dismountHelicopter();
+        sendHelicopterDismount(); // サーバーに降車を通知
         // プレイヤーをヘリの横（右側）に配置（ヘリの向きを考慮）
         const dismountOffset = 2.5;
         const cosR = Math.cos(heli.rotationY + Math.PI / 2);
@@ -274,14 +278,15 @@ export function Player() {
         // カメラの向きをヘリの向きに合わせてリセット
         euler.current.x = 0;
         camera.quaternion.setFromEuler(euler.current);
-      } else if (heli.spawned) {
-        // 搭乗: ヘリに近いかチェック
+      } else if (heli.spawned && !heli.isBoarded) {
+        // 搭乗: ヘリに近いかチェック（他プレイヤーが搭乗中でない場合のみ）
         const dx = pos.x - heli.x;
         const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
         const dz = pos.z - heli.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) {
           vehicleState.boardHelicopter();
+          sendHelicopterBoard(); // サーバーに搭乗を通知
           // カメラの向きをヘリの正面に合わせる
           euler.current.y = heli.rotationY;
           euler.current.x = -0.1; // 少し下向き（前方が見やすい）
@@ -418,13 +423,21 @@ export function Player() {
       camera.quaternion.setFromEuler(euler.current);
       camera.position.set(pos.x, pos.y, pos.z);
 
-      // マルチプレイ位置送信
+      // マルチプレイ: ヘリ位置とプレイヤー位置を送信
       const now = performance.now();
       if (now - lastSendTime.current > 50) {
         sendPosition(
           [pos.x, pos.y, pos.z],
           [euler.current.y, euler.current.x],
         );
+        // ヘリコプターの位置もサーバーに送信
+        sendHelicopterMove({
+          x: apX, y: apY, z: apZ,
+          rotationY: apRotY,
+          pitch: apPitch, roll: apRoll,
+          speed: apSpeed,
+          rotorAngle: apRotorAngle,
+        });
         lastSendTime.current = now;
       }
 
