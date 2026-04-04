@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 /** ヘルスチェックの間隔（ミリ秒） */
-const CHECK_INTERVAL = 5000;
+const CHECK_INTERVAL = 3000;
 /** オフライン判定前の連続失敗回数 */
 const FAIL_THRESHOLD = 2;
 /** ヘルスチェック用の軽量URLパス */
@@ -23,9 +23,12 @@ export function MaintenanceOverlay() {
 
   const checkHealth = useCallback(async () => {
     try {
-      const res = await fetch(HEALTH_URL, {
+      // キャッシュバスター付きでフェッチ（Cloudflareキャッシュ回避）
+      const url = `${HEALTH_URL}?_t=${Date.now()}`;
+      const res = await fetch(url, {
         method: 'HEAD',
         cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
       });
       if (res.ok) {
         failCount.current = 0;

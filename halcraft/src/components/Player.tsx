@@ -278,8 +278,8 @@ export function Player() {
         // カメラの向きをヘリの向きに合わせてリセット
         euler.current.x = 0;
         camera.quaternion.setFromEuler(euler.current);
-      } else if (heli.spawned && !heli.isBoarded) {
-        // 搭乗: ヘリに近いかチェック（他プレイヤーが搭乗中でない場合のみ）
+      } else if (heli.spawned && heli.pilotId === null) {
+        // 搭乗: ヘリに近いかチェック（空席の場合のみ）
         const dx = pos.x - heli.x;
         const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
         const dz = pos.z - heli.z;

@@ -263,11 +263,10 @@ function setupSocketListeners(
       // 初回接続: バージョンを記憶
       knownServerVersion = data.version;
     } else if (knownServerVersion !== data.version) {
-      // バージョンが変わった → デプロイされた → 強制リロード
+      // バージョンが変わった → デプロイされた
+      // MaintenanceOverlay のカウントダウンに任せるため、直接リロードは行わない
       console.log(`[Multiplayer] サーバー更新検知: ${knownServerVersion} → ${data.version}`);
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
+      knownServerVersion = data.version;
     }
   });
 
@@ -422,9 +421,11 @@ function setupSocketListeners(
   }) => {
     const h = data.helicopter;
     const myId = get().myId;
+    const isMePilot = h.pilotId === myId;
+
     // 自分が操縦中の場合は位置更新を無視（自分の入力で動かす）
     // ただし、降車イベント（isBoarded=false）は受け取る
-    if (h.pilotId === myId && h.isBoarded) return;
+    if (isMePilot && h.isBoarded) return;
 
     const vehicleStore = useVehicleStore.getState();
     if (!h.spawned) return;
@@ -435,8 +436,11 @@ function setupSocketListeners(
     }
 
     // サーバーからの状態で上書き
+    // isBoarded は「自分が搭乗中か」を表す → 自分がパイロットの場合のみ true
+    // pilotId は「誰かが乗っているか」を表す → サーバーの値をそのままセット
     vehicleStore.updateHelicopter({
-      isBoarded: h.isBoarded,
+      isBoarded: isMePilot ? h.isBoarded : false,
+      pilotId: h.pilotId,
       x: h.x,
       y: h.y,
       z: h.z,
@@ -445,7 +449,7 @@ function setupSocketListeners(
       roll: h.roll,
       speed: h.speed,
       rotorAngle: h.rotorAngle,
-      engineOn: h.isBoarded,
+      engineOn: h.isBoarded, // エンジン状態は誰かが乗っていれば回す（アニメーション用）
     });
   });
 }

@@ -10,8 +10,10 @@ export type VehicleType = 'helicopter';
 export interface HelicopterState {
   /** ヘリコプターがスポーン済みか */
   spawned: boolean;
-  /** プレイヤーが搭乗中か */
+  /** 自分が搭乗中か（ローカルプレイヤーのみtrue） */
   isBoarded: boolean;
+  /** 搭乗中のプレイヤーID（誰かが乗っていればセット、空席ならnull） */
+  pilotId: string | null;
   /** ワールド座標 */
   x: number;
   y: number;
@@ -82,6 +84,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   helicopter: {
     spawned: false,
     isBoarded: false,
+    pilotId: null,
     x: 0,
     y: 0,
     z: 0,
@@ -101,6 +104,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       helicopter: {
         spawned: true,
         isBoarded: false,
+        pilotId: null,
         x,
         y,
         z,
@@ -132,6 +136,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       helicopter: {
         ...state.helicopter,
         isBoarded: false,
+        pilotId: null,
         engineOn: false,
         speed: 0,
         // ヘリポートにリセット（スポーン位置に戻す）
