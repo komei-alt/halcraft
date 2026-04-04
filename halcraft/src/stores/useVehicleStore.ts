@@ -16,6 +16,10 @@ export interface HelicopterState {
   x: number;
   y: number;
   z: number;
+  /** スポーン位置（降車時のリセット先） */
+  spawnX: number;
+  spawnY: number;
+  spawnZ: number;
   /** 回転（ラジアン） */
   rotationY: number;
   /** ピッチ（上下傾き） */
@@ -81,6 +85,9 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     x: 0,
     y: 0,
     z: 0,
+    spawnX: 0,
+    spawnY: 0,
+    spawnZ: 0,
     rotationY: 0,
     pitch: 0,
     roll: 0,
@@ -97,6 +104,9 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         x,
         y,
         z,
+        spawnX: x,
+        spawnY: y,
+        spawnZ: z,
         rotationY: 0,
         pitch: 0,
         roll: 0,
@@ -124,6 +134,14 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         isBoarded: false,
         engineOn: false,
         speed: 0,
+        // ヘリポートにリセット（スポーン位置に戻す）
+        x: state.helicopter.spawnX,
+        y: state.helicopter.spawnY,
+        z: state.helicopter.spawnZ,
+        rotationY: 0,
+        pitch: 0,
+        roll: 0,
+        rotorAngle: 0,
       },
     }));
   },
