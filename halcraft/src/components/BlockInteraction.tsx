@@ -280,7 +280,7 @@ export function BlockInteraction() {
         // まずプレイヤー攻撃をチェック → モブ攻撃 → ブロック破壊
         const targetPlayerId = findTargetPlayer();
         if (targetPlayerId) {
-          const multiplier = performAttack();
+          const multiplier = performAttack({ noShake: true });
           attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
           const actualDamage = Math.round(PVP_DAMAGE * multiplier);
           useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
@@ -288,7 +288,7 @@ export function BlockInteraction() {
         } else {
           const targetMob = findTargetMobData();
           if (targetMob) {
-            const multiplier = performAttack();
+            const multiplier = performAttack({ noShake: true });
             attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
             const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
             const isCritical = multiplier >= 0.9;
@@ -342,7 +342,7 @@ export function BlockInteraction() {
 
       if (targetPlayerId) {
         // プレイヤーを殴る
-        const multiplier = performAttack();
+        const multiplier = performAttack({ noShake: true });
         attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         const actualDamage = Math.round(PVP_DAMAGE * multiplier);
         useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
@@ -352,7 +352,7 @@ export function BlockInteraction() {
 
         if (targetMob) {
           // モブを殴る
-          const multiplier = performAttack();
+          const multiplier = performAttack({ noShake: true });
           attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
           const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
           const isCritical = multiplier >= 0.9;

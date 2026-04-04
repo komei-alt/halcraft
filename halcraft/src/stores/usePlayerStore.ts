@@ -69,7 +69,7 @@ interface PlayerState {
   selectSlot: (slot: number) => void;
 
   /** 攻撃を実行しダメージ倍率を返す（0=クールダウン中で攻撃不可） */
-  performAttack: () => number;
+  performAttack: (options?: { noShake?: boolean }) => number;
 
   /** 攻撃クールダウンを毎フレーム更新 */
   updateAttackCooldown: (dt: number) => void;
@@ -122,17 +122,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  performAttack: () => {
+  performAttack: (options) => {
     const state = get();
     // チャージ率をダメージ倍率として返す（最低0.2倍）
     const charge = state.attackCharge;
     const multiplier = 0.2 + charge * 0.8;
 
-    // クールダウン開始
+    // クールダウン開始（モブ/プレイヤー攻撃時はシェイク不要）
     set({
       attackCooldown: ATTACK_COOLDOWN,
       attackCharge: 0,
-      cameraShake: 0.3 + charge * 0.4,
+      ...(options?.noShake ? {} : { cameraShake: 0.3 + charge * 0.4 }),
     });
 
     return multiplier;
