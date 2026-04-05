@@ -347,25 +347,27 @@ export function MachineGun() {
             break;
           }
 
-          // --- モブ衝突判定 ---
-          for (const mob of mobs) {
-            if (mob.hp <= 0) continue;
-            const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
-            const dist = proj.pos.distanceTo(mobCenter);
+          // --- モブ衝突判定（ローカル弾のみ、リモート弾はダメージ二重適用防止のためスキップ） ---
+          if (!proj.isRemote) {
+            for (const mob of mobs) {
+              if (mob.hp <= 0) continue;
+              const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
+              const dist = proj.pos.distanceTo(mobCenter);
 
-            if (dist < MOB_HIT_RADIUS) {
-              const normal = proj.pos.clone().sub(mobCenter).normalize();
-              spawnImpact(proj.pos.clone(), normal, 'mob');
+              if (dist < MOB_HIT_RADIUS) {
+                const normal = proj.pos.clone().sub(mobCenter).normalize();
+                spawnImpact(proj.pos.clone(), normal, 'mob');
 
-              const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-              sendMobDamage(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
-              useMobStore.getState().damageMob(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
+                const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
+                sendMobDamage(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
+                useMobStore.getState().damageMob(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
 
-              spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+                spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
 
-              proj.dead = true;
-              hitSomething = true;
-              break;
+                proj.dead = true;
+                hitSomething = true;
+                break;
+              }
             }
           }
 
