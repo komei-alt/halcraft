@@ -1,8 +1,14 @@
 // 機関銃コンポーネント
 // ヘリコプターの左右に搭載されるボクセル風の機関銃
 // ガンナー席のプレイヤーが左クリックで発射
-// レイキャストでモブにヒット判定
-// 3Dメッシュによる太くて視認しやすいトレーサー弾エフェクト
+// 弾丸は物理計算で飛翔し、ブロックやモブへの衝突エフェクトを表示
+//
+// 弾道システム:
+//   1. マズル位置から弾丸（プロジェクタイル）を発射
+//   2. 毎フレーム弾丸を高速移動させながらレイマーチングでブロック衝突判定
+//   3. モブとの球体交差判定を同時実行
+//   4. 衝突時にインパクトエフェクト（パーティクル）を生成
+//   5. 弾道は光る3D円柱トレイルで尾を引く表現
 
 import { useRef, useMemo, useCallback, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -10,29 +16,87 @@ import * as THREE from 'three';
 import { useVehicleStore, GUN_CONSTANTS } from '../../stores/useVehicleStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { useWorldStore } from '../../stores/useWorldStore';
+import { BLOCK_IDS } from '../../types/blocks';
+import { spawnDamagePopup } from '../../utils/effectTriggers';
 
-/** 機関銃の色定義 */
-const GUN_BARREL_COLOR = new THREE.Color(0x333333);  // 銃身（ダークグレー）
-const GUN_BODY_COLOR = new THREE.Color(0x555555);    // 銃本体
-const GUN_MOUNT_COLOR = new THREE.Color(0x444444);   // マウント
-const MUZZLE_FLASH_COLOR = new THREE.Color(0xffaa33); // マズルフラッシュ
+// ─── 定数 ──────────────────────────────────────────────
+/** 弾速（ブロック/秒） */
+const BULLET_SPEED = 120;
+/** 弾の最大生存時間（秒） */
+const BULLET_MAX_AGE = 1.0;
+/** トレイル（残光）の長さ（ブロック） */
+const TRAIL_LENGTH = 3.5;
+/** 弾のヒット半径（モブ当たり判定） */
+const MOB_HIT_RADIUS = 1.2;
+/** インパクトパーティクルの数 */
+const IMPACT_PARTICLE_COUNT = 8;
+/** インパクトパーティクルの表示時間（秒） */
+const IMPACT_LIFETIME = 0.5;
+/** ヒットフラッシュの表示時間（秒） */
+const HIT_FLASH_LIFETIME = 0.15;
+/** 重力（弾道にわずかな落下を加える） */
+const BULLET_GRAVITY = 3.0;
 
-/** トレーサー弾の情報 */
-interface TracerData {
+// ─── 色定義 ──────────────────────────────────────────
+const GUN_BARREL_COLOR = new THREE.Color(0x333333);
+const GUN_BODY_COLOR = new THREE.Color(0x555555);
+const GUN_MOUNT_COLOR = new THREE.Color(0x444444);
+const MUZZLE_FLASH_COLOR = new THREE.Color(0xffaa33);
+const TRACER_COLOR = new THREE.Color(0xffdd44);
+const TRACER_GLOW_COLOR = new THREE.Color(0xffaa22);
+const BLOCK_IMPACT_COLOR = new THREE.Color(0xccaa66);   // ブロック衝突: 土粒子の色
+const MOB_HIT_COLOR = new THREE.Color(0xff3333);        // モブ衝突: 赤い血しぶき
+const SPARK_COLOR = new THREE.Color(0xffffff);           // 白い火花
+
+// ─── 型定義 ──────────────────────────────────────────
+/** 飛翔中の弾丸 */
+interface Projectile {
   id: number;
-  start: THREE.Vector3;
-  end: THREE.Vector3;
+  /** 現在位置 */
+  pos: THREE.Vector3;
+  /** 速度ベクトル */
+  vel: THREE.Vector3;
+  /** 発射時刻 */
   createdAt: number;
+  /** 前フレームの位置（トレイル描画用） */
+  prevPositions: THREE.Vector3[];
+  /** 発射元の銃の位置（マズルフラッシュ用） */
+  side: 'left' | 'right';
+  /** 弾が衝突して消滅済みか */
+  dead: boolean;
 }
 
-let tracerIdCounter = 0;
+/** 衝突エフェクト */
+interface ImpactEffect {
+  id: number;
+  /** 衝突位置 */
+  pos: THREE.Vector3;
+  /** 衝突面の法線ベクトル（パーティクルの飛散方向） */
+  normal: THREE.Vector3;
+  /** 衝突種別 */
+  type: 'block' | 'mob';
+  /** 生成時刻 */
+  createdAt: number;
+  /** パーティクルの初速度（各粒子ごと） */
+  particles: Array<{
+    vel: THREE.Vector3;
+    pos: THREE.Vector3;
+    size: number;
+  }>;
+}
 
+let nextId = 0;
+
+// ────────────────────────────────────────────────────────
+// メインコンポーネント
+// ────────────────────────────────────────────────────────
 export function MachineGun() {
   const helicopter = useVehicleStore((s) => s.helicopter);
   const mySeat = helicopter.mySeat;
   const { camera } = useThree();
 
-  // 発射クールダウン管理
+  // 発射クールダウン
   const lastFireTime = useRef(0);
   const isMouseDown = useRef(false);
 
@@ -42,13 +106,14 @@ export function MachineGun() {
   const flashTimerLeft = useRef(0);
   const flashTimerRight = useRef(0);
 
-  // トレーサー弾 — useState で管理して再レンダリングをトリガー
-  const [tracers, setTracers] = useState<TracerData[]>([]);
+  // 弾丸（プロジェクタイル）とエフェクト
+  const [projectiles, setProjectiles] = useState<Projectile[]>([]);
+  const [impacts, setImpacts] = useState<ImpactEffect[]>([]);
 
-  // 射撃方向ベクトル
+  // 射撃方向のワーク用ベクトル
   const shootDir = useRef(new THREE.Vector3());
 
-  // マテリアル
+  // マテリアル（メモ化）
   const barrelMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: GUN_BARREL_COLOR, roughness: 0.6, metalness: 0.4,
   }), []);
@@ -59,71 +124,41 @@ export function MachineGun() {
     color: GUN_MOUNT_COLOR, roughness: 0.7, metalness: 0.2,
   }), []);
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: MUZZLE_FLASH_COLOR,
-    transparent: true,
-    opacity: 0,
+    color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
   }), []);
 
-  // 射撃処理
+  // ─── 射撃処理 ─────────────────────────────────────
   const fireGun = useCallback((side: 'left' | 'right') => {
     const now = performance.now() / 1000;
     if (now - lastFireTime.current < GUN_CONSTANTS.FIRE_COOLDOWN) return;
     lastFireTime.current = now;
 
-    // カメラの向きを射撃方向として使用
-    shootDir.current.set(0, 0, -1);
-    shootDir.current.applyQuaternion(camera.quaternion);
+    // 照準方向 = カメラの前方
+    shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
 
+    // 弾の初期位置 = カメラ位置（ガンナー視点から発射）
     const startPos = camera.position.clone();
 
-    // モブストアからモブの位置を取得してヒット判定
-    const mobs = useMobStore.getState().mobs;
-    let hitMob: { id: string; distance: number } | null = null;
-    const hitRadius = 1.2; // モブの当たり判定半径（少し大きめに）
+    // わずかなランダム散布（リアリティ向上）
+    const spread = 0.015;
+    shootDir.current.x += (Math.random() - 0.5) * spread;
+    shootDir.current.y += (Math.random() - 0.5) * spread;
+    shootDir.current.z += (Math.random() - 0.5) * spread;
+    shootDir.current.normalize();
 
-    for (const mob of mobs) {
-      // 死んでいるモブはスキップ
-      if (mob.hp <= 0) continue;
-
-      // モブの中心位置
-      const mobPos = new THREE.Vector3(mob.x, mob.y + 0.5, mob.z);
-      // レイとモブの球体との交差判定
-      const toMob = mobPos.clone().sub(startPos);
-      const dot = toMob.dot(shootDir.current);
-
-      if (dot < 0 || dot > GUN_CONSTANTS.RANGE) continue;
-
-      // レイ上の最近接点
-      const closest = startPos.clone().add(shootDir.current.clone().multiplyScalar(dot));
-      const dist = closest.distanceTo(mobPos);
-
-      if (dist < hitRadius) {
-        if (!hitMob || dot < hitMob.distance) {
-          hitMob = { id: mob.id, distance: dot };
-        }
-      }
-    }
-
-    // ヒット処理
-    if (hitMob) {
-      // ダメージ送信（マルチプレイ対応）
-      const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-      sendMobDamage(hitMob.id, GUN_CONSTANTS.DAMAGE, shootDir.current.x * 3, shootDir.current.z * 3);
-      // ローカルでもダメージ適用
-      useMobStore.getState().damageMob(hitMob.id, GUN_CONSTANTS.DAMAGE, shootDir.current.x, shootDir.current.z);
-    }
-
-    // トレーサー弾エフェクト
-    const endPos = hitMob
-      ? startPos.clone().add(shootDir.current.clone().multiplyScalar(hitMob.distance))
-      : startPos.clone().add(shootDir.current.clone().multiplyScalar(GUN_CONSTANTS.RANGE));
-
-    setTracers((prev) => [...prev, {
-      id: tracerIdCounter++,
-      start: startPos.clone(),
-      end: endPos,
+    // 弾丸を生成
+    const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
+    const projectile: Projectile = {
+      id: nextId++,
+      pos: startPos,
+      vel,
       createdAt: now,
-    }]);
+      prevPositions: [startPos.clone()],
+      side,
+      dead: false,
+    };
+
+    setProjectiles((prev) => [...prev, projectile]);
 
     // マズルフラッシュ
     if (side === 'left') {
@@ -133,19 +168,14 @@ export function MachineGun() {
     }
   }, [camera]);
 
-  // マウスイベントの適切な登録（useEffect）
+  // ─── マウスイベント ───────────────────────────────
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) {
-        isMouseDown.current = true;
-      }
+      if (e.button === 0) isMouseDown.current = true;
     };
     const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) {
-        isMouseDown.current = false;
-      }
+      if (e.button === 0) isMouseDown.current = false;
     };
-    // PointerLock中もmousedownイベントは届く
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mouseup', onMouseUp);
     return () => {
@@ -154,8 +184,45 @@ export function MachineGun() {
     };
   }, []);
 
-  // フレーム更新
+  // ─── インパクトエフェクト生成ヘルパー ─────────────
+  const spawnImpact = useCallback((
+    pos: THREE.Vector3,
+    normal: THREE.Vector3,
+    type: 'block' | 'mob',
+  ) => {
+    const particles: ImpactEffect['particles'] = [];
+    for (let i = 0; i < IMPACT_PARTICLE_COUNT; i++) {
+      // 法線方向を中心にランダムに飛散
+      const spread = new THREE.Vector3(
+        (Math.random() - 0.5) * 4,
+        Math.random() * 3 + 1,
+        (Math.random() - 0.5) * 4,
+      );
+      // 法線方向に追加バイアス
+      spread.addScaledVector(normal, Math.random() * 3);
+      particles.push({
+        vel: spread,
+        pos: pos.clone(),
+        size: 0.05 + Math.random() * 0.1,
+      });
+    }
+    const effect: ImpactEffect = {
+      id: nextId++,
+      pos: pos.clone(),
+      normal: normal.clone(),
+      type,
+      createdAt: performance.now() / 1000,
+      particles,
+    };
+    setImpacts((prev) => [...prev, effect]);
+  }, []);
+
+  // ─── フレーム更新 ─────────────────────────────────
   useFrame((_, delta) => {
+    const now = performance.now() / 1000;
+    const getBlock = useWorldStore.getState().getBlock;
+    const mobs = useMobStore.getState().mobs;
+
     // マズルフラッシュ減衰
     if (flashTimerLeft.current > 0) {
       flashTimerLeft.current -= delta;
@@ -172,17 +239,97 @@ export function MachineGun() {
       }
     }
 
-    // トレーサー期限切れ除去
-    const now = performance.now() / 1000;
-    setTracers((prev) => {
-      const filtered = prev.filter((t) => now - t.createdAt < GUN_CONSTANTS.TRACER_LIFETIME);
-      // 配列の長さが変わった場合のみ更新（不要な再レンダリング防止）
+    // 弾丸の物理更新
+    setProjectiles((prev) => {
+      const alive: Projectile[] = [];
+      for (const proj of prev) {
+        if (proj.dead) { continue; }
+        const age = now - proj.createdAt;
+        if (age > BULLET_MAX_AGE) { continue; }
+
+        // 前フレームの位置を記録（トレイル用、最大6点を保持）
+        proj.prevPositions.push(proj.pos.clone());
+        if (proj.prevPositions.length > 6) proj.prevPositions.shift();
+
+        // 重力を適用
+        proj.vel.y -= BULLET_GRAVITY * delta;
+
+        // 移動量算出（フレームレート非依存）
+        const moveDir = proj.vel.clone().normalize();
+        const moveDist = BULLET_SPEED * delta;
+        const steps = Math.max(1, Math.ceil(moveDist / 0.5)); // 0.5ブロック刻みでチェック
+        const stepSize = moveDist / steps;
+
+        let hitSomething = false;
+
+        for (let s = 0; s < steps; s++) {
+          // 段階的に位置を更新
+          proj.pos.addScaledVector(moveDir, stepSize);
+
+          // --- ブロック衝突判定（レイマーチング） ---
+          const bx = Math.floor(proj.pos.x);
+          const by = Math.floor(proj.pos.y);
+          const bz = Math.floor(proj.pos.z);
+
+          const blockId = getBlock(bx, by, bz);
+          if (blockId !== BLOCK_IDS.AIR) {
+            // 衝突面の法線を推定（弾の進入方向の逆）
+            const normal = moveDir.clone().negate().normalize();
+            // 衝突位置をブロック表面に補正
+            const hitPos = proj.pos.clone();
+            spawnImpact(hitPos, normal, 'block');
+            proj.dead = true;
+            hitSomething = true;
+            break;
+          }
+
+          // --- モブ衝突判定 ---
+          for (const mob of mobs) {
+            if (mob.hp <= 0) continue;
+            const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
+            const dist = proj.pos.distanceTo(mobCenter);
+
+            if (dist < MOB_HIT_RADIUS) {
+              // ヒット！
+              const normal = proj.pos.clone().sub(mobCenter).normalize();
+              spawnImpact(proj.pos.clone(), normal, 'mob');
+
+              // ダメージ適用
+              const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
+              sendMobDamage(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
+              useMobStore.getState().damageMob(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
+
+              // ダメージポップアップ
+              spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+
+              proj.dead = true;
+              hitSomething = true;
+              break;
+            }
+          }
+
+          if (hitSomething) break;
+        }
+
+        // 生存中の弾丸のみ保持
+        if (!proj.dead) {
+          alive.push(proj);
+        }
+      }
+
+      // 変更が無ければ同じ参照を返す（不要な再レンダリング防止）
+      // ただしprevPositionsの更新があるので毎フレーム新しい配列にしたほうが良い
+      return alive;
+    });
+
+    // インパクトエフェクト期限切れ除去
+    setImpacts((prev) => {
+      const filtered = prev.filter((e) => now - e.createdAt < IMPACT_LIFETIME);
       if (filtered.length === prev.length) return prev;
       return filtered;
     });
 
     // ガンナー席の射撃（左クリック長押し対応）
-    // PointerLock中かどうかも確認
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
     const hasPointerLock = !!document.pointerLockElement;
     if (isGunner && isMouseDown.current && hasPointerLock) {
@@ -194,7 +341,7 @@ export function MachineGun() {
 
   return (
     <group>
-      {/* === 左機関銃 === */}
+      {/* === 左機関銃モデル === */}
       <GunModel
         side="left"
         flashRef={flashLeftRef}
@@ -203,7 +350,7 @@ export function MachineGun() {
         mountMat={mountMat}
         flashMat={flashMat}
       />
-      {/* === 右機関銃 === */}
+      {/* === 右機関銃モデル === */}
       <GunModel
         side="right"
         flashRef={flashRightRef}
@@ -212,15 +359,21 @@ export function MachineGun() {
         mountMat={mountMat}
         flashMat={flashMat}
       />
-      {/* === トレーサー弾（3Dメッシュで太く視認性の高い弾丸） === */}
-      {tracers.map((tracer) => (
-        <TracerBullet key={tracer.id} start={tracer.start} end={tracer.end} createdAt={tracer.createdAt} />
+      {/* === 飛翔中の弾丸 + トレイル === */}
+      {projectiles.map((proj) => (
+        <ProjectileTrail key={proj.id} projectile={proj} />
+      ))}
+      {/* === 衝突エフェクト（パーティクル） === */}
+      {impacts.map((effect) => (
+        <ImpactParticles key={effect.id} effect={effect} />
       ))}
     </group>
   );
 }
 
-/** 機関銃3Dモデル（ボクセルスタイル） */
+// ────────────────────────────────────────────────────────
+// 機関銃3Dモデル（ボクセルスタイル）
+// ────────────────────────────────────────────────────────
 function GunModel({
   side,
   flashRef,
@@ -247,18 +400,17 @@ function GunModel({
       rotation={[helicopter.pitch, helicopter.rotationY, helicopter.roll]}
       scale={1.3}
     >
-      {/* モデルを180度回転（ノーズが-Z方向を向くため） */}
       <group rotation={[0, Math.PI, 0]}>
         <group position={[xOffset, 0.0, 0.4]}>
-          {/* マウント（取り付け部） */}
+          {/* マウント */}
           <mesh material={mountMat}>
             <boxGeometry args={[0.2, 0.15, 0.2]} />
           </mesh>
-          {/* 銃本体（ボックス） */}
+          {/* 銃本体 */}
           <mesh position={[0, -0.1, 0.2]} material={bodyMat}>
             <boxGeometry args={[0.15, 0.12, 0.35]} />
           </mesh>
-          {/* 銃身（細長い） */}
+          {/* 銃身 */}
           <mesh position={[0, -0.1, 0.55]} material={barrelMat}>
             <boxGeometry args={[0.08, 0.08, 0.5]} />
           </mesh>
@@ -266,16 +418,12 @@ function GunModel({
           <mesh position={[0, -0.1, 0.82]} material={barrelMat}>
             <boxGeometry args={[0.1, 0.1, 0.06]} />
           </mesh>
-          {/* 弾薬ボックス（銃の下） */}
+          {/* 弾薬ボックス */}
           <mesh position={[0, -0.22, 0.15]} material={bodyMat}>
             <boxGeometry args={[0.12, 0.1, 0.18]} />
           </mesh>
           {/* マズルフラッシュ */}
-          <mesh
-            ref={flashRef}
-            position={[0, -0.1, 0.9]}
-            material={flashMat.clone()}
-          >
+          <mesh ref={flashRef} position={[0, -0.1, 0.9]} material={flashMat.clone()}>
             <boxGeometry args={[0.2, 0.2, 0.15]} />
           </mesh>
         </group>
@@ -284,75 +432,179 @@ function GunModel({
   );
 }
 
-/** トレーサー弾（太い3Dメッシュで飛翔中の弾を視覚化） */
-function TracerBullet({ start, end, createdAt }: { start: THREE.Vector3; end: THREE.Vector3; createdAt: number }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+// ────────────────────────────────────────────────────────
+// 弾丸 + トレイル描画
+// ────────────────────────────────────────────────────────
+function ProjectileTrail({ projectile }: { projectile: Projectile }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const bulletRef = useRef<THREE.Mesh>(null);
+  const trailRef = useRef<THREE.Mesh>(null);
 
-  // 弾の進行方向と長さ
-  const { position, quaternion, length } = useMemo(() => {
-    const dir = end.clone().sub(start);
-    const len = dir.length();
-    const mid = start.clone().add(end).multiplyScalar(0.5);
-
-    // 向きを計算
-    const quat = new THREE.Quaternion();
-    const up = new THREE.Vector3(0, 1, 0);
-    const dirNorm = dir.clone().normalize();
-
-    // CylinderGeometryはデフォルトでY軸方向なので、射線方向に回転させる
-    quat.setFromUnitVectors(up, dirNorm);
-
-    return { position: mid, quaternion: quat, length: len };
-  }, [start, end]);
-
-  // フェードアウトアニメーション
   useFrame(() => {
-    if (!meshRef.current) return;
-    const now = performance.now() / 1000;
-    const age = now - createdAt;
-    const fadeProgress = age / GUN_CONSTANTS.TRACER_LIFETIME;
+    if (!groupRef.current || !bulletRef.current) return;
 
-    // 時間経過で弾を前方に移動させつつフェードアウト
-    const mat = meshRef.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = Math.max(0, 1 - fadeProgress * 1.5);
+    // 弾頭の位置を更新
+    bulletRef.current.position.copy(projectile.pos);
 
-    // スケールも時間で少し縮小
-    const scale = Math.max(0.3, 1 - fadeProgress * 0.5);
-    meshRef.current.scale.set(scale, 1, scale);
+    // トレイル（弾の尾）を計算
+    if (trailRef.current && projectile.prevPositions.length >= 2) {
+      const tailPos = projectile.prevPositions[0];
+      const headPos = projectile.pos;
+      const dir = headPos.clone().sub(tailPos);
+      const len = Math.min(dir.length(), TRAIL_LENGTH);
+
+      if (len > 0.1) {
+        const mid = tailPos.clone().add(headPos).multiplyScalar(0.5);
+        trailRef.current.position.copy(mid);
+
+        // Y軸 → 弾道方向へ回転
+        const up = new THREE.Vector3(0, 1, 0);
+        const dirNorm = dir.clone().normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(up, dirNorm);
+        trailRef.current.quaternion.copy(quat);
+        trailRef.current.scale.set(1, len, 1);
+        trailRef.current.visible = true;
+      }
+    }
   });
 
-  // 弾の長さを制限（あまりに長いと不自然）
-  const tracerLength = Math.min(length, 8);
+  return (
+    <group ref={groupRef}>
+      {/* 弾頭（明るい光る球） */}
+      <mesh ref={bulletRef}>
+        <sphereGeometry args={[0.12, 6, 6]} />
+        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} />
+      </mesh>
+      {/* 弾頭のグロー */}
+      <mesh position={projectile.pos.clone()}>
+        <sphereGeometry args={[0.25, 6, 6]} />
+        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.4} />
+      </mesh>
+      {/* トレイル（弾の尾） */}
+      <mesh ref={trailRef} visible={false}>
+        <cylinderGeometry args={[0.06, 0.02, 1, 4]} />
+        <meshBasicMaterial color={TRACER_GLOW_COLOR} transparent opacity={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+// 衝突エフェクト（パーティクル散乱）
+// ────────────────────────────────────────────────────────
+function ImpactParticles({ effect }: { effect: ImpactEffect }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const particlesRef = useRef<THREE.Mesh[]>([]);
+  // ヒットフラッシュ
+  const flashRef = useRef<THREE.Mesh>(null);
+
+  useFrame(() => {
+    const now = performance.now() / 1000;
+    const age = now - effect.createdAt;
+    const progress = age / IMPACT_LIFETIME;
+    if (progress >= 1) return;
+
+    // パーティクルの物理更新
+    const dt = 1 / 60; // 固定ステップ
+    for (let i = 0; i < effect.particles.length; i++) {
+      const p = effect.particles[i];
+      // 重力
+      p.vel.y -= 12 * dt;
+      // 位置更新
+      p.pos.x += p.vel.x * dt;
+      p.pos.y += p.vel.y * dt;
+      p.pos.z += p.vel.z * dt;
+      // 速度減衰
+      p.vel.multiplyScalar(0.96);
+
+      // メッシュに反映
+      const mesh = particlesRef.current[i];
+      if (mesh) {
+        mesh.position.copy(p.pos);
+        // フェードアウト
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = Math.max(0, 1 - progress * 1.5);
+        // 縮小
+        const s = p.size * Math.max(0.2, 1 - progress);
+        mesh.scale.setScalar(s / p.size);
+      }
+    }
+
+    // ヒットフラッシュ
+    if (flashRef.current) {
+      const flashProgress = age / HIT_FLASH_LIFETIME;
+      if (flashProgress < 1) {
+        flashRef.current.visible = true;
+        const flashScale = 0.3 + flashProgress * 0.5;
+        flashRef.current.scale.setScalar(flashScale);
+        const mat = flashRef.current.material as THREE.MeshBasicMaterial;
+        mat.opacity = Math.max(0, 1 - flashProgress);
+      } else {
+        flashRef.current.visible = false;
+      }
+    }
+  });
+
+  const isBlock = effect.type === 'block';
+  const mainColor = isBlock ? BLOCK_IMPACT_COLOR : MOB_HIT_COLOR;
 
   return (
-    <group position={position} quaternion={quaternion}>
-      {/* メインの弾体（明るい黄色） */}
-      <mesh ref={meshRef}>
-        <cylinderGeometry args={[0.04, 0.04, tracerLength, 4]} />
+    <group ref={groupRef}>
+      {/* ヒットフラッシュ（着弾時の一瞬の光） */}
+      <mesh ref={flashRef} position={effect.pos.clone()}>
+        <sphereGeometry args={[1, 8, 8]} />
         <meshBasicMaterial
-          color={0xffdd44}
+          color={isBlock ? 0xffddaa : 0xff6633}
           transparent
           opacity={1}
         />
       </mesh>
-      {/* グロー（やや太めの半透明で光っているように見せる） */}
-      <mesh>
-        <cylinderGeometry args={[0.1, 0.1, tracerLength, 4]} />
-        <meshBasicMaterial
-          color={0xffaa22}
-          transparent
-          opacity={0.3}
-        />
-      </mesh>
-      {/* 先端の光点 */}
-      <mesh position={[0, tracerLength / 2, 0]}>
-        <sphereGeometry args={[0.08, 6, 6]} />
-        <meshBasicMaterial
-          color={0xffffff}
-          transparent
-          opacity={0.9}
-        />
-      </mesh>
+
+      {/* パーティクル群 */}
+      {effect.particles.map((p, i) => (
+        <mesh
+          key={i}
+          ref={(el) => { if (el) particlesRef.current[i] = el; }}
+          position={p.pos.clone()}
+        >
+          <boxGeometry args={[p.size, p.size, p.size]} />
+          <meshBasicMaterial
+            color={i % 3 === 0 ? SPARK_COLOR : mainColor}
+            transparent
+            opacity={1}
+          />
+        </mesh>
+      ))}
+
+      {/* ブロック衝突: 追加の破片（大きめの四角形パーティクル） */}
+      {isBlock && (
+        <>
+          <mesh position={effect.pos.clone()}>
+            <boxGeometry args={[0.15, 0.15, 0.15]} />
+            <meshBasicMaterial color={0x886633} transparent opacity={0.8} />
+          </mesh>
+          <mesh position={[effect.pos.x + 0.1, effect.pos.y + 0.05, effect.pos.z - 0.1]}>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+            <meshBasicMaterial color={0x997744} transparent opacity={0.6} />
+          </mesh>
+        </>
+      )}
+
+      {/* モブ衝突: ヒットマーカー（赤いX） */}
+      {!isBlock && (
+        <group position={effect.pos.clone()}>
+          {/* 横棒 */}
+          <mesh rotation={[0, 0, Math.PI / 4]}>
+            <boxGeometry args={[0.4, 0.06, 0.06]} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+          </mesh>
+          {/* 縦棒 */}
+          <mesh rotation={[0, 0, -Math.PI / 4]}>
+            <boxGeometry args={[0.4, 0.06, 0.06]} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }
