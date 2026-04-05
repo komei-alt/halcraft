@@ -304,7 +304,9 @@ export function Player() {
     // ========================================
     // ヘリコプター搭乗中の物理
     // ========================================
-    if (isInHeli) {
+    // 降車直後のフレームで物理がリセット位置を上書きしないよう、最新の搭乗状態を再取得
+    const isStillInHeli = useVehicleStore.getState().helicopter.isBoarded;
+    if (isStillInHeli) {
       const {
         MAX_SPEED, ACCELERATION, DECELERATION, TURN_SPEED,
         VERTICAL_SPEED, ROTOR_SPEED,
