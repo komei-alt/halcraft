@@ -39,6 +39,9 @@ export function Player() {
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const onGround = useRef(false);
 
+  // カメラY座標スムージング用（接地振動によるブレを吸収）
+  const smoothCameraY = useRef(40 + PLAYER_HEIGHT - 0.1);
+
   // 落下ダメージ追跡
   const lastGroundY = useRef(40);
   const wasFalling = useRef(false);
@@ -459,11 +462,14 @@ export function Player() {
       onGround.current = false;
     }
 
-    // --- 重力（空中の場合のみ適用） ---
+    // --- 重力（空中の場合のみ適用、接地中はスキップして振動を防ぐ） ---
     if (!onGround.current) {
       vel.y += GRAVITY * dt;
       // 終端速度を制限
       if (vel.y < -40) vel.y = -40;
+    } else {
+      // 接地中は垂直速度を強制的にゼロ維持（重力→衝突→スナップの振動を防止）
+      vel.y = 0;
     }
 
     // --- ノックバック適用 ---
@@ -533,8 +539,8 @@ export function Player() {
       vel.y = 0;
     } else {
       pos.y = newY;
-      // 空中にいる場合は接地フラグを降ろす
-      if (vel.y !== 0) {
+      // 空中にいる場合は接地フラグを降ろす（ジャンプ初期のvel.y>0含む）
+      if (!onGround.current || vel.y > 0) {
         onGround.current = false;
       }
     }
@@ -556,10 +562,11 @@ export function Player() {
     }
 
     // --- 接地チェック（静止時にも接地判定を維持） ---
-    if (vel.y === 0 && onGround.current) {
-      // 足元にブロックがあるか確認（少し下をチェック）
-      if (!checkCollision(pos.x, pos.y - 0.1, pos.z)) {
-        // 足元にブロックがない → 空中に出た
+    if (onGround.current) {
+      // 足元にブロックがあるか確認（0.05だけ下をチェック — 0.1だとスナップ値1.001との
+      // 精度差で誤検出し接地フラグが毎フレーム外れて振動の原因になる）
+      if (!checkCollision(pos.x, pos.y - 0.05, pos.z)) {
+        // 足元にブロックがない → 空中に出た（崖から歩き出した等）
         onGround.current = false;
       }
     }
@@ -568,6 +575,16 @@ export function Player() {
     updateAttackCooldown(dt);
 
     // --- カメラ追従（目の高さ + シェイク） ---
+    // カメラY座標をスムージング（接地スナップの微細な変動を吸収して震えを防止）
+    const targetCameraY = pos.y + PLAYER_HEIGHT - 0.1;
+    // 接地中は強めにスムージング、空中では追従を速く
+    const smoothFactor = onGround.current ? 20 : 50;
+    smoothCameraY.current += (targetCameraY - smoothCameraY.current) * Math.min(1, smoothFactor * dt);
+    // smoothCameraYがtargetとほぼ一致したらスナップ（無限漸近を防止）
+    if (Math.abs(smoothCameraY.current - targetCameraY) < 0.0005) {
+      smoothCameraY.current = targetCameraY;
+    }
+
     // 最新のcameraShake値を取得（上のupdateAttackCooldownで減衰済み）
     const currentShake = usePlayerStore.getState().cameraShake;
     let shakeX = 0;
@@ -579,7 +596,7 @@ export function Player() {
     }
     camera.position.set(
       pos.x + shakeX,
-      pos.y + PLAYER_HEIGHT - 0.1 + shakeY,
+      smoothCameraY.current + shakeY,
       pos.z,
     );
 
@@ -598,6 +615,7 @@ export function Player() {
       pos.set(8, 40, 8);
       vel.set(0, 0, 0);
       lastGroundY.current = 40;
+      smoothCameraY.current = 40 + PLAYER_HEIGHT - 0.1;
       respawn();
     }
   });
