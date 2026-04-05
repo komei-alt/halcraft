@@ -8,7 +8,7 @@
 import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
-import { useVehicleStore, SEAT_OFFSETS } from '../stores/useVehicleStore';
+import { useVehicleStore } from '../stores/useVehicleStore';
 import { VoxelAvatar } from './VoxelAvatar';
 import { isValidSkinId } from '../types/skins';
 
@@ -65,29 +65,13 @@ function RemotePlayerModel({
     }
     const isInHelicopter = occupiedSeat !== null;
 
-    if (isInHelicopter && occupiedSeat) {
-      // 搭乗中: 該当する席のオフセット位置にアバターを配置
-      const seatOff = SEAT_OFFSETS[occupiedSeat as keyof typeof SEAT_OFFSETS] || { x: 0, y: 1.8, z: -0.3 };
-
-      const cosR = Math.cos(heli.rotationY);
-      const sinR = Math.sin(heli.rotationY);
-      // ローカル座標をワールド座標に変換
-      const worldX = heli.x + sinR * seatOff.z + cosR * seatOff.x;
-      const worldZ = heli.z + cosR * seatOff.z - sinR * seatOff.x;
-
-      groupRef.current.position.set(
-        worldX,
-        heli.y + seatOff.y,
-        worldZ,
-      );
-      // ヘリの向きに体を合わせる
-      groupRef.current.rotation.y = heli.rotationY;
-
-      // 搭乗中は移動アニメーション無効
+    if (isInHelicopter) {
+      // 搭乗中: Helicopter.tsx の PassengerAvatars が描画するので非表示
+      groupRef.current.visible = false;
       setIsMoving((prev: boolean) => prev ? false : prev);
-      prevPosRef.current = [worldX, heli.y + seatOff.y, worldZ];
     } else {
       // 通常: サーバーからの補間位置を使用
+      groupRef.current.visible = true;
       groupRef.current.position.set(
         player.position[0],
         player.position[1],

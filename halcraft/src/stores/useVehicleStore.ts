@@ -8,26 +8,38 @@ import { create } from 'zustand';
 export type VehicleType = 'helicopter';
 
 /** 座席タイプ */
-export type SeatType = 'pilot' | 'copilot' | 'gunner_left' | 'gunner_right';
+export type SeatType = 'pilot' | 'gunner_left' | 'gunner_right';
 
 /** 座席の優先順（搭乗時に空席を探す順序） */
-export const SEAT_PRIORITY: SeatType[] = ['pilot', 'copilot', 'gunner_left', 'gunner_right'];
+export const SEAT_PRIORITY: SeatType[] = ['pilot', 'gunner_left', 'gunner_right'];
 
 /** 全座席リスト */
-export const ALL_SEATS: SeatType[] = ['pilot', 'copilot', 'gunner_left', 'gunner_right'];
+export const ALL_SEATS: SeatType[] = ['pilot', 'gunner_left', 'gunner_right'];
 
-/** 座席ごとのローカル座標オフセット（ヘリ中心からの相対位置） */
+/**
+ * 座席ごとのオフセット
+ * - worldOffset: ワールド座標系でのオフセット（カメラ配置に使用）
+ *   ヘリモデルは scale=1.3 + 内部180°Y回転。Z正=モデル後方=ワールド前方
+ * - modelOffset: ヘリモデル内部座標系でのオフセット（アバター3D配置に使用）
+ *   180°回転グループの内側で使う座標（Z正=ノーズ方向）
+ */
 export const SEAT_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
-  pilot:        { x: -0.4, y: 0.55, z: -0.3 },
-  copilot:      { x:  0.4, y: 0.55, z: -0.3 },
-  gunner_left:  { x: -0.8, y: 0.40, z:  0.5 },
-  gunner_right: { x:  0.8, y: 0.40, z:  0.5 },
+  // ワールド座標系（Player.tsx / RemotePlayers.tsx で使用）
+  pilot:        { x:  0.0, y: 0.7, z:  0.9 },   // コクピット前席
+  gunner_left:  { x: -1.0, y: 0.5, z: -0.6 },   // 後方左席
+  gunner_right: { x:  1.0, y: 0.5, z: -0.6 },   // 後方右席
+};
+
+/** ヘリモデル内部座標系でのアバター配置オフセット（180°回転グループ内） */
+export const SEAT_MODEL_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
+  pilot:        { x:  0.0, y: -0.15, z:  0.7 },   // コクピット前席
+  gunner_left:  { x: -0.75, y: -0.25, z: -0.5 },  // 後方左席
+  gunner_right: { x:  0.75, y: -0.25, z: -0.5 },  // 後方右席
 };
 
 /** 座席の表示名 */
 export const SEAT_NAMES: Record<SeatType, string> = {
   pilot: 'パイロット',
-  copilot: '副操縦士',
   gunner_left: '左ガナー',
   gunner_right: '右ガナー',
 };
@@ -101,13 +113,12 @@ export const HELICOPTER_CONSTANTS = {
   HEIGHT: 2.5,
   LENGTH: 5.5,
   /** 最大搭乗人数 */
-  MAX_PASSENGERS: 4,
+  MAX_PASSENGERS: 3,
 } as const;
 
 /** 空の座席マップ */
 const EMPTY_SEATS: Record<SeatType, string | null> = {
   pilot: null,
-  copilot: null,
   gunner_left: null,
   gunner_right: null,
 };

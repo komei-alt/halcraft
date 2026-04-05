@@ -127,15 +127,12 @@ function VehicleControls({ seat }: { seat: SeatType }) {
         </>
       )}
 
-      {/* 副操縦士 */}
-      {seat === 'copilot' && (
-        <ControlRow keyName="マウス" action="周囲を見回す" />
-      )}
+
 
       <Divider />
 
       {/* 共通操作 */}
-      <ControlRow keyName="1-4" action="座席を移動" keyColor="#88ccff" />
+      <ControlRow keyName="1-3" action="座席を移動" keyColor="#88ccff" />
       <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
     </>
   );

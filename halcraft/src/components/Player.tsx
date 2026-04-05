@@ -189,7 +189,7 @@ export function Player() {
         const digit = parseInt(e.code.replace('Digit', ''));
         // ヘリ搭乗中: 1-4キーで座席移動
         const vehicleState = useVehicleStore.getState();
-        if (vehicleState.helicopter.mySeat !== null && digit >= 1 && digit <= 4) {
+        if (vehicleState.helicopter.mySeat !== null && digit >= 1 && digit <= 3) {
           const targetSeat = ALL_SEATS[digit - 1];
           vehicleState.changeSeat(targetSeat);
         } else {

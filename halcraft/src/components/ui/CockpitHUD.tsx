@@ -424,7 +424,7 @@ export function CockpitHUD() {
           fontFamily: 'monospace',
           marginTop: '2px',
         }}>
-          1-4キーで移動
+          1-3キーで移動
         </span>
       </div>
 

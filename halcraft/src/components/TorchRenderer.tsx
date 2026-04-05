@@ -1,6 +1,6 @@
-// 松明レンダラーコンポーネント
-// 松明をデザイン通りに3Dで描画する
-// 茶色の棒 + 灰色の受け部分 + オレンジの炎（パーティクル風）
+// 松明レンダラーコンポーネント（InstancedMesh 最適化版）
+// 全松明を5つの InstancedMesh で一括描画し、パフォーマンスを最大化
+// 個別コンポーネント方式 → InstancedMesh 方式でメッシュ数を劇的に削減
 
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -40,10 +40,31 @@ const flameGeom = new THREE.ConeGeometry(0.10, 0.28, 6);
 const innerFlameGeom = new THREE.ConeGeometry(0.06, 0.20, 5);
 const glowGeom = new THREE.SphereGeometry(0.18, 8, 8);
 
-/** ワールド内のすべての松明を描画 */
+/** アニメーション更新する最大距離（この範囲外の松明は静止表示） */
+const ANIMATION_RANGE = 40;
+/** アニメーション距離の二乗（毎フレーム平方根を避ける） */
+const ANIMATION_RANGE_SQ = ANIMATION_RANGE * ANIMATION_RANGE;
+
+/** 再利用用の行列・ベクトル（GCプレッシャー削減） */
+const _matrix = new THREE.Matrix4();
+const _position = new THREE.Vector3();
+const _quaternion = new THREE.Quaternion();
+const _scale = new THREE.Vector3(1, 1, 1);
+
+/** ワールド内のすべての松明を InstancedMesh で一括描画 */
 export function TorchRenderer() {
   const chunks = useWorldStore((s) => s.chunks);
   const chunkVersions = useWorldStore((s) => s.chunkVersions);
+
+  // InstancedMesh の ref
+  const stickRef = useRef<THREE.InstancedMesh>(null);
+  const holderRef = useRef<THREE.InstancedMesh>(null);
+  const flameRef = useRef<THREE.InstancedMesh>(null);
+  const innerFlameRef = useRef<THREE.InstancedMesh>(null);
+  const glowRef = useRef<THREE.InstancedMesh>(null);
+
+  // 各松明のランダムなタイムオフセット（炎のゆらぎを個別化）
+  const timeOffsetsRef = useRef<Float32Array>(new Float32Array(0));
 
   // 全チャンクから松明の位置を収集
   const torchPositions = useMemo(() => {
@@ -71,62 +92,147 @@ export function TorchRenderer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chunks, chunkVersions]);
 
-  return (
-    <group>
-      {torchPositions.map((pos) => (
-        <TorchModel
-          key={`torch-${pos.x}-${pos.y}-${pos.z}`}
-          position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
-        />
-      ))}
-    </group>
-  );
-}
+  // 松明数が変わったらタイムオフセットを再生成
+  const count = torchPositions.length;
+  useMemo(() => {
+    const offsets = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      offsets[i] = Math.random() * Math.PI * 2;
+    }
+    timeOffsetsRef.current = offsets;
+  }, [count]);
 
-/** 個別の松明3Dモデル（共有マテリアル・ジオメトリ使用） */
-function TorchModel({ position }: { position: [number, number, number] }) {
-  const flameRef = useRef<THREE.Mesh>(null);
-  const flameRef2 = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-  const timeOffsetRef = useRef<number | null>(null);
+  // 静的パーツ（棒と受け）の初期配置 + 炎アニメーションの一括更新
+  useFrame(({ camera, clock }) => {
+    if (count === 0) return;
 
-  // 炎のアニメーション
-  useFrame(({ clock }) => {
-    if (timeOffsetRef.current === null) {
-      timeOffsetRef.current = Math.random() * Math.PI * 2;
-    }
-    const t = clock.getElapsedTime() + timeOffsetRef.current;
+    const stick = stickRef.current;
+    const holder = holderRef.current;
+    const flame = flameRef.current;
+    const innerFlame = innerFlameRef.current;
+    const glow = glowRef.current;
+    if (!stick || !holder || !flame || !innerFlame || !glow) return;
 
-    if (flameRef.current) {
-      flameRef.current.position.x = Math.sin(t * 6) * 0.02;
-      flameRef.current.position.z = Math.cos(t * 8) * 0.02;
-      const scale = 1 + Math.sin(t * 10) * 0.15;
-      flameRef.current.scale.set(scale, scale * 1.1, scale);
+    const t = clock.getElapsedTime();
+    const offsets = timeOffsetsRef.current;
+    const camX = camera.position.x;
+    const camY = camera.position.y;
+    const camZ = camera.position.z;
+
+    for (let i = 0; i < count; i++) {
+      const pos = torchPositions[i];
+      const baseX = pos.x + 0.5;
+      const baseZ = pos.z + 0.5;
+
+      // 棒（静的）
+      _position.set(baseX, pos.y + 0.3, baseZ);
+      _matrix.compose(_position, _quaternion, _scale);
+      stick.setMatrixAt(i, _matrix);
+
+      // 受け（静的）
+      _position.set(baseX, pos.y + 0.58, baseZ);
+      _matrix.compose(_position, _quaternion, _scale);
+      holder.setMatrixAt(i, _matrix);
+
+      // カメラからの距離でアニメーション判定
+      const dx = baseX - camX;
+      const dy = pos.y - camY;
+      const dz = baseZ - camZ;
+      const distSq = dx * dx + dy * dy + dz * dz;
+
+      if (distSq < ANIMATION_RANGE_SQ) {
+        // 近い松明: 炎のアニメーション
+        const offset = offsets[i];
+        const ti = t + offset;
+
+        // メインの炎
+        const flameScale = 1 + Math.sin(ti * 10) * 0.15;
+        _position.set(
+          baseX + Math.sin(ti * 6) * 0.02,
+          pos.y + 0.75,
+          baseZ + Math.cos(ti * 8) * 0.02,
+        );
+        _scale.set(flameScale, flameScale * 1.1, flameScale);
+        _matrix.compose(_position, _quaternion, _scale);
+        flame.setMatrixAt(i, _matrix);
+
+        // 内側の炎
+        const innerScale = 0.8 + Math.sin(ti * 12 + 1) * 0.2;
+        _position.set(
+          baseX + Math.sin(ti * 7 + 1) * 0.03,
+          pos.y + 0.72,
+          baseZ + Math.cos(ti * 9 + 2) * 0.03,
+        );
+        _scale.set(innerScale, innerScale * 1.2, innerScale);
+        _matrix.compose(_position, _quaternion, _scale);
+        innerFlame.setMatrixAt(i, _matrix);
+
+        // グロー
+        const glowScale = 1 + Math.sin(ti * 7) * 0.1;
+        _position.set(baseX, pos.y + 0.72, baseZ);
+        _scale.set(glowScale, glowScale, glowScale);
+        _matrix.compose(_position, _quaternion, _scale);
+        glow.setMatrixAt(i, _matrix);
+      } else {
+        // 遠い松明: 静止表示（スケール固定）
+        _scale.set(1, 1, 1);
+
+        _position.set(baseX, pos.y + 0.75, baseZ);
+        _matrix.compose(_position, _quaternion, _scale);
+        flame.setMatrixAt(i, _matrix);
+
+        _position.set(baseX, pos.y + 0.72, baseZ);
+        _matrix.compose(_position, _quaternion, _scale);
+        innerFlame.setMatrixAt(i, _matrix);
+
+        _position.set(baseX, pos.y + 0.72, baseZ);
+        _matrix.compose(_position, _quaternion, _scale);
+        glow.setMatrixAt(i, _matrix);
+      }
     }
-    if (flameRef2.current) {
-      flameRef2.current.position.x = Math.sin(t * 7 + 1) * 0.03;
-      flameRef2.current.position.z = Math.cos(t * 9 + 2) * 0.03;
-      const scale2 = 0.8 + Math.sin(t * 12 + 1) * 0.2;
-      flameRef2.current.scale.set(scale2, scale2 * 1.2, scale2);
-    }
-    if (glowRef.current) {
-      const glowScale = 1 + Math.sin(t * 7) * 0.1;
-      glowRef.current.scale.set(glowScale, glowScale, glowScale);
-    }
+
+    // InstancedMesh に変更通知
+    stick.instanceMatrix.needsUpdate = true;
+    holder.instanceMatrix.needsUpdate = true;
+    flame.instanceMatrix.needsUpdate = true;
+    innerFlame.instanceMatrix.needsUpdate = true;
+    glow.instanceMatrix.needsUpdate = true;
   });
 
+  if (count === 0) return null;
+
   return (
-    <group position={position}>
-      {/* 棒の部分 */}
-      <mesh position={[0, 0.3, 0]} geometry={stickGeom} material={stickMaterial} />
-      {/* 受け部分 */}
-      <mesh position={[0, 0.58, 0]} geometry={holderGeom} material={holderMaterial} />
+    <group>
+      {/* 棒 */}
+      <instancedMesh
+        ref={stickRef}
+        args={[stickGeom, stickMaterial, count]}
+        frustumCulled={false}
+      />
+      {/* 受け */}
+      <instancedMesh
+        ref={holderRef}
+        args={[holderGeom, holderMaterial, count]}
+        frustumCulled={false}
+      />
       {/* メインの炎 */}
-      <mesh ref={flameRef} position={[0, 0.75, 0]} geometry={flameGeom} material={flameMaterial} />
+      <instancedMesh
+        ref={flameRef}
+        args={[flameGeom, flameMaterial, count]}
+        frustumCulled={false}
+      />
       {/* 内側の炎 */}
-      <mesh ref={flameRef2} position={[0, 0.72, 0]} geometry={innerFlameGeom} material={innerFlameMaterial} />
+      <instancedMesh
+        ref={innerFlameRef}
+        args={[innerFlameGeom, innerFlameMaterial, count]}
+        frustumCulled={false}
+      />
       {/* グロー */}
-      <mesh ref={glowRef} position={[0, 0.72, 0]} geometry={glowGeom} material={glowMaterial} />
+      <instancedMesh
+        ref={glowRef}
+        args={[glowGeom, glowMaterial, count]}
+        frustumCulled={false}
+      />
     </group>
   );
 }

@@ -1,9 +1,10 @@
 // 機関銃コンポーネント
 // ヘリコプターの左右に搭載されるボクセル風の機関銃
-// 機関銃手席のプレイヤーが左クリックで発射
-// レイキャストでモブにヒット判定、トレーサー弾エフェクト付き
+// ガンナー席のプレイヤーが左クリックで発射
+// レイキャストでモブにヒット判定
+// 3Dメッシュによる太くて視認しやすいトレーサー弾エフェクト
 
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useVehicleStore, GUN_CONSTANTS } from '../../stores/useVehicleStore';
@@ -15,7 +16,6 @@ const GUN_BARREL_COLOR = new THREE.Color(0x333333);  // 銃身（ダークグレ
 const GUN_BODY_COLOR = new THREE.Color(0x555555);    // 銃本体
 const GUN_MOUNT_COLOR = new THREE.Color(0x444444);   // マウント
 const MUZZLE_FLASH_COLOR = new THREE.Color(0xffaa33); // マズルフラッシュ
-const TRACER_COLOR = new THREE.Color(0xffdd44);       // トレーサー弾
 
 /** トレーサー弾の情報 */
 interface TracerData {
@@ -42,11 +42,10 @@ export function MachineGun() {
   const flashTimerLeft = useRef(0);
   const flashTimerRight = useRef(0);
 
-  // トレーサー弾のステート
-  const tracers = useRef<TracerData[]>([]);
+  // トレーサー弾 — useState で管理して再レンダリングをトリガー
+  const [tracers, setTracers] = useState<TracerData[]>([]);
 
-  // レイキャスター
-  const raycaster = useRef(new THREE.Raycaster());
+  // 射撃方向ベクトル
   const shootDir = useRef(new THREE.Vector3());
 
   // マテリアル
@@ -77,16 +76,15 @@ export function MachineGun() {
 
     const startPos = camera.position.clone();
 
-    // レイキャストでモブへのヒット判定
-    raycaster.current.set(startPos, shootDir.current);
-    raycaster.current.far = GUN_CONSTANTS.RANGE;
-
     // モブストアからモブの位置を取得してヒット判定
     const mobs = useMobStore.getState().mobs;
     let hitMob: { id: string; distance: number } | null = null;
-    const hitRadius = 0.8; // モブの当たり判定半径
+    const hitRadius = 1.2; // モブの当たり判定半径（少し大きめに）
 
     for (const mob of mobs) {
+      // 死んでいるモブはスキップ
+      if (mob.hp <= 0) continue;
+
       // モブの中心位置
       const mobPos = new THREE.Vector3(mob.x, mob.y + 0.5, mob.z);
       // レイとモブの球体との交差判定
@@ -120,12 +118,12 @@ export function MachineGun() {
       ? startPos.clone().add(shootDir.current.clone().multiplyScalar(hitMob.distance))
       : startPos.clone().add(shootDir.current.clone().multiplyScalar(GUN_CONSTANTS.RANGE));
 
-    tracers.current.push({
+    setTracers((prev) => [...prev, {
       id: tracerIdCounter++,
       start: startPos.clone(),
       end: endPos,
       createdAt: now,
-    });
+    }]);
 
     // マズルフラッシュ
     if (side === 'left') {
@@ -135,7 +133,28 @@ export function MachineGun() {
     }
   }, [camera]);
 
-  // マウスイベント（機関銃手席のみ）
+  // マウスイベントの適切な登録（useEffect）
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        isMouseDown.current = true;
+      }
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) {
+        isMouseDown.current = false;
+      }
+    };
+    // PointerLock中もmousedownイベントは届く
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  // フレーム更新
   useFrame((_, delta) => {
     // マズルフラッシュ減衰
     if (flashTimerLeft.current > 0) {
@@ -155,37 +174,21 @@ export function MachineGun() {
 
     // トレーサー期限切れ除去
     const now = performance.now() / 1000;
-    tracers.current = tracers.current.filter(
-      (t) => now - t.createdAt < GUN_CONSTANTS.TRACER_LIFETIME,
-    );
+    setTracers((prev) => {
+      const filtered = prev.filter((t) => now - t.createdAt < GUN_CONSTANTS.TRACER_LIFETIME);
+      // 配列の長さが変わった場合のみ更新（不要な再レンダリング防止）
+      if (filtered.length === prev.length) return prev;
+      return filtered;
+    });
 
-    // 機関銃手の射撃（左クリック長押し対応）
+    // ガンナー席の射撃（左クリック長押し対応）
+    // PointerLock中かどうかも確認
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
-    if (isGunner && isMouseDown.current) {
+    const hasPointerLock = !!document.pointerLockElement;
+    if (isGunner && isMouseDown.current && hasPointerLock) {
       fireGun(mySeat === 'gunner_left' ? 'left' : 'right');
     }
   });
-
-  // マウスダウン/アップイベントの登録
-  useFrame(() => {
-    // フレームごとにイベント登録は不要 → useEffectに移す方がいいが
-    // R3Fコンテキスト内ではuseEffectでcanvasアクセスしにくいため、
-    // グローバルイベントで管理
-  });
-
-  // マウスイベントの直接登録
-  const mouseHandlerAttached = useRef(false);
-  if (!mouseHandlerAttached.current) {
-    mouseHandlerAttached.current = true;
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) isMouseDown.current = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) isMouseDown.current = false;
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mouseup', onMouseUp);
-  }
 
   if (!helicopter.spawned) return null;
 
@@ -209,9 +212,9 @@ export function MachineGun() {
         mountMat={mountMat}
         flashMat={flashMat}
       />
-      {/* === トレーサー弾 === */}
-      {tracers.current.map((tracer) => (
-        <TracerLine key={tracer.id} start={tracer.start} end={tracer.end} />
+      {/* === トレーサー弾（3Dメッシュで太く視認性の高い弾丸） === */}
+      {tracers.map((tracer) => (
+        <TracerBullet key={tracer.id} start={tracer.start} end={tracer.end} createdAt={tracer.createdAt} />
       ))}
     </group>
   );
@@ -281,22 +284,75 @@ function GunModel({
   );
 }
 
-/** トレーサー弾のライン */
-function TracerLine({ start, end }: { start: THREE.Vector3; end: THREE.Vector3 }) {
-  const lineRef = useRef<THREE.Line>(null);
+/** トレーサー弾（太い3Dメッシュで飛翔中の弾を視覚化） */
+function TracerBullet({ start, end, createdAt }: { start: THREE.Vector3; end: THREE.Vector3; createdAt: number }) {
+  const meshRef = useRef<THREE.Mesh>(null);
 
-  const geometry = useMemo(() => {
-    return new THREE.BufferGeometry().setFromPoints([start, end]);
+  // 弾の進行方向と長さ
+  const { position, quaternion, length } = useMemo(() => {
+    const dir = end.clone().sub(start);
+    const len = dir.length();
+    const mid = start.clone().add(end).multiplyScalar(0.5);
+
+    // 向きを計算
+    const quat = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const dirNorm = dir.clone().normalize();
+
+    // CylinderGeometryはデフォルトでY軸方向なので、射線方向に回転させる
+    quat.setFromUnitVectors(up, dirNorm);
+
+    return { position: mid, quaternion: quat, length: len };
   }, [start, end]);
 
-  const material = useMemo(
-    () => new THREE.LineBasicMaterial({ color: TRACER_COLOR, linewidth: 2, transparent: true, opacity: 0.8 }),
-    [],
+  // フェードアウトアニメーション
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const now = performance.now() / 1000;
+    const age = now - createdAt;
+    const fadeProgress = age / GUN_CONSTANTS.TRACER_LIFETIME;
+
+    // 時間経過で弾を前方に移動させつつフェードアウト
+    const mat = meshRef.current.material as THREE.MeshBasicMaterial;
+    mat.opacity = Math.max(0, 1 - fadeProgress * 1.5);
+
+    // スケールも時間で少し縮小
+    const scale = Math.max(0.3, 1 - fadeProgress * 0.5);
+    meshRef.current.scale.set(scale, 1, scale);
+  });
+
+  // 弾の長さを制限（あまりに長いと不自然）
+  const tracerLength = Math.min(length, 8);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      {/* メインの弾体（明るい黄色） */}
+      <mesh ref={meshRef}>
+        <cylinderGeometry args={[0.04, 0.04, tracerLength, 4]} />
+        <meshBasicMaterial
+          color={0xffdd44}
+          transparent
+          opacity={1}
+        />
+      </mesh>
+      {/* グロー（やや太めの半透明で光っているように見せる） */}
+      <mesh>
+        <cylinderGeometry args={[0.1, 0.1, tracerLength, 4]} />
+        <meshBasicMaterial
+          color={0xffaa22}
+          transparent
+          opacity={0.3}
+        />
+      </mesh>
+      {/* 先端の光点 */}
+      <mesh position={[0, tracerLength / 2, 0]}>
+        <sphereGeometry args={[0.08, 6, 6]} />
+        <meshBasicMaterial
+          color={0xffffff}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+    </group>
   );
-
-  const line = useMemo(() => {
-    return new THREE.Line(geometry, material);
-  }, [geometry, material]);
-
-  return <primitive ref={lineRef} object={line} />;
 }

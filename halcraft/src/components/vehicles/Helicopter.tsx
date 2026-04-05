@@ -4,12 +4,14 @@
 // 鮮やかな色と自発光で昼夜問わず視認しやすい
 // ヘッドライト搭載: ノーズ下部に2灯のSpotLight + 発光ハウジング
 // 搭乗時は胴体が半透明ガラス化し、機内から外が見える
+// 搭乗者のアバターをヘリモデル内部に直接描画
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useVehicleStore, HELICOPTER_CONSTANTS } from '../../stores/useVehicleStore';
+
 
 /** ヘリコプターの色定義（鮮やかで目立つ色） */
 const BODY_COLOR = new THREE.Color(0xff3333);       // 鮮やかな赤い胴体
@@ -338,6 +340,8 @@ export function Helicopter() {
         </mesh>
       </group>
 
+
+
       {/* === スキッド（着陸脚） === */}
       {/* 左スキッド */}
       <group position={[-0.6, -0.5, 0]}>
@@ -371,7 +375,7 @@ export function Helicopter() {
       {/* === 搭乗プロンプト（回転ラッパーの外側に置く） === */}
       {(() => {
         const passengerCount = Object.values(helicopter.seats).filter((id) => id !== null).length;
-        const hasEmptySeat = passengerCount < 4;
+        const hasEmptySeat = passengerCount < 3;
         if (!hasEmptySeat || helicopter.mySeat !== null) return null;
         return (
           <Billboard position={[0, 3.5, 0]}>
@@ -402,7 +406,7 @@ export function Helicopter() {
               anchorY="middle"
               font={undefined}
             >
-              {`${passengerCount}/4`}
+              {`${passengerCount}/3`}
             </Text>
           </Billboard>
         );
@@ -410,3 +414,4 @@ export function Helicopter() {
     </group>
   );
 }
+
