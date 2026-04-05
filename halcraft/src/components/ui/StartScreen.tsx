@@ -8,6 +8,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
 import { initAudio } from '../../utils/sounds';
+import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
 
 /** localStorage のキー */
@@ -43,6 +44,9 @@ export function StartScreen() {
     // サウンドエンジン初期化（ユーザーインタラクション時に必要）
     initAudio();
 
+    // PWAならプッシュ通知を自動購読（非同期・エラーは握りつぶす）
+    initPushIfPWA().catch(() => { /* noop */ });
+
     startGame();
     join(trimmedName);
   }, [isValidName, isJoining, name, startGame, join]);
@@ -54,6 +58,7 @@ export function StartScreen() {
       try { localStorage.setItem(PLAYER_NAME_KEY, trimmedName); } catch { /* noop */ }
       requestFullscreen();
       initAudio();
+      initPushIfPWA().catch(() => { /* noop */ });
       startGame();
       join(trimmedName);
     }

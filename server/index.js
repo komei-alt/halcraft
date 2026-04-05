@@ -1,14 +1,16 @@
 // ============================================
 // HalCraft — マルチプレイサーバー
 // Express + Socket.IO
-// 時間同期 + サーバーサイドモブAI
+// 時間同期 + サーバーサイドモブAI + プッシュ通知
 // ============================================
 
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIO } from 'socket.io';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
+import webpush from 'web-push';
 import { WorldChanges } from './WorldChanges.js';
 import { getTerrainHeight } from './terrain.js';
 
@@ -57,6 +59,17 @@ const DATA_DIR = path.join(__dirname, 'data');
 const SERVER_VERSION = Date.now().toString();
 
 const app = express();
+app.use(express.json());
+
+// CORS（REST API用）
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (_req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 const httpServer = createServer(app);
 const io = new SocketIO(httpServer, {
   cors: { origin: '*' },
@@ -64,6 +77,86 @@ const io = new SocketIO(httpServer, {
 });
 
 const worldChanges = new WorldChanges(DATA_DIR);
+
+// ============================================
+// プッシュ通知設定
+// ============================================
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BMIodx4H334etYD9e8PldzeiSnZCgUcov8DX4DNXXAyGSDu_TccUqWOo8ycnoOaO3hL_FYusMRN_4zU_OQTax6Y';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'I3gXmZ3NmOvX6FRQm5nY25QTXAivTyAWEvKdJvB50Dg';
+
+webpush.setVapidDetails(
+  'mailto:system@rosch.co.jp',
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+// プッシュサブスクリプション管理（ファイル永続化）
+const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subscriptions.json');
+let pushSubscriptions = [];
+
+function loadPushSubscriptions() {
+  try {
+    if (fs.existsSync(PUSH_SUBS_FILE)) {
+      pushSubscriptions = JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf-8'));
+      console.log(`[Push] ${pushSubscriptions.length} 件のサブスクリプションを読み込み`);
+    }
+  } catch (err) {
+    console.error('[Push] サブスクリプション読み込みエラー:', err);
+    pushSubscriptions = [];
+  }
+}
+
+function savePushSubscriptions() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify(pushSubscriptions, null, 2));
+  } catch (err) {
+    console.error('[Push] サブスクリプション保存エラー:', err);
+  }
+}
+
+/**
+ * 全サブスクリプションにプッシュ通知を送信
+ * @param {object} payload - { title, body, icon?, url?, tag? }
+ * @param {string} [excludeEndpoint] - 送信者自身を除外するためのエンドポイント
+ */
+async function sendPushToAll(payload, excludeEndpoint) {
+  const targets = excludeEndpoint
+    ? pushSubscriptions.filter((s) => s.endpoint !== excludeEndpoint)
+    : pushSubscriptions;
+
+  if (targets.length === 0) return;
+
+  const staleEndpoints = [];
+
+  await Promise.allSettled(
+    targets.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+          },
+          JSON.stringify(payload),
+        );
+      } catch (err) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          staleEndpoints.push(sub.endpoint);
+        }
+      }
+    }),
+  );
+
+  // 無効なサブスクリプションを削除
+  if (staleEndpoints.length > 0) {
+    pushSubscriptions = pushSubscriptions.filter(
+      (s) => !staleEndpoints.includes(s.endpoint),
+    );
+    savePushSubscriptions();
+    console.log(`[Push] ${staleEndpoints.length} 件の無効なサブスクリプションを削除`);
+  }
+}
 
 const SKIN_COLORS = [
   '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
@@ -425,7 +518,46 @@ app.get('/api/health', (_req, res) => {
     maxPlayers: MAX_PLAYERS,
     mobs: mobs.length,
     uptime: process.uptime(),
+    pushSubscriptions: pushSubscriptions.length,
   });
+});
+
+// ── プッシュ通知 API ──
+
+// サブスクリプション登録
+app.post('/api/push/subscribe', (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: 'endpoint と keys (p256dh, auth) が必要です' });
+  }
+
+  // 重複チェック → 更新 or 追加
+  const existingIdx = pushSubscriptions.findIndex((s) => s.endpoint === endpoint);
+  const subscription = { endpoint, keys, createdAt: new Date().toISOString() };
+
+  if (existingIdx >= 0) {
+    pushSubscriptions[existingIdx] = subscription;
+  } else {
+    pushSubscriptions.push(subscription);
+  }
+  savePushSubscriptions();
+
+  console.log(`[Push] サブスクリプション登録 (合計: ${pushSubscriptions.length})`);
+  res.status(201).json({ ok: true });
+});
+
+// サブスクリプション削除
+app.delete('/api/push/subscribe', (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) {
+    return res.status(400).json({ error: 'endpoint が必要です' });
+  }
+
+  pushSubscriptions = pushSubscriptions.filter((s) => s.endpoint !== endpoint);
+  savePushSubscriptions();
+
+  console.log(`[Push] サブスクリプション削除 (残り: ${pushSubscriptions.length})`);
+  res.json({ ok: true });
 });
 
 // ── プレイヤー管理 ──
@@ -481,6 +613,15 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('player:joined', player);
     io.emit('player:count', connectedPlayers.size);
     console.log(`[参加] ${name} (${connectedPlayers.size}/${MAX_PLAYERS})`);
+
+    // プッシュ通知（ゲームを開いていないPWAユーザーに通知）
+    sendPushToAll({
+      title: 'ハルクラ',
+      body: `🎮 ${name} がハルクラに参加したよ！（${connectedPlayers.size}/${MAX_PLAYERS}人）`,
+      icon: '/icon-192.png',
+      url: '/',
+      tag: 'player-joined',
+    });
   });
 
   socket.on('player:move', (data) => {
@@ -637,6 +778,7 @@ io.on('connection', (socket) => {
 });
 
 worldChanges.init();
+loadPushSubscriptions();
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`

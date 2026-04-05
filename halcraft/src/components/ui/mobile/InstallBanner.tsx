@@ -1,23 +1,37 @@
-// iOS Safari 用「ホーム画面に追加」案内バナー
-// PWA としてフルスクリーンで遊ぶための誘導UI
+// PWA インストール案内バナー
+// iOS Safari / Android Chrome 向け
+// フルスクリーン + プッシュ通知のメリットを案内
 
 import { useState, useCallback } from 'react';
 import { isIOS, isStandalone } from '../../../utils/device';
 
+const BANNER_DISMISSED_KEY = 'halcraft-install-banner-dismissed';
+
 /**
- * iOS Safari でブラウジング中（PWA未起動）の場合のみ表示
- * 「ホーム画面に追加」してフルスクリーンで遊ぶよう案内する
+ * iOS Safari でブラウジング中 or Android Chrome（PWA未起動）の場合に表示
+ * フルスクリーン＋プッシュ通知で遊ぶよう案内する
  */
 export function InstallBanner() {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(BANNER_DISMISSED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const handleDismiss = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     setDismissed(true);
+    try {
+      localStorage.setItem(BANNER_DISMISSED_KEY, 'true');
+    } catch { /* noop */ }
   }, []);
 
-  // iOS + 通常のブラウザ（PWA非起動）のみ表示
-  if (!isIOS() || isStandalone() || dismissed) return null;
+  // PWA起動中 or 既に閉じた場合は非表示
+  if (isStandalone() || dismissed) return null;
+
+  const ios = isIOS();
 
   return (
     <div
@@ -37,7 +51,7 @@ export function InstallBanner() {
         borderRadius: 12,
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
+        gap: 8,
         zIndex: 210,
         animation: 'craftSlideIn 0.5s ease-out',
       }}
@@ -59,7 +73,7 @@ export function InstallBanner() {
             letterSpacing: 1,
           }}
         >
-          📱 フルスクリーンで遊ぼう！
+          📱 アプリとしてインストール！
         </span>
         <button
           onClick={handleDismiss}
@@ -77,23 +91,45 @@ export function InstallBanner() {
         </button>
       </div>
 
+      {/* メリット */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          color: 'rgba(255,255,255,0.75)',
+          fontSize: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        <span>🖥️ フルスクリーンでプレイできる</span>
+        <span>🔔 誰かが参加したらプッシュ通知でお知らせ</span>
+      </div>
+
       {/* 手順 */}
       <p
         style={{
-          color: 'rgba(255,255,255,0.7)',
-          fontSize: 12,
-          lineHeight: 1.6,
+          color: 'rgba(255,255,255,0.5)',
+          fontSize: 11,
+          lineHeight: 1.5,
           margin: 0,
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          paddingTop: 6,
         }}
       >
-        Safari の{' '}
-        <span style={{ fontSize: 15, verticalAlign: 'middle' }}>
-          {/* Share icon */}
-          ⬆
-        </span>
-        {' '}→「ホーム画面に追加」で
-        <br />
-        バーなしのフルスクリーンで遊べるよ！
+        {ios ? (
+          <>
+            Safari の{' '}
+            <span style={{ fontSize: 14, verticalAlign: 'middle' }}>⬆</span>
+            {' '}→「ホーム画面に追加」
+          </>
+        ) : (
+          <>
+            メニュー{' '}
+            <span style={{ fontSize: 14, verticalAlign: 'middle' }}>⋮</span>
+            {' '}→「ホーム画面に追加」or「インストール」
+          </>
+        )}
       </p>
     </div>
   );
