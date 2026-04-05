@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
-import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS } from '../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS, ALL_SEATS } from '../stores/useVehicleStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -186,9 +186,18 @@ export function Player() {
           break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
-        const slot = parseInt(e.code.replace('Digit', '')) - 1;
-        const slotCount = usePlayerStore.getState().hotbarSlots.length;
-        if (slot < slotCount) selectSlot(slot);
+        const digit = parseInt(e.code.replace('Digit', ''));
+        // ヘリ搭乗中: 1-4キーで座席移動
+        const vehicleState = useVehicleStore.getState();
+        if (vehicleState.helicopter.mySeat !== null && digit >= 1 && digit <= 4) {
+          const targetSeat = ALL_SEATS[digit - 1];
+          vehicleState.changeSeat(targetSeat);
+        } else {
+          // 通常: ホットバー選択
+          const slot = digit - 1;
+          const slotCount = usePlayerStore.getState().hotbarSlots.length;
+          if (slot < slotCount) selectSlot(slot);
+        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {

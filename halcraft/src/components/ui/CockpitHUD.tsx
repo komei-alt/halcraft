@@ -276,35 +276,8 @@ export function CockpitHUD() {
         </div>
       </div>
 
-      {/* 下部中央: 操作ガイド（コンパクト） */}
-      <div style={{
-        position: 'absolute',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: '16px',
-        background: 'rgba(0, 0, 0, 0.4)',
-        borderRadius: '6px',
-        padding: '5px 16px',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-      }}>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontFamily: 'monospace' }}>
-          <b style={{ color: '#50c878' }}>W/S</b> 前進/後退
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontFamily: 'monospace' }}>
-          <b style={{ color: '#50c878' }}>A/D</b> 旋回
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontFamily: 'monospace' }}>
-          <b style={{ color: '#50c878' }}>Space</b> ↑
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontFamily: 'monospace' }}>
-          <b style={{ color: '#50c878' }}>Shift</b> ↓
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontFamily: 'monospace' }}>
-          <b style={{ color: '#ff6644' }}>F</b> 降りる
-        </span>
-      </div>
+      {/* 操作ガイドは ControlsGuide コンポーネントに統合 */}
+
 
       {/* ステータスバー（左下） */}
       <div style={{

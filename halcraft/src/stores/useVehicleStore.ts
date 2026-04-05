@@ -18,10 +18,10 @@ export const ALL_SEATS: SeatType[] = ['pilot', 'copilot', 'gunner_left', 'gunner
 
 /** 座席ごとのローカル座標オフセット（ヘリ中心からの相対位置） */
 export const SEAT_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
-  pilot:        { x: -0.4, y: 1.8, z: -0.3 },
-  copilot:      { x:  0.4, y: 1.8, z: -0.3 },
-  gunner_left:  { x: -0.8, y: 1.5, z:  0.5 },
-  gunner_right: { x:  0.8, y: 1.5, z:  0.5 },
+  pilot:        { x: -0.4, y: 0.55, z: -0.3 },
+  copilot:      { x:  0.4, y: 0.55, z: -0.3 },
+  gunner_left:  { x: -0.8, y: 0.40, z:  0.5 },
+  gunner_right: { x:  0.8, y: 0.40, z:  0.5 },
 };
 
 /** 座席の表示名 */
@@ -139,6 +139,9 @@ interface VehicleState {
 
   /** 空席を探して返す */
   findAvailableSeat: (preferred?: SeatType) => SeatType | null;
+
+  /** 座席を移動する（搭乗中のみ） */
+  changeSeat: (targetSeat: SeatType) => boolean;
 
   /** 特定の席にプレイヤーをセット（リモート同期用） */
   setSeatPlayer: (seat: SeatType, playerId: string | null) => void;
@@ -291,6 +294,39 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     }
 
     return null; // 満席
+  },
+
+  changeSeat: (targetSeat) => {
+    const state = get();
+    const currentSeat = state.helicopter.mySeat;
+
+    // 搭乗していない場合は移動不可
+    if (currentSeat === null) return false;
+    // 同じ席への移動は何もしない
+    if (currentSeat === targetSeat) return false;
+    // ターゲット席が埋まっている場合は移動不可
+    if (state.helicopter.seats[targetSeat] !== null) return false;
+
+    set((s) => {
+      const newSeats = { ...s.helicopter.seats };
+      // 元の席を空ける
+      newSeats[currentSeat] = null;
+      // 新しい席に移動
+      newSeats[targetSeat] = '__local__';
+
+      return {
+        helicopter: {
+          ...s.helicopter,
+          mySeat: targetSeat,
+          seats: newSeats,
+          pilotId: targetSeat === 'pilot'
+            ? '__local__'
+            : (currentSeat === 'pilot' ? null : s.helicopter.pilotId),
+        },
+      };
+    });
+
+    return true;
   },
 
   setSeatPlayer: (seat, playerId) => {
