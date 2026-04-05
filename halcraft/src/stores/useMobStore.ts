@@ -47,11 +47,11 @@ export interface MobDeathEvent {
 
 /** 最大同時スポーン数 */
 const MAX_MOBS = 20;
-/** スポーン距離（プレイヤーからの距離） */
-const SPAWN_DISTANCE_MIN = 15;
-const SPAWN_DISTANCE_MAX = 25;
+/** スポーン距離（プレイヤーからの距離） — 遠くからワラワラ寄ってくる演出 */
+const SPAWN_DISTANCE_MIN = 30;
+const SPAWN_DISTANCE_MAX = 45;
 /** 自動削除距離 */
-const DESPAWN_DISTANCE = 40;
+const DESPAWN_DISTANCE = 60;
 /** スポーン間隔（秒） */
 const SPAWN_INTERVAL = 2.5;
 /** ゾンビのHP */
