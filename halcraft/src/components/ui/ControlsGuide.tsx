@@ -69,7 +69,7 @@ function WalkingControls() {
   return (
     <>
       <ControlRow keyName="W A S D" action="移動" />
-      <ControlRow keyName="Shift" action="ダッシュ" />
+      <ControlRow keyName="Shift / Q / WW" action="ダッシュ" />
       <ControlRow keyName="Space" action="ジャンプ" />
       <Divider />
       <ControlRow keyName="左クリック" action="ブロック破壊 / 攻撃" />

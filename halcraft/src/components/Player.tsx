@@ -60,6 +60,10 @@ export function Player() {
   // Fキーの単発入力用（押した瞬間のみ反応）
   const interactPressed = useRef(false);
 
+  // Wキーダブルタップでダッシュ用タイマー
+  const lastWPressTime = useRef(0);
+  const doubleTapSprint = useRef(false);
+
   // 視点回転
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
@@ -172,12 +176,23 @@ export function Player() {
 
     const onKeyDown = (e: KeyboardEvent) => {
       switch (e.code) {
-        case 'KeyW': keys.current.forward = true; break;
+        case 'KeyW': {
+          // ダブルタップ検出（300ms以内に再度Wを押すとダッシュ）
+          const now = performance.now();
+          if (!keys.current.forward && now - lastWPressTime.current < 300) {
+            doubleTapSprint.current = true;
+            keys.current.sprint = true;
+          }
+          lastWPressTime.current = now;
+          keys.current.forward = true;
+          break;
+        }
         case 'KeyS': keys.current.backward = true; break;
         case 'KeyA': keys.current.left = true; break;
         case 'KeyD': keys.current.right = true; break;
         case 'Space': keys.current.jump = true; e.preventDefault(); break;
         case 'ShiftLeft': keys.current.sprint = true; break;
+        case 'KeyQ': keys.current.sprint = true; break;
         case 'KeyF':
           if (!keys.current.interact) {
             keys.current.interact = true;
@@ -202,12 +217,20 @@ export function Player() {
     };
     const onKeyUp = (e: KeyboardEvent) => {
       switch (e.code) {
-        case 'KeyW': keys.current.forward = false; break;
+        case 'KeyW':
+          keys.current.forward = false;
+          // ダブルタップダッシュ中にWを離したらダッシュ解除
+          if (doubleTapSprint.current) {
+            doubleTapSprint.current = false;
+            keys.current.sprint = false;
+          }
+          break;
         case 'KeyS': keys.current.backward = false; break;
         case 'KeyA': keys.current.left = false; break;
         case 'KeyD': keys.current.right = false; break;
         case 'Space': keys.current.jump = false; break;
         case 'ShiftLeft': keys.current.sprint = false; break;
+        case 'KeyQ': keys.current.sprint = false; break;
         case 'KeyF': keys.current.interact = false; break;
       }
     };
