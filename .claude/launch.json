@@ -3,10 +3,9 @@
   "configurations": [
     {
       "name": "halcraft-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--host"],
-      "port": 5173,
-      "cwd": "halcraft"
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-l", "-c", "cd halcraft && npm run dev -- --host"],
+      "port": 5173
     }
   ]
 }
