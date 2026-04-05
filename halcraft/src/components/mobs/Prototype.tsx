@@ -68,8 +68,13 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
 
   // ダメージ中判定
   const isDamaged = mob.hitTimer > 0;
+  // 怒り状態判定
+  const isAngry = mob.angryAtPlayer;
 
-  // ダメージ時に色を赤くする / 戻す
+  /** 怒り時の色（赤みがかったオレンジ） */
+  const ANGRY_TINT = useMemo(() => new THREE.Color(0xff6633), []);
+
+  // ダメージ・怒り時に色を変更 / 戻す
   useEffect(() => {
     clonedScene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -79,6 +84,8 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
             const key = `${child.uuid}-${i}`;
             if (isDamaged) {
               mat.color.copy(DAMAGED_COLOR);
+            } else if (isAngry) {
+              mat.color.copy(ANGRY_TINT);
             } else {
               const orig = originalColors.get(key);
               if (orig) {
@@ -89,7 +96,7 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
         });
       }
     });
-  }, [isDamaged, clonedScene, originalColors]);
+  }, [isDamaged, isAngry, clonedScene, originalColors, ANGRY_TINT]);
 
   // アニメーション計算
   const bobHeight = Math.sin(animTime * 2) * 0.05; // 上下の浮遊感（控えめに）

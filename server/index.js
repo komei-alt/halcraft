@@ -14,26 +14,15 @@ import webpush from 'web-push';
 import { WorldChanges } from './WorldChanges.js';
 import { getTerrainHeight } from './terrain.js';
 
-// ── ヘリコプター状態（サーバー側で単一管理） ──
+// ── ヘリコプター状態（サーバー側で管理 — 3人乗り対応） ──
 const HELIPORT_CENTER = { x: 15, z: -12 };
-let helicopterState = {
-  spawned: true,
-  isBoarded: false,
-  pilotId: null,      // 搭乗中のプレイヤーID
-  pilotName: null,     // 搭乗中のプレイヤー名
-  x: HELIPORT_CENTER.x,
-  y: getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2,
-  z: HELIPORT_CENTER.z,
-  rotationY: 0,
-  pitch: 0,
-  roll: 0,
-  speed: 0,
-  rotorAngle: 0,
-};
+const SEAT_PRIORITY = ['pilot', 'gunner_left', 'gunner_right'];
 
-function resetHelicopterToHeliport() {
-  helicopterState = {
+function makeDefaultHeliState() {
+  return {
     spawned: true,
+    seats: { pilot: null, gunner_left: null, gunner_right: null },
+    // 後方互換
     isBoarded: false,
     pilotId: null,
     pilotName: null,
@@ -46,6 +35,54 @@ function resetHelicopterToHeliport() {
     speed: 0,
     rotorAngle: 0,
   };
+}
+
+let helicopterState = makeDefaultHeliState();
+
+/** 全座席に誰かいるか */
+function hasAnyPassenger() {
+  return Object.values(helicopterState.seats).some((id) => id !== null);
+}
+
+/** 後方互換フィールドを seats から同期 */
+function syncLegacyFields() {
+  helicopterState.pilotId = helicopterState.seats.pilot;
+  const pilotPlayer = helicopterState.seats.pilot
+    ? connectedPlayers.get(helicopterState.seats.pilot)
+    : null;
+  helicopterState.pilotName = pilotPlayer?.name || null;
+  helicopterState.isBoarded = helicopterState.seats.pilot !== null;
+}
+
+function resetHelicopterToHeliport() {
+  helicopterState = makeDefaultHeliState();
+}
+
+/** プレイヤーを座席から外す（切断/降車時） */
+function removePlayerFromHelicopter(socketId) {
+  let removedSeat = null;
+  for (const seat of SEAT_PRIORITY) {
+    if (helicopterState.seats[seat] === socketId) {
+      helicopterState.seats[seat] = null;
+      removedSeat = seat;
+      break;
+    }
+  }
+  if (removedSeat === null) return null;
+
+  // パイロットが降りた場合
+  if (removedSeat === 'pilot') {
+    helicopterState.speed = 0;
+    if (!hasAnyPassenger()) {
+      // 誰もいない → ヘリポートリセット
+      resetHelicopterToHeliport();
+    } else {
+      syncLegacyFields();
+    }
+  } else {
+    syncLegacyFields();
+  }
+  return removedSeat;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -676,27 +713,48 @@ io.on('connection', (socket) => {
     console.log(`[PvP] ${attacker.name} → ${connectedPlayers.get(targetId)?.name || 'unknown'} (${amount}ダメージ)`);
   });
 
-  // ── ヘリコプター同期 ──
+  // ── ヘリコプター同期（3人乗り対応） ──
 
-  // ヘリコプターに搭乗
-  socket.on('helicopter:board', () => {
-    if (helicopterState.isBoarded) return; // 既に誰かが乗っている
+  // ヘリコプターに搭乗（座席指定）
+  socket.on('helicopter:board', (data) => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
-    helicopterState.isBoarded = true;
-    helicopterState.pilotId = socket.id;
-    helicopterState.pilotName = player.name;
+
+    // 既に搭乗中なら無視
+    const alreadySeated = Object.values(helicopterState.seats).includes(socket.id);
+    if (alreadySeated) return;
+
+    // 希望席を確認
+    const preferred = data?.preferredSeat || null;
+    let assignedSeat = null;
+
+    if (preferred && helicopterState.seats[preferred] === null) {
+      assignedSeat = preferred;
+    } else {
+      // 優先順で空席を探す
+      for (const seat of SEAT_PRIORITY) {
+        if (helicopterState.seats[seat] === null) {
+          assignedSeat = seat;
+          break;
+        }
+      }
+    }
+
+    if (assignedSeat === null) return; // 満席
+
+    helicopterState.seats[assignedSeat] = socket.id;
+    syncLegacyFields();
     io.emit('helicopter:sync', { helicopter: helicopterState });
-    console.log(`[ヘリ] ${player.name} が搭乗`);
+    console.log(`[ヘリ] ${player.name} が ${assignedSeat} に搭乗`);
   });
 
-  // ヘリコプターから降車
+  // ヘリコプターから降車（全座席対応）
   socket.on('helicopter:dismount', () => {
-    if (helicopterState.pilotId !== socket.id) return; // 自分が操縦者じゃない
     const player = connectedPlayers.get(socket.id);
-    resetHelicopterToHeliport();
+    const removedSeat = removePlayerFromHelicopter(socket.id);
+    if (removedSeat === null) return;
     io.emit('helicopter:sync', { helicopter: helicopterState });
-    console.log(`[ヘリ] ${player?.name || 'unknown'} が降車 → ヘリポートにリセット`);
+    console.log(`[ヘリ] ${player?.name || 'unknown'} が ${removedSeat} から降車`);
   });
 
   // ヘリコプター位置更新（操縦者のみ）
@@ -770,11 +828,11 @@ io.on('connection', (socket) => {
     const player = connectedPlayers.get(socket.id);
     const name = player?.name || 'unknown';
 
-    // ヘリ操縦中に切断した場合、ヘリをリセット
-    if (helicopterState.pilotId === socket.id) {
-      resetHelicopterToHeliport();
+    // ヘリ搭乗中に切断した場合、座席をクリア
+    const removedSeat = removePlayerFromHelicopter(socket.id);
+    if (removedSeat !== null) {
       io.emit('helicopter:sync', { helicopter: helicopterState });
-      console.log(`[ヘリ] ${name} が切断 → ヘリポートにリセット`);
+      console.log(`[ヘリ] ${name} が切断 → ${removedSeat} をクリア`);
     }
 
     connectedPlayers.delete(socket.id);

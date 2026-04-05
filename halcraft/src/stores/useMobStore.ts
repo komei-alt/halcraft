@@ -29,6 +29,10 @@ export interface MobData {
   burnTimer: number;
   /** 味方フラグ */
   isAlly: boolean;
+  /** フレンドリーファイヤーで怒り状態（プレイヤーを攻撃する） */
+  angryAtPlayer: boolean;
+  /** 怒り状態の残り時間（秒） */
+  angryTimer: number;
 }
 
 /** モブ死亡イベント */
@@ -68,6 +72,8 @@ const SPIDER_HP = 8;
 const MAX_SPIDERS = 5;
 /** アイアンゴーレムのHP（頑丈な味方） */
 const IRON_GOLEM_HP = 40;
+/** フレンドリーファイヤー後の怒り持続時間（秒） */
+const ANGRY_DURATION = 30;
 
 let nextMobId = 0;
 
@@ -152,6 +158,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       hitTimer: 0,
       burnTimer: 0,
       isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
+      angryAtPlayer: false,
+      angryTimer: 0,
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -173,6 +181,10 @@ export const useMobStore = create<MobState>((set, get) => ({
           // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）
           const kbResistance = (m.type === 'prototype' || m.type === 'iron_golem') ? 0.3 : 0.7 + Math.random() * 0.3;
           const kbMultiplier = kbResistance * (4 + Math.random() * 3);
+
+          // フレンドリーファイヤー: 味方モブがダメージを受けたら怒り状態にする
+          const shouldBeAngry = m.isAlly && m.type !== 'chicken';
+
           return {
             ...m,
             hp: newHp,
@@ -180,6 +192,9 @@ export const useMobStore = create<MobState>((set, get) => ({
             vy: 2 + Math.random() * 2,
             vz: knockbackZ * kbMultiplier,
             hitTimer: 0.3,
+            // 味方がダメージを受けたら怒り状態に（ニワトリは除外）
+            angryAtPlayer: shouldBeAngry ? true : m.angryAtPlayer,
+            angryTimer: shouldBeAngry ? ANGRY_DURATION : m.angryTimer,
           };
         })
         .filter((m): m is MobData => m !== null);
@@ -315,6 +330,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       hitTimer: sm.hitTimer,
       burnTimer: 0,
       isAlly: sm.isAlly,
+      angryAtPlayer: false,
+      angryTimer: 0,
     }));
     set({ mobs: newMobs });
   },

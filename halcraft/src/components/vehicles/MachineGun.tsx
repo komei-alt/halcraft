@@ -39,6 +39,10 @@ const IMPACT_LIFETIME = 0.5;
 const HIT_FLASH_LIFETIME = 0.15;
 /** 重力（弾道にわずかな落下を加える） */
 const BULLET_GRAVITY = 3.0;
+/** プレイヤーヒット半径 */
+const PLAYER_HIT_RADIUS = 0.5;
+/** プレイヤーヒット高さ */
+const PLAYER_HIT_HEIGHT = 1.7;
 
 /**
  * 銃のモデル内配置（180度回転グループ内の座標）
@@ -363,6 +367,37 @@ export function MachineGun() {
                 useMobStore.getState().damageMob(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
 
                 spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+
+                proj.dead = true;
+                hitSomething = true;
+                break;
+              }
+            }
+          }
+
+          // --- プレイヤー衝突判定（フレンドリーファイヤー有効、ローカル弾のみ） ---
+          if (!proj.isRemote && !hitSomething) {
+            const remotePlayers = useMultiplayerStore.getState().remotePlayers;
+            for (const [, rp] of remotePlayers) {
+              if (rp.isDead) continue;
+              // プレイヤー判定: 円柱ヒットボックス（半径0.5、高さ1.7）
+              const px = rp.position[0];
+              const py = rp.position[1];
+              const pz = rp.position[2];
+              const dx = proj.pos.x - px;
+              const dz = proj.pos.z - pz;
+              const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+              const verticalInRange = proj.pos.y >= py && proj.pos.y <= py + PLAYER_HIT_HEIGHT;
+
+              if (horizontalDist < PLAYER_HIT_RADIUS && verticalInRange) {
+                const playerCenter = new THREE.Vector3(px, py + PLAYER_HIT_HEIGHT * 0.5, pz);
+                const normal = proj.pos.clone().sub(playerCenter).normalize();
+                spawnImpact(proj.pos.clone(), normal, 'mob');
+
+                const sendPlayerAttack = useMultiplayerStore.getState().sendPlayerAttack;
+                sendPlayerAttack(rp.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
+
+                spawnDamagePopup(GUN_CONSTANTS.DAMAGE, px, py + 1.0, pz, false);
 
                 proj.dead = true;
                 hitSomething = true;

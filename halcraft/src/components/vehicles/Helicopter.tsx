@@ -10,7 +10,10 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { useVehicleStore, HELICOPTER_CONSTANTS } from '../../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_MODEL_OFFSETS, ALL_SEATS, type SeatType } from '../../stores/useVehicleStore';
+import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { VoxelAvatar } from '../VoxelAvatar';
+import { isValidSkinId } from '../../types/skins';
 
 
 /** ヘリコプターの色定義（鮮やかで目立つ色） */
@@ -369,6 +372,8 @@ export function Helicopter() {
         <mesh position={[0, 0.25, -0.7]} material={skidMat}>
           <boxGeometry args={[0.06, 0.5, 0.06]} />
         </mesh>
+      {/* === 搭乗者アバター（180度回転グループ内に配置） === */}
+      <PassengerAvatars />
       </group>
       </group>
 
@@ -412,6 +417,46 @@ export function Helicopter() {
         );
       })()}
     </group>
+  );
+}
+
+/**
+ * 搭乗者のアバターをヘリモデル内部に描画
+ * 180度回転グループの内側に配置されるため SEAT_MODEL_OFFSETS を使用
+ * 自分自身は描画しない（FPS視点のため）
+ */
+function PassengerAvatars() {
+  const seats = useVehicleStore((s) => s.helicopter.seats);
+  const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
+  const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
+  const myId = useMultiplayerStore((s) => s.myId);
+
+  return (
+    <>
+      {ALL_SEATS.map((seat) => {
+        const playerId = seats[seat];
+        // 空席 or 自分自身はスキップ
+        if (playerId === null || playerId === '__local__' || playerId === myId) return null;
+
+        // リモートプレイヤーの情報を取得
+        const player = remotePlayers.get(playerId);
+        if (!player) return null;
+
+        const offset = SEAT_MODEL_OFFSETS[seat];
+
+        return (
+          <group key={seat} position={[offset.x, offset.y, offset.z]}>
+            <VoxelAvatar
+              skinId={player.skinId && isValidSkinId(player.skinId) ? player.skinId : undefined}
+              color={player.color}
+              isMoving={false}
+              isDead={player.isDead}
+              deathTime={player.deathTime}
+            />
+          </group>
+        );
+      })}
+    </>
   );
 }
 

@@ -67,6 +67,11 @@ export function IronGolem({ mob, animTime }: IronGolemProps) {
 
   // ダメージ中判定
   const isDamaged = mob.hitTimer > 0;
+  // 怒り状態判定
+  const isAngry = mob.angryAtPlayer;
+
+  /** 怒り状態の色（赤みがかった鉄色） */
+  const ANGRY_COLOR = useMemo(() => new THREE.Color(0xcc6666), []);
 
   // 歩行アニメーション計算
   const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
@@ -74,18 +79,20 @@ export function IronGolem({ mob, animTime }: IronGolemProps) {
   const walkAmplitude = 0.4; // 腕の振り幅
   const walkCycle = isMoving ? Math.sin(animTime * walkSpeed) : 0;
 
-  // ダメージ時に色を変更
+  // ダメージ・怒り時に色を変更
   useEffect(() => {
     meshRefs.current.forEach((mesh) => {
       if (!mesh) return;
       const mat = mesh.material as THREE.MeshStandardMaterial;
       if (isDamaged) {
         mat.color.copy(DAMAGED_COLOR);
+      } else if (isAngry) {
+        mat.color.copy(ANGRY_COLOR);
       } else {
         mat.color.copy(NORMAL_COLOR);
       }
     });
-  }, [isDamaged]);
+  }, [isDamaged, isAngry, ANGRY_COLOR]);
 
   // HPバーの色計算
   const hpRatio = mob.hp / mob.maxHp;
@@ -131,21 +138,21 @@ export function IronGolem({ mob, animTime }: IronGolemProps) {
         );
       })}
 
-      {/* 目（赤く光る） */}
+      {/* 目（通常: 赤く光る / 怒り時: 激しく光る） */}
       <mesh position={[-0.15, 2.85, 0.36]}>
         <boxGeometry args={[0.12, 0.08, 0.02]} />
         <meshStandardMaterial
-          color={0xff4444}
-          emissive={new THREE.Color(0xff2222)}
-          emissiveIntensity={2.0}
+          color={isAngry ? 0xff0000 : 0xff4444}
+          emissive={new THREE.Color(isAngry ? 0xff0000 : 0xff2222)}
+          emissiveIntensity={isAngry ? 5.0 : 2.0}
         />
       </mesh>
       <mesh position={[0.15, 2.85, 0.36]}>
         <boxGeometry args={[0.12, 0.08, 0.02]} />
         <meshStandardMaterial
-          color={0xff4444}
-          emissive={new THREE.Color(0xff2222)}
-          emissiveIntensity={2.0}
+          color={isAngry ? 0xff0000 : 0xff4444}
+          emissive={new THREE.Color(isAngry ? 0xff0000 : 0xff2222)}
+          emissiveIntensity={isAngry ? 5.0 : 2.0}
         />
       </mesh>
 

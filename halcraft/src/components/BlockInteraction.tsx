@@ -186,7 +186,8 @@ export function BlockInteraction() {
     let closestDist = ATTACK_REACH;
 
     for (const mob of mobs) {
-      if (mob.isAlly) continue;
+      // ニワトリは攻撃対象外（中立パッシブ）。味方モブはフレンドリーファイヤー可能
+      if (mob.type === 'chicken') continue;
 
       tempToTarget.current.set(mob.x - origin.x, mob.y + 0.9 - origin.y, mob.z - origin.z);
       const projection = tempToTarget.current.dot(dir);

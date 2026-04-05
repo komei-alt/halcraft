@@ -324,7 +324,7 @@ export function Player() {
         if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) {
           const assignedSeat = vehicleState.boardHelicopter();
           if (assignedSeat) {
-            sendHelicopterBoard(); // サーバーに搭乗を通知
+            sendHelicopterBoard(assignedSeat); // サーバーに搭乗を通知（座席指定）
             // カメラの向きをヘリの正面に合わせる
             euler.current.y = heli.rotationY;
             euler.current.x = -0.1; // 少し下向き（前方が見やすい）

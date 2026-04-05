@@ -11,7 +11,7 @@ import { useWorldStore } from './useWorldStore';
 import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
-import { useVehicleStore } from './useVehicleStore';
+import { useVehicleStore, type SeatType } from './useVehicleStore';
 import type { BlockId } from '../types/blocks';
 import type { SkinId } from '../types/skins';
 
@@ -91,8 +91,8 @@ interface MultiplayerState {
   /** プレイヤーに攻撃を送信 */
   sendPlayerAttack: (targetId: string, amount: number, knockbackX: number, knockbackZ: number) => void;
 
-  /** ヘリコプター搭乗を送信 */
-  sendHelicopterBoard: () => void;
+  /** ヘリコプター搭乗を送信（座席指定） */
+  sendHelicopterBoard: (seat?: SeatType) => void;
 
   /** ヘリコプター降車を送信 */
   sendHelicopterDismount: () => void;
@@ -218,10 +218,10 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     socket.emit('player:attack', { targetId, amount, knockbackX, knockbackZ });
   },
 
-  sendHelicopterBoard: () => {
+  sendHelicopterBoard: (seat?: SeatType) => {
     const socket = getSocket();
     if (!socket?.connected) return;
-    socket.emit('helicopter:board');
+    socket.emit('helicopter:board', { preferredSeat: seat || undefined });
   },
 
   sendHelicopterDismount: () => {
@@ -443,13 +443,14 @@ function setupSocketListeners(
     get().setRemoteMicStatus(data.id, data.micEnabled);
   });
 
-  // ── ヘリコプター同期 ──
+  // ── ヘリコプター同期（3人乗り対応） ──
   socket.on('helicopter:sync', (data: {
     helicopter: {
       spawned: boolean;
       isBoarded: boolean;
       pilotId: string | null;
       pilotName: string | null;
+      seats: Record<string, string | null>;
       x: number; y: number; z: number;
       rotationY: number; pitch: number; roll: number;
       speed: number; rotorAngle: number;
@@ -457,13 +458,8 @@ function setupSocketListeners(
   }) => {
     const h = data.helicopter;
     const myId = get().myId;
-    const isMePilot = h.pilotId === myId;
-
-    // 自分が操縦中の場合は位置更新を無視（自分の入力で動かす）
-    // ただし、降車イベント（isBoarded=false）は受け取る
-    if (isMePilot && h.isBoarded) return;
-
     const vehicleStore = useVehicleStore.getState();
+
     if (!h.spawned) return;
 
     // ヘリがまだスポーンされてなければスポーン
@@ -471,11 +467,35 @@ function setupSocketListeners(
       vehicleStore.spawnHelicopter(h.x, h.y, h.z);
     }
 
-    // サーバーからの状態で上書き
-    // isBoarded は「自分が搭乗中か」を表す → 自分がパイロットの場合のみ true
-    // pilotId は「誰かが乗っているか」を表す → サーバーの値をそのままセット
+    // 座席情報を同期
+    const serverSeats = (h.seats || {}) as Record<SeatType, string | null>;
+    vehicleStore.syncSeats(serverSeats);
+
+    // 自分がどの席にいるか判定
+    let mySeat: SeatType | null = null;
+    for (const [seat, playerId] of Object.entries(serverSeats)) {
+      if (playerId === myId) {
+        mySeat = seat as SeatType;
+        break;
+      }
+    }
+
+    // mySeat を更新（サーバー権威）
+    const currentMySeat = vehicleStore.helicopter.mySeat;
+    if (mySeat !== currentMySeat) {
+      vehicleStore.updateHelicopter({
+        mySeat,
+        isBoarded: mySeat !== null,
+      });
+    }
+
+    // 自分がパイロットで操縦中なら位置更新を無視（ローカル入力で動かす）
+    const isMePilot = mySeat === 'pilot';
+    if (isMePilot && mySeat !== null) return;
+
+    // 位置・回転をサーバーから反映
+    const someoneBoarded = Object.values(serverSeats).some((id) => id !== null);
     vehicleStore.updateHelicopter({
-      isBoarded: isMePilot ? h.isBoarded : false,
       pilotId: h.pilotId,
       x: h.x,
       y: h.y,
@@ -485,7 +505,7 @@ function setupSocketListeners(
       roll: h.roll,
       speed: h.speed,
       rotorAngle: h.rotorAngle,
-      engineOn: h.isBoarded, // エンジン状態は誰かが乗っていれば回す（アニメーション用）
+      engineOn: someoneBoarded,
     });
   });
 

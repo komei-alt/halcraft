@@ -445,6 +445,16 @@ export function MobManager() {
         // 味方モブ（プロトタイプ / アイアンゴーレム）のAI
         // =======================================
 
+        // --- 怒りタイマーの減算 ---
+        if (m.angryAtPlayer && m.angryTimer > 0) {
+          m.angryTimer -= dt;
+          if (m.angryTimer <= 0) {
+            // 怒り終了 → 味方に戻る
+            m.angryAtPlayer = false;
+            m.angryTimer = 0;
+          }
+        }
+
         // プレイヤーまでの距離
         const dxP = playerX - m.x;
         const dzP = playerZ - m.z;
@@ -465,92 +475,129 @@ export function MobManager() {
         protoLastPos.current.x = m.x;
         protoLastPos.current.z = m.z;
 
-        // テレポート（遠すぎるか、スタックしている場合）
-        const shouldTeleport = distP > PROTOTYPE_FOLLOW_MAX || protoStuckTimer.current > PROTOTYPE_STUCK_TIME;
-        if (shouldTeleport) {
-          const angle = Math.atan2(dzP, dxP) + (Math.random() - 0.5) * 1.0;
-          const tpDist = Math.min(distP, PROTOTYPE_FOLLOW_MIN);
-          m.x = playerX - Math.cos(angle) * tpDist;
-          m.z = playerZ - Math.sin(angle) * tpDist;
-          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
-          m.vx = 0;
-          m.vz = 0;
-          m.vy = 0;
-          protoStuckTimer.current = 0;
-        }
-
-        // 近くの敵モブを探す（ゾンビ、クモなど全ての敵をターゲット）
-        let targetEnemy: typeof m | null = null;
-        let closestDist = PROTOTYPE_DETECT_RANGE;
-
-        for (const other of currentMobs) {
-          // 敵モブ判定: 味方でなく、自分自身でもないモブ
-          if (other.isAlly || other.id === m.id) continue;
-          // ニワトリは中立なので攻撃しない
-          if (other.type === 'chicken') continue;
-
-          // プロトタイプからの距離
-          const odx = other.x - m.x;
-          const odz = other.z - m.z;
-          const oDist = Math.sqrt(odx * odx + odz * odz);
-
-          // プレイヤーからの距離も考慮（プレイヤーに近い敵ほど優先）
-          const pdx = other.x - playerX;
-          const pdz = other.z - playerZ;
-          const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
-
-          // プレイヤーに近い敵ほど優先度を上げる（距離にペナルティ軽減）
-          const priority = oDist + Math.max(0, pDist - 5) * 0.5;
-
-          if (oDist < PROTOTYPE_DETECT_RANGE && priority < closestDist) {
-            closestDist = priority;
-            targetEnemy = other;
+        // テレポート（遠すぎるか、スタックしている場合）— 怒り中はテレポートしない
+        if (!m.angryAtPlayer) {
+          const shouldTeleport = distP > PROTOTYPE_FOLLOW_MAX || protoStuckTimer.current > PROTOTYPE_STUCK_TIME;
+          if (shouldTeleport) {
+            const angle = Math.atan2(dzP, dxP) + (Math.random() - 0.5) * 1.0;
+            const tpDist = Math.min(distP, PROTOTYPE_FOLLOW_MIN);
+            m.x = playerX - Math.cos(angle) * tpDist;
+            m.z = playerZ - Math.sin(angle) * tpDist;
+            m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
+            m.vx = 0;
+            m.vz = 0;
+            m.vy = 0;
+            protoStuckTimer.current = 0;
           }
         }
 
-        if (targetEnemy) {
-          // 敵モブに向かって移動
-          const tdx = targetEnemy.x - m.x;
-          const tdz = targetEnemy.z - m.z;
-          const tDist = Math.sqrt(tdx * tdx + tdz * tdz);
-
-          if (tDist > 0.1) {
-            m.rotation = Math.atan2(tdx, tdz);
+        // =======================================
+        // 怒り状態: プレイヤーを攻撃するAI
+        // =======================================
+        if (m.angryAtPlayer) {
+          // プレイヤーに向かって移動
+          if (distP > 0.1) {
+            m.rotation = Math.atan2(dxP, dzP);
           }
 
-          if (tDist > PROTOTYPE_ATTACK_RANGE) {
-            // 戦闘移動（高速で接近）
-            const nx = tdx / tDist;
-            const nz = tdz / tDist;
-            const chaseSpeed = PROTOTYPE_SPEED * 2.0;
+          if (distP > PROTOTYPE_ATTACK_RANGE) {
+            // プレイヤーに接近
+            const nx = dxP / distP;
+            const nz = dzP / distP;
+            const chaseSpeed = PROTOTYPE_SPEED * 1.8; // 怒り時は速い
             m.vx = nx * chaseSpeed;
             m.vz = nz * chaseSpeed;
           } else {
             m.vx = 0;
             m.vz = 0;
 
-            // 攻撃
-            if (protoAttackCooldown.current <= 0 && tDist > 0.01) {
-              const kbX = tdx / tDist;
-              const kbZ = tdz / tDist;
-              useMobStore.getState().damageMob(targetEnemy.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
+            // プレイヤーに攻撃
+            if (protoAttackCooldown.current <= 0 && distP > 0.01) {
+              const kbDirX = playerX - m.x;
+              const kbDirZ = playerZ - m.z;
+              takeDamage(PROTOTYPE_ATTACK_DAMAGE, kbDirX, kbDirZ);
+              playHurtSound();
               protoAttackCooldown.current = PROTOTYPE_ATTACK_COOLDOWN;
             }
           }
-        } else if (distP > PROTOTYPE_FOLLOW_MIN) {
-          // 敵がいなければプレイヤーに追従
-          const nx = dxP / distP;
-          const nz = dzP / distP;
-          m.rotation = Math.atan2(dxP, dzP);
-          m.vx = nx * PROTOTYPE_SPEED;
-          m.vz = nz * PROTOTYPE_SPEED;
         } else {
-          // 近くにいる場合は停止
-          m.vx = 0;
-          m.vz = 0;
-          // プレイヤーの方を向く
-          if (distP > 0.1) {
+          // =======================================
+          // 通常状態: 敵を討伐 or プレイヤーに追従
+          // =======================================
+
+          // 近くの敵モブを探す（ゾンビ、クモなど全ての敵をターゲット）
+          let targetEnemy: typeof m | null = null;
+          let closestDist = PROTOTYPE_DETECT_RANGE;
+
+          for (const other of currentMobs) {
+            // 敵モブ判定: 味方でなく、自分自身でもないモブ
+            if (other.isAlly || other.id === m.id) continue;
+            // ニワトリは中立なので攻撃しない
+            if (other.type === 'chicken') continue;
+
+            // プロトタイプからの距離
+            const odx = other.x - m.x;
+            const odz = other.z - m.z;
+            const oDist = Math.sqrt(odx * odx + odz * odz);
+
+            // プレイヤーからの距離も考慮（プレイヤーに近い敵ほど優先）
+            const pdx = other.x - playerX;
+            const pdz = other.z - playerZ;
+            const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
+
+            // プレイヤーに近い敵ほど優先度を上げる（距離にペナルティ軽減）
+            const priority = oDist + Math.max(0, pDist - 5) * 0.5;
+
+            if (oDist < PROTOTYPE_DETECT_RANGE && priority < closestDist) {
+              closestDist = priority;
+              targetEnemy = other;
+            }
+          }
+
+          if (targetEnemy) {
+            // 敵モブに向かって移動
+            const tdx = targetEnemy.x - m.x;
+            const tdz = targetEnemy.z - m.z;
+            const tDist = Math.sqrt(tdx * tdx + tdz * tdz);
+
+            if (tDist > 0.1) {
+              m.rotation = Math.atan2(tdx, tdz);
+            }
+
+            if (tDist > PROTOTYPE_ATTACK_RANGE) {
+              // 戦闘移動（高速で接近）
+              const nx = tdx / tDist;
+              const nz = tdz / tDist;
+              const chaseSpeed = PROTOTYPE_SPEED * 2.0;
+              m.vx = nx * chaseSpeed;
+              m.vz = nz * chaseSpeed;
+            } else {
+              m.vx = 0;
+              m.vz = 0;
+
+              // 攻撃
+              if (protoAttackCooldown.current <= 0 && tDist > 0.01) {
+                const kbX = tdx / tDist;
+                const kbZ = tdz / tDist;
+                useMobStore.getState().damageMob(targetEnemy.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
+                protoAttackCooldown.current = PROTOTYPE_ATTACK_COOLDOWN;
+              }
+            }
+          } else if (distP > PROTOTYPE_FOLLOW_MIN) {
+            // 敵がいなければプレイヤーに追従
+            const nx = dxP / distP;
+            const nz = dzP / distP;
             m.rotation = Math.atan2(dxP, dzP);
+            m.vx = nx * PROTOTYPE_SPEED;
+            m.vz = nz * PROTOTYPE_SPEED;
+          } else {
+            // 近くにいる場合は停止
+            m.vx = 0;
+            m.vz = 0;
+            // プレイヤーの方を向く
+            if (distP > 0.1) {
+              m.rotation = Math.atan2(dxP, dzP);
+            }
           }
         }
 
