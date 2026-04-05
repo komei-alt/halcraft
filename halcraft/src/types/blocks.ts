@@ -22,6 +22,7 @@ export const BLOCK_IDS = {
   TORCH: 14,
   BED: 15,
   LEAVES: 16,
+  TURRET: 17,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -225,6 +226,18 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     unbreakable: false,
     emissive: false,
   },
+  [BLOCK_IDS.TURRET]: {
+    id: BLOCK_IDS.TURRET,
+    name: '固定タレット',
+    texture: 'iron.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xff4444),
+    emissiveIntensity: 0.3,
+    nonStandard: true,
+    noCollision: true,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -238,6 +251,7 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.ENCHANT,
   BLOCK_IDS.ELECTRIC,
   BLOCK_IDS.SPAWNER,
+  BLOCK_IDS.TURRET,
 ];
 
 /** チャンクサイズ定数 */

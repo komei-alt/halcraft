@@ -17,6 +17,7 @@ import { DroppedItems } from './components/DroppedItems';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
+import { TurretRenderer } from './components/TurretRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -72,6 +73,7 @@ function GameCanvas() {
         <World />
         <TorchRenderer />
         <BedRenderer />
+        <TurretRenderer />
         <BlockLights />
         <Player />
         <BlockInteraction />
