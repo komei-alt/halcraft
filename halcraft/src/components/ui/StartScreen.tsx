@@ -10,6 +10,7 @@ import { isTouchDevice, requestFullscreen } from '../../utils/device';
 import { initAudio } from '../../utils/sounds';
 import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
+import { UpdateLog } from './UpdateLog';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
@@ -113,6 +114,25 @@ export function StartScreen() {
           pointerEvents: 'none',
         }}
       />
+
+      {/* 左側グラデーション（アップデートログの可読性向上） */}
+      {!isTouch && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: '35%',
+            background: 'linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* アップデート履歴パネル（デスクトップのみ） */}
+      {!isTouch && <UpdateLog />}
 
       {/* UI コンテンツ（下寄せ） */}
       <div
