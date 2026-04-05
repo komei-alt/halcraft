@@ -36,6 +36,7 @@ import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
+import { UpdateToast } from './components/ui/UpdateToast';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
@@ -114,6 +115,7 @@ export default function App() {
     <>
       <StartScreen />
       <MaintenanceOverlay />
+      <UpdateToast />
       {phase !== 'menu' && (
         <>
           <GameCanvas />

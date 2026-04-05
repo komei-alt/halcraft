@@ -277,10 +277,10 @@ function setupSocketListeners(
       // 初回接続: バージョンを記憶
       knownServerVersion = data.version;
     } else if (knownServerVersion !== data.version) {
-      // バージョンが変わった → デプロイされた
-      // MaintenanceOverlay のカウントダウンに任せるため、直接リロードは行わない
+      // バージョンが変わった → デプロイされた → UI通知
       console.log(`[Multiplayer] サーバー更新検知: ${knownServerVersion} → ${data.version}`);
       knownServerVersion = data.version;
+      useGameStore.getState().showUpdateNotice();
     }
   });
 
