@@ -478,29 +478,32 @@ export function MobManager() {
           protoStuckTimer.current = 0;
         }
 
-        // 近くのゾンビを探す（プレイヤー付近のゾンビも優先的に検知）
-        let targetZombie: typeof m | null = null;
+        // 近くの敵モブを探す（ゾンビ、クモなど全ての敵をターゲット）
+        let targetEnemy: typeof m | null = null;
         let closestDist = PROTOTYPE_DETECT_RANGE;
 
         for (const other of currentMobs) {
-          if (other.type === 'zombie') {
-            // プロトタイプからの距離
-            const odx = other.x - m.x;
-            const odz = other.z - m.z;
-            const oDist = Math.sqrt(odx * odx + odz * odz);
+          // 敵モブ判定: 味方でなく、自分自身でもないモブ
+          if (other.isAlly || other.id === m.id) continue;
+          // ニワトリは中立なので攻撃しない
+          if (other.type === 'chicken') continue;
 
-            // プレイヤーからの距離も考慮（プレイヤーに近いゾンビを優先）
-            const pdx = other.x - playerX;
-            const pdz = other.z - playerZ;
-            const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
+          // プロトタイプからの距離
+          const odx = other.x - m.x;
+          const odz = other.z - m.z;
+          const oDist = Math.sqrt(odx * odx + odz * odz);
 
-            // プレイヤーに近いゾンビほど優先度を上げる（距離にペナルティ軽減）
-            const priority = oDist + Math.max(0, pDist - 5) * 0.5;
+          // プレイヤーからの距離も考慮（プレイヤーに近い敵ほど優先）
+          const pdx = other.x - playerX;
+          const pdz = other.z - playerZ;
+          const pDist = Math.sqrt(pdx * pdx + pdz * pdz);
 
-            if (oDist < PROTOTYPE_DETECT_RANGE && priority < closestDist) {
-              closestDist = priority;
-              targetZombie = other;
-            }
+          // プレイヤーに近い敵ほど優先度を上げる（距離にペナルティ軽減）
+          const priority = oDist + Math.max(0, pDist - 5) * 0.5;
+
+          if (oDist < PROTOTYPE_DETECT_RANGE && priority < closestDist) {
+            closestDist = priority;
+            targetEnemy = other;
           }
         }
 

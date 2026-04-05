@@ -237,7 +237,7 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.GLASS,
   BLOCK_IDS.ENCHANT,
   BLOCK_IDS.ELECTRIC,
-  BLOCK_IDS.TORCH,
+  BLOCK_IDS.SPAWNER,
 ];
 
 /** チャンクサイズ定数 */

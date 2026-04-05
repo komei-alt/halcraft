@@ -1,6 +1,14 @@
 // クロスヘア（照準）UIコンポーネント
+// ヘリコプター搭乗中は非表示
+
+import { useVehicleStore } from '../../stores/useVehicleStore';
 
 export function Crosshair() {
+  const isInHeli = useVehicleStore((s) => s.helicopter.isBoarded);
+
+  // ヘリコプター搭乗中はクロスヘアを非表示
+  if (isInHeli) return null;
+
   return (
     <div
       id="crosshair"

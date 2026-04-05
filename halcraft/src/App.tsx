@@ -22,7 +22,8 @@ import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
 import { Helicopter } from './components/vehicles/Helicopter';
-import { VehicleHUD } from './components/ui/VehicleHUD';
+import { CockpitView } from './components/vehicles/CockpitView';
+import { CockpitHUD } from './components/ui/CockpitHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
 import { getTerrainHeight } from './utils/terrain';
 import { HELIPORT_CENTER } from './utils/terrain';
@@ -76,6 +77,7 @@ function GameCanvas() {
         <DroppedItems />
         <MobManager />
         <Helicopter />
+        <CockpitView />
         <RemotePlayers />
         <PlayerNameOverlay />
         <SoundManager />
@@ -125,7 +127,7 @@ export default function App() {
           <TimeDisplay />
           <DamageOverlay />
           <AttackIndicator />
-          <VehicleHUD />
+          <CockpitHUD />
           <VoiceChatUI />
           <CraftingScreen
             externalOpen={isTouch ? craftingOpen : undefined}
