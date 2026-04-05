@@ -56,10 +56,13 @@ export function Helicopter() {
   useFrame(() => {
     if (!helicopter.spawned) return;
 
+    // 誰かが搭乗中か（自分 or 他プレイヤー）
+    const someoneBoarded = helicopter.isBoarded || helicopter.pilotId !== null;
+
     // メインローターのアニメーション
     if (mainRotorRef.current) {
-      if (helicopter.isBoarded) {
-        // 搭乗中: ストアの rotorAngle を直接反映（入力速度に連動）
+      if (someoneBoarded) {
+        // 搭乗中: ストアの rotorAngle を直接反映（サーバー同期 or ローカル入力）
         mainRotorRef.current.rotation.y = helicopter.rotorAngle;
       } else {
         // 待機中: ゆっくりアイドル回転
@@ -69,7 +72,7 @@ export function Helicopter() {
 
     // テールローターのアニメーション（メインより速く回る）
     if (tailRotorRef.current) {
-      if (helicopter.isBoarded) {
+      if (someoneBoarded) {
         tailRotorRef.current.rotation.x = helicopter.rotorAngle * 1.5;
       } else {
         tailRotorRef.current.rotation.x += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.006;
@@ -79,8 +82,9 @@ export function Helicopter() {
 
   if (!helicopter.spawned) return null;
 
-  // コックピット窓のみ搭乗中は非表示（視界を遮らないため）
-  const showCockpitWindow = !helicopter.isBoarded;
+  // コックピット窓のみ搭乗中は非表示（自分 or 他プレイヤーが搭乗中）
+  const someoneBoarded = helicopter.isBoarded || helicopter.pilotId !== null;
+  const showCockpitWindow = !someoneBoarded;
 
   return (
     <group
@@ -210,7 +214,7 @@ export function Helicopter() {
       </group>
 
       {/* === 搭乗プロンプト（回転ラッパーの外側に置く） === */}
-      {!helicopter.isBoarded && (
+      {helicopter.pilotId === null && (
         <Billboard position={[0, 3.5, 0]}>
           {/* 背景パネル */}
           <mesh>
