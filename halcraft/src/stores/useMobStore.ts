@@ -76,6 +76,9 @@ interface MobState {
   /** 最後のスポーン時刻 */
   lastSpawnTime: number;
 
+  /** SPAWNERからの最後のプロトタイプスポーン時刻 */
+  lastProtoSpawnTime: number;
+
   /** モブを追加 */
   spawnMob: (type: MobType, x: number, y: number, z: number) => void;
 
@@ -122,6 +125,7 @@ interface MobState {
 export const useMobStore = create<MobState>((set, get) => ({
   mobs: [],
   lastSpawnTime: 0,
+  lastProtoSpawnTime: 0,
   _lastChickenSpawnTime: 0,
   _lastSpiderSpawnTime: 0,
   _deathEvents: [] as MobDeathEvent[],

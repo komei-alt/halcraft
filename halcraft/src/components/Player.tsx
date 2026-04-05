@@ -11,7 +11,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore, HELICOPTER_CONSTANTS } from '../stores/useVehicleStore';
-import { HOTBAR_BLOCKS, BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
   joystickInput,
@@ -184,7 +184,8 @@ export function Player() {
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const slot = parseInt(e.code.replace('Digit', '')) - 1;
-        if (slot < HOTBAR_BLOCKS.length) selectSlot(slot);
+        const slotCount = usePlayerStore.getState().hotbarSlots.length;
+        if (slot < slotCount) selectSlot(slot);
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -201,7 +202,8 @@ export function Player() {
     const onWheel = (e: WheelEvent) => {
       const current = usePlayerStore.getState().selectedSlot;
       const dir = e.deltaY > 0 ? 1 : -1;
-      const next = ((current + dir) % HOTBAR_BLOCKS.length + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
+      const slotCount = usePlayerStore.getState().hotbarSlots.length;
+      const next = ((current + dir) % slotCount + slotCount) % slotCount;
       selectSlot(next);
     };
 

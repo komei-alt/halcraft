@@ -12,7 +12,6 @@ import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
-import { useInventoryStore } from '../stores/useInventoryStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -84,7 +83,6 @@ export function BlockInteraction() {
   const performAttack = usePlayerStore((s) => s.performAttack);
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
-  const removeItem = useInventoryStore((s) => s.removeItem);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -320,14 +318,11 @@ export function BlockInteraction() {
           // プレイヤーの体と重ならないかチェック
           if (!wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) {
             const selectedBlock = getSelectedBlock();
-            // インベントリから1個消費（所持数チェック）
-            if (removeItem(selectedBlock, 1)) {
-              setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
-              sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-              // SPAWNERブロック設置時:アイアンゴーレムをスポーン
-              if (selectedBlock === BLOCK_IDS.SPAWNER) {
-                spawnMob('prototype', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
-              }
+            setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+            sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+            // SPAWNERブロック設置時:アイアンゴーレムをスポーン
+            if (selectedBlock === BLOCK_IDS.SPAWNER) {
+              spawnMob('prototype', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
             }
           }
         }
@@ -389,8 +384,6 @@ export function BlockInteraction() {
       // プレイヤーの体と重ならないかチェック
       if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return;
       const selectedBlock = getSelectedBlock();
-      // インベントリから1個消費（所持数チェック）
-      if (!removeItem(selectedBlock, 1)) return;
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
       // SPAWNERブロック設置時:アイアンゴーレムをスポーン
@@ -398,7 +391,7 @@ export function BlockInteraction() {
         spawnMob('prototype', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, removeItem]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

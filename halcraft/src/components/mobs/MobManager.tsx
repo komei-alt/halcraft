@@ -213,7 +213,7 @@ export function MobManager() {
     const MAX_PROTO_FROM_SPAWNER = 3; // SPAWNERからの最大同時数
     if (protoCount < MAX_PROTO_FROM_SPAWNER) {
       const now = performance.now() / 1000;
-      const lastProtoSpawn = (useMobStore.getState() as ReturnType<typeof useMobStore.getState> & { _lastProtoSpawnTime?: number })._lastProtoSpawnTime ?? 0;
+      const lastProtoSpawn = useMobStore.getState().lastProtoSpawnTime;
       if (now - lastProtoSpawn > 10) { // 10秒間隔
         // 周囲のSPAWNERブロックを探す
         for (let dx = -SPAWNER_SEARCH_RANGE; dx <= SPAWNER_SEARCH_RANGE; dx += 2) {
@@ -226,7 +226,7 @@ export function MobManager() {
               if (getBlock(sx, surfaceY + dy, sz) === BLOCK_IDS.SPAWNER) {
                 // SPAWNERブロックの上にスポーン
                 useMobStore.getState().spawnMob('prototype', sx + 0.5, surfaceY + dy + 2, sz + 0.5);
-                useMobStore.setState({ _lastProtoSpawnTime: now } as Partial<ReturnType<typeof useMobStore.getState>>);
+                useMobStore.setState({ lastProtoSpawnTime: now });
                 dx = SPAWNER_SEARCH_RANGE + 1; // ループ脱出
                 dz = SPAWNER_SEARCH_RANGE + 1;
                 break;
