@@ -104,6 +104,9 @@ interface MultiplayerState {
     speed: number; rotorAngle: number;
   }) => void;
 
+  /** 機関銃発射を送信 */
+  sendGunFire: (pos: [number, number, number], dir: [number, number, number], side: 'left' | 'right') => void;
+
 }
 
 let lastSentPos: [number, number, number] | null = null;
@@ -231,6 +234,12 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     const socket = getSocket();
     if (!socket?.connected) return;
     socket.emit('helicopter:move', data);
+  },
+
+  sendGunFire: (pos, dir, side) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('gun:fire', { pos, dir, side });
   },
 
 
@@ -479,4 +488,36 @@ function setupSocketListeners(
       engineOn: h.isBoarded, // エンジン状態は誰かが乗っていれば回す（アニメーション用）
     });
   });
+
+  // ── 機関銃発射同期 ──
+  socket.on('gun:fired', (data: {
+    playerId: string;
+    pos: [number, number, number];
+    dir: [number, number, number];
+    side: 'left' | 'right';
+  }) => {
+    // 登録されたコールバックに通知
+    for (const cb of remoteGunFireCallbacks) {
+      cb(data);
+    }
+  });
+}
+
+// ── リモート機関銃発射のコールバック管理 ──
+export interface RemoteGunFireData {
+  playerId: string;
+  pos: [number, number, number];
+  dir: [number, number, number];
+  side: 'left' | 'right';
+}
+
+const remoteGunFireCallbacks: Array<(data: RemoteGunFireData) => void> = [];
+
+/** リモートプレイヤーの機関銃発射イベントを受け取るコールバックを登録 */
+export function onRemoteGunFire(cb: (data: RemoteGunFireData) => void): () => void {
+  remoteGunFireCallbacks.push(cb);
+  return () => {
+    const idx = remoteGunFireCallbacks.indexOf(cb);
+    if (idx >= 0) remoteGunFireCallbacks.splice(idx, 1);
+  };
 }

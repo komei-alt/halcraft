@@ -714,6 +714,18 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('helicopter:sync', { helicopter: helicopterState });
   });
 
+  // ── 機関銃発射同期 ──
+  // 発射情報を他プレイヤーにリレー（弾道の視覚同期用）
+  socket.on('gun:fire', (data) => {
+    // data: { pos: [x,y,z], dir: [x,y,z], side: 'left'|'right' }
+    socket.broadcast.emit('gun:fired', {
+      playerId: socket.id,
+      pos: data.pos,
+      dir: data.dir,
+      side: data.side,
+    });
+  });
+
   // プレイヤー死亡通知（全プレイヤーにブロードキャスト）
   socket.on('player:died', () => {
     socket.broadcast.emit('player:died', { id: socket.id });

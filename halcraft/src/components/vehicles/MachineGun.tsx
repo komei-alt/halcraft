@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { useVehicleStore, GUN_CONSTANTS } from '../../stores/useVehicleStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { onRemoteGunFire } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { BLOCK_IDS } from '../../types/blocks';
 import { spawnDamagePopup } from '../../utils/effectTriggers';
@@ -79,6 +80,8 @@ interface Projectile {
   side: 'left' | 'right';
   /** 弾が衝突して消滅済みか */
   dead: boolean;
+  /** リモートプレイヤーの弾か（ダメージ判定なし・視覚のみ） */
+  isRemote?: boolean;
 }
 
 /** 衝突エフェクト */
@@ -189,6 +192,7 @@ export function MachineGun() {
       prevPositions: [startPos.clone()],
       side,
       dead: false,
+      isRemote: false,
     };
 
     setProjectiles((prev) => [...prev, projectile]);
@@ -199,6 +203,14 @@ export function MachineGun() {
     } else {
       flashTimerRight.current = 0.08;
     }
+
+    // サーバーに発射データを送信（他プレイヤーの弾道表示用）
+    const sendGunFire = useMultiplayerStore.getState().sendGunFire;
+    sendGunFire(
+      [startPos.x, startPos.y, startPos.z],
+      [shootDir.current.x, shootDir.current.y, shootDir.current.z],
+      side,
+    );
   }, [camera]);
 
   // ─── マウスイベント ───────────────────────────────
@@ -215,6 +227,30 @@ export function MachineGun() {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('mouseup', onMouseUp);
     };
+  }, []);
+
+  // ─── リモートプレイヤーの弾丸受信 ─────────────────
+  useEffect(() => {
+    const unsubscribe = onRemoteGunFire((data) => {
+      const now = performance.now() / 1000;
+      const startPos = new THREE.Vector3(data.pos[0], data.pos[1], data.pos[2]);
+      const dir = new THREE.Vector3(data.dir[0], data.dir[1], data.dir[2]).normalize();
+      const vel = dir.clone().multiplyScalar(BULLET_SPEED);
+
+      const projectile: Projectile = {
+        id: nextId++,
+        pos: startPos,
+        vel,
+        createdAt: now,
+        prevPositions: [startPos.clone()],
+        side: data.side,
+        dead: false,
+        isRemote: true,
+      };
+
+      setProjectiles((prev) => [...prev, projectile]);
+    });
+    return unsubscribe;
   }, []);
 
   // ─── インパクトエフェクト生成ヘルパー ─────────────
