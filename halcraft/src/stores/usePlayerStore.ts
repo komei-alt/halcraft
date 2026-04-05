@@ -4,6 +4,19 @@
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
 import { getSocket } from '../utils/socket';
+import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
+
+/** localStorage のキー（スキン保存用） */
+const SKIN_STORAGE_KEY = 'halcraft-skin-id';
+
+/** 保存されたスキンIDを読み込む */
+function loadSkinId(): SkinId {
+  try {
+    const saved = localStorage.getItem(SKIN_STORAGE_KEY);
+    if (saved && isValidSkinId(saved)) return saved;
+  } catch { /* noop */ }
+  return DEFAULT_SKIN_ID;
+}
 
 /** ホットバーのスロット数 */
 const HOTBAR_SLOT_COUNT = HOTBAR_BLOCKS.length;
@@ -27,6 +40,9 @@ const KNOCKBACK_SPEED = 6;
 const DAMAGE_INVINCIBLE_MS = 500;
 
 interface PlayerState {
+  /** 選択中のスキンID */
+  skinId: SkinId;
+
   /** 体力 */
   hp: number;
   maxHp: number;
@@ -103,9 +119,13 @@ interface PlayerState {
 
   /** ノックバック速度を消費してリセット */
   consumeKnockback: () => { vx: number; vz: number };
+
+  /** スキンを変更 */
+  setSkin: (skinId: SkinId) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
+  skinId: loadSkinId(),
   hp: 20,
   maxHp: 20,
   selectedSlot: 0,
@@ -263,6 +283,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ knockbackVx: 0, knockbackVz: 0 });
     }
     return { vx, vz };
+  },
+
+  setSkin: (skinId) => {
+    set({ skinId });
+    try { localStorage.setItem(SKIN_STORAGE_KEY, skinId); } catch { /* noop */ }
   },
 }));
 

@@ -11,6 +11,7 @@ import { initAudio } from '../../utils/sounds';
 import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
 import { UpdateLog } from './UpdateLog';
+import { SkinSelector } from './SkinSelector';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
@@ -210,6 +211,14 @@ export function StartScreen() {
           >
             {name.trim().length}/8
           </span>
+        </div>
+
+        {/* スキン選択 */}
+        <div
+          style={{ marginTop: 12 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SkinSelector compact />
         </div>
 
         {/* サーバー満員表示 */}

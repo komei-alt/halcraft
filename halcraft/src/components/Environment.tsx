@@ -11,10 +11,10 @@ const DAY_SKY = new THREE.Color(0x87ceeb);
 const DAY_FOG = new THREE.Color(0x87ceeb);
 const DAY_SUN_COLOR = new THREE.Color(0xfff5e0);
 
-/** 夜の色定義 */
-const NIGHT_SKY = new THREE.Color(0x0a0a20);
-const NIGHT_FOG = new THREE.Color(0x0a0a20);
-const NIGHT_SUN_COLOR = new THREE.Color(0x334488);
+/** 夜の色定義（月明かりのある暗さ） */
+const NIGHT_SKY = new THREE.Color(0x141430);
+const NIGHT_FOG = new THREE.Color(0x141430);
+const NIGHT_SUN_COLOR = new THREE.Color(0x4466aa);
 
 /** 夕焼けの色 */
 const SUNSET_SKY = new THREE.Color(0xff7733);
@@ -86,14 +86,14 @@ export function Environment() {
       const t = (gameTime - 0.5) / 0.05;
       _skyColor.copy(SUNSET_SKY).lerp(NIGHT_SKY, t);
       _fogColor.copy(SUNSET_FOG).lerp(NIGHT_FOG, t);
-      sunIntensity = 0.6 - t * 0.4;
-      ambientIntensity = 0.25 - t * 0.1;
+      sunIntensity = 0.6 - t * 0.25;
+      ambientIntensity = 0.25 - t * 0.03;
       _sunColor.copy(SUNSET_SUN_COLOR).lerp(NIGHT_SUN_COLOR, t);
     } else {
       _skyColor.copy(NIGHT_SKY);
       _fogColor.copy(NIGHT_FOG);
-      sunIntensity = 0.15;
-      ambientIntensity = 0.12;
+      sunIntensity = 0.35;
+      ambientIntensity = 0.22;
       _sunColor.copy(NIGHT_SUN_COLOR);
     }
 

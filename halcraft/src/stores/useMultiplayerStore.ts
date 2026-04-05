@@ -13,12 +13,15 @@ import { useMobStore } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
 import { useVehicleStore } from './useVehicleStore';
 import type { BlockId } from '../types/blocks';
+import type { SkinId } from '../types/skins';
 
 /** リモートプレイヤーの状態 */
 export interface RemotePlayer {
   id: string;
   name: string;
   color: string;
+  /** スキンID（サーバー非対応時は undefined） */
+  skinId?: SkinId;
   position: [number, number, number];
   rotation: [number, number]; // [yaw, pitch]
   /** 補間用の目標位置 */
@@ -119,7 +122,8 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   join: (name) => {
     const socket = connectToServer();
     setupSocketListeners(socket, set, get);
-    socket.emit('player:join', { name });
+    const skinId = usePlayerStore.getState().skinId;
+    socket.emit('player:join', { name, skinId });
   },
 
   leave: () => {
@@ -286,7 +290,7 @@ function setupSocketListeners(
 
   // プレイヤー一覧受信
   socket.on('players:list', (data: {
-    players: Array<{ id: string; name: string; color: string; position: [number, number, number]; rotation: [number, number] }>;
+    players: Array<{ id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number] }>;
     yourId: string;
   }) => {
     const newPlayers = new Map<string, RemotePlayer>();
@@ -294,6 +298,7 @@ function setupSocketListeners(
       if (p.id !== data.yourId) {
         newPlayers.set(p.id, {
           ...p,
+          skinId: p.skinId,
           targetPosition: [...p.position],
           targetRotation: [...p.rotation],
           speaking: false,
@@ -307,10 +312,11 @@ function setupSocketListeners(
   });
 
   // 新プレイヤー参加
-  socket.on('player:joined', (data: { id: string; name: string; color: string; position: [number, number, number]; rotation: [number, number] }) => {
+  socket.on('player:joined', (data: { id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number] }) => {
     const players = new Map(get().remotePlayers);
     players.set(data.id, {
       ...data,
+      skinId: data.skinId,
       targetPosition: [...data.position],
       targetRotation: [...data.rotation],
       speaking: false,

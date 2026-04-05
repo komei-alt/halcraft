@@ -2,15 +2,19 @@
 // VoxelAvatar — マイクラ風ボクセルキャラクター
 // BoxGeometry で構成された人型アバター
 // 死亡時: パーツが崩れ落ちるアニメーション
+// スキン対応: skinId で各パーツの色を変更
 // ============================================
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
 
 interface VoxelAvatarProps {
-  /** スキンカラー（体・腕の色） */
-  color: string;
+  /** スキンID（優先） */
+  skinId?: SkinId;
+  /** 旧互換: スキンカラー（skinIdが無い場合のフォールバック） */
+  color?: string;
   /** 移動中か（歩行アニメーション用） */
   isMoving: boolean;
   /** 死亡状態か */
@@ -44,7 +48,7 @@ const PART_PHYSICS: Record<string, PartPhysics> = {
   rightLeg: { spreadX: 0.35, spreadZ: -0.1, rotSpeed: 2, delay: 0.25 },
 };
 
-export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: VoxelAvatarProps) {
+export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime = 0 }: VoxelAvatarProps) {
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
   const leftLegRef = useRef<THREE.Mesh>(null);
@@ -53,32 +57,63 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
   const bodyRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
 
-  // マテリアルをメモ化
-  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ color }), [color]);
-  const skinMat = useMemo(() => new THREE.MeshLambertMaterial({ color: '#ffcc99' }), []);
-  const legMat = useMemo(() => {
-    const c = new THREE.Color(color);
-    c.multiplyScalar(0.7);
-    return new THREE.MeshLambertMaterial({ color: c });
-  }, [color]);
+  // スキン定義を取得（skinId優先、なければcolorからフォールバック）
+  const skin = useMemo(() => {
+    if (skinId && skinId in SKIN_DEFS) return SKIN_DEFS[skinId];
+    return SKIN_DEFS[DEFAULT_SKIN_ID];
+  }, [skinId]);
+
+  // フォールバック色（skinIdが無くcolorが渡された場合の旧互換用）
+  const fallbackColor = color && !skinId ? color : null;
+
+  // マテリアルをメモ化（スキンカラーベース）
+  const headMat = useMemo(() =>
+    new THREE.MeshLambertMaterial({ color: fallbackColor || skin.colors.head }),
+    [skin, fallbackColor]);
+
+  const bodyMat = useMemo(() =>
+    new THREE.MeshLambertMaterial({ color: fallbackColor || skin.colors.body }),
+    [skin, fallbackColor]);
+
+  const armMat = useMemo(() =>
+    new THREE.MeshLambertMaterial({ color: fallbackColor || skin.colors.arms }),
+    [skin, fallbackColor]);
+
+  const legMat = useMemo(() =>
+    new THREE.MeshLambertMaterial({ color: fallbackColor ? new THREE.Color(fallbackColor).multiplyScalar(0.7) : skin.colors.legs }),
+    [skin, fallbackColor]);
+
   // 死亡時のグレーアウトマテリアル
-  const deadBodyMat = useMemo(() => {
-    const c = new THREE.Color(color);
+  const deadHeadMat = useMemo(() => {
+    const c = new THREE.Color(fallbackColor || skin.colors.head);
     c.multiplyScalar(0.4);
     return new THREE.MeshLambertMaterial({ color: c });
-  }, [color]);
-  const deadSkinMat = useMemo(() => new THREE.MeshLambertMaterial({ color: '#999988' }), []);
+  }, [skin, fallbackColor]);
+
+  const deadBodyMat = useMemo(() => {
+    const c = new THREE.Color(fallbackColor || skin.colors.body);
+    c.multiplyScalar(0.4);
+    return new THREE.MeshLambertMaterial({ color: c });
+  }, [skin, fallbackColor]);
+
   const deadLegMat = useMemo(() => {
-    const c = new THREE.Color(color);
+    const c = new THREE.Color(fallbackColor || skin.colors.legs);
     c.multiplyScalar(0.3);
     return new THREE.MeshLambertMaterial({ color: c });
-  }, [color]);
+  }, [skin, fallbackColor]);
+
+  // ツノ用アクセサリーマテリアル
+  const accessoryMat = useMemo(() => {
+    if (!skin.hasHeadAccessory) return null;
+    return new THREE.MeshLambertMaterial({ color: skin.accessoryColor || '#881100' });
+  }, [skin]);
 
   // ジオメトリをメモ化
   const headGeom = useMemo(() => new THREE.BoxGeometry(0.5, 0.5, 0.5), []);
   const bodyGeom = useMemo(() => new THREE.BoxGeometry(0.6, 0.8, 0.4), []);
   const armGeom = useMemo(() => new THREE.BoxGeometry(0.25, 0.7, 0.25), []);
   const legGeom = useMemo(() => new THREE.BoxGeometry(0.25, 0.6, 0.3), []);
+  const hornGeom = useMemo(() => new THREE.BoxGeometry(0.08, 0.2, 0.08), []);
 
   // 元の位置（各パーツ）
   const origPositions = useMemo(() => ({
@@ -112,7 +147,7 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
       groupRef.current.position.y = -ease * 0.5;
 
       // マテリアル変更（グレーアウト）
-      headRef.current.material = deadSkinMat;
+      headRef.current.material = deadHeadMat;
       bodyRef.current.material = deadBodyMat;
       leftArmRef.current.material = deadBodyMat;
       rightArmRef.current.material = deadBodyMat;
@@ -155,10 +190,10 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
       groupRef.current.position.y = 0;
 
       // マテリアル戻す
-      headRef.current.material = skinMat;
+      headRef.current.material = headMat;
       bodyRef.current.material = bodyMat;
-      leftArmRef.current.material = bodyMat;
-      rightArmRef.current.material = bodyMat;
+      leftArmRef.current.material = armMat;
+      rightArmRef.current.material = armMat;
       leftLegRef.current.material = legMat;
       rightLegRef.current.material = legMat;
 
@@ -205,7 +240,27 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
   return (
     <group ref={groupRef}>
       {/* 頭 */}
-      <mesh ref={headRef} geometry={headGeom} material={skinMat} position={[0, 1.55, 0]} castShadow />
+      <mesh ref={headRef} geometry={headGeom} material={headMat} position={[0, 1.55, 0]} castShadow />
+
+      {/* ツノ（赤ウォーデンなど、headAccessory付きスキン） */}
+      {skin.hasHeadAccessory && accessoryMat && (
+        <>
+          <mesh
+            geometry={hornGeom}
+            material={accessoryMat}
+            position={[-0.15, 1.88, 0]}
+            rotation={[0, 0, -0.2]}
+            castShadow
+          />
+          <mesh
+            geometry={hornGeom}
+            material={accessoryMat}
+            position={[0.15, 1.88, 0]}
+            rotation={[0, 0, 0.2]}
+            castShadow
+          />
+        </>
+      )}
 
       {/* 体 */}
       <mesh ref={bodyRef} geometry={bodyGeom} material={bodyMat} position={[0, 0.9, 0]} castShadow />
@@ -214,7 +269,7 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
       <mesh
         ref={leftArmRef}
         geometry={armGeom}
-        material={bodyMat}
+        material={armMat}
         position={[-0.42, 0.85, 0]}
         castShadow
       />
@@ -223,7 +278,7 @@ export function VoxelAvatar({ color, isMoving, isDead = false, deathTime = 0 }: 
       <mesh
         ref={rightArmRef}
         geometry={armGeom}
-        material={bodyMat}
+        material={armMat}
         position={[0.42, 0.85, 0]}
         castShadow
       />

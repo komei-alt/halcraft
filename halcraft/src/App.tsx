@@ -4,7 +4,7 @@
 
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Suspense, useState, useCallback } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
@@ -42,6 +42,7 @@ import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
 import { MobileControls } from './components/ui/mobile/MobileControls';
+import { SkinSelector } from './components/ui/SkinSelector';
 import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
 import './App.css';
@@ -118,6 +119,36 @@ export default function App() {
     setCraftingOpen(false);
   }, []);
 
+  // スキン変更UI の開閉状態
+  const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
+  const skinOpenRef = useRef(false);
+  skinOpenRef.current = skinSelectorOpen;
+
+  // Tab キーでスキンセレクターを開閉
+  useEffect(() => {
+    if (phase === 'menu') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const next = !skinOpenRef.current;
+        setSkinSelectorOpen(next);
+        // PointerLock を制御
+        if (next) {
+          document.exitPointerLock?.();
+        } else {
+          document.querySelector('canvas')?.requestPointerLock?.();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [phase]);
+
+  const handleCloseSkinSelector = useCallback(() => {
+    setSkinSelectorOpen(false);
+    document.querySelector('canvas')?.requestPointerLock?.();
+  }, []);
+
   return (
     <>
       <StartScreen />
@@ -143,6 +174,10 @@ export default function App() {
           {/* モバイルコントロール（タッチデバイスのみ） */}
           {isTouch && (
             <MobileControls onOpenCrafting={handleOpenCrafting} />
+          )}
+          {/* スキン変更オーバーレイ */}
+          {skinSelectorOpen && (
+            <SkinSelector overlay onClose={handleCloseSkinSelector} />
           )}
         </>
       )}

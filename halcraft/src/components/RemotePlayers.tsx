@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
 import { useVehicleStore, SEAT_OFFSETS } from '../stores/useVehicleStore';
 import { VoxelAvatar } from './VoxelAvatar';
+import { isValidSkinId } from '../types/skins';
 
 
 export function RemotePlayers() {
@@ -111,6 +112,7 @@ function RemotePlayerModel({
   return (
     <group ref={groupRef}>
       <VoxelAvatar
+        skinId={player.skinId && isValidSkinId(player.skinId) ? player.skinId : undefined}
         color={player.color}
         isMoving={isMoving}
         isDead={player.isDead}
