@@ -379,15 +379,27 @@ export function CockpitHUD() {
         }}>
           CREW
         </span>
-        {ALL_SEATS.map((seat: SeatType) => {
+        {ALL_SEATS.map((seat: SeatType, index: number) => {
           const occupied = helicopter.seats[seat] !== null;
           const isMe = seat === mySeat;
+          const seatNumber = index + 1;
           return (
             <div key={seat} style={{
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
             }}>
+              {/* 座席番号キー */}
+              <span style={{
+                color: isMe ? '#ffdd00' : occupied ? 'rgba(80, 200, 120, 0.5)' : 'rgba(255,255,255,0.3)',
+                fontSize: '8px',
+                fontFamily: 'monospace',
+                fontWeight: 'bold',
+                width: '8px',
+                textAlign: 'center',
+              }}>
+                {seatNumber}
+              </span>
               <div style={{
                 width: '5px',
                 height: '5px',
@@ -405,6 +417,15 @@ export function CockpitHUD() {
             </div>
           );
         })}
+        {/* 座席変更のヒント */}
+        <span style={{
+          color: 'rgba(255,255,255,0.3)',
+          fontSize: '7px',
+          fontFamily: 'monospace',
+          marginTop: '2px',
+        }}>
+          1-4キーで移動
+        </span>
       </div>
 
       {/* === 機関銃手用照準HUD === */}

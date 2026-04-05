@@ -125,6 +125,7 @@ export function VehicleHUD() {
         {mySeat === 'copilot' && (
           <span>マウスで周囲を見回せます</span>
         )}
+        <span><b style={{ color: '#44aaff' }}>1-4</b> 座席変更</span>
         <span><b style={{ color: '#ff6644' }}>F</b> 降りる</span>
       </div>
     </div>
