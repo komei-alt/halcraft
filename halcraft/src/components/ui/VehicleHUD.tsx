@@ -1,12 +1,13 @@
 // ヘリコプター操作HUD
 // 搭乗中に速度・高度・操作ガイドを表示
 
-import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useVehicleStore, SEAT_NAMES } from '../../stores/useVehicleStore';
 
 export function VehicleHUD() {
   const helicopter = useVehicleStore((s) => s.helicopter);
 
-  if (!helicopter.isBoarded) return null;
+  const mySeat = helicopter.mySeat;
+  if (mySeat === null) return null;
 
   const speed = Math.abs(helicopter.speed).toFixed(1);
   const altitude = helicopter.y.toFixed(1);
@@ -92,7 +93,7 @@ export function VehicleHUD() {
         </div>
       </div>
 
-      {/* 操作ガイド */}
+      {/* 操作ガイド（座席別） */}
       <div style={{
         background: 'rgba(0, 0, 0, 0.5)',
         borderRadius: '8px',
@@ -101,11 +102,29 @@ export function VehicleHUD() {
         color: 'rgba(255, 255, 255, 0.6)',
         display: 'flex',
         gap: '12px',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
       }}>
-        <span><b style={{ color: '#ffcc00' }}>W/S</b> 前進/後退</span>
-        <span><b style={{ color: '#ffcc00' }}>A/D</b> 旋回</span>
-        <span><b style={{ color: '#ffcc00' }}>Space</b> 上昇</span>
-        <span><b style={{ color: '#ffcc00' }}>Shift</b> 下降</span>
+        <span style={{ color: '#ffdd00', fontWeight: 'bold', fontSize: '10px' }}>
+          {SEAT_NAMES[mySeat]}
+        </span>
+        {mySeat === 'pilot' && (
+          <>
+            <span><b style={{ color: '#ffcc00' }}>W/S</b> 前進/後退</span>
+            <span><b style={{ color: '#ffcc00' }}>A/D</b> 旋回</span>
+            <span><b style={{ color: '#ffcc00' }}>Space</b> 上昇</span>
+            <span><b style={{ color: '#ffcc00' }}>Shift</b> 下降</span>
+          </>
+        )}
+        {(mySeat === 'gunner_left' || mySeat === 'gunner_right') && (
+          <>
+            <span><b style={{ color: '#ff6644' }}>左クリック</b> 射撃</span>
+            <span><b style={{ color: '#ffcc00' }}>マウス</b> 照準</span>
+          </>
+        )}
+        {mySeat === 'copilot' && (
+          <span>マウスで周囲を見回せます</span>
+        )}
         <span><b style={{ color: '#ff6644' }}>F</b> 降りる</span>
       </div>
     </div>

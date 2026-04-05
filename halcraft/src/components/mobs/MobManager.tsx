@@ -16,6 +16,7 @@ import { Zombie } from './Zombie';
 import { Prototype } from './Prototype';
 import { Chicken } from './Chicken';
 import { Spider } from './Spider';
+import { IronGolem } from './IronGolem';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
 import { spawnMobDeathEffect } from '../../utils/effectTriggers';
 
@@ -206,12 +207,12 @@ export function MobManager() {
       trySpawnChicken(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
     }
 
-    // SPAWNERブロックベースのゴーレムスポーン（近くにSPAWNERがあれば一定間隔でスポーン）
+    // SPAWNERブロックベースのアイアンゴーレムスポーン（近くにSPAWNERがあれば一定間隔でスポーン）
     // プレイヤー周辺のSPAWNERブロックを検索（範囲16ブロック）
     const SPAWNER_SEARCH_RANGE = 16;
-    const protoCount = useMobStore.getState().mobs.filter((m) => m.type === 'prototype').length;
-    const MAX_PROTO_FROM_SPAWNER = 3; // SPAWNERからの最大同時数
-    if (protoCount < MAX_PROTO_FROM_SPAWNER) {
+    const golemCount = useMobStore.getState().mobs.filter((m) => m.type === 'iron_golem').length;
+    const MAX_GOLEMS_FROM_SPAWNER = 3; // SPAWNERからの最大同時数
+    if (golemCount < MAX_GOLEMS_FROM_SPAWNER) {
       const now = performance.now() / 1000;
       const lastProtoSpawn = useMobStore.getState().lastProtoSpawnTime;
       if (now - lastProtoSpawn > 10) { // 10秒間隔
@@ -224,8 +225,8 @@ export function MobManager() {
             const surfaceY = getTerrainHeight(sx, sz);
             for (let dy = -2; dy <= 5; dy++) {
               if (getBlock(sx, surfaceY + dy, sz) === BLOCK_IDS.SPAWNER) {
-                // SPAWNERブロックの上にスポーン
-                useMobStore.getState().spawnMob('prototype', sx + 0.5, surfaceY + dy + 2, sz + 0.5);
+                // SPAWNERブロックの上にアイアンゴーレムをスポーン
+                useMobStore.getState().spawnMob('iron_golem', sx + 0.5, surfaceY + dy + 2, sz + 0.5);
                 useMobStore.setState({ lastProtoSpawnTime: now });
                 dx = SPAWNER_SEARCH_RANGE + 1; // ループ脱出
                 dz = SPAWNER_SEARCH_RANGE + 1;
@@ -439,9 +440,9 @@ export function MobManager() {
         continue;
       }
 
-      if (m.type === 'prototype') {
+      if (m.type === 'prototype' || m.type === 'iron_golem') {
         // =======================================
-        // 味方モブ（プロトタイプ）のAI
+        // 味方モブ（プロトタイプ / アイアンゴーレム）のAI
         // =======================================
 
         // プレイヤーまでの距離
@@ -507,10 +508,10 @@ export function MobManager() {
           }
         }
 
-        if (targetZombie) {
-          // ゾンビに向かって移動
-          const tdx = targetZombie.x - m.x;
-          const tdz = targetZombie.z - m.z;
+        if (targetEnemy) {
+          // 敵モブに向かって移動
+          const tdx = targetEnemy.x - m.x;
+          const tdz = targetEnemy.z - m.z;
           const tDist = Math.sqrt(tdx * tdx + tdz * tdz);
 
           if (tDist > 0.1) {
@@ -532,12 +533,12 @@ export function MobManager() {
             if (protoAttackCooldown.current <= 0 && tDist > 0.01) {
               const kbX = tdx / tDist;
               const kbZ = tdz / tDist;
-              useMobStore.getState().damageMob(targetZombie.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
+              useMobStore.getState().damageMob(targetEnemy.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
               protoAttackCooldown.current = PROTOTYPE_ATTACK_COOLDOWN;
             }
           }
         } else if (distP > PROTOTYPE_FOLLOW_MIN) {
-          // ゾンビがいなければプレイヤーに追従
+          // 敵がいなければプレイヤーに追従
           const nx = dxP / distP;
           const nz = dzP / distP;
           m.rotation = Math.atan2(dxP, dzP);
@@ -823,6 +824,8 @@ export function MobManager() {
             return <Chicken key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'spider':
             return <Spider key={mob.id} mob={mob} animTime={animTimeValue} />;
+          case 'iron_golem':
+            return <IronGolem key={mob.id} mob={mob} animTime={animTimeValue} />;
           default:
             return null;
         }

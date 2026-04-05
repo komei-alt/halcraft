@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
-import { useVehicleStore, HELICOPTER_CONSTANTS } from '../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS } from '../stores/useVehicleStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -244,7 +244,7 @@ export function Player() {
     // --- 乗り物ストアの状態を取得 ---
     const vehicleState = useVehicleStore.getState();
     const heli = vehicleState.helicopter;
-    const isInHeli = heli.isBoarded;
+    const isInHeli = heli.mySeat !== null;
 
     // --- 搭乗/降車の処理（Fキー） ---
     if (interactPressed.current && isInputActive) {
@@ -283,19 +283,21 @@ export function Player() {
         // カメラの向きをヘリの向きに合わせてリセット
         euler.current.x = 0;
         camera.quaternion.setFromEuler(euler.current);
-      } else if (heli.spawned && heli.pilotId === null) {
-        // 搭乗: ヘリに近いかチェック（空席の場合のみ）
+      } else if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
+        // 搭乗: ヘリに近いかチェック（空席がある場合のみ）
         const dx = pos.x - heli.x;
         const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
         const dz = pos.z - heli.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) {
-          vehicleState.boardHelicopter();
-          sendHelicopterBoard(); // サーバーに搭乗を通知
-          // カメラの向きをヘリの正面に合わせる
-          euler.current.y = heli.rotationY;
-          euler.current.x = -0.1; // 少し下向き（前方が見やすい）
-          camera.quaternion.setFromEuler(euler.current);
+          const assignedSeat = vehicleState.boardHelicopter();
+          if (assignedSeat) {
+            sendHelicopterBoard(); // サーバーに搭乗を通知
+            // カメラの向きをヘリの正面に合わせる
+            euler.current.y = heli.rotationY;
+            euler.current.x = -0.1; // 少し下向き（前方が見やすい）
+            camera.quaternion.setFromEuler(euler.current);
+          }
         }
       }
     }
@@ -308,8 +310,9 @@ export function Player() {
     // ヘリコプター搭乗中の物理
     // ========================================
     // 降車直後のフレームで物理がリセット位置を上書きしないよう、最新の搭乗状態を再取得
-    const isStillInHeli = useVehicleStore.getState().helicopter.isBoarded;
-    if (isStillInHeli) {
+    const latestHeli = useVehicleStore.getState().helicopter;
+    const currentSeat = latestHeli.mySeat;
+    if (currentSeat !== null) {
       const {
         MAX_SPEED, ACCELERATION, DECELERATION, TURN_SPEED,
         VERTICAL_SPEED, ROTOR_SPEED,
@@ -319,133 +322,145 @@ export function Player() {
       updateAttackCooldown(dt);
       consumeKnockback();
 
-      let apSpeed = heli.speed;
-      let apRotY = heli.rotationY;
-      let apPitch = heli.pitch;
-      let apRoll = heli.roll;
-      let apX = heli.x;
-      let apY = heli.y;
-      let apZ = heli.z;
-      let apRotorAngle = heli.rotorAngle;
+      // パイロット席のみ操縦可能
+      const isPilot = currentSeat === 'pilot';
 
-      // 入力取得
-      let inputForward: number;
-      let inputTurn: number;
-      let inputVertical: number;
+      if (isPilot) {
+        // === パイロット: 操縦ロジック ===
+        let apSpeed = latestHeli.speed;
+        let apRotY = latestHeli.rotationY;
+        let apPitch = latestHeli.pitch;
+        let apRoll = latestHeli.roll;
+        let apX = latestHeli.x;
+        let apY = latestHeli.y;
+        let apZ = latestHeli.z;
+        let apRotorAngle = latestHeli.rotorAngle;
 
-      if (isTouch.current) {
-        inputForward = -joystickInput.y; // 前後
-        inputTurn = -joystickInput.x;    // 左右旋回
-        inputVertical = mobileActions.jump ? 1 : 0; // 上昇
-      } else {
-        inputForward = isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
-        inputTurn = isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
-        inputVertical = isInputActive
-          ? (keys.current.jump ? 1 : 0) - (keys.current.sprint ? 1 : 0)
-          : 0;
-      }
+        // 入力取得
+        let inputForward: number;
+        let inputTurn: number;
+        let inputVertical: number;
 
-      // 加速/減速
-      if (inputForward > 0) {
-        apSpeed = Math.min(MAX_SPEED, apSpeed + ACCELERATION * dt);
-      } else if (inputForward < 0) {
-        apSpeed = Math.max(-MAX_SPEED * 0.3, apSpeed - ACCELERATION * 1.5 * dt);
-      } else {
-        // 自動減速
-        if (apSpeed > 0) {
-          apSpeed = Math.max(0, apSpeed - DECELERATION * dt);
+        if (isTouch.current) {
+          inputForward = -joystickInput.y;
+          inputTurn = -joystickInput.x;
+          inputVertical = mobileActions.jump ? 1 : 0;
         } else {
-          apSpeed = Math.min(0, apSpeed + DECELERATION * dt);
+          inputForward = isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
+          inputTurn = isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
+          inputVertical = isInputActive
+            ? (keys.current.jump ? 1 : 0) - (keys.current.sprint ? 1 : 0)
+            : 0;
         }
-      }
 
-      // 旋回（ヘリは低速でも旋回可能、ホバリング中も回れる）
-      const turnFactor = Math.min(1, (Math.abs(apSpeed) + 2) / 5);
-      const turnDelta = inputTurn * TURN_SPEED * dt * turnFactor;
-      apRotY += turnDelta;
-
-      // カメラの向きも旋回に同期（マウスはこの上にオーバーライドで動く）
-      euler.current.y += turnDelta;
-
-      // 上昇/下降
-      apY += inputVertical * VERTICAL_SPEED * dt;
-
-      // 前方への移動（Three.jsでは -Z が前方）
-      flyForward.current.set(0, 0, -1);
-      flyForward.current.applyAxisAngle(Y_AXIS, apRotY);
-      apX += flyForward.current.x * apSpeed * dt;
-      apZ += flyForward.current.z * apSpeed * dt;
-
-      // ビジュアル: ピッチとロール（滑らかに補間）
-      const targetPitch = inputForward > 0 ? -0.1 : inputForward < 0 ? 0.15 : 0;
-      const targetRoll = -inputTurn * 0.4;
-      apPitch += (targetPitch - apPitch) * 3 * dt;
-      apRoll += (targetRoll - apRoll) * 3 * dt;
-
-      // 地面衝突チェック: ヘリのAABBで下方向をチェック
-      // ヘリの底面（現在のY位置 - ヘリの高さの半分）付近をチェック
-      const heliBottomY = apY - 0.5;
-      const groundCheck = checkCollision(apX, heliBottomY, apZ);
-      if (groundCheck && inputVertical <= 0) {
-        // 地面に衝突 → 現在の位置から安全な高さを探す
-        let safeY = apY;
-        for (let checkY = Math.floor(heliBottomY); checkY < Math.floor(heliBottomY) + 5; checkY++) {
-          if (!checkCollision(apX, checkY + 1, apZ)) {
-            // このcheckYの上にブロックがない → checkY + 1 の上が安全
-            safeY = checkY + 1 + 0.5; // ヘリの底面分を考慮
-            break;
+        // 加速/減速
+        if (inputForward > 0) {
+          apSpeed = Math.min(MAX_SPEED, apSpeed + ACCELERATION * dt);
+        } else if (inputForward < 0) {
+          apSpeed = Math.max(-MAX_SPEED * 0.3, apSpeed - ACCELERATION * 1.5 * dt);
+        } else {
+          if (apSpeed > 0) {
+            apSpeed = Math.max(0, apSpeed - DECELERATION * dt);
+          } else {
+            apSpeed = Math.min(0, apSpeed + DECELERATION * dt);
           }
         }
-        apY = Math.max(apY, safeY);
-      }
 
-      // 落下防止（最低高度）
-      if (apY < 1) apY = 1;
+        // 旋回
+        const turnFactor = Math.min(1, (Math.abs(apSpeed) + 2) / 5);
+        const turnDelta = inputTurn * TURN_SPEED * dt * turnFactor;
+        apRotY += turnDelta;
 
-      // ローターアニメーション
-      const rotorSpeedFactor = Math.abs(apSpeed) / MAX_SPEED;
-      apRotorAngle += ROTOR_SPEED * (0.5 + rotorSpeedFactor * 0.5) * dt;
+        // カメラの向きも旋回に同期
+        euler.current.y += turnDelta;
 
-      // ストアに反映
-      vehicleState.updateHelicopter({
-        x: apX,
-        y: apY,
-        z: apZ,
-        rotationY: apRotY,
-        pitch: apPitch,
-        roll: apRoll,
-        speed: apSpeed,
-        rotorAngle: apRotorAngle,
-      });
+        // 上昇/下降
+        apY += inputVertical * VERTICAL_SPEED * dt;
 
-      // カメラをヘリの上に配置（操縦席の視点、前方は -Z）
-      cockpitOffset.current.set(0, 1.8, -0.5);
-      cockpitOffset.current.applyAxisAngle(Y_AXIS, apRotY);
+        // 前方への移動
+        flyForward.current.set(0, 0, -1);
+        flyForward.current.applyAxisAngle(Y_AXIS, apRotY);
+        apX += flyForward.current.x * apSpeed * dt;
+        apZ += flyForward.current.z * apSpeed * dt;
 
-      pos.x = apX + cockpitOffset.current.x;
-      pos.y = apY + cockpitOffset.current.y;
-      pos.z = apZ + cockpitOffset.current.z;
+        // ビジュアル: ピッチとロール
+        const targetPitch = inputForward > 0 ? -0.1 : inputForward < 0 ? 0.15 : 0;
+        const targetRoll = -inputTurn * 0.4;
+        apPitch += (targetPitch - apPitch) * 3 * dt;
+        apRoll += (targetRoll - apRoll) * 3 * dt;
 
-      // カメラの向きをeulerから更新（旋回+マウスの合成結果を反映）
-      camera.quaternion.setFromEuler(euler.current);
-      camera.position.set(pos.x, pos.y, pos.z);
+        // 地面衝突チェック
+        const heliBottomY = apY - 0.5;
+        const groundCheck = checkCollision(apX, heliBottomY, apZ);
+        if (groundCheck && inputVertical <= 0) {
+          let safeY = apY;
+          for (let checkY = Math.floor(heliBottomY); checkY < Math.floor(heliBottomY) + 5; checkY++) {
+            if (!checkCollision(apX, checkY + 1, apZ)) {
+              safeY = checkY + 1 + 0.5;
+              break;
+            }
+          }
+          apY = Math.max(apY, safeY);
+        }
 
-      // マルチプレイ: ヘリ位置とプレイヤー位置を送信
-      const now = performance.now();
-      if (now - lastSendTime.current > 50) {
-        sendPosition(
-          [pos.x, pos.y, pos.z],
-          [euler.current.y, euler.current.x],
-        );
-        // ヘリコプターの位置もサーバーに送信
-        sendHelicopterMove({
+        if (apY < 1) apY = 1;
+
+        // ローターアニメーション
+        const rotorSpeedFactor = Math.abs(apSpeed) / MAX_SPEED;
+        apRotorAngle += ROTOR_SPEED * (0.5 + rotorSpeedFactor * 0.5) * dt;
+
+        // ストアに反映
+        vehicleState.updateHelicopter({
           x: apX, y: apY, z: apZ,
-          rotationY: apRotY,
-          pitch: apPitch, roll: apRoll,
-          speed: apSpeed,
-          rotorAngle: apRotorAngle,
+          rotationY: apRotY, pitch: apPitch, roll: apRoll,
+          speed: apSpeed, rotorAngle: apRotorAngle,
         });
-        lastSendTime.current = now;
+
+        // カメラをパイロット席に配置
+        const seatOff = SEAT_OFFSETS.pilot;
+        cockpitOffset.current.set(seatOff.x, seatOff.y, seatOff.z);
+        cockpitOffset.current.applyAxisAngle(Y_AXIS, apRotY);
+
+        pos.x = apX + cockpitOffset.current.x;
+        pos.y = apY + cockpitOffset.current.y;
+        pos.z = apZ + cockpitOffset.current.z;
+
+        camera.quaternion.setFromEuler(euler.current);
+        camera.position.set(pos.x, pos.y, pos.z);
+
+        // マルチプレイ送信
+        const now = performance.now();
+        if (now - lastSendTime.current > 50) {
+          sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+          sendHelicopterMove({
+            x: apX, y: apY, z: apZ,
+            rotationY: apRotY, pitch: apPitch, roll: apRoll,
+            speed: apSpeed, rotorAngle: apRotorAngle,
+          });
+          lastSendTime.current = now;
+        }
+      } else {
+        // === パイロット以外の席: ヘリに追従、視点のみ自由 ===
+        const seatOff = SEAT_OFFSETS[currentSeat];
+        cockpitOffset.current.set(seatOff.x, seatOff.y, seatOff.z);
+        cockpitOffset.current.applyAxisAngle(Y_AXIS, latestHeli.rotationY);
+
+        pos.x = latestHeli.x + cockpitOffset.current.x;
+        pos.y = latestHeli.y + cockpitOffset.current.y;
+        pos.z = latestHeli.z + cockpitOffset.current.z;
+
+        // パイロット以外もヘリの向きベースで視点が回転
+        // ただしマウスで自由に見回せる
+
+        camera.quaternion.setFromEuler(euler.current);
+        camera.position.set(pos.x, pos.y, pos.z);
+
+        // マルチプレイ送信（同乗者の位置）
+        const now = performance.now();
+        if (now - lastSendTime.current > 50) {
+          sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+          lastSendTime.current = now;
+        }
       }
 
       return; // 通常の物理処理をスキップ

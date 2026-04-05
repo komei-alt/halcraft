@@ -101,7 +101,7 @@ export function Helicopter() {
     if (!helicopter.spawned) return;
 
     // 誰かが搭乗中か（自分 or 他プレイヤー）
-    const someoneBoarded = helicopter.isBoarded || helicopter.pilotId !== null;
+    const someoneBoarded = Object.values(helicopter.seats).some((id) => id !== null);
 
     // メインローターのアニメーション
     if (mainRotorRef.current) {
@@ -161,7 +161,7 @@ export function Helicopter() {
   if (!helicopter.spawned) return null;
 
   // コックピット窓のみ搭乗中は非表示（自分 or 他プレイヤーが搭乗中）
-  const someoneBoarded = helicopter.isBoarded || helicopter.pilotId !== null;
+  const someoneBoarded = Object.values(helicopter.seats).some((id) => id !== null);
   const showCockpitWindow = !someoneBoarded;
 
   return (
@@ -345,28 +345,44 @@ export function Helicopter() {
       </group>
 
       {/* === 搭乗プロンプト（回転ラッパーの外側に置く） === */}
-      {helicopter.pilotId === null && (
-        <Billboard position={[0, 3.5, 0]}>
-          {/* 背景パネル */}
-          <mesh>
-            <planeGeometry args={[4.0, 0.8]} />
-            <meshBasicMaterial color={0x000000} transparent opacity={0.8} side={THREE.DoubleSide} />
-          </mesh>
-          {/* テキスト */}
-          <Text
-            position={[0, 0, 0.01]}
-            fontSize={0.4}
-            color="#ffdd00"
-            anchorX="center"
-            anchorY="middle"
-            font={undefined}
-            outlineWidth={0.02}
-            outlineColor="#000000"
-          >
-            🚁 [F] のる
-          </Text>
-        </Billboard>
-      )}
+      {(() => {
+        const passengerCount = Object.values(helicopter.seats).filter((id) => id !== null).length;
+        const hasEmptySeat = passengerCount < 4;
+        if (!hasEmptySeat || helicopter.mySeat !== null) return null;
+        return (
+          <Billboard position={[0, 3.5, 0]}>
+            {/* 背景パネル */}
+            <mesh>
+              <planeGeometry args={[4.5, 1.0]} />
+              <meshBasicMaterial color={0x000000} transparent opacity={0.8} side={THREE.DoubleSide} />
+            </mesh>
+            {/* テキスト */}
+            <Text
+              position={[0, 0.12, 0.01]}
+              fontSize={0.35}
+              color="#ffdd00"
+              anchorX="center"
+              anchorY="middle"
+              font={undefined}
+              outlineWidth={0.02}
+              outlineColor="#000000"
+            >
+              🚁 [F] のる
+            </Text>
+            {/* 搭乗者数 */}
+            <Text
+              position={[0, -0.22, 0.01]}
+              fontSize={0.18}
+              color="rgba(255, 255, 255, 0.7)"
+              anchorX="center"
+              anchorY="middle"
+              font={undefined}
+            >
+              {`${passengerCount}/4`}
+            </Text>
+          </Billboard>
+        );
+      })()}
     </group>
   );
 }

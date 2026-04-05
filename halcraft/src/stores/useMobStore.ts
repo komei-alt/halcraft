@@ -1,10 +1,10 @@
 // モブ（敵キャラ・味方キャラ）の状態管理ストア
-// ゾンビのスポーン・AI・物理、プロトタイプ味方モブを管理
+// ゾンビ・クモ（敵）、プロトタイプ・アイアンゴーレム（味方）、ニワトリ（中立）を管理
 
 import { create } from 'zustand';
 
 /** モブの種類 */
-export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider';
+export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider' | 'iron_golem';
 
 /** モブのデータ */
 export interface MobData {
@@ -66,6 +66,8 @@ const CHICKEN_SPAWN_INTERVAL = 8;
 const SPIDER_HP = 8;
 /** クモの最大同時数 */
 const MAX_SPIDERS = 5;
+/** アイアンゴーレムのHP（頑丈な味方） */
+const IRON_GOLEM_HP = 40;
 
 let nextMobId = 0;
 
@@ -136,6 +138,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       prototype: PROTOTYPE_HP,
       chicken: CHICKEN_HP,
       spider: SPIDER_HP,
+      iron_golem: IRON_GOLEM_HP,
     };
     const hp = hpMap[type] ?? ZOMBIE_HP;
     const mob: MobData = {
@@ -148,7 +151,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       rotation: Math.random() * Math.PI * 2,
       hitTimer: 0,
       burnTimer: 0,
-      isAlly: type === 'prototype' || type === 'chicken',
+      isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -167,8 +170,8 @@ export const useMobStore = create<MobState>((set, get) => ({
             newDeathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
             return null;
           }
-          // モブタイプごとのノックバック耐性
-          const kbResistance = m.type === 'prototype' ? 0.3 : 0.7 + Math.random() * 0.3;
+          // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）
+          const kbResistance = (m.type === 'prototype' || m.type === 'iron_golem') ? 0.3 : 0.7 + Math.random() * 0.3;
           const kbMultiplier = kbResistance * (4 + Math.random() * 3);
           return {
             ...m,

@@ -4,9 +4,9 @@
 
 ```
 Status: 確定
-Version: 3.0
+Version: 3.1
 Created: 2026-03-21
-Updated: 2026-03-22
+Updated: 2026-04-05
 Replica of: CLAUDE.md
 Game: ハルクラ (HalCraft)
 ```
@@ -91,9 +91,12 @@ Hobby _Hal_Game 01/
 │   │       ├── TorchRenderer.tsx  ← 松明の3D描画
 │   │       ├── BedRenderer.tsx    ← ベッドの3D描画
 │   │       ├── mobs/
-│   │       │   ├── MobManager.tsx    ← モブの一括管理
-│   │       │   ├── Zombie.tsx        ← ゾンビ
-│   │       │   └── Prototype.tsx     ← アイアンゴーレム（プロトタイプ）
+│   │       │   ├── MobManager.tsx    ← モブの一括管理・AI
+│   │       │   ├── Zombie.tsx        ← ゾンビ（敵）
+│   │       │   ├── Spider.tsx        ← クモ（敵）
+│   │       │   ├── Chicken.tsx       ← ニワトリ（中立）
+│   │       │   ├── Prototype.tsx     ← プロトタイプ（味方・GLBモデル）
+│   │       │   └── IronGolem.tsx     ← アイアンゴーレム（味方・ボクセル）
 │   │       └── ui/
 │   │           ├── StartScreen.tsx    ← タイトル画面
 │   │           ├── Crosshair.tsx      ← 照準UI
@@ -144,6 +147,16 @@ Hobby _Hal_Game 01/
 - 建物系 → 壊せるブロックで構成し、中に入れる空間を作る
 - 背景 → 平面に絵を貼るのではなく、3Dワールドとしてプロシージャル生成
 - コンセプトアート → あくまで世界観の参考。スタイルや色味の指針
+
+### モブ一覧
+
+| モブ名 | タイプ | 陣営 | HP | 特徴 |
+|--------|--------|------|-----|------|
+| ゾンビ | `zombie` | 敵 | 10 | 夜間スポーン、プレイヤーを追跡・攻撃 |
+| クモ | `spider` | 敵 | 8 | 夜間スポーン、高速移動 |
+| ニワトリ | `chicken` | 中立 | 4 | 昼間スポーン、プレイヤーから逃げる |
+| プロトタイプ | `prototype` | 味方 | 50 | GLBモデル、プレイヤー追従・敵を攻撃 |
+| アイアンゴーレム | `iron_golem` | 味方 | 40 | SPAWNERブロックから召喚、ボクセルスタイル、敵を自動攻撃 |
 
 ---
 
@@ -307,4 +320,4 @@ cd halcraft && docker build -t halcraft:latest . && docker run -p 4000:80 halcra
 
 ---
 
-*最終更新: 2026-03-22 v3.0*
+*最終更新: 2026-04-05 v3.1*

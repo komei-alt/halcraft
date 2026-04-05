@@ -29,7 +29,8 @@ const COCKPIT_CONFIG = {
 } as const;
 
 export function CockpitView() {
-  const isBoarded = useVehicleStore((s) => s.helicopter.isBoarded);
+  const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
+  const isBoarded = mySeat !== null;
   const cockpitRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
 

@@ -13,6 +13,7 @@ const MOB_COLORS: Record<MobType, THREE.Color> = {
   prototype: new THREE.Color(0x8888cc),
   chicken: new THREE.Color(0xf5f5f0),
   spider: new THREE.Color(0x2a2a2a),
+  iron_golem: new THREE.Color(0xaaaaaa),
 };
 
 interface DeathParticle {

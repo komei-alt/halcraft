@@ -1,21 +1,28 @@
 // コックピットHUDオーバーレイ
 // ヘリコプター搭乗中に表示する2D CSSオーバーレイ
-// ガラスの反射エフェクト + 窓枠の影 + リアルな計器デザイン
-// VehicleHUD を拡張してコックピット感を演出
+// 座席ごとに異なるHUDを表示:
+// - パイロット: 操縦計器 + ガラスエフェクト
+// - 機関銃手: 射撃照準HUD
+// - 副操縦士: マップビュー
 
-import { useVehicleStore, HELICOPTER_CONSTANTS } from '../../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_NAMES, ALL_SEATS } from '../../stores/useVehicleStore';
+import type { SeatType } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
 
 export function CockpitHUD() {
   const helicopter = useVehicleStore((s) => s.helicopter);
   const isNight = useGameStore((s) => s.isNight);
 
-  if (!helicopter.isBoarded) return null;
+  // 搭乗中でなければ非表示
+  const mySeat = helicopter.mySeat;
+  if (mySeat === null) return null;
+
+  const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
+  const isPilot = mySeat === 'pilot';
 
   const speed = Math.abs(helicopter.speed);
   const speedPct = (speed / HELICOPTER_CONSTANTS.MAX_SPEED) * 100;
   const altitude = helicopter.y;
-  // 方位をヘリの回転から計算（0-360度）
   const heading = (((-helicopter.rotationY * 180) / Math.PI) % 360 + 360) % 360;
 
   return (
@@ -91,8 +98,9 @@ export function CockpitHUD() {
         background: 'linear-gradient(to bottom, rgba(10, 10, 15, 0.6) 0%, transparent 100%)',
       }} />
 
-      {/* === HUD インストルメント === */}
+      {/* === HUD インストルメント（パイロット・副操縦士のみ表示） === */}
 
+      {isPilot && (<>
       {/* ヘッドアップ風 方位表示（上部中央） */}
       <div style={{
         position: 'absolute',
@@ -375,6 +383,108 @@ export function CockpitHUD() {
           HC-01 RESCUE
         </span>
       </div>
+      </>)}
+
+      {/* === 搭乗者リスト（左上） === */}
+      <div style={{
+        position: 'absolute',
+        top: '16px',
+        left: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '3px',
+        background: 'rgba(0, 0, 0, 0.4)',
+        borderRadius: '6px',
+        padding: '6px 10px',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+      }}>
+        <span style={{
+          color: 'rgba(255, 255, 255, 0.5)',
+          fontSize: '8px',
+          fontFamily: 'monospace',
+          letterSpacing: '1px',
+        }}>
+          CREW
+        </span>
+        {ALL_SEATS.map((seat: SeatType) => {
+          const occupied = helicopter.seats[seat] !== null;
+          const isMe = seat === mySeat;
+          return (
+            <div key={seat} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}>
+              <div style={{
+                width: '5px',
+                height: '5px',
+                borderRadius: '50%',
+                background: occupied ? (isMe ? '#ffdd00' : '#50c878') : 'rgba(255,255,255,0.15)',
+                boxShadow: occupied ? `0 0 3px ${isMe ? '#ffdd00' : '#50c878'}` : 'none',
+              }} />
+              <span style={{
+                color: isMe ? '#ffdd00' : occupied ? 'rgba(80, 200, 120, 0.7)' : 'rgba(255,255,255,0.25)',
+                fontSize: '8px',
+                fontFamily: 'monospace',
+              }}>
+                {SEAT_NAMES[seat]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* === 機関銃手用照準HUD === */}
+      {isGunner && (
+        <>
+          {/* 中央射撃照準（クロスヘアとは別の大きな照準） */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '80px',
+            height: '80px',
+            border: '1px solid rgba(255, 68, 68, 0.4)',
+            borderRadius: '50%',
+            pointerEvents: 'none',
+          }}>
+            {/* 十字線 */}
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '10px',
+              right: '10px',
+              height: '1px',
+              background: 'rgba(255, 68, 68, 0.5)',
+            }} />
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '10px',
+              bottom: '10px',
+              width: '1px',
+              background: 'rgba(255, 68, 68, 0.5)',
+            }} />
+          </div>
+          {/* GUN STATUS */}
+          <div style={{
+            position: 'absolute',
+            bottom: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0, 0, 0, 0.5)',
+            borderRadius: '4px',
+            padding: '4px 12px',
+            border: '1px solid rgba(255, 68, 68, 0.3)',
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            color: '#ff6644',
+          }}>
+            🔫 {mySeat === 'gunner_left' ? 'LEFT' : 'RIGHT'} GUN • 左クリックで射撃
+          </div>
+        </>
+      )}
     </div>
   );
 }

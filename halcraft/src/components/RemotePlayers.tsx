@@ -8,11 +8,9 @@
 import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
-import { useVehicleStore } from '../stores/useVehicleStore';
+import { useVehicleStore, SEAT_OFFSETS } from '../stores/useVehicleStore';
 import { VoxelAvatar } from './VoxelAvatar';
 
-/** ヘリコプター操縦席のオフセット（Helicopter.tsx の group scale=1.3 を考慮） */
-const COCKPIT_OFFSET_Y = 1.8;
 
 export function RemotePlayers() {
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
@@ -53,35 +51,40 @@ function RemotePlayerModel({
   useFrame(() => {
     if (!groupRef.current) return;
 
-    // ヘリコプター搭乗判定（pilotIdが自分のIDと一致するか）
+    // ヘリコプター搭乗判定（全座席からプレイヤーIDを検索）
     const heli = useVehicleStore.getState().helicopter;
-    const isInHelicopter = heli.spawned && heli.pilotId === player.id;
+    let occupiedSeat: string | null = null;
+    if (heli.spawned) {
+      for (const [seat, id] of Object.entries(heli.seats)) {
+        if (id === player.id) {
+          occupiedSeat = seat;
+          break;
+        }
+      }
+    }
+    const isInHelicopter = occupiedSeat !== null;
 
-    if (isInHelicopter) {
-      // 搭乗中: ヘリコプターの操縦席位置にアバターを配置
-      // ヘリの向きに合わせてオフセットを回転させる
+    if (isInHelicopter && occupiedSeat) {
+      // 搭乗中: 該当する席のオフセット位置にアバターを配置
+      const seatOff = SEAT_OFFSETS[occupiedSeat as keyof typeof SEAT_OFFSETS] || { x: 0, y: 1.8, z: -0.3 };
+
       const cosR = Math.cos(heli.rotationY);
       const sinR = Math.sin(heli.rotationY);
-      // 操縦席はヘリの中心から少し前方上方（ヘリのローカル座標で Y+1.8, Z-0.5 → ワールド座標に変換）
-      const localZ = -0.3; // ヘリの前方寄り（Three.jsの-Zが前方、モデルは180度回転してるので調整）
-      const offsetX = sinR * localZ;
-      const offsetZ = cosR * localZ;
+      // ローカル座標をワールド座標に変換
+      const worldX = heli.x + sinR * seatOff.z + cosR * seatOff.x;
+      const worldZ = heli.z + cosR * seatOff.z - sinR * seatOff.x;
 
       groupRef.current.position.set(
-        heli.x + offsetX,
-        heli.y + COCKPIT_OFFSET_Y,
-        heli.z + offsetZ,
+        worldX,
+        heli.y + seatOff.y,
+        worldZ,
       );
       // ヘリの向きに体を合わせる
       groupRef.current.rotation.y = heli.rotationY;
 
       // 搭乗中は移動アニメーション無効
       setIsMoving((prev: boolean) => prev ? false : prev);
-      prevPosRef.current = [
-        heli.x + offsetX,
-        heli.y + COCKPIT_OFFSET_Y,
-        heli.z + offsetZ,
-      ];
+      prevPosRef.current = [worldX, heli.y + seatOff.y, worldZ];
     } else {
       // 通常: サーバーからの補間位置を使用
       groupRef.current.position.set(

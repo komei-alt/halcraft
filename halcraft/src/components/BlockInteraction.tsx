@@ -322,7 +322,7 @@ export function BlockInteraction() {
             sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
             // SPAWNERブロック設置時:アイアンゴーレムをスポーン
             if (selectedBlock === BLOCK_IDS.SPAWNER) {
-              spawnMob('prototype', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
+              spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
             }
           }
         }
@@ -388,7 +388,7 @@ export function BlockInteraction() {
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
       // SPAWNERブロック設置時:アイアンゴーレムをスポーン
       if (selectedBlock === BLOCK_IDS.SPAWNER) {
-        spawnMob('prototype', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
+        spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
   }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer]);
