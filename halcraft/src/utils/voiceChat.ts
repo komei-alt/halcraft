@@ -2,6 +2,10 @@
 // VoiceChat — WebRTC ベースのボイスチャット
 // P2P Mesh トポロジー（最大10人、音声のみ）
 // Socket.IO をシグナリングサーバーとして利用
+//
+// モード:
+//   - listener: スピーカーのみ（マイクなし、受信専用）
+//   - full: マイク＋スピーカー（送受信）
 // ============================================
 
 import { getSocket } from './socket';
@@ -31,6 +35,10 @@ interface PeerConnection {
 export interface VoiceChatCallbacks {
   /** 接続状態が変わった時 */
   onStateChange?: (state: VoiceChatState) => void;
+  /** マイク状態が変わった時 */
+  onMicChange?: (micEnabled: boolean) => void;
+  /** スピーカー（リスナー）状態が変わった時 */
+  onSpeakerChange?: (speakerEnabled: boolean) => void;
   /** 自分の発話状態が変わった時 */
   onSpeakingChange?: (speaking: boolean) => void;
   /** リモートプレイヤーの発話状態が変わった時 */
@@ -44,13 +52,20 @@ export type VoiceChatState = 'disconnected' | 'connecting' | 'connected' | 'erro
 /**
  * ボイスチャットマネージャー
  * WebRTC Mesh トポロジーで P2P 音声通信を管理
+ *
+ * 起動フロー:
+ * 1. マルチプレイ接続時に joinAsListener() → 受信専用で自動参加
+ * 2. ユーザーがマイクON → enableMicrophone() → 既存のピア接続にトラック追加
+ * 3. マイクOFF → disableMicrophone() → トラックを無効化（接続は維持）
  */
 class VoiceChatManager {
   private peers: Map<string, PeerConnection> = new Map();
   private localStream: MediaStream | null = null;
   private callbacks: VoiceChatCallbacks = {};
   private state: VoiceChatState = 'disconnected';
+  private isMicEnabled = false;
   private isMuted = false;
+  private isSpeakerEnabled = false;
   private speakingTimer: ReturnType<typeof setInterval> | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -62,9 +77,19 @@ class VoiceChatManager {
     return this.state;
   }
 
+  /** マイクが有効かどうか */
+  getMicEnabled(): boolean {
+    return this.isMicEnabled;
+  }
+
   /** ミュート状態を取得 */
   getMuted(): boolean {
     return this.isMuted;
+  }
+
+  /** スピーカー（リスナー）が有効かどうか */
+  getSpeakerEnabled(): boolean {
+    return this.isSpeakerEnabled;
   }
 
   /** 接続中のピア数を取得 */
@@ -84,19 +109,46 @@ class VoiceChatManager {
   }
 
   /**
-   * ボイスチャットに参加
-   * マイクの許可を取得し、既存のピアと接続を確立
+   * リスナーモードで参加（スピーカーのみ、マイク不要）
+   * マルチプレイ接続時に自動で呼ばれる
    */
-  async join(): Promise<void> {
+  async joinAsListener(): Promise<void> {
     if (this.state !== 'disconnected') return;
 
     const socket = getSocket();
     if (!socket?.connected) {
-      this.callbacks.onError?.('サーバーに接続されていません');
-      return;
+      return; // サーバー未接続の場合はサイレントに無視
     }
 
     this.setState('connecting');
+
+    try {
+      // Socket.IO シグナリングイベントを登録（受信用）
+      this.attachSocketListeners();
+
+      // ボイスチャット参加を通知 → 他のピアからオファーを受け取る
+      socket.emit('voice:joined');
+
+      this.isSpeakerEnabled = true;
+      this.callbacks.onSpeakerChange?.(true);
+      this.setState('connected');
+    } catch (err) {
+      console.error('[VoiceChat] リスナー参加に失敗:', err);
+      this.setState('error');
+    }
+  }
+
+  /**
+   * マイクを有効化
+   * リスナーモードから送信モードにアップグレード
+   */
+  async enableMicrophone(): Promise<void> {
+    if (this.isMicEnabled) return;
+
+    if (this.state !== 'connected') {
+      // まだ接続していない場合は先にリスナーとして参加
+      await this.joinAsListener();
+    }
 
     try {
       // マイクの許可を取得
@@ -109,16 +161,33 @@ class VoiceChatManager {
         video: false,
       });
 
+      // 既存のピア接続にローカルトラックを追加
+      for (const [peerId, peer] of this.peers) {
+        this.localStream.getTracks().forEach((track) => {
+          try {
+            peer.pc.addTrack(track, this.localStream!);
+          } catch (e) {
+            console.warn(`[VoiceChat] ピア ${peerId} にトラック追加失敗:`, e);
+          }
+        });
+
+        // 再ネゴシエーション: 新しいトラックを通知するためにオファーを再送
+        try {
+          const offer = await peer.pc.createOffer();
+          await peer.pc.setLocalDescription(offer);
+          const socket = getSocket();
+          socket?.emit('voice:offer', { targetId: peerId, offer });
+        } catch (e) {
+          console.warn(`[VoiceChat] ピア ${peerId} 再ネゴシエーション失敗:`, e);
+        }
+      }
+
       // 発話検出の設定
       await this.setupSpeakingDetection();
 
-      // Socket.IO シグナリングイベントを登録
-      this.attachSocketListeners();
-
-      // ボイスチャット参加を通知
-      socket.emit('voice:joined');
-
-      this.setState('connected');
+      this.isMicEnabled = true;
+      this.isMuted = false;
+      this.callbacks.onMicChange?.(true);
     } catch (err) {
       console.error('[VoiceChat] マイクの取得に失敗:', err);
 
@@ -128,29 +197,46 @@ class VoiceChatManager {
           : 'マイクの接続に失敗しました。';
 
       this.callbacks.onError?.(errorMessage);
-      this.setState('error');
     }
   }
 
-  /** ボイスチャットから退出 */
-  leave(): void {
-    const socket = getSocket();
-    socket?.emit('voice:left');
+  /**
+   * マイクを無効化
+   * ローカルストリームを停止するが、リスナーモードは維持
+   */
+  disableMicrophone(): void {
+    if (!this.isMicEnabled) return;
 
     // 発話検出を停止
     this.stopSpeakingDetection();
 
-    // 全ピア接続を切断
-    for (const [peerId, peer] of this.peers) {
-      peer.pc.close();
-      peer.audioElement.srcObject = null;
-      peer.audioElement.remove();
-      this.peers.delete(peerId);
+    // 発話状態をリセット
+    if (this.isSpeaking) {
+      this.isSpeaking = false;
+      this.callbacks.onSpeakingChange?.(false);
+      const socket = getSocket();
+      socket?.emit('voice:speaking', { speaking: false });
     }
 
     // ローカルストリームを停止
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
+
+      // ピア接続からローカルトラックを削除
+      for (const [, peer] of this.peers) {
+        const senders = peer.pc.getSenders();
+        for (const sender of senders) {
+          if (sender.track && this.localStream.getTracks().includes(sender.track)) {
+            try {
+              peer.pc.removeTrack(sender);
+            } catch (e) {
+              // removeTrack が非対応のブラウザ
+              console.warn('[VoiceChat] トラック削除失敗:', e);
+            }
+          }
+        }
+      }
+
       this.localStream = null;
     }
 
@@ -161,12 +247,37 @@ class VoiceChatManager {
       this.analyser = null;
     }
 
+    this.isMicEnabled = false;
+    this.isMuted = false;
+    this.callbacks.onMicChange?.(false);
+  }
+
+  /** ボイスチャットから完全に退出（スピーカーも停止） */
+  leave(): void {
+    // マイクを先に停止
+    this.disableMicrophone();
+
+    const socket = getSocket();
+    socket?.emit('voice:left');
+
+    // 全ピア接続を切断
+    for (const [peerId, peer] of this.peers) {
+      peer.pc.close();
+      peer.audioElement.srcObject = null;
+      peer.audioElement.remove();
+      this.peers.delete(peerId);
+    }
+
     this.detachSocketListeners();
+    this.isSpeakerEnabled = false;
+    this.callbacks.onSpeakerChange?.(false);
     this.setState('disconnected');
   }
 
   /** マイクのミュート/ミュート解除を切り替え */
   toggleMute(): boolean {
+    if (!this.isMicEnabled) return this.isMuted;
+
     this.isMuted = !this.isMuted;
 
     if (this.localStream) {
@@ -184,6 +295,19 @@ class VoiceChatManager {
     }
 
     return this.isMuted;
+  }
+
+  /** スピーカー（受信音声）のミュート/解除を切り替え */
+  toggleSpeaker(): boolean {
+    this.isSpeakerEnabled = !this.isSpeakerEnabled;
+
+    // 全ピアの音声要素のボリュームを切り替え
+    for (const [, peer] of this.peers) {
+      peer.audioElement.muted = !this.isSpeakerEnabled;
+    }
+
+    this.callbacks.onSpeakerChange?.(this.isSpeakerEnabled);
+    return this.isSpeakerEnabled;
   }
 
   // ── 発話検出 ──
@@ -353,7 +477,7 @@ class VoiceChatManager {
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
-    // ローカルの音声トラックを追加
+    // ローカルの音声トラックを追加（マイクが有効な場合のみ）
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         pc.addTrack(track, this.localStream!);
@@ -378,6 +502,8 @@ class VoiceChatManager {
     audioElement.setAttribute('playsinline', '');
     audioElement.setAttribute('webkit-playsinline', '');
     audioElement.volume = 1.0;
+    // スピーカーがOFFの場合はミュート
+    audioElement.muted = !this.isSpeakerEnabled;
     // DOM に追加しないと一部ブラウザで再生できない（Mac Safari, Firefox等）
     audioElement.style.display = 'none';
     document.body.appendChild(audioElement);

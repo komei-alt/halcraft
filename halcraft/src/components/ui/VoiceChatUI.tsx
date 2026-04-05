@@ -1,9 +1,10 @@
 // ============================================
 // VoiceChatUI — ボイスチャットの操作パネル
-// マイクON/OFF / ミュート / 発話インジケーター
+// スピーカーはデフォルトON、マイクは明示的にON
+// マイクOFF時は「参加を促す」フレンドリーなUI表示
 // ============================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { voiceChat } from '../../utils/voiceChat';
 import type { VoiceChatState } from '../../utils/voiceChat';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
@@ -17,6 +18,16 @@ const MicIcon = ({ size = 20 }: { size?: number }) => (
     <path d="M5 10a7 7 0 0 0 14 0" />
     <line x1="12" y1="17" x2="12" y2="21" />
     <line x1="8" y1="21" x2="16" y2="21" />
+  </svg>
+);
+
+const MicOffIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="1" y1="1" x2="23" y2="23" />
+    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+    <path d="M17 16.95A7 7 0 0 1 5 12" />
+    <line x1="12" y1="19" x2="12" y2="23" />
+    <line x1="8" y1="23" x2="16" y2="23" />
   </svg>
 );
 
@@ -36,20 +47,19 @@ const SpeakerMutedIcon = ({ size = 18 }: { size?: number }) => (
   </svg>
 );
 
-const HourglassIcon = ({ size = 20 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M6 2h12v5l-4 4 4 4v5H6v-5l4-4-4-4z" />
-  </svg>
-);
-
 export function VoiceChatUI() {
   const phase = useGameStore((s) => s.phase);
   const connected = useMultiplayerStore((s) => s.connected);
 
   const [vcState, setVcState] = useState<VoiceChatState>('disconnected');
+  const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // マイク参加を促すツールチップの表示（初回のみ数秒間表示）
+  const [showJoinHint, setShowJoinHint] = useState(false);
+  const hintShownRef = useRef(false);
 
   const isTouch = isTouchDevice();
 
@@ -57,14 +67,14 @@ export function VoiceChatUI() {
   useEffect(() => {
     voiceChat.setCallbacks({
       onStateChange: (state) => setVcState(state),
+      onMicChange: (mic) => setIsMicEnabled(mic),
+      onSpeakerChange: (speaker) => setIsSpeakerOn(speaker),
       onSpeakingChange: (speaking) => setIsSpeaking(speaking),
       onRemoteSpeaking: (playerId, speaking) => {
-        // リモートプレイヤーの発話状態を useMultiplayerStore に反映
         useMultiplayerStore.getState().setRemoteSpeaking(playerId, speaking);
       },
       onError: (err) => {
         setError(err);
-        // 3秒後にエラーをクリア
         setTimeout(() => setError(null), 5000);
       },
     });
@@ -74,33 +84,69 @@ export function VoiceChatUI() {
     };
   }, []);
 
-  // ボイスチャットに参加/退出
-  const handleToggleVoice = useCallback(() => {
-    if (vcState === 'connected') {
-      voiceChat.leave();
-    } else if (vcState === 'disconnected' || vcState === 'error') {
-      voiceChat.join();
+  // マルチプレイ接続時にリスナー（スピーカーのみ）として自動参加
+  useEffect(() => {
+    if (phase === 'playing' && connected) {
+      voiceChat.joinAsListener();
     }
-  }, [vcState]);
+    // マルチプレイ切断時はクリーンアップ
+    if (!connected && vcState !== 'disconnected') {
+      voiceChat.leave();
+    }
+  }, [phase, connected, vcState]);
 
-  // ミュートトグル
+  // リスナー参加後、マイク未有効の場合にヒントを表示（初回のみ）
+  useEffect(() => {
+    if (vcState === 'connected' && !isMicEnabled && !hintShownRef.current) {
+      const timer = setTimeout(() => {
+        setShowJoinHint(true);
+        hintShownRef.current = true;
+        // 6秒後にフェードアウト
+        setTimeout(() => setShowJoinHint(false), 6000);
+      }, 2000); // 参加後2秒待ってから表示
+      return () => clearTimeout(timer);
+    }
+  }, [vcState, isMicEnabled]);
+
+  // マイクON/OFF
+  const handleToggleMic = useCallback(() => {
+    if (isMicEnabled) {
+      voiceChat.disableMicrophone();
+    } else {
+      voiceChat.enableMicrophone();
+      setShowJoinHint(false);
+    }
+  }, [isMicEnabled]);
+
+  // マイクミュートトグル
   const handleToggleMute = useCallback(() => {
     const newMuted = voiceChat.toggleMute();
     setIsMuted(newMuted);
   }, []);
 
-  // タッチ用ハンドラ（モバイルでは onClick が発火しないため）
-  const handleTouchToggleVoice = useCallback((e: React.TouchEvent) => {
+  // スピーカーON/OFF
+  const handleToggleSpeaker = useCallback(() => {
+    voiceChat.toggleSpeaker();
+  }, []);
+
+  // タッチ用ハンドラ
+  const handleTouchToggleMic = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    handleToggleVoice();
-  }, [handleToggleVoice]);
+    handleToggleMic();
+  }, [handleToggleMic]);
 
   const handleTouchToggleMute = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     handleToggleMute();
   }, [handleToggleMute]);
+
+  const handleTouchToggleSpeaker = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleToggleSpeaker();
+  }, [handleToggleSpeaker]);
 
   // ゲームプレイ中 + マルチプレイ接続中のみ表示
   if (phase !== 'playing' || !connected) return null;
@@ -138,24 +184,86 @@ export function VoiceChatUI() {
         </div>
       )}
 
+      {/* マイク参加を促すヒント（マイクOFF時に表示） */}
+      {showJoinHint && !isMicEnabled && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 14px',
+            background: 'rgba(52, 152, 219, 0.9)',
+            borderRadius: 10,
+            color: '#fff',
+            fontSize: isTouch ? 13 : 12,
+            maxWidth: 220,
+            textAlign: 'right',
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 12px rgba(52, 152, 219, 0.4)',
+            animation: 'hintSlideIn 0.4s ease-out',
+            lineHeight: 1.4,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>🎤</span>
+          <span>マイクを押して<br />会話に参加しよう！</span>
+          <span style={{
+            position: 'absolute',
+            right: isTouch ? 18 : 16,
+            top: -6,
+            width: 0,
+            height: 0,
+          }} />
+        </div>
+      )}
+
       {/* ボタンの行 */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {/* ミュートボタン（VC接続中のみ） */}
-        {vcState === 'connected' && (
+        {/* スピーカーボタン（常時表示） */}
+        <button
+          id="voice-speaker-button"
+          onClick={isTouch ? undefined : handleToggleSpeaker}
+          onTouchStart={isTouch ? handleTouchToggleSpeaker : undefined}
+          style={{
+            width: isTouch ? 40 : 36,
+            height: isTouch ? 40 : 36,
+            borderRadius: '50%',
+            border: 'none',
+            background: isSpeakerOn
+              ? 'rgba(255,255,255,0.15)'
+              : 'rgba(231, 76, 60, 0.8)',
+            color: '#fff',
+            fontSize: isTouch ? 20 : 16,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s',
+            backdropFilter: 'blur(8px)',
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          title={isSpeakerOn ? 'スピーカーOFF' : 'スピーカーON'}
+        >
+          {isSpeakerOn
+            ? <SpeakerIcon size={isTouch ? 20 : 16} />
+            : <SpeakerMutedIcon size={isTouch ? 20 : 16} />}
+        </button>
+
+        {/* マイクミュートボタン（マイクON時のみ） */}
+        {isMicEnabled && (
           <button
             id="voice-mute-button"
             onClick={isTouch ? undefined : handleToggleMute}
             onTouchStart={isTouch ? handleTouchToggleMute : undefined}
             style={{
-              width: isTouch ? 44 : 40,
-              height: isTouch ? 44 : 40,
+              width: isTouch ? 40 : 36,
+              height: isTouch ? 40 : 36,
               borderRadius: '50%',
               border: 'none',
               background: isMuted
                 ? 'rgba(231, 76, 60, 0.8)'
                 : 'rgba(255,255,255,0.15)',
               color: '#fff',
-              fontSize: isTouch ? 20 : 16,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -167,32 +275,33 @@ export function VoiceChatUI() {
             }}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
-            {isMuted ? <SpeakerMutedIcon size={isTouch ? 22 : 18} /> : <SpeakerIcon size={isTouch ? 22 : 18} />}
+            {isMuted
+              ? <MicOffIcon size={isTouch ? 20 : 16} />
+              : <MicIcon size={isTouch ? 20 : 16} />}
           </button>
         )}
 
-        {/* マイクON/OFFボタン */}
+        {/* メインのマイクON/OFFボタン */}
         <button
-          id="voice-toggle-button"
-          onClick={isTouch ? undefined : handleToggleVoice}
-          onTouchStart={isTouch ? handleTouchToggleVoice : undefined}
-          disabled={vcState === 'connecting'}
+          id="voice-mic-button"
+          onClick={isTouch ? undefined : handleToggleMic}
+          onTouchStart={isTouch ? handleTouchToggleMic : undefined}
           style={{
             width: isTouch ? 48 : 44,
             height: isTouch ? 48 : 44,
             borderRadius: '50%',
             border: '2px solid',
-            borderColor: vcState === 'connected'
+            borderColor: isMicEnabled
               ? (isSpeaking ? '#2ecc71' : '#3498db')
-              : 'rgba(255,255,255,0.2)',
-            background: vcState === 'connected'
+              : 'rgba(255,255,255,0.25)',
+            background: isMicEnabled
               ? (isSpeaking
                 ? 'rgba(46, 204, 113, 0.3)'
                 : 'rgba(52, 152, 219, 0.3)')
               : 'rgba(0,0,0,0.4)',
             color: '#fff',
             fontSize: isTouch ? 22 : 20,
-            cursor: vcState === 'connecting' ? 'wait' : 'pointer',
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -203,16 +312,20 @@ export function VoiceChatUI() {
             // 発話中のパルスアニメーション
             boxShadow: isSpeaking
               ? '0 0 12px rgba(46, 204, 113, 0.6), 0 0 24px rgba(46, 204, 113, 0.3)'
-              : 'none',
-            animation: isSpeaking ? 'voicePulse 1.5s ease-in-out infinite' : 'none',
+              : (showJoinHint && !isMicEnabled
+                ? '0 0 12px rgba(52, 152, 219, 0.5), 0 0 24px rgba(52, 152, 219, 0.2)'
+                : 'none'),
+            animation: isSpeaking
+              ? 'voicePulse 1.5s ease-in-out infinite'
+              : (showJoinHint && !isMicEnabled
+                ? 'micHintPulse 2s ease-in-out infinite'
+                : 'none'),
           }}
-          title={
-            vcState === 'connected' ? 'ボイスチャットを終了'
-            : vcState === 'connecting' ? '接続中...'
-            : 'ボイスチャットに参加'
-          }
+          title={isMicEnabled ? 'マイクOFF' : 'マイクON — 会話に参加'}
         >
-          {vcState === 'connecting' ? <HourglassIcon size={isTouch ? 24 : 20} /> : <MicIcon size={isTouch ? 24 : 20} />}
+          {isMicEnabled
+            ? <MicIcon size={isTouch ? 24 : 20} />
+            : <MicOffIcon size={isTouch ? 24 : 20} />}
         </button>
       </div>
 
@@ -220,22 +333,29 @@ export function VoiceChatUI() {
       <span
         style={{
           fontSize: 10,
-          color: vcState === 'connected'
-            ? 'rgba(52, 152, 219, 0.8)'
+          color: isMicEnabled
+            ? (isMuted ? 'rgba(231, 76, 60, 0.8)' : 'rgba(52, 152, 219, 0.8)')
             : 'rgba(255,255,255,0.3)',
           letterSpacing: 1,
         }}
       >
-        {vcState === 'connected' && (isMuted ? 'ミュート中' : 'ボイスON')}
-        {vcState === 'connecting' && '接続中...'}
-        {vcState === 'disconnected' && ''}
+        {isMicEnabled && (isMuted ? 'ミュート中' : 'マイクON')}
+        {!isMicEnabled && vcState === 'connected' && '聴取中'}
       </span>
 
-      {/* パルスアニメーション用のスタイル */}
+      {/* アニメーション用スタイル */}
       <style>{`
         @keyframes voicePulse {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.08); }
+        }
+        @keyframes micHintPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(52, 152, 219, 0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 0 16px rgba(52, 152, 219, 0.6); }
+        }
+        @keyframes hintSlideIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
