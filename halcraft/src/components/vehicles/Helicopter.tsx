@@ -2,6 +2,7 @@
 // ボクセルスタイルの3Dヘリコプターモデル + ローターアニメーション
 // プレイヤーが近づくと搭乗プロンプトを表示
 // 鮮やかな色と自発光で昼夜問わず視認しやすい
+// ヘッドライト搭載: ノーズ下部に2灯のSpotLight + 発光ハウジング
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -18,11 +19,44 @@ const WINDOW_COLOR = new THREE.Color(0x66ddff);      // 明るい水色の窓
 const SKID_COLOR = new THREE.Color(0x333333);        // 黒いスキッド
 const STRIPE_COLOR = new THREE.Color(0xffdd00);      // 黄色いストライプ
 
+/** ヘッドライトの色定義 */
+const HEADLIGHT_COLOR = new THREE.Color(0xffffcc);       // 暖かい白色光
+const HEADLIGHT_HOUSING_COLOR = new THREE.Color(0xdddddd); // ライトハウジング（シルバー）
+const HEADLIGHT_LENS_COLOR = new THREE.Color(0xffffaa);    // レンズ（暖かい黄白色）
+
+/** ヘッドライト設定 */
+const HEADLIGHT_CONFIG = {
+  /** 搭乗時の光量 */
+  BOARDED_INTENSITY: 5,
+  /** 待機時の光量 */
+  IDLE_INTENSITY: 1.5,
+  /** 搭乗時のレンズ発光強度 */
+  BOARDED_EMISSIVE: 2.0,
+  /** 待機時のレンズ発光強度 */
+  IDLE_EMISSIVE: 0.5,
+  /** 照射距離 */
+  DISTANCE: 25,
+  /** 照射角度（ラジアン） */
+  ANGLE: Math.PI / 5,
+  /** 半影のソフトさ（0=くっきり, 1=ぼんやり） */
+  PENUMBRA: 0.4,
+  /** 光の減衰 */
+  DECAY: 1.5,
+} as const;
+
 export function Helicopter() {
   const helicopter = useVehicleStore((s) => s.helicopter);
   const mainRotorRef = useRef<THREE.Group>(null);
   const tailRotorRef = useRef<THREE.Group>(null);
   const groupRef = useRef<THREE.Group>(null);
+
+  // ヘッドライトの参照
+  const spotLightLeftRef = useRef<THREE.SpotLight>(null);
+  const spotLightRightRef = useRef<THREE.SpotLight>(null);
+  const spotLightTargetLeftRef = useRef<THREE.Object3D>(null);
+  const spotLightTargetRightRef = useRef<THREE.Object3D>(null);
+  const lensLeftRef = useRef<THREE.Mesh>(null);
+  const lensRightRef = useRef<THREE.Mesh>(null);
 
   // マテリアルをメモ化（emissive付きで暗所でも目立つ）
   const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -53,6 +87,16 @@ export function Helicopter() {
     emissive: STRIPE_COLOR, emissiveIntensity: 0.2,
   }), []);
 
+  // ヘッドライト用マテリアル
+  const housingMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: HEADLIGHT_HOUSING_COLOR, roughness: 0.3, metalness: 0.6,
+  }), []);
+  const lensMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: HEADLIGHT_LENS_COLOR, roughness: 0.1, metalness: 0.2,
+    emissive: HEADLIGHT_LENS_COLOR, emissiveIntensity: HEADLIGHT_CONFIG.IDLE_EMISSIVE,
+    transparent: true, opacity: 0.95,
+  }), []);
+
   useFrame(() => {
     if (!helicopter.spawned) return;
 
@@ -77,6 +121,40 @@ export function Helicopter() {
       } else {
         tailRotorRef.current.rotation.x += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.006;
       }
+    }
+
+    // ヘッドライトの強度を搭乗状態に応じて変更
+    const targetIntensity = someoneBoarded
+      ? HEADLIGHT_CONFIG.BOARDED_INTENSITY
+      : HEADLIGHT_CONFIG.IDLE_INTENSITY;
+    const targetEmissive = someoneBoarded
+      ? HEADLIGHT_CONFIG.BOARDED_EMISSIVE
+      : HEADLIGHT_CONFIG.IDLE_EMISSIVE;
+
+    // SpotLight の強度をスムーズに補間
+    if (spotLightLeftRef.current) {
+      spotLightLeftRef.current.intensity += (targetIntensity - spotLightLeftRef.current.intensity) * 0.1;
+    }
+    if (spotLightRightRef.current) {
+      spotLightRightRef.current.intensity += (targetIntensity - spotLightRightRef.current.intensity) * 0.1;
+    }
+
+    // レンズの発光強度をスムーズに補間
+    if (lensLeftRef.current) {
+      const mat = lensLeftRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.1;
+    }
+    if (lensRightRef.current) {
+      const mat = lensRightRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.1;
+    }
+
+    // SpotLight のターゲットを設定
+    if (spotLightLeftRef.current && spotLightTargetLeftRef.current) {
+      spotLightLeftRef.current.target = spotLightTargetLeftRef.current;
+    }
+    if (spotLightRightRef.current && spotLightTargetRightRef.current) {
+      spotLightRightRef.current.target = spotLightTargetRightRef.current;
     }
   });
 
@@ -114,6 +192,59 @@ export function Helicopter() {
       <mesh position={[0, 0.3, 0.3]} material={stripeMat}>
         <boxGeometry args={[1.62, 0.15, 0.3]} />
       </mesh>
+
+      {/* === ヘッドライト（ノーズ下部に2灯） === */}
+      {/* 左ヘッドライト */}
+      <group position={[-0.35, -0.15, 1.75]}>
+        {/* ハウジング（ライトの外枠） */}
+        <mesh material={housingMat}>
+          <boxGeometry args={[0.28, 0.22, 0.15]} />
+        </mesh>
+        {/* レンズ（発光面 — 前方に少し出す） */}
+        <mesh ref={lensLeftRef} position={[0, 0, 0.09]} material={lensMat.clone()}>
+          <boxGeometry args={[0.22, 0.16, 0.04]} />
+        </mesh>
+        {/* SpotLight */}
+        <spotLight
+          ref={spotLightLeftRef}
+          position={[0, 0, 0.1]}
+          color={HEADLIGHT_COLOR}
+          intensity={HEADLIGHT_CONFIG.IDLE_INTENSITY}
+          distance={HEADLIGHT_CONFIG.DISTANCE}
+          angle={HEADLIGHT_CONFIG.ANGLE}
+          penumbra={HEADLIGHT_CONFIG.PENUMBRA}
+          decay={HEADLIGHT_CONFIG.DECAY}
+          castShadow={false}
+        />
+        {/* SpotLight ターゲット（前方8ブロック先・やや下向き） */}
+        <object3D ref={spotLightTargetLeftRef} position={[0, -2, 8]} />
+      </group>
+
+      {/* 右ヘッドライト */}
+      <group position={[0.35, -0.15, 1.75]}>
+        {/* ハウジング */}
+        <mesh material={housingMat}>
+          <boxGeometry args={[0.28, 0.22, 0.15]} />
+        </mesh>
+        {/* レンズ */}
+        <mesh ref={lensRightRef} position={[0, 0, 0.09]} material={lensMat.clone()}>
+          <boxGeometry args={[0.22, 0.16, 0.04]} />
+        </mesh>
+        {/* SpotLight */}
+        <spotLight
+          ref={spotLightRightRef}
+          position={[0, 0, 0.1]}
+          color={HEADLIGHT_COLOR}
+          intensity={HEADLIGHT_CONFIG.IDLE_INTENSITY}
+          distance={HEADLIGHT_CONFIG.DISTANCE}
+          angle={HEADLIGHT_CONFIG.ANGLE}
+          penumbra={HEADLIGHT_CONFIG.PENUMBRA}
+          decay={HEADLIGHT_CONFIG.DECAY}
+          castShadow={false}
+        />
+        {/* SpotLight ターゲット */}
+        <object3D ref={spotLightTargetRightRef} position={[0, -2, 8]} />
+      </group>
 
       {/* === テールブーム === */}
       <mesh position={[0, 0.4, -2.2]} material={tailMat}>
