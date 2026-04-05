@@ -3,6 +3,12 @@
 // 3D座標をスクリーン投影し、CSSテキストで常にクリスプに表示
 // 画面外の場合は矢印付きで方向を画面端に表示
 // 対象: リモートプレイヤー + プロトタイプ味方モブ
+//
+// ボイスチャットステータス:
+//   🎙️ = マイクON & 発話中（緑パルス）
+//   🎤 = マイクON & 無言
+//   🔊 = スピーカーのみ（聴取中）
+//   なし = ボイスチャット未参加
 // ============================================
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -28,10 +34,13 @@ interface LabelElements {
   container: HTMLDivElement;
   nameSpan: HTMLSpanElement;
   arrow: HTMLDivElement;
-  iconSpan: HTMLSpanElement;
+  /** ボイスアイコン（マイク/スピーカー状態表示） */
+  voiceIcon: HTMLSpanElement;
   /** ドクロマーク（死亡時表示） */
   skullSpan: HTMLSpanElement;
   type: LabelType;
+  /** 前回のボイス状態キャッシュ（不要なDOM操作を避ける） */
+  lastVoiceState: string;
 }
 
 /**
@@ -55,6 +64,17 @@ export function PlayerNameOverlay() {
       z-index: 10;
       overflow: hidden;
     `;
+
+    // アニメーション用スタイルを追加
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes voice-speaking-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.8; }
+      }
+    `;
+    overlay.appendChild(style);
+
     document.body.appendChild(overlay);
     overlayRef.current = overlay;
 
@@ -93,17 +113,25 @@ export function PlayerNameOverlay() {
     `;
     container.appendChild(skullSpan);
 
-    // アイコン（味方: ♥、プレイヤー: 発話時🎙️）
-    const iconSpan = document.createElement('span');
-    iconSpan.style.cssText = `font-size: 12px; line-height: 1; display: none;`;
-    if (type === 'ally') {
-      iconSpan.textContent = '♥';
-      iconSpan.style.color = '#ff4488';
-      iconSpan.style.display = 'inline';
-    } else {
-      iconSpan.textContent = '🎙️';
+    // ボイスアイコン（プレイヤーのみ）
+    const voiceIcon = document.createElement('span');
+    voiceIcon.style.cssText = `
+      font-size: 13px;
+      line-height: 1;
+      display: none;
+      transition: all 0.3s;
+    `;
+    if (type === 'player') {
+      container.appendChild(voiceIcon);
     }
-    container.appendChild(iconSpan);
+
+    // 味方用アイコン
+    if (type === 'ally') {
+      const allyIcon = document.createElement('span');
+      allyIcon.textContent = '♥';
+      allyIcon.style.cssText = `font-size: 12px; line-height: 1; color: #ff4488;`;
+      container.appendChild(allyIcon);
+    }
 
     // 名前テキスト
     const nameSpan = document.createElement('span');
@@ -138,7 +166,7 @@ export function PlayerNameOverlay() {
     container.appendChild(arrow);
 
     overlayRef.current?.appendChild(container);
-    const elements: LabelElements = { container, nameSpan, arrow, iconSpan, skullSpan, type };
+    const elements: LabelElements = { container, nameSpan, arrow, voiceIcon, skullSpan, type, lastVoiceState: '' };
     labelsRef.current.set(id, elements);
     return elements;
   }, []);
@@ -161,6 +189,7 @@ export function PlayerNameOverlay() {
     screenW: number, screenH: number,
     speaking: boolean,
     dead: boolean,
+    micEnabled: boolean,
   ) => {
     // 3D頭上座標
     projVec.current.set(worldX, worldY + headOffset, worldZ);
@@ -183,14 +212,42 @@ export function PlayerNameOverlay() {
       if (dead) {
         // ドクロマーク表示、名前を赤く、取り消し線
         label.skullSpan.style.display = 'inline';
-        label.iconSpan.style.display = 'none';
+        label.voiceIcon.style.display = 'none';
         label.nameSpan.style.color = '#ff4444';
         label.nameSpan.style.textDecoration = 'line-through';
       } else {
         label.skullSpan.style.display = 'none';
-        label.iconSpan.style.display = speaking ? 'inline' : 'none';
-        label.nameSpan.style.color = speaking ? '#2ecc71' : '#ffffff';
         label.nameSpan.style.textDecoration = 'none';
+
+        // ボイスステータスアイコンの更新
+        // 状態キーを生成して変更があった場合のみDOM更新
+        const voiceState = `${micEnabled ? 1 : 0}-${speaking ? 1 : 0}`;
+        if (label.lastVoiceState !== voiceState) {
+          label.lastVoiceState = voiceState;
+
+          if (micEnabled && speaking) {
+            // マイクON & 発話中 → 🎙️ 緑パルスアニメーション
+            label.voiceIcon.textContent = '🎙️';
+            label.voiceIcon.style.display = 'inline';
+            label.voiceIcon.style.animation = 'voice-speaking-pulse 0.8s ease-in-out infinite';
+            label.voiceIcon.style.filter = 'drop-shadow(0 0 4px #2ecc71)';
+            label.nameSpan.style.color = '#2ecc71';
+          } else if (micEnabled) {
+            // マイクON & 無言 → 🎤
+            label.voiceIcon.textContent = '🎤';
+            label.voiceIcon.style.display = 'inline';
+            label.voiceIcon.style.animation = 'none';
+            label.voiceIcon.style.filter = 'none';
+            label.nameSpan.style.color = '#ffffff';
+          } else {
+            // スピーカーのみ（リスナー）or 未参加 → アイコンなし
+            label.voiceIcon.textContent = '';
+            label.voiceIcon.style.display = 'none';
+            label.voiceIcon.style.animation = 'none';
+            label.voiceIcon.style.filter = 'none';
+            label.nameSpan.style.color = '#ffffff';
+          }
+        }
       }
     }
 
@@ -271,6 +328,7 @@ export function PlayerNameOverlay() {
         camera, screenW, screenH,
         player.speaking,
         player.isDead,
+        player.micEnabled,
       );
     }
 
@@ -288,6 +346,7 @@ export function PlayerNameOverlay() {
         mob.x, mob.y, mob.z,
         4.2, // プロトタイプの頭上（大きいモブ）
         camera, screenW, screenH,
+        false,
         false,
         false,
       );

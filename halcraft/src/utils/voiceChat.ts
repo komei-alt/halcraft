@@ -188,6 +188,10 @@ class VoiceChatManager {
       this.isMicEnabled = true;
       this.isMuted = false;
       this.callbacks.onMicChange?.(true);
+
+      // サーバーにマイク状態を通知
+      const socket = getSocket();
+      socket?.emit('voice:mic-status', { micEnabled: true });
     } catch (err) {
       console.error('[VoiceChat] マイクの取得に失敗:', err);
 
@@ -250,6 +254,10 @@ class VoiceChatManager {
     this.isMicEnabled = false;
     this.isMuted = false;
     this.callbacks.onMicChange?.(false);
+
+    // サーバーにマイク状態を通知
+    const socket = getSocket();
+    socket?.emit('voice:mic-status', { micEnabled: false });
   }
 
   /** ボイスチャットから完全に退出（スピーカーも停止） */

@@ -26,6 +26,8 @@ export interface RemotePlayer {
   targetRotation: [number, number];
   /** ボイスチャットで発話中か */
   speaking: boolean;
+  /** マイクが有効か */
+  micEnabled: boolean;
   /** 死亡状態 */
   isDead: boolean;
   /** 死亡開始時刻（アニメーション用、Date.now()） */
@@ -76,6 +78,9 @@ interface MultiplayerState {
 
   /** リモートプレイヤーの発話状態を更新 */
   setRemoteSpeaking: (playerId: string, speaking: boolean) => void;
+
+  /** リモートプレイヤーのマイク状態を更新 */
+  setRemoteMicStatus: (playerId: string, micEnabled: boolean) => void;
 
   /** モブにダメージを送信（非オーナー → オーナーへ転送） */
   sendMobDamage: (mobId: string, amount: number, knockbackX: number, knockbackZ: number) => void;
@@ -234,6 +239,15 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       set({ remotePlayers: new Map(players) });
     }
   },
+
+  setRemoteMicStatus: (playerId, micEnabled) => {
+    const players = get().remotePlayers;
+    const player = players.get(playerId);
+    if (player && player.micEnabled !== micEnabled) {
+      player.micEnabled = micEnabled;
+      set({ remotePlayers: new Map(players) });
+    }
+  },
 }));
 
 /**
@@ -283,6 +297,7 @@ function setupSocketListeners(
           targetPosition: [...p.position],
           targetRotation: [...p.rotation],
           speaking: false,
+          micEnabled: false,
           isDead: false,
           deathTime: 0,
         });
@@ -299,6 +314,7 @@ function setupSocketListeners(
       targetPosition: [...data.position],
       targetRotation: [...data.rotation],
       speaking: false,
+      micEnabled: false,
       isDead: false,
       deathTime: 0,
     });
@@ -405,6 +421,11 @@ function setupSocketListeners(
       set({ remotePlayers: new Map(players) });
       console.log(`[Multiplayer] ${player.name} が復活！`);
     }
+  });
+
+  // リモートプレイヤーのマイク状態
+  socket.on('voice:mic-status', (data: { id: string; micEnabled: boolean }) => {
+    get().setRemoteMicStatus(data.id, data.micEnabled);
   });
 
   // ── ヘリコプター同期 ──

@@ -750,6 +750,9 @@ io.on('connection', (socket) => {
   socket.on('voice:speaking', (data) => {
     socket.broadcast.emit('voice:speaking', { id: socket.id, speaking: data.speaking });
   });
+  socket.on('voice:mic-status', (data) => {
+    socket.broadcast.emit('voice:mic-status', { id: socket.id, micEnabled: data.micEnabled });
+  });
 
   socket.on('disconnect', () => {
     const player = connectedPlayers.get(socket.id);
