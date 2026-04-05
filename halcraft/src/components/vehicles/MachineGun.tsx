@@ -434,35 +434,38 @@ export function MachineGun() {
     }
   });
 
-  if (!helicopter.spawned) return null;
-
   return (
     <group>
-      {/* === 左機関銃（ドア位置に設置、ガンナー視点追従） === */}
-      <DoorMountedGun
-        side="left"
-        flashRef={flashLeftRef}
-        gunGroupRef={gunGroupLeftRef}
-        barrelMat={barrelMat}
-        bodyMat={bodyMat}
-        mountMat={mountMat}
-        flashMat={flashMat}
-      />
-      {/* === 右機関銃（ドア位置に設置、ガンナー視点追従） === */}
-      <DoorMountedGun
-        side="right"
-        flashRef={flashRightRef}
-        gunGroupRef={gunGroupRightRef}
-        barrelMat={barrelMat}
-        bodyMat={bodyMat}
-        mountMat={mountMat}
-        flashMat={flashMat}
-      />
-      {/* === 飛翔中の弾丸 + トレイル === */}
+      {/* === 銃モデルはヘリがスポーンしている場合のみ表示 === */}
+      {helicopter.spawned && (
+        <>
+          {/* === 左機関銃（ドア位置に設置、ガンナー視点追従） === */}
+          <DoorMountedGun
+            side="left"
+            flashRef={flashLeftRef}
+            gunGroupRef={gunGroupLeftRef}
+            barrelMat={barrelMat}
+            bodyMat={bodyMat}
+            mountMat={mountMat}
+            flashMat={flashMat}
+          />
+          {/* === 右機関銃（ドア位置に設置、ガンナー視点追従） === */}
+          <DoorMountedGun
+            side="right"
+            flashRef={flashRightRef}
+            gunGroupRef={gunGroupRightRef}
+            barrelMat={barrelMat}
+            bodyMat={bodyMat}
+            mountMat={mountMat}
+            flashMat={flashMat}
+          />
+        </>
+      )}
+      {/* === 飛翔中の弾丸 + トレイル（リモート含む、常に描画） === */}
       {projectiles.map((proj) => (
         <ProjectileTrail key={proj.id} projectile={proj} />
       ))}
-      {/* === 衝突エフェクト（パーティクル） === */}
+      {/* === 衝突エフェクト（パーティクル、常に描画） === */}
       {impacts.map((effect) => (
         <ImpactParticles key={effect.id} effect={effect} />
       ))}
