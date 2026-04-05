@@ -73,7 +73,6 @@ export function MobManager() {
   const mobs = useMobStore((s) => s.mobs);
   const setMobs = useMobStore((s) => s.setMobs);
   const trySpawnZombie = useMobStore((s) => s.trySpawnZombie);
-  const trySpawnPrototype = useMobStore((s) => s.trySpawnPrototype);
   const trySpawnChicken = useMobStore((s) => s.trySpawnChicken);
   const trySpawnSpider = useMobStore((s) => s.trySpawnSpider);
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
@@ -207,8 +206,36 @@ export function MobManager() {
       trySpawnChicken(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
     }
 
-    // プロトタイプ味方モブは常時スポーン（昼夜問わず）
-    trySpawnPrototype(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+    // SPAWNERブロックベースのゴーレムスポーン（近くにSPAWNERがあれば一定間隔でスポーン）
+    // プレイヤー周辺のSPAWNERブロックを検索（範囲16ブロック）
+    const SPAWNER_SEARCH_RANGE = 16;
+    const protoCount = useMobStore.getState().mobs.filter((m) => m.type === 'prototype').length;
+    const MAX_PROTO_FROM_SPAWNER = 3; // SPAWNERからの最大同時数
+    if (protoCount < MAX_PROTO_FROM_SPAWNER) {
+      const now = performance.now() / 1000;
+      const lastProtoSpawn = (useMobStore.getState() as ReturnType<typeof useMobStore.getState> & { _lastProtoSpawnTime?: number })._lastProtoSpawnTime ?? 0;
+      if (now - lastProtoSpawn > 10) { // 10秒間隔
+        // 周囲のSPAWNERブロックを探す
+        for (let dx = -SPAWNER_SEARCH_RANGE; dx <= SPAWNER_SEARCH_RANGE; dx += 2) {
+          for (let dz = -SPAWNER_SEARCH_RANGE; dz <= SPAWNER_SEARCH_RANGE; dz += 2) {
+            const sx = Math.floor(playerX) + dx;
+            const sz = Math.floor(playerZ) + dz;
+            // Y座標は地表付近を探索
+            const surfaceY = getTerrainHeight(sx, sz);
+            for (let dy = -2; dy <= 5; dy++) {
+              if (getBlock(sx, surfaceY + dy, sz) === BLOCK_IDS.SPAWNER) {
+                // SPAWNERブロックの上にスポーン
+                useMobStore.getState().spawnMob('prototype', sx + 0.5, surfaceY + dy + 2, sz + 0.5);
+                useMobStore.setState({ _lastProtoSpawnTime: now } as Partial<ReturnType<typeof useMobStore.getState>>);
+                dx = SPAWNER_SEARCH_RANGE + 1; // ループ脱出
+                dz = SPAWNER_SEARCH_RANGE + 1;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
 
     // 遠すぎるモブの削除
     despawnFarMobs(playerX, playerZ);

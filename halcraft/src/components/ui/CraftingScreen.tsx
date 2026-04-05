@@ -10,7 +10,6 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
 import {
   BLOCK_DEFS,
-  HOTBAR_BLOCKS,
   type BlockId,
   BLOCK_IDS,
 } from '../../types/blocks';
@@ -99,6 +98,8 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const addItem = useInventoryStore((s) => s.addItem);
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
+  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const assignHotbarSlot = usePlayerStore((s) => s.assignHotbarSlot);
   const isTouch = isTouchDevice();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -160,15 +161,19 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
     [addItem],
   );
 
-  // ホットバースロットにアイテムをセット
+  // インベントリアイテムをクリックしてホットバーにセット
   const handleSelectItem = useCallback(
     (blockId: BlockId) => {
-      const hotbarIndex = HOTBAR_BLOCKS.indexOf(blockId);
+      // 既にホットバーにある場合はそのスロットを選択
+      const hotbarIndex = hotbarSlots.indexOf(blockId);
       if (hotbarIndex >= 0) {
         selectSlot(hotbarIndex);
+      } else {
+        // ホットバーにないブロック→現在のスロットにセット
+        assignHotbarSlot(selectedSlot, blockId);
       }
     },
-    [selectSlot],
+    [selectSlot, hotbarSlots, assignHotbarSlot, selectedSlot],
   );
 
   // ツールチップ表示制御
@@ -260,7 +265,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
               border: `1px solid ${STONE_SHADOW}`,
             }}
           >
-            {HOTBAR_BLOCKS.map((blockId, idx) => {
+            {hotbarSlots.map((blockId, idx) => {
               const isSelected = idx === selectedSlot;
               const texUrl = getTextureUrl(blockId);
               const count = items[blockId] ?? 0;
@@ -351,7 +356,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
 
               const { blockId, count } = entry;
               const texUrl = getTextureUrl(blockId);
-              const isInHotbar = HOTBAR_BLOCKS.includes(blockId);
+              const isInHotbar = hotbarSlots.includes(blockId);
 
               return (
                 <div
@@ -362,7 +367,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLDivElement).style.background = CELL_HOVER;
                   }}
-                  style={cellStyle(false, isInHotbar)}
+                  style={cellStyle(isInHotbar, true)}
                 >
                   {texUrl && (
                     <img

@@ -4,12 +4,13 @@
 
 import { useMemo } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
-import { HOTBAR_BLOCKS, BLOCK_DEFS } from '../../types/blocks';
+import { BLOCK_DEFS } from '../../types/blocks';
 import { isTouchDevice } from '../../utils/device';
 
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
+  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
 
   const isTouch = isTouchDevice();
 
@@ -17,17 +18,17 @@ export function Hotbar() {
   const cellSize = isTouch ? 40 : 48;
   const imgSize = isTouch ? 28 : 36;
 
-  // テクスチャをdata URLに変換して表示用に準備（初回のみ計算）
+  // テクスチャをdata URLに変換して表示用に準備（hotbarSlotsが変わるたび再計算）
   const textures = useMemo(() => {
     const map = new Map<number, string>();
-    HOTBAR_BLOCKS.forEach((blockId) => {
+    hotbarSlots.forEach((blockId) => {
       const def = BLOCK_DEFS[blockId];
       if (def) {
         map.set(blockId, `/textures/blocks/${def.texture}`);
       }
     });
     return map;
-  }, []);
+  }, [hotbarSlots]);
 
   return (
     <div
@@ -49,7 +50,7 @@ export function Hotbar() {
         backdropFilter: 'blur(6px)',
       }}
     >
-      {HOTBAR_BLOCKS.map((blockId, index) => {
+      {hotbarSlots.map((blockId, index) => {
         const def = BLOCK_DEFS[blockId];
         const isSelected = index === selectedSlot;
         const texUrl = textures.get(blockId);

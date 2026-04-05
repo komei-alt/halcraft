@@ -5,6 +5,9 @@ import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
 import { getSocket } from '../utils/socket';
 
+/** ホットバーのスロット数 */
+const HOTBAR_SLOT_COUNT = HOTBAR_BLOCKS.length;
+
 /** 落下ダメージの閾値（これ以上落ちるとダメージ） */
 const FALL_DAMAGE_THRESHOLD = 3;
 /** 落下1ブロックあたりのダメージ量 */
@@ -30,6 +33,9 @@ interface PlayerState {
 
   /** ホットバーの選択インデックス (0-8) */
   selectedSlot: number;
+
+  /** 動的ホットバースロット（ブロックIDの配列） */
+  hotbarSlots: BlockId[];
 
   /** ダメージフラッシュ中か */
   isDamageFlash: boolean;
@@ -64,6 +70,9 @@ interface PlayerState {
 
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
+
+  /** ホットバーの指定スロットにブロックをセット */
+  assignHotbarSlot: (slot: number, blockId: BlockId) => void;
 
   /** スロット選択（0-8） */
   selectSlot: (slot: number) => void;
@@ -100,6 +109,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   hp: 20,
   maxHp: 20,
   selectedSlot: 0,
+  hotbarSlots: [...HOTBAR_BLOCKS] as BlockId[],
   isDamageFlash: false,
   isDead: false,
   invincibleUntil: 0,
@@ -113,13 +123,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   damageDirection: null,
 
   getSelectedBlock: () => {
-    return HOTBAR_BLOCKS[get().selectedSlot] ?? HOTBAR_BLOCKS[0];
+    const state = get();
+    return state.hotbarSlots[state.selectedSlot] ?? HOTBAR_BLOCKS[0];
   },
 
   selectSlot: (slot) => {
-    if (slot >= 0 && slot < HOTBAR_BLOCKS.length) {
+    if (slot >= 0 && slot < HOTBAR_SLOT_COUNT) {
       set({ selectedSlot: slot });
     }
+  },
+
+  assignHotbarSlot: (slot, blockId) => {
+    if (slot < 0 || slot >= HOTBAR_SLOT_COUNT) return;
+    set((state) => {
+      const newSlots = [...state.hotbarSlots];
+      newSlots[slot] = blockId;
+      return { hotbarSlots: newSlots };
+    });
   },
 
   performAttack: (options) => {
