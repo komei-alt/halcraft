@@ -3,6 +3,7 @@
 // プレイヤーが近づくと搭乗プロンプトを表示
 // 鮮やかな色と自発光で昼夜問わず視認しやすい
 // ヘッドライト搭載: ノーズ下部に2灯のSpotLight + 発光ハウジング
+// 搭乗時は胴体が半透明ガラス化し、機内から外が見える
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -44,6 +45,11 @@ const HEADLIGHT_CONFIG = {
   DECAY: 1.5,
 } as const;
 
+/** 搭乗時の胴体透過度（0=完全透明, 1=完全不透明） */
+const BOARDED_BODY_OPACITY = 0.15;
+/** 搭乗時の窓透過度 */
+const BOARDED_WINDOW_OPACITY = 0.3;
+
 export function Helicopter() {
   const helicopter = useVehicleStore((s) => s.helicopter);
   const mainRotorRef = useRef<THREE.Group>(null);
@@ -59,17 +65,21 @@ export function Helicopter() {
   const lensRightRef = useRef<THREE.Mesh>(null);
 
   // マテリアルをメモ化（emissive付きで暗所でも目立つ）
+  // 搭乗時に半透明化するため transparent=true
   const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: BODY_COLOR, roughness: 0.5, metalness: 0.1,
     emissive: BODY_COLOR, emissiveIntensity: 0.15,
+    transparent: true, opacity: 1.0,
   }), []);
   const bodyWhiteMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: BODY_WHITE, roughness: 0.4, metalness: 0.0,
     emissive: BODY_WHITE, emissiveIntensity: 0.1,
+    transparent: true, opacity: 1.0,
   }), []);
   const tailMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: TAIL_COLOR, roughness: 0.5, metalness: 0.1,
     emissive: TAIL_COLOR, emissiveIntensity: 0.1,
+    transparent: true, opacity: 1.0,
   }), []);
   const rotorMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: ROTOR_COLOR, roughness: 0.5, metalness: 0.3,
@@ -78,6 +88,7 @@ export function Helicopter() {
     color: WINDOW_COLOR, roughness: 0.1, metalness: 0.5,
     transparent: true, opacity: 0.8,
     emissive: WINDOW_COLOR, emissiveIntensity: 0.3,
+    side: THREE.DoubleSide,
   }), []);
   const skidMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: SKID_COLOR, roughness: 0.9,
@@ -85,6 +96,7 @@ export function Helicopter() {
   const stripeMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: STRIPE_COLOR, roughness: 0.4,
     emissive: STRIPE_COLOR, emissiveIntensity: 0.2,
+    transparent: true, opacity: 1.0,
   }), []);
 
   // ヘッドライト用マテリアル
@@ -100,8 +112,28 @@ export function Helicopter() {
   useFrame(() => {
     if (!helicopter.spawned) return;
 
+    // 自分が搭乗中か
+    const iAmBoarded = helicopter.mySeat !== null;
     // 誰かが搭乗中か（自分 or 他プレイヤー）
     const someoneBoarded = Object.values(helicopter.seats).some((id) => id !== null);
+
+    // --- 胴体の半透明化（自分搭乗時のみ） ---
+    const targetBodyOpacity = iAmBoarded ? BOARDED_BODY_OPACITY : 1.0;
+    const targetWindowOpacity = iAmBoarded ? BOARDED_WINDOW_OPACITY : 0.8;
+    const lerpSpeed = 0.15;
+
+    // 胴体マテリアルのopacityをスムーズ補間
+    bodyMat.opacity += (targetBodyOpacity - bodyMat.opacity) * lerpSpeed;
+    bodyWhiteMat.opacity += (targetBodyOpacity - bodyWhiteMat.opacity) * lerpSpeed;
+    tailMat.opacity += (targetBodyOpacity - tailMat.opacity) * lerpSpeed;
+    stripeMat.opacity += (targetBodyOpacity - stripeMat.opacity) * lerpSpeed;
+    windowMat.opacity += (targetWindowOpacity - windowMat.opacity) * lerpSpeed;
+
+    // 搭乗時は裏面も描画（内側から見るため）
+    const targetSide = iAmBoarded ? THREE.DoubleSide : THREE.FrontSide;
+    bodyMat.side = targetSide;
+    bodyWhiteMat.side = targetSide;
+    tailMat.side = targetSide;
 
     // メインローターのアニメーション
     if (mainRotorRef.current) {
@@ -159,10 +191,6 @@ export function Helicopter() {
   });
 
   if (!helicopter.spawned) return null;
-
-  // コックピット窓のみ搭乗中は非表示（自分 or 他プレイヤーが搭乗中）
-  const someoneBoarded = Object.values(helicopter.seats).some((id) => id !== null);
-  const showCockpitWindow = !someoneBoarded;
 
   return (
     <group
@@ -261,23 +289,19 @@ export function Helicopter() {
         <boxGeometry args={[1.2, 0.08, 0.4]} />
       </mesh>
 
-      {/* === コックピット窓 === */}
-      {showCockpitWindow && (
-        <>
-          {/* フロントウィンドウ（大きく斜め） */}
-          <mesh position={[0, 0.6, 1.6]} material={windowMat}>
-            <boxGeometry args={[1.2, 0.6, 0.4]} />
-          </mesh>
-          {/* サイドウィンドウ左 */}
-          <mesh position={[-0.81, 0.5, 0.5]} material={windowMat}>
-            <boxGeometry args={[0.02, 0.5, 1.0]} />
-          </mesh>
-          {/* サイドウィンドウ右 */}
-          <mesh position={[0.81, 0.5, 0.5]} material={windowMat}>
-            <boxGeometry args={[0.02, 0.5, 1.0]} />
-          </mesh>
-        </>
-      )}
+      {/* === コックピット窓（常に表示 — 搭乗時はガラス越しに外が見える） === */}
+      {/* フロントウィンドウ（大きく斜め） */}
+      <mesh position={[0, 0.6, 1.6]} material={windowMat}>
+        <boxGeometry args={[1.2, 0.6, 0.4]} />
+      </mesh>
+      {/* サイドウィンドウ左 */}
+      <mesh position={[-0.81, 0.5, 0.5]} material={windowMat}>
+        <boxGeometry args={[0.02, 0.5, 1.0]} />
+      </mesh>
+      {/* サイドウィンドウ右 */}
+      <mesh position={[0.81, 0.5, 0.5]} material={windowMat}>
+        <boxGeometry args={[0.02, 0.5, 1.0]} />
+      </mesh>
 
       {/* === ルーフ（ローター取り付け部） === */}
       <mesh position={[0, 0.95, 0]} material={bodyMat}>

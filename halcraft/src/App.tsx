@@ -22,7 +22,7 @@ import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
 import { Helicopter } from './components/vehicles/Helicopter';
-import { CockpitView } from './components/vehicles/CockpitView';
+// CockpitView は無効化済み — ヘリ胴体自体がガラス化するため不要
 import { MachineGun } from './components/vehicles/MachineGun';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
@@ -81,7 +81,8 @@ function GameCanvas() {
         <MobManager />
         <Helicopter />
         <MachineGun />
-        <CockpitView />
+        {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
+        {/* <CockpitView /> */}
         <RemotePlayers />
         <PlayerNameOverlay />
         <SoundManager />
