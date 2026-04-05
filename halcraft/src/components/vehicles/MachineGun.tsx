@@ -50,8 +50,8 @@ const PLAYER_HIT_HEIGHT = 1.7;
  * Z正方向 = ノーズ方向（モデル内座標系）
  */
 const GUN_MOUNT_POSITIONS = {
-  left:  { x: -0.85, y: 0.0, z: -0.3 },
-  right: { x:  0.85, y: 0.0, z: -0.3 },
+  left:  { x: -0.82, y: -0.15, z: -0.45 },
+  right: { x:  0.82, y: -0.15, z: -0.45 },
 } as const;
 
 /** マズル（銃口）のローカルオフセット（銃本体原点から） */
@@ -428,7 +428,9 @@ export function MachineGun() {
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
     const hasPointerLock = !!document.pointerLockElement;
     if (isGunner && isMouseDown.current && hasPointerLock) {
-      fireGun(mySeat === 'gunner_left' ? 'left' : 'right');
+      // 180度回転グループ内でモデルの左右が反転するため、
+      // gunner_left → right銃、gunner_right → left銃から発射
+      fireGun(mySeat === 'gunner_left' ? 'right' : 'left');
     }
   });
 
@@ -490,6 +492,8 @@ function DoorMountedGun({
 }) {
   const helicopter = useVehicleStore((s) => s.helicopter);
   const { camera } = useThree();
+  // 銃全体のルートグループ（位置・回転を毎フレーム同期）
+  const rootRef = useRef<THREE.Group>(null);
   // 銃の回転部分（ピボット）の参照
   const pivotRef = useRef<THREE.Group>(null);
 
@@ -499,22 +503,35 @@ function DoorMountedGun({
   const currentYaw = useRef(0);
   const currentPitch = useRef(0);
 
+  // 毎フレーム、ヘリの最新位置に銃の位置を同期（stale prop 回避）
+  useFrame(() => {
+    if (!rootRef.current) return;
+    const heli = useVehicleStore.getState().helicopter;
+    if (!heli.spawned) {
+      rootRef.current.visible = false;
+      return;
+    }
+    rootRef.current.visible = true;
+    rootRef.current.position.set(heli.x, heli.y, heli.z);
+    rootRef.current.rotation.set(heli.pitch, heli.rotationY, heli.roll);
+  });
+
   if (!helicopter.spawned) return null;
 
   const mountPos = GUN_MOUNT_POSITIONS[side];
 
   // ガンナーが自分のサイドに座っている場合のみ視点追従
+  // 注意: 銃モデルは180度回転グループ内にあるため、
+  // モデル内の left (x負) はワールドでは右側に表示される。
+  // gunner_right（ワールド右側に座る）→ モデル内 left 銃にリンク
+  // gunner_left （ワールド左側に座る）→ モデル内 right 銃にリンク
   const myGunSide =
-    helicopter.mySeat === 'gunner_left' ? 'left' :
-    helicopter.mySeat === 'gunner_right' ? 'right' : null;
+    helicopter.mySeat === 'gunner_left' ? 'right' :
+    helicopter.mySeat === 'gunner_right' ? 'left' : null;
   const isMyGun = myGunSide === side;
 
   return (
-    <group
-      position={[helicopter.x, helicopter.y, helicopter.z]}
-      rotation={[helicopter.pitch, helicopter.rotationY, helicopter.roll]}
-      scale={1.3}
-    >
+    <group ref={rootRef} scale={1.3}>
       {/* ヘリモデル内部座標系（180度回転） */}
       <group rotation={[0, Math.PI, 0]}>
         {/* 銃マウント位置 */}
@@ -534,7 +551,6 @@ function DoorMountedGun({
             mountMat={mountMat}
             flashMat={flashMat}
             camera={camera}
-            helicopter={helicopter}
             targetDir={targetDir}
             localDir={localDir}
             currentYaw={currentYaw}
@@ -559,7 +575,6 @@ function GunPivot({
   mountMat,
   flashMat,
   camera,
-  helicopter,
   targetDir,
   localDir,
   currentYaw,
@@ -574,7 +589,6 @@ function GunPivot({
   mountMat: THREE.MeshStandardMaterial;
   flashMat: THREE.MeshBasicMaterial;
   camera: THREE.Camera;
-  helicopter: ReturnType<typeof useVehicleStore.getState>['helicopter'];
   targetDir: React.MutableRefObject<THREE.Vector3>;
   localDir: React.MutableRefObject<THREE.Vector3>;
   currentYaw: React.MutableRefObject<number>;
@@ -584,6 +598,9 @@ function GunPivot({
   useFrame((_, delta) => {
     if (!pivotRef.current) return;
 
+    // 毎フレーム最新のヘリ状態を取得（prop 経由だと stale になる可能性あり）
+    const heli = useVehicleStore.getState().helicopter;
+
     if (isMyGun) {
       // カメラの前方向をワールド座標で取得
       targetDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -591,7 +608,7 @@ function GunPivot({
       // ヘリの回転の逆を適用してローカル座標系に変換
       // ヘリは rotationY で回転 + モデル内部で180度回転なので
       // ローカルZ正 = ノーズ方向。カメラの向きをヘリローカルに戻す
-      const heliYaw = helicopter.rotationY + Math.PI; // モデルの180度回転を含む
+      const heliYaw = heli.rotationY + Math.PI; // モデルの180度回転を含む
       const cosY = Math.cos(-heliYaw);
       const sinY = Math.sin(-heliYaw);
 

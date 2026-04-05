@@ -473,13 +473,17 @@ export function Player() {
         }
       } else {
         // === パイロット以外の席: ヘリに追従、視点のみ自由 ===
+        // 毎フレーム最新のヘリ位置を再取得（サーバーから受信した値が反映される）
+        // latestHeli は345行で1度取得したスナップショットなので、
+        // 同乗者はサーバー同期で更新されるストアの最新値を使う必要がある
+        const passengerHeli = useVehicleStore.getState().helicopter;
         const seatOff = SEAT_OFFSETS[currentSeat];
         cockpitOffset.current.set(seatOff.x, seatOff.y, seatOff.z);
-        cockpitOffset.current.applyAxisAngle(Y_AXIS, latestHeli.rotationY);
+        cockpitOffset.current.applyAxisAngle(Y_AXIS, passengerHeli.rotationY);
 
-        pos.x = latestHeli.x + cockpitOffset.current.x;
-        pos.y = latestHeli.y + cockpitOffset.current.y;
-        pos.z = latestHeli.z + cockpitOffset.current.z;
+        pos.x = passengerHeli.x + cockpitOffset.current.x;
+        pos.y = passengerHeli.y + cockpitOffset.current.y;
+        pos.z = passengerHeli.z + cockpitOffset.current.z;
 
         // パイロット以外もヘリの向きベースで視点が回転
         // ただしマウスで自由に見回せる

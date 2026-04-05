@@ -206,14 +206,31 @@ export function Helicopter() {
     >
       {/* モデルを180度回転: ノーズが-Z（Three.js前方）を向くように */}
       <group rotation={[0, Math.PI, 0]}>
-      {/* === 胴体（メイン） === */}
-      <mesh position={[0, 0.3, 0]} material={bodyMat}>
-        <boxGeometry args={[1.6, 1.2, 2.8]} />
+      {/* === 胴体（ドア開口部付き — ガンナー席のサイドが開いている） === */}
+      {/* 胴体前部（コックピット周辺 z: 0.2〜1.4） */}
+      <mesh position={[0, 0.3, 0.8]} material={bodyMat}>
+        <boxGeometry args={[1.6, 1.2, 1.2]} />
+      </mesh>
+      {/* 胴体後部（テールブーム接続部 z: -1.0〜-1.4） */}
+      <mesh position={[0, 0.3, -1.2]} material={bodyMat}>
+        <boxGeometry args={[1.6, 1.2, 0.4]} />
+      </mesh>
+      {/* 胴体中央上部（ドア開口部の上 — 屋根として繋ぐ） */}
+      <mesh position={[0, 0.75, -0.3]} material={bodyMat}>
+        <boxGeometry args={[1.6, 0.3, 1.4]} />
+      </mesh>
+      {/* 胴体中央下部（ドア開口部の下 — 床として繋ぐ） */}
+      <mesh position={[0, -0.15, -0.3]} material={bodyMat}>
+        <boxGeometry args={[1.6, 0.3, 1.4]} />
       </mesh>
 
-      {/* 胴体下部（白） */}
-      <mesh position={[0, -0.2, 0]} material={bodyWhiteMat}>
-        <boxGeometry args={[1.5, 0.3, 2.6]} />
+      {/* 胴体下部（白） — 前部 */}
+      <mesh position={[0, -0.2, 0.8]} material={bodyWhiteMat}>
+        <boxGeometry args={[1.5, 0.3, 1.1]} />
+      </mesh>
+      {/* 胴体下部（白） — 後部 */}
+      <mesh position={[0, -0.2, -1.2]} material={bodyWhiteMat}>
+        <boxGeometry args={[1.5, 0.3, 0.4]} />
       </mesh>
 
       {/* ノーズ（前部を丸みをつけて） */}
@@ -306,6 +323,24 @@ export function Helicopter() {
       {/* サイドウィンドウ右 */}
       <mesh position={[0.81, 0.5, 0.5]} material={windowMat}>
         <boxGeometry args={[0.02, 0.5, 1.0]} />
+      </mesh>
+
+      {/* === ドア開口部フレーム（ガンナー席の左右 — 開放状態） === */}
+      {/* 左ドアフレーム前柱 */}
+      <mesh position={[-0.78, 0.3, 0.1]} material={bodyMat}>
+        <boxGeometry args={[0.06, 0.9, 0.08]} />
+      </mesh>
+      {/* 左ドアフレーム後柱 */}
+      <mesh position={[-0.78, 0.3, -0.75]} material={bodyMat}>
+        <boxGeometry args={[0.06, 0.9, 0.08]} />
+      </mesh>
+      {/* 右ドアフレーム前柱 */}
+      <mesh position={[0.78, 0.3, 0.1]} material={bodyMat}>
+        <boxGeometry args={[0.06, 0.9, 0.08]} />
+      </mesh>
+      {/* 右ドアフレーム後柱 */}
+      <mesh position={[0.78, 0.3, -0.75]} material={bodyMat}>
+        <boxGeometry args={[0.06, 0.9, 0.08]} />
       </mesh>
 
       {/* === ルーフ（ローター取り付け部） === */}
