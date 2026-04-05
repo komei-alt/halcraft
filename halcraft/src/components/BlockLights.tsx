@@ -49,9 +49,6 @@ interface LightCluster {
   distance: number;
 }
 
-/** 再利用用の Color オブジェクト */
-const _clusterColor = new THREE.Color();
-
 /** 近接する光源をクラスタリングして PointLight 数を削減 */
 function clusterLightSources(sources: LightSource[]): LightCluster[] {
   if (sources.length === 0) return [];
