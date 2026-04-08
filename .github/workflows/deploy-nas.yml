@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-nas
+  group: deploy-halcraft
   cancel-in-progress: true
 
 jobs:
