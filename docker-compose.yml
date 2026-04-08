@@ -45,27 +45,7 @@ services:
     networks:
       - halcraft-net
 
-  deploy-webhook:
-    build:
-      context: ./deploy-webhook
-      dockerfile: Dockerfile
-    image: halcraft-webhook:latest
-    container_name: halcraft-webhook
-    restart: always
-    ports:
-      - "9000:9000"
-    environment:
-      - WEBHOOK_PORT=9000
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
-    volumes:
-      # Docker ソケット（ビルド・再起動に必要）
-      - /var/run/docker.sock:/var/run/docker.sock
-      # リポジトリ（git pull 用）
-      - /volume1/docker/halcraft-repo:/volume1/docker/halcraft-repo
-      # デプロイログ
-      - /var/log:/var/log
-    networks:
-      - halcraft-net
+
 
 networks:
   halcraft-net:

@@ -1,0 +1,19 @@
+name: Deploy to NAS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-nas
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: komei-alt/ROSCH_Actions/.github/workflows/shared-nas-deploy.yml@main
+    with:
+      deploy_dir: '/volume1/docker/halcraft-repo'
+      compose_dir: '/volume1/docker/halcraft-repo'
+      container_name: 'halcraft'
