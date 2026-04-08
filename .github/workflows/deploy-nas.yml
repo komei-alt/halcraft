@@ -24,3 +24,4 @@ jobs:
       compose_dir: '/volume1/docker/halcraft-repo'
       container_name: 'halcraft'
       deploy_delay: ${{ github.event_name == 'push' && 180 || 0 }}
+      preserve_files: ""
