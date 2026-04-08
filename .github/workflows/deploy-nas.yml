@@ -4,11 +4,17 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'DOCUMENT/**'
+      - 'PLAN/**'
+      - '.agent/**'
+      - '.claude/**'
+      - '**.md'
   workflow_dispatch:
 
 concurrency:
   group: deploy-nas
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -17,3 +23,4 @@ jobs:
       deploy_dir: '/volume1/docker/halcraft-repo'
       compose_dir: '/volume1/docker/halcraft-repo'
       container_name: 'halcraft'
+      deploy_delay: ${{ github.event_name == 'push' && 180 || 0 }}
