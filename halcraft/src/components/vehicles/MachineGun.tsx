@@ -19,8 +19,8 @@ import { useMobStore } from '../../stores/useMobStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { onRemoteGunFire } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
-import { BLOCK_IDS } from '../../types/blocks';
 import { spawnDamagePopup } from '../../utils/effectTriggers';
+import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 弾速（ブロック/秒） */
@@ -325,88 +325,45 @@ export function MachineGun() {
         // 重力を適用
         proj.vel.y -= BULLET_GRAVITY * delta;
 
-        // 移動量算出（フレームレート非依存）
+        // 共通レイマーチングで衝突判定
         const moveDir = proj.vel.clone().normalize();
         const moveDist = BULLET_SPEED * delta;
-        const steps = Math.max(1, Math.ceil(moveDist / 0.5));
-        const stepSize = moveDist / steps;
 
-        let hitSomething = false;
+        // ローカル弾のみダメージ判定あり、リモート弾は視覚のみ
+        const hitResult = rayMarchProjectile(
+          proj.pos,
+          moveDir,
+          moveDist,
+          getBlock,
+          proj.isRemote ? [] : mobs,
+          MOB_HIT_RADIUS,
+          proj.isRemote ? undefined : {
+            remotePlayers: useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>,
+            playerHitRadius: PLAYER_HIT_RADIUS,
+            playerHitHeight: PLAYER_HIT_HEIGHT,
+          },
+        );
 
-        for (let s = 0; s < steps; s++) {
-          proj.pos.addScaledVector(moveDir, stepSize);
-
-          // --- ブロック衝突判定 ---
-          const bx = Math.floor(proj.pos.x);
-          const by = Math.floor(proj.pos.y);
-          const bz = Math.floor(proj.pos.z);
-
-          const blockId = getBlock(bx, by, bz);
-          if (blockId !== BLOCK_IDS.AIR) {
-            const normal = moveDir.clone().negate().normalize();
-            const hitPos = proj.pos.clone();
-            spawnImpact(hitPos, normal, 'block');
-            proj.dead = true;
-            hitSomething = true;
-            break;
+        if (hitResult.type === 'block') {
+          spawnImpact(hitResult.hitPos, hitResult.normal, 'block');
+          proj.dead = true;
+        } else if (hitResult.type === 'mob' && hitResult.targetId) {
+          spawnImpact(hitResult.hitPos, hitResult.normal, 'mob');
+          const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
+          sendMobDamage(hitResult.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
+          useMobStore.getState().damageMob(hitResult.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
+          const mob = mobs.find(m => m.id === hitResult.targetId);
+          if (mob) spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+          proj.dead = true;
+        } else if (hitResult.type === 'player' && hitResult.targetId) {
+          spawnImpact(hitResult.hitPos, hitResult.normal, 'mob');
+          const rp = useMultiplayerStore.getState().remotePlayers.get(hitResult.targetId);
+          if (rp) {
+            const sendPlayerAttack = useMultiplayerStore.getState().sendPlayerAttack;
+            sendPlayerAttack(rp.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
+            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, rp.position[0], rp.position[1] + 1.0, rp.position[2], false);
           }
-
-          // --- モブ衝突判定（ローカル弾のみ、リモート弾はダメージ二重適用防止のためスキップ） ---
-          if (!proj.isRemote) {
-            for (const mob of mobs) {
-              if (mob.hp <= 0) continue;
-              const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
-              const dist = proj.pos.distanceTo(mobCenter);
-
-              if (dist < MOB_HIT_RADIUS) {
-                const normal = proj.pos.clone().sub(mobCenter).normalize();
-                spawnImpact(proj.pos.clone(), normal, 'mob');
-
-                const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-                sendMobDamage(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
-                useMobStore.getState().damageMob(mob.id, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
-
-                spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
-
-                proj.dead = true;
-                hitSomething = true;
-                break;
-              }
-            }
-          }
-
-          // --- プレイヤー衝突判定（フレンドリーファイヤー有効、ローカル弾のみ） ---
-          if (!proj.isRemote && !hitSomething) {
-            const remotePlayers = useMultiplayerStore.getState().remotePlayers;
-            for (const [, rp] of remotePlayers) {
-              if (rp.isDead) continue;
-              // プレイヤー判定: 円柱ヒットボックス（半径0.5、高さ1.7）
-              const px = rp.position[0];
-              const py = rp.position[1];
-              const pz = rp.position[2];
-              const dx = proj.pos.x - px;
-              const dz = proj.pos.z - pz;
-              const horizontalDist = Math.sqrt(dx * dx + dz * dz);
-              const verticalInRange = proj.pos.y >= py && proj.pos.y <= py + PLAYER_HIT_HEIGHT;
-
-              if (horizontalDist < PLAYER_HIT_RADIUS && verticalInRange) {
-                const playerCenter = new THREE.Vector3(px, py + PLAYER_HIT_HEIGHT * 0.5, pz);
-                const normal = proj.pos.clone().sub(playerCenter).normalize();
-                spawnImpact(proj.pos.clone(), normal, 'mob');
-
-                const sendPlayerAttack = useMultiplayerStore.getState().sendPlayerAttack;
-                sendPlayerAttack(rp.id, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
-
-                spawnDamagePopup(GUN_CONSTANTS.DAMAGE, px, py + 1.0, pz, false);
-
-                proj.dead = true;
-                hitSomething = true;
-                break;
-              }
-            }
-          }
-
-          if (hitSomething) break;
+          proj.dead = true;
         }
 
         if (!proj.dead) {

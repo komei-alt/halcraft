@@ -12,6 +12,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { CHUNK_SIZE } from '../types/blocks';
 import { spawnDamagePopup } from '../utils/effectTriggers';
+import { rayMarchProjectile } from '../utils/projectilePhysics';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 自動射撃の射程（ブロック） */
@@ -315,43 +316,31 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
         const moveDir = proj.vel.clone().normalize();
         const moveDist = BULLET_SPEED * delta;
-        const steps = Math.max(1, Math.ceil(moveDist / 0.5));
-        const stepSize = moveDist / steps;
-        let hit = false;
 
-        for (let s = 0; s < steps; s++) {
-          proj.pos.addScaledVector(moveDir, stepSize);
+        // 共通レイマーチング（TURRETブロック自体は除外）
+        const hitResult = rayMarchProjectile(
+          proj.pos,
+          moveDir,
+          moveDist,
+          getBlock,
+          mobs,
+          MOB_HIT_RADIUS,
+          { excludeBlockIds: new Set([BLOCK_IDS.TURRET]) },
+        );
 
-          // ブロック衝突
-          const bx = Math.floor(proj.pos.x);
-          const by = Math.floor(proj.pos.y);
-          const bz = Math.floor(proj.pos.z);
-          const blockId = getBlock(bx, by, bz);
-          if (blockId !== BLOCK_IDS.AIR && blockId !== BLOCK_IDS.TURRET) {
-            spawnImpact(proj.pos.clone(), moveDir.clone().negate().normalize(), 'block');
-            proj.dead = true;
-            hit = true;
-            break;
-          }
-
-          // モブ衝突
-          for (const mob of mobs) {
-            if (mob.hp <= 0) continue;
-            const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
-            const dist = proj.pos.distanceTo(mobCenter);
-            if (dist < MOB_HIT_RADIUS) {
-              spawnImpact(proj.pos.clone(), proj.pos.clone().sub(mobCenter).normalize(), 'mob');
-              useMobStore.getState().damageMob(mob.id, TURRET_DAMAGE, moveDir.x, moveDir.z);
-              const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-              sendMobDamage(mob.id, TURRET_DAMAGE, moveDir.x * 3, moveDir.z * 3);
-              spawnDamagePopup(TURRET_DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
-              proj.dead = true;
-              hit = true;
-              break;
-            }
-          }
-          if (hit) break;
+        if (hitResult.type === 'block') {
+          spawnImpact(hitResult.hitPos, hitResult.normal, 'block');
+          proj.dead = true;
+        } else if (hitResult.type === 'mob' && hitResult.targetId) {
+          spawnImpact(hitResult.hitPos, hitResult.normal, 'mob');
+          useMobStore.getState().damageMob(hitResult.targetId, TURRET_DAMAGE, moveDir.x, moveDir.z);
+          const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
+          sendMobDamage(hitResult.targetId, TURRET_DAMAGE, moveDir.x * 3, moveDir.z * 3);
+          const mob = mobs.find(m => m.id === hitResult.targetId);
+          if (mob) spawnDamagePopup(TURRET_DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+          proj.dead = true;
         }
+
         if (!proj.dead) alive.push(proj);
       }
       return alive;

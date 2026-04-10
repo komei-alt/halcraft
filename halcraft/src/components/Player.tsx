@@ -11,7 +11,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS, ALL_SEATS } from '../stores/useVehicleStore';
-import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
+import { checkAABBCollision, isBlockSolid } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
 import {
   joystickInput,
@@ -94,43 +94,10 @@ export function Player() {
   const updateAttackCooldown = usePlayerStore((s) => s.updateAttackCooldown);
   const consumeKnockback = usePlayerStore((s) => s.consumeKnockback);
 
-  // ブロックが固体（通行不可）かチェック
-  const isBlockSolid = useCallback((bx: number, by: number, bz: number) => {
-    const blockId = getBlock(bx, by, bz);
-    if (blockId === BLOCK_IDS.AIR) return false;
-    // 松明などnoCollision=trueのブロックは通過可能
-    const def = BLOCK_DEFS[blockId];
-    if (def?.noCollision) return false;
-    return true;
-  }, [getBlock]);
-
   // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定
-  const checkCollision = useCallback((px: number, py: number, pz: number): boolean => {
-    const minX = px - PLAYER_RADIUS;
-    const maxX = px + PLAYER_RADIUS;
-    const minY = py;
-    const maxY = py + PLAYER_HEIGHT;
-    const minZ = pz - PLAYER_RADIUS;
-    const maxZ = pz + PLAYER_RADIUS;
-
-    for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
-      for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
-        for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
-          if (!isBlockSolid(bx, by, bz)) continue;
-
-          // ブロックAABBとの重なり判定
-          if (
-            maxX > bx && minX < bx + 1 &&
-            maxY > by && minY < by + 1 &&
-            maxZ > bz && minZ < bz + 1
-          ) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }, [isBlockSolid]);
+  const checkCollision = useCallback((px: number, py: number, pz: number): boolean =>
+    checkAABBCollision(getBlock, px, py, pz, PLAYER_RADIUS, PLAYER_HEIGHT, isBlockSolid),
+  [getBlock]);
 
   // マウスによる視点回転（デスクトップ用）
   const handleMouseMove = useCallback((e: MouseEvent) => {
