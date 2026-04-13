@@ -1,15 +1,9 @@
-name: Deploy to NAS
+name: "[DEPRECATED] Deploy to NAS"
+
+# NAS Deploy Engine (/opt/nas-deploy/) に移行済み。
+# 通常のデプロイは git push → NAS bare repo → nas-deploy.sh で実行。
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'DOCUMENT/**'
-      - 'PLAN/**'
-      - '.agent/**'
-      - '.claude/**'
-      - '**.md'
   workflow_dispatch:
 
 concurrency:
