@@ -26,8 +26,8 @@ export const ALL_SEATS: SeatType[] = ['pilot', 'gunner_left', 'gunner_right'];
 export const SEAT_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
   // ワールド座標系（Player.tsx / RemotePlayers.tsx で使用）
   pilot:        { x:  0.0, y: 0.7, z:  0.9 },   // コクピット前席
-  gunner_left:  { x: -1.0, y: 0.5, z: -0.6 },   // 後方左席
-  gunner_right: { x:  1.0, y: 0.5, z: -0.6 },   // 後方右席
+  gunner_left:  { x: -1.0, y: 0.5, z: -0.2 },   // ドア開口部左席（銃の横）
+  gunner_right: { x:  1.0, y: 0.5, z: -0.2 },   // ドア開口部右席（銃の横）
 };
 
 /** ヘリモデル内部座標系でのアバター配置オフセット（180°回転グループ内） */

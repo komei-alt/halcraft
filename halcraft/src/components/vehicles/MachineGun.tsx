@@ -46,12 +46,17 @@ const PLAYER_HIT_HEIGHT = 1.7;
 
 /**
  * 銃のモデル内配置（180度回転グループ内の座標）
- * ヘリのサイドドア開口部（中央）に設置
+ * ヘリのサイドドア開口部に設置
  * Z正方向 = ノーズ方向（モデル内座標系）
+ *
+ * 注意: 180度回転グループ内なので、ワールドでの位置は左右・前後が反転する
+ *   モデル left (x:-0.82)  → ワールド RIGHT (x:+1.07)
+ *   モデル right (x:+0.82) → ワールド LEFT  (x:-1.07)
+ *   モデル z:0.2 → ワールド z:-0.26（カメラz:-0.2の近くに配置）
  */
 const GUN_MOUNT_POSITIONS = {
-  left:  { x: -0.82, y: -0.15, z: -0.3 },
-  right: { x:  0.82, y: -0.15, z: -0.3 },
+  left:  { x: -0.82, y: -0.15, z: 0.2 },
+  right: { x:  0.82, y: -0.15, z: 0.2 },
 } as const;
 
 /** マズル（銃口）のローカルオフセット（銃本体原点から） */
@@ -385,9 +390,10 @@ export function MachineGun() {
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
     const hasPointerLock = !!document.pointerLockElement;
     if (isGunner && isMouseDown.current && hasPointerLock) {
-      // gunner_left → left銃、gunner_right → right銃から発射
-      // 各銃のDoorMountedGun内で180度回転が処理されるため直接マッピング
-      fireGun(mySeat === 'gunner_left' ? 'left' : 'right');
+      // 180度回転グループ内でモデルの左右が反転するため、
+      // gunner_left（ワールド左）→ モデル right銃（ワールド左）
+      // gunner_right（ワールド右）→ モデル left銃（ワールド右）
+      fireGun(mySeat === 'gunner_left' ? 'right' : 'left');
     }
   });
 
@@ -481,11 +487,12 @@ function DoorMountedGun({
   const mountPos = GUN_MOUNT_POSITIONS[side];
 
   // ガンナーが自分のサイドに座っている場合のみ視点追従
-  // gunner_left → left銃、gunner_right → right銃に直接対応
-  // DoorMountedGun内で180度回転が処理されるため直接マッピング
+  // 180度回転グループ内でモデルの左右がワールドで反転するため:
+  //   gunner_left （ワールド左側に座る）→ モデル right銃（ワールド左側）にリンク
+  //   gunner_right（ワールド右側に座る）→ モデル left銃（ワールド右側）にリンク
   const myGunSide =
-    helicopter.mySeat === 'gunner_left' ? 'left' :
-    helicopter.mySeat === 'gunner_right' ? 'right' : null;
+    helicopter.mySeat === 'gunner_left' ? 'right' :
+    helicopter.mySeat === 'gunner_right' ? 'left' : null;
   const isMyGun = myGunSide === side;
 
   return (
