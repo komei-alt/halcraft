@@ -258,6 +258,13 @@ export function MachineGun() {
       };
 
       setProjectiles((prev) => [...prev, projectile]);
+
+      // リモート弾のマズルフラッシュも発火
+      if (data.side === 'left') {
+        flashTimerLeft.current = 0.08;
+      } else {
+        flashTimerRight.current = 0.08;
+      }
     });
     return unsubscribe;
   }, []);
