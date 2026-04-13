@@ -10,7 +10,7 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_MODEL_OFFSETS, ALL_SEATS, type SeatType } from '../../stores/useVehicleStore';
+import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_MODEL_OFFSETS, ALL_SEATS } from '../../stores/useVehicleStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { isValidSkinId } from '../../types/skins';
@@ -462,7 +462,7 @@ export function Helicopter() {
  */
 function PassengerAvatars() {
   const seats = useVehicleStore((s) => s.helicopter.seats);
-  const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
+
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
   const myId = useMultiplayerStore((s) => s.myId);
 
