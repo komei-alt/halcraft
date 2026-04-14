@@ -19,6 +19,7 @@ import {
   mobileActions,
   resetTouchLookDelta,
 } from '../utils/touchInput';
+import { getTerrainHeight } from '../utils/terrain/heightmap';
 
 // 定数
 const MOVE_SPEED = 4.5;
@@ -31,19 +32,26 @@ const PLAYER_RADIUS = 0.25;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+// スポーン座標（プレイヤーの家の中心近く）
+const SPAWN_X = 8;
+const SPAWN_Z = 8;
+// プレイヤーの家の基準高さ（x=7, z=7 の地形高さ）を取得し、床(y=floorY)の上(空気ブロック)にスポーンさせる
+const getSpawnY = () => getTerrainHeight(7, 7) + 1.1;
+
 export function Player() {
   const { camera } = useThree();
 
   // プレイヤーの物理状態
-  const position = useRef(new THREE.Vector3(8, 40, 8));
+  const initialY = getSpawnY();
+  const position = useRef(new THREE.Vector3(SPAWN_X, initialY, SPAWN_Z));
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const onGround = useRef(false);
 
   // カメラY座標スムージング用（接地振動によるブレを吸収）
-  const smoothCameraY = useRef(40 + PLAYER_HEIGHT - 0.1);
+  const smoothCameraY = useRef(initialY + PLAYER_HEIGHT - 0.1);
 
   // 落下ダメージ追跡
-  const lastGroundY = useRef(40);
+  const lastGroundY = useRef(initialY);
   const wasFalling = useRef(false);
 
   // キー入力状態
@@ -630,10 +638,11 @@ export function Player() {
 
     // --- 落下リスポーン ---
     if (pos.y < -20) {
-      pos.set(8, 40, 8);
+      const respawnY = getSpawnY();
+      pos.set(SPAWN_X, respawnY, SPAWN_Z);
       vel.set(0, 0, 0);
-      lastGroundY.current = 40;
-      smoothCameraY.current = 40 + PLAYER_HEIGHT - 0.1;
+      lastGroundY.current = respawnY;
+      smoothCameraY.current = respawnY + PLAYER_HEIGHT - 0.1;
       respawn();
     }
   });
