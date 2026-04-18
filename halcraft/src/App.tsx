@@ -28,6 +28,10 @@ import { MachineGun } from './components/vehicles/MachineGun';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
+import { useWorldStore } from './stores/useWorldStore';
+import { useGameStore } from './stores/useGameStore';
+import { useMobStore } from './stores/useMobStore';
+import { BLOCK_IDS } from './types/blocks';
 import { getTerrainHeight } from './utils/terrain';
 import { HELIPORT_CENTER } from './utils/terrain';
 import { Crosshair } from './components/ui/Crosshair';
@@ -39,6 +43,9 @@ import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
+import { MissionOverlay } from './components/ui/MissionOverlay';
+import { CoreHealthBar } from './components/ui/CoreHealthBar';
+import { BossHealthBar } from './components/ui/BossHealthBar';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
@@ -110,6 +117,29 @@ export default function App() {
     }
   }, [phase, helicopterSpawned, spawnHelicopter]);
 
+  const currentStage = useGameStore((s) => s.currentStage);
+  const setCorePosition = useGameStore((s) => s.setCorePosition);
+  const trySpawnBoss = useMobStore((s) => s.trySpawnBoss);
+
+  // 防衛ミッション開始時にコアを自動配置 / ボスミッション時にボスを配置
+  useEffect(() => {
+    if (phase === 'playing') {
+      if (currentStage?.mission.type === 'defend_core') {
+        const coreX = 0;
+        const coreZ = -10;
+        const terrainY = getTerrainHeight(coreX, coreZ) + 1;
+        const setBlock = useWorldStore.getState().setBlock;
+        setBlock(coreX, terrainY, coreZ, BLOCK_IDS.CORE);
+        setCorePosition(coreX, terrainY, coreZ);
+      } else if (currentStage?.mission.type === 'defeat_boss') {
+        // スタート直後にプレイヤーの少し離れた場所にボスをスポーン
+        const playerX = 0;
+        const playerZ = 0;
+        trySpawnBoss(playerX, playerZ, getTerrainHeight);
+      }
+    }
+  }, [phase, currentStage, setCorePosition, trySpawnBoss]);
+
   // クラフト画面の開閉状態（モバイル用：外部から制御）
   const [craftingOpen, setCraftingOpen] = useState(false);
 
@@ -165,6 +195,9 @@ export default function App() {
           <TimeDisplay />
           <DamageOverlay />
           <AttackIndicator />
+          <MissionOverlay />
+          <CoreHealthBar />
+          <BossHealthBar />
           <CockpitHUD />
           <MinimapHUD />
           <ControlsGuide />

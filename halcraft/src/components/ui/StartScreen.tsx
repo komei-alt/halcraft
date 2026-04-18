@@ -1,9 +1,9 @@
 // スタート画面コンポーネント
 // ハルが描いたタイトル画像を背景に使用
-// 名前入力 + クリック/タップでゲーム開始 + マルチプレイ接続
+// 名前入力 + ステージ選択 + クリック/タップでゲーム開始
 // デバイスに応じて操作説明を切り替え
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
@@ -12,66 +12,96 @@ import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
 import { UpdateLog } from './UpdateLog';
 import { SkinSelector } from './SkinSelector';
+import { STAGES } from '../../types/stages';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
+const SELECTED_STAGE_KEY = 'halcraft-selected-stage';
 
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
+  const setStage = useGameStore((s) => s.setStage);
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
 
   const [name, setName] = useState(() => {
     try { return localStorage.getItem(PLAYER_NAME_KEY) || ''; } catch { return ''; }
   });
+  const [selectedStageId, setSelectedStageId] = useState(() => {
+    try { return localStorage.getItem(SELECTED_STAGE_KEY) || STAGES[0].id; } catch { return STAGES[0].id; }
+  });
   const [isJoining, setIsJoining] = useState(false);
+  const [stagePlayerCounts, setStagePlayerCounts] = useState<Record<string, number>>({});
 
   const isTouch = isTouchDevice();
   const isValidName = name.trim().length >= 1 && name.trim().length <= 8;
 
-  const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  // 定期的にステージのプレイヤー数を取得
+  useEffect(() => {
+    if (phase !== 'menu') return;
+
+    let mounted = true;
+    const fetchStages = async () => {
+      try {
+        // 注: utils/socket.ts がない場合は /api/stages (プロキシ設定済であれば) を利用
+        const res = await fetch('/api/stages');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data.stages) {
+            const counts: Record<string, number> = {};
+            data.stages.forEach((s: any) => {
+              counts[s.id] = s.playerCount;
+            });
+            setStagePlayerCounts(counts);
+          }
+        }
+      } catch (err) {
+        // 無視
+      }
+    };
+
+    fetchStages();
+    const interval = setInterval(fetchStages, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [phase]);
+
+  const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent) => {
     // 入力フィールドのクリックでゲーム開始しないようにする
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     if (!isValidName || isJoining) return;
 
     setIsJoining(true);
     const trimmedName = name.trim();
-    try { localStorage.setItem(PLAYER_NAME_KEY, trimmedName); } catch { /* noop */ }
+    try { 
+      localStorage.setItem(PLAYER_NAME_KEY, trimmedName); 
+      localStorage.setItem(SELECTED_STAGE_KEY, selectedStageId); 
+    } catch { /* noop */ }
 
     // ゲーム開始 + マルチプレイ接続
-    // フルスクリーンを試みる（対応ブラウザのみ）
     requestFullscreen();
-
-    // サウンドエンジン初期化（ユーザーインタラクション時に必要）
     initAudio();
-
-    // PWAならプッシュ通知を自動購読（非同期・エラーは握りつぶす）
     initPushIfPWA().catch(() => { /* noop */ });
 
+    setStage(selectedStageId);
     startGame();
-    join(trimmedName);
-  }, [isValidName, isJoining, name, startGame, join]);
+    join(trimmedName, selectedStageId);
+  }, [isValidName, isJoining, name, selectedStageId, setStage, startGame, join]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && isValidName && !isJoining) {
-      setIsJoining(true);
-      const trimmedName = name.trim();
-      try { localStorage.setItem(PLAYER_NAME_KEY, trimmedName); } catch { /* noop */ }
-      requestFullscreen();
-      initAudio();
-      initPushIfPWA().catch(() => { /* noop */ });
-      startGame();
-      join(trimmedName);
+    if (e.key === 'Enter') {
+      handleStart(e);
     }
-  }, [isValidName, isJoining, name, startGame, join]);
+  }, [handleStart]);
 
   if (phase !== 'menu') return null;
 
   return (
     <div
       id="start-screen"
-      onClick={handleStart}
       style={{
         position: 'fixed',
         inset: 0,
@@ -80,7 +110,6 @@ export function StartScreen() {
         alignItems: 'center',
         justifyContent: 'flex-end',
         zIndex: 200,
-        cursor: isValidName ? 'pointer' : 'default',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
         padding: 0,
         overflow: 'hidden',
@@ -109,8 +138,8 @@ export function StartScreen() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: '50%',
-          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
+          height: '60%',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)',
           zIndex: 1,
           pointerEvents: 'none',
         }}
@@ -143,10 +172,47 @@ export function StartScreen() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          paddingBottom: isTouch ? 40 : 60,
+          paddingBottom: isTouch ? 20 : 40,
           gap: 0,
         }}
+        onClick={(e) => e.stopPropagation()}
       >
+        {/* ステージ選択UI */}
+        <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 600 }}>
+          {STAGES.map((stage) => {
+            const isSelected = selectedStageId === stage.id;
+            const players = stagePlayerCounts[stage.id] || 0;
+            return (
+              <div
+                key={stage.id}
+                onClick={() => setSelectedStageId(stage.id)}
+                style={{
+                  width: 140,
+                  padding: '8px 12px',
+                  background: isSelected ? 'rgba(50, 180, 50, 0.4)' : 'rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(8px)',
+                  border: '2px solid',
+                  borderColor: isSelected ? 'rgba(100, 220, 100, 0.8)' : 'rgba(255,255,255,0.2)',
+                  borderRadius: 12,
+                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  boxShadow: isSelected ? '0 0 15px rgba(100,220,100,0.4)' : 'none',
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 'bold' }}>{stage.name}</div>
+                <div style={{ fontSize: 10, opacity: 0.8 }}>ミッション:<br/>{stage.mission.title}</div>
+                <div style={{ fontSize: 11, marginTop: 4, color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)' }}>
+                  {players > 0 ? `🟢 ${players}人がプレイ中` : '○ 誰もいない'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* 名前入力 */}
         <div
           style={{
@@ -155,7 +221,6 @@ export function StartScreen() {
             alignItems: 'center',
             gap: 8,
           }}
-          onClick={(e) => e.stopPropagation()}
         >
           <label
             style={{
@@ -173,7 +238,6 @@ export function StartScreen() {
             value={name}
             onChange={(e) => setName(e.target.value.slice(0, 8))}
             onKeyDown={handleKeyDown}
-            onClick={(e) => e.stopPropagation()}
             placeholder="ハル"
             maxLength={8}
             autoComplete="off"
@@ -216,7 +280,6 @@ export function StartScreen() {
         {/* スキン選択 */}
         <div
           style={{ marginTop: 12 }}
-          onClick={(e) => e.stopPropagation()}
         >
           <SkinSelector compact />
         </div>
@@ -242,6 +305,7 @@ export function StartScreen() {
 
         {/* 開始ボタン */}
         <div
+          onClick={handleStart}
           style={{
             marginTop: 20,
             padding: isTouch ? '14px 36px' : '16px 48px',
@@ -262,6 +326,7 @@ export function StartScreen() {
             transition: 'all 0.3s',
             pointerEvents: isValidName ? 'auto' : 'none',
             textShadow: isValidName ? '0 1px 4px rgba(0,0,0,0.6)' : 'none',
+            cursor: isValidName ? 'pointer' : 'default',
           }}
         >
           {isJoining ? '接続中...' : (isTouch ? 'タップでスタート' : 'クリックでスタート')}
@@ -270,7 +335,7 @@ export function StartScreen() {
         {/* 操作説明 */}
         <div
           style={{
-            marginTop: 24,
+            marginTop: 20,
             display: 'flex',
             flexDirection: isTouch ? 'column' : 'row',
             gap: isTouch ? 6 : 20,

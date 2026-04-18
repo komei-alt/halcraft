@@ -21,6 +21,7 @@ import { onRemoteGunFire } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { spawnDamagePopup } from '../../utils/effectTriggers';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
+import { playMachineGunSound, playBulletImpactSound } from '../../utils/sounds';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 弾速（ブロック/秒） */
@@ -206,6 +207,9 @@ export function MachineGun() {
 
     setProjectiles((prev) => [...prev, projectile]);
 
+    // サウンド再生（カメラからの距離）
+    playMachineGunSound(startPos.distanceTo(camera.position));
+
     // マズルフラッシュ
     if (side === 'left') {
       flashTimerLeft.current = 0.08;
@@ -259,6 +263,9 @@ export function MachineGun() {
 
       setProjectiles((prev) => [...prev, projectile]);
 
+      // リモートプレイヤーの発射時にも音を鳴らす
+      playMachineGunSound(startPos.distanceTo(camera.position));
+
       // リモート弾のマズルフラッシュも発火
       if (data.side === 'left') {
         flashTimerLeft.current = 0.08;
@@ -298,7 +305,10 @@ export function MachineGun() {
       particles,
     };
     setImpacts((prev) => [...prev, effect]);
-  }, []);
+
+    // 着弾音再生
+    playBulletImpactSound(pos.distanceTo(camera.position), type);
+  }, [camera]);
 
   // ─── フレーム更新 ─────────────────────────────────
   useFrame((_, delta) => {

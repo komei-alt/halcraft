@@ -18,6 +18,7 @@ import { Prototype } from './Prototype';
 import { Chicken } from './Chicken';
 import { Spider } from './Spider';
 import { IronGolem } from './IronGolem';
+import { BossRenderer } from './BossRenderer';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
 import { spawnMobDeathEffect } from '../../utils/effectTriggers';
 import {
@@ -25,6 +26,7 @@ import {
   updateSpiderAI, type SpiderState,
   updateZombieAI, type ZombieState,
   updateAllyMobAI, type AllyMobState,
+  updateBossAI, type BossState,
   type MobAIContext,
 } from '../../utils/mobAI';
 
@@ -37,8 +39,10 @@ export function MobManager() {
   const trySpawnSpider = useMobStore((s) => s.trySpawnSpider);
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const breakBlock = useWorldStore((s) => s.breakBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const updateRegen = usePlayerStore((s) => s.updateRegen);
+  const damageCore = useGameStore((s) => s.damageCore);
   const consumeDeathEvents = useMobStore((s) => s.consumeDeathEvents);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
 
@@ -61,6 +65,10 @@ export function MobManager() {
     attackCooldown: 0,
     stuckTimer: 0,
     lastPos: { x: 0, z: 0 },
+  });
+  const bossState = useRef<BossState>({
+    attackCooldown: 0,
+    summonCooldown: 0,
   });
 
   // 衝突チェック関数（可変サイズ版）
@@ -88,6 +96,7 @@ export function MobManager() {
     zombieState.current.attackCooldown = Math.max(0, zombieState.current.attackCooldown - dt);
     spiderState.current.attackCooldown = Math.max(0, spiderState.current.attackCooldown - dt);
     allyState.current.attackCooldown = Math.max(0, allyState.current.attackCooldown - dt);
+    bossState.current.attackCooldown = Math.max(0, bossState.current.attackCooldown - dt);
     zombieState.current.flankTimer += dt;
 
     // HP回復を毎フレーム更新
@@ -162,6 +171,8 @@ export function MobManager() {
       checkCollision: checkCollisionFn,
       animTime: animTimeRef.current,
       allMobs: currentMobs,
+      corePosition: gameState.corePosition,
+      getBlock,
     };
 
     for (const mob of currentMobs) {
@@ -193,10 +204,34 @@ export function MobManager() {
         continue;
       }
 
+      // ─── 巨大ボス ───
+      if (m.type === 'boss_giant') {
+        const { alive, attack } = updateBossAI(m, aiCtx, bossState.current, breakBlock);
+        if (attack) {
+          takeDamage(attack.damage, attack.kbDirX, attack.kbDirZ);
+          playHurtSound();
+        }
+        if (alive) updatedMobs.push(m);
+        continue;
+      }
+
       // ─── ゾンビ（デフォルト） ───
-      const { alive, attack } = updateZombieAI(m, aiCtx, zombieState.current);
+      const { alive, attack, blockAttack } = updateZombieAI(m, aiCtx, zombieState.current);
       if (attack) {
         zombieHitMob = m;
+      }
+      if (blockAttack) {
+        const blockId = getBlock(blockAttack.x, blockAttack.y, blockAttack.z);
+        if (blockId === BLOCK_IDS.CORE) {
+          damageCore(blockAttack.damage);
+          playHurtSound(); // TODO: コア用のダメージ音に変更
+        } else {
+          // コア以外の障害物ブロックは破壊する
+          if (breakBlock(blockAttack.x, blockAttack.y, blockAttack.z)) {
+            // ブロック破壊のエフェクト用：ここでアイテムをドロップするかパーティクルを出す
+            spawnMobDeathEffect('chicken', blockAttack.x + 0.5, blockAttack.y + 0.5, blockAttack.z + 0.5); // 仮エフェクト
+          }
+        }
       }
       if (alive) updatedMobs.push(m);
     }
@@ -259,6 +294,8 @@ export function MobManager() {
             return <Spider key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'iron_golem':
             return <IronGolem key={mob.id} mob={mob} animTime={animTimeValue} />;
+          case 'boss_giant':
+            return <BossRenderer key={mob.id} mob={mob} animTime={animTimeValue} />;
           default:
             return null;
         }

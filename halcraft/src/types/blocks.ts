@@ -23,6 +23,7 @@ export const BLOCK_IDS = {
   BED: 15,
   LEAVES: 16,
   TURRET: 17,
+  CORE: 18,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -238,6 +239,19 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     nonStandard: true,
     noCollision: true,
   },
+  [BLOCK_IDS.CORE]: {
+    id: BLOCK_IDS.CORE,
+    name: '防衛クリスタル',
+    texture: 'enchant.png',
+    transparent: false,
+    unbreakable: true, // プレイヤーからは破壊不可。敵の攻撃とシステムでのみ破壊可能
+    emissive: true,
+    emissiveColor: new THREE.Color(0x00ffaa),
+    emissiveIntensity: 1.5,
+    lightColor: new THREE.Color(0x88ffcc),
+    lightIntensity: 3.0,
+    lightDistance: 20,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -252,6 +266,7 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.ELECTRIC,
   BLOCK_IDS.SPAWNER,
   BLOCK_IDS.TURRET,
+  BLOCK_IDS.CORE,
 ];
 
 /** チャンクサイズ定数 */

@@ -2,9 +2,10 @@
 // ゾンビ・クモ（敵）、プロトタイプ・アイアンゴーレム（味方）、ニワトリ（中立）を管理
 
 import { create } from 'zustand';
+import { useGameStore } from './useGameStore';
 
 /** モブの種類 */
-export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider' | 'iron_golem';
+export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
 
 /** モブのデータ */
 export interface MobData {
@@ -72,6 +73,8 @@ const SPIDER_HP = 8;
 const MAX_SPIDERS = 5;
 /** アイアンゴーレムのHP（頑丈な味方） */
 const IRON_GOLEM_HP = 40;
+/** ボスジャイアントのHP */
+const BOSS_GIANT_HP = 500;
 /** フレンドリーファイヤー後の怒り持続時間（秒） */
 const ANGRY_DURATION = 30;
 
@@ -117,6 +120,9 @@ interface MobState {
   /** 夜間のクモスポーン */
   trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
+  /** 巨大ボスのスポーンロジック */
+  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
 
@@ -145,6 +151,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       chicken: CHICKEN_HP,
       spider: SPIDER_HP,
       iron_golem: IRON_GOLEM_HP,
+      boss_giant: BOSS_GIANT_HP,
     };
     const hp = hpMap[type] ?? ZOMBIE_HP;
     const mob: MobData = {
@@ -176,6 +183,21 @@ export const useMobStore = create<MobState>((set, get) => ({
           if (newHp <= 0) {
             // 死亡イベントを記録
             newDeathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
+            
+            // ゾンビ討伐ミッション判定
+            if (m.type === 'zombie') {
+              const gameStore = useGameStore.getState();
+              if (gameStore.currentStage?.mission.type === 'defeat_zombie' && !gameStore.missionCleared) {
+                gameStore.addMissionProgress(1);
+              }
+            } else if (m.type === 'boss_giant') {
+              // ボス討伐ミッション判定
+              const gameStore = useGameStore.getState();
+              if (gameStore.currentStage?.mission.type === 'defeat_boss' && !gameStore.missionCleared) {
+                gameStore.addMissionProgress(1);
+              }
+            }
+
             return null;
           }
           // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）
@@ -299,6 +321,22 @@ export const useMobStore = create<MobState>((set, get) => ({
 
     get().spawnMob('spider', spawnX, spawnY, spawnZ);
     set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
+  },
+
+  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => {
+    const state = get();
+    // 既にボスが存在する場合はスポーンしない
+    const hasBoss = state.mobs.some((m) => m.type === 'boss_giant');
+    if (hasBoss) return;
+
+    // プレイヤーのやや遠くにスポーン
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 20;
+    const spawnX = playerX + Math.cos(angle) * distance;
+    const spawnZ = playerZ + Math.sin(angle) * distance;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
+
+    get().spawnMob('boss_giant', spawnX, spawnY, spawnZ);
   },
 
   despawnFarMobs: (playerX, playerZ) => {

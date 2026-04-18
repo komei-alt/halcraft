@@ -3,7 +3,7 @@
 // 射程内の敵モブを自動追尾・射撃する
 // プレイヤーが近くにいる場合はプレイヤー操作モードに切り替え
 
-import { useRef, useMemo, useState, useCallback } from 'react';
+import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
@@ -13,6 +13,7 @@ import { BLOCK_IDS } from '../types/blocks';
 import { CHUNK_SIZE } from '../types/blocks';
 import { spawnDamagePopup } from '../utils/effectTriggers';
 import { rayMarchProjectile } from '../utils/projectilePhysics';
+import { playMachineGunSound, playBulletImpactSound } from '../utils/sounds';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 自動射撃の射程（ブロック） */
@@ -147,7 +148,23 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const currentYaw = useRef(0);
   const currentPitch = useRef(0);
   const barrelRotation = useRef(0);
+  const isMouseDown = useRef(false);
   const { camera } = useThree();
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) isMouseDown.current = true;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) isMouseDown.current = false;
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
 
   const [projectiles, setProjectiles] = useState<TurretProjectile[]>([]);
   const [impacts, setImpacts] = useState<TurretImpact[]>([]);
@@ -197,7 +214,10 @@ function SingleTurret({ position }: { position: TurretPos }) {
       createdAt: performance.now() / 1000,
       particles,
     }]);
-  }, []);
+
+    // 着弾音再生
+    playBulletImpactSound(pos.distanceTo(camera.position), type);
+  }, [camera]);
 
   // メインループ
   useFrame((_, delta) => {
@@ -260,7 +280,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
     // --- 射撃 ---
     const canFire = now - lastFireTime.current > TURRET_FIRE_COOLDOWN;
     const shouldFire = isPlayerControlled
-      ? canFire  // プレイヤー操作時は常に発射（マウスボタン判定は別途）
+      ? (canFire && isMouseDown.current) // プレイヤー操作時は左クリック中のみ発射
       : (canFire && targetDir !== null);
 
     if (shouldFire && targetDir && gunGroupRef.current) {
@@ -292,6 +312,9 @@ function SingleTurret({ position }: { position: TurretPos }) {
       // マズルフラッシュ + バレル回転
       flashTimer.current = 0.06;
       barrelRotation.current += Math.PI / 3; // 回転式バレル
+
+      // 発射音
+      playMachineGunSound(muzzleWorld.distanceTo(camera.position));
     }
 
     // --- マズルフラッシュ減衰 ---

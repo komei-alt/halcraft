@@ -11,9 +11,10 @@ import { registerMobDeathEffectSpawner } from '../utils/effectTriggers';
 const MOB_COLORS: Record<MobType, THREE.Color> = {
   zombie: new THREE.Color(0x4a6741),
   prototype: new THREE.Color(0x8888cc),
-  chicken: new THREE.Color(0xf5f5f0),
-  spider: new THREE.Color(0x2a2a2a),
-  iron_golem: new THREE.Color(0xaaaaaa),
+  chicken: new THREE.Color('#ffffff'),
+  spider: new THREE.Color('#333333'), // 黒
+  iron_golem: new THREE.Color('#e0e0e0'), // 銀色
+  boss_giant: new THREE.Color('#ff3333'), // 赤
 };
 
 interface DeathParticle {

@@ -11,7 +11,9 @@ import {
   playFootstep,
   playAllyMove,
   playZombieGrunt,
+  playHelicopterRotor,
 } from '../utils/sounds';
+import { useVehicleStore } from '../stores/useVehicleStore';
 
 /** 足音の最小速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -117,6 +119,23 @@ export function SoundManager() {
         playAllyMove(closestAllyDist);
       }
       allySoundTimer.current = ALLY_SOUND_INTERVAL;
+    }
+
+    // --- ヘリコプターのローター音 ---
+    const vehicleState = useVehicleStore.getState();
+    if (vehicleState.helicopter.spawned) {
+      const hx = vehicleState.helicopter.x;
+      const hy = vehicleState.helicopter.y;
+      const hz = vehicleState.helicopter.z;
+      const dx = hx - cx;
+      const dy = hy - cy;
+      const dz = hz - cz;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      
+      const someoneBoarded = Object.values(vehicleState.helicopter.seats).some((id) => id !== null);
+      if (someoneBoarded) {
+        playHelicopterRotor(dist);
+      }
     }
   });
 

@@ -371,3 +371,177 @@ export function playMobDeathSound(distance: number): void {
   noise.start(now);
   noise.stop(now + 0.12);
 }
+
+// ============================================
+// 7. ガトリングガン発射音
+// ============================================
+
+export function playMachineGunSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('machinegun', 60)) return; // 早い連射のため制限を緩くする
+
+  // 距離による音量減衰（最大距離50ブロック）
+  const maxDist = 50;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.4 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  // 重低音のパンチ（短いサイン波・徐々に下がる）
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(150, now);
+  osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(800, now);
+  filter.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(volume * 0.7, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+  osc.connect(filter);
+  filter.connect(oscGain);
+  oscGain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.1);
+
+  // マズルフラッシュの破裂感（ノイズバースト）
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.setValueAtTime(1200, now);
+  noiseFilter.Q.setValueAtTime(0.5, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(volume * 0.8, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.08);
+}
+
+// ============================================
+// 8. 弾丸着弾音
+// ============================================
+
+export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`impact_${type}`, 50)) return;
+
+  const maxDist = 40;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.3 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  if (type === 'block') {
+    // 乾いた破砕音（高音ノイズ）
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.setValueAtTime(2000, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(volume * 0.6, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.1);
+  } else {
+    // モブ（少し水気のある衝撃音）
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(volume * 0.8, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.1);
+    
+    // 付帯ノイズ
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.setValueAtTime(1000, now);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(volume * 0.4, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.1);
+  }
+}
+
+// ============================================
+// 9. ヘリコプターのローター音
+// ============================================
+
+export function playHelicopterRotor(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('heliRotor', 70)) return; // 連続再生用
+
+  const maxDist = 80; // 音が届く距離
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.4 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  // バタバタという低周波の音の成分
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(40, now); // 低いバタバタ音
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(120, now);
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(volume * 0.5, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+  osc.connect(filter);
+  filter.connect(oscGain);
+  oscGain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.12);
+
+  // 風のノイズ成分
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.setValueAtTime(300, now);
+  noiseFilter.Q.setValueAtTime(0.5, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(volume * 0.1, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.1);
+}

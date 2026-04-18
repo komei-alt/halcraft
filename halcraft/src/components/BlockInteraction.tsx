@@ -12,6 +12,7 @@ import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
+import { useGameStore } from '../stores/useGameStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -321,6 +322,13 @@ export function BlockInteraction() {
             const selectedBlock = getSelectedBlock();
             setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
             sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+            
+            // ブロック設置ミッション判定
+            const gameStore = useGameStore.getState();
+            if (gameStore.currentStage?.mission.type === 'place_block' && !gameStore.missionCleared) {
+              gameStore.addMissionProgress(1);
+            }
+
             // SPAWNERブロック設置時:アイアンゴーレムをスポーン
             if (selectedBlock === BLOCK_IDS.SPAWNER) {
               spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
@@ -387,6 +395,13 @@ export function BlockInteraction() {
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+      
+      // ブロック設置ミッション判定
+      const gameStore = useGameStore.getState();
+      if (gameStore.currentStage?.mission.type === 'place_block' && !gameStore.missionCleared) {
+        gameStore.addMissionProgress(1);
+      }
+
       // SPAWNERブロック設置時:アイアンゴーレムをスポーン
       if (selectedBlock === BLOCK_IDS.SPAWNER) {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);

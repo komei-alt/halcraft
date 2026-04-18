@@ -62,7 +62,7 @@ interface MultiplayerState {
   setPlayerName: (name: string) => void;
 
   /** サーバーに接続＆参加 */
-  join: (name: string) => void;
+  join: (name: string, stageId: string) => void;
 
   /** サーバーから切断 */
   leave: () => void;
@@ -122,11 +122,11 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
 
   setPlayerName: (name) => set({ playerName: name }),
 
-  join: (name) => {
+  join: (name, stageId) => {
     const socket = connectToServer();
     setupSocketListeners(socket, set, get);
     const skinId = usePlayerStore.getState().skinId;
-    socket.emit('player:join', { name, skinId });
+    socket.emit('player:join', { name, skinId, stageId });
   },
 
   leave: () => {

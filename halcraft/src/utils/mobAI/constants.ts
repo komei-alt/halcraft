@@ -77,6 +77,10 @@ export interface MobAIContext {
   animTime: number;
   /** 全モブリスト（分離計算等に使用） */
   allMobs: MobData[];
+  /** 防衛用コアの位置（あれば） */
+  corePosition?: { x: number; y: number; z: number } | null;
+  /** ブロック取得関数 */
+  getBlock?: (x: number, y: number, z: number) => number;
 }
 
 /**
