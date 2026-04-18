@@ -51,7 +51,6 @@ import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
-import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
 import './App.css';
 
