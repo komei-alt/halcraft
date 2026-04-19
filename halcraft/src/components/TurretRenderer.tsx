@@ -407,7 +407,8 @@ function SingleTurret({ position }: { position: TurretPos }) {
   });
 
   return (
-    <group position={[position.x, position.y, position.z]}>
+    <>
+      <group position={[position.x, position.y, position.z]}>
       {/* === 台座（軽量形状のまま密度を上げる） === */}
       <mesh material={baseMat} position={[0, -0.2, 0]}>
         <cylinderGeometry args={[0.42, 0.5, 0.22, 10]} />
@@ -491,6 +492,8 @@ function SingleTurret({ position }: { position: TurretPos }) {
         </group>
       </group>
 
+      </group>
+
       {/* === 弾丸トレイル === */}
       {projectiles.map((proj) => (
         <TurretTrail key={proj.id} projectile={proj} />
@@ -500,7 +503,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
       {impacts.map((effect) => (
         <TurretImpactEffect key={effect.id} effect={effect} />
       ))}
-    </group>
+    </>
   );
 }
 

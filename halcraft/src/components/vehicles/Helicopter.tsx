@@ -305,9 +305,24 @@ export function Helicopter() {
       <mesh position={[0, -0.02, 1.45]} material={bodyWhiteMat}>
         <boxGeometry args={[1.05, 0.24, 0.44]} />
       </mesh>
+      <mesh position={[-0.56, 0.22, 1.26]} material={trimMat}>
+        <boxGeometry args={[0.18, 0.46, 0.7]} />
+      </mesh>
+      <mesh position={[0.56, 0.22, 1.26]} material={trimMat}>
+        <boxGeometry args={[0.18, 0.46, 0.7]} />
+      </mesh>
+      <mesh position={[0, -0.28, 1.12]} material={trimMat}>
+        <boxGeometry args={[0.42, 0.14, 0.32]} />
+      </mesh>
+      <mesh position={[0, -0.34, 0.98]} material={engineMat}>
+        <boxGeometry args={[0.22, 0.1, 0.2]} />
+      </mesh>
       {/* コックピット上部の眉 */}
       <mesh position={[0, 0.92, 1.45]} material={trimMat}>
         <boxGeometry args={[1.18, 0.08, 0.34]} />
+      </mesh>
+      <mesh position={[0, 0.82, 1.16]} material={trimMat}>
+        <boxGeometry args={[0.98, 0.06, 0.16]} />
       </mesh>
 
       {/* 黄色いストライプ（胴体装飾） */}
@@ -378,6 +393,15 @@ export function Helicopter() {
       <mesh position={[0, 0.62, -2.45]} material={engineMat}>
         <boxGeometry args={[0.18, 0.18, 1.3]} />
       </mesh>
+      <mesh position={[-0.18, 0.12, -1.62]} rotation={[-0.5, 0, 0.14]} material={trimMat}>
+        <boxGeometry args={[0.05, 0.05, 1.36]} />
+      </mesh>
+      <mesh position={[0.18, 0.12, -1.62]} rotation={[-0.5, 0, -0.14]} material={trimMat}>
+        <boxGeometry args={[0.05, 0.05, 1.36]} />
+      </mesh>
+      <mesh position={[0, 0.12, -2.72]} material={trimMat}>
+        <boxGeometry args={[0.22, 0.14, 0.78]} />
+      </mesh>
 
       {/* テールフィン（垂直） */}
       <mesh position={[0, 1.0, -3.0]} material={tailMat}>
@@ -387,6 +411,12 @@ export function Helicopter() {
       {/* テールフィン（水平） */}
       <mesh position={[0, 0.65, -3.0]} material={tailMat}>
         <boxGeometry args={[1.2, 0.08, 0.4]} />
+      </mesh>
+      <mesh position={[-0.56, 0.82, -3.02]} material={tailMat}>
+        <boxGeometry args={[0.08, 0.34, 0.2]} />
+      </mesh>
+      <mesh position={[0.56, 0.82, -3.02]} material={tailMat}>
+        <boxGeometry args={[0.08, 0.34, 0.2]} />
       </mesh>
 
       {/* === コックピット窓（常に表示 — 搭乗時はガラス越しに外が見える） === */}
@@ -408,9 +438,15 @@ export function Helicopter() {
       <mesh position={[-0.81, 0.5, 0.5]} material={windowMat}>
         <boxGeometry args={[0.02, 0.5, 1.0]} />
       </mesh>
+      <mesh position={[-0.77, 0.5, 0.5]} material={trimMat}>
+        <boxGeometry args={[0.04, 0.58, 1.08]} />
+      </mesh>
       {/* サイドウィンドウ右 */}
       <mesh position={[0.81, 0.5, 0.5]} material={windowMat}>
         <boxGeometry args={[0.02, 0.5, 1.0]} />
+      </mesh>
+      <mesh position={[0.77, 0.5, 0.5]} material={trimMat}>
+        <boxGeometry args={[0.04, 0.58, 1.08]} />
       </mesh>
 
       {/* === ドア開口部フレーム（ガンナー席の左右 — 開放状態） === */}
@@ -430,16 +466,34 @@ export function Helicopter() {
       <mesh position={[0.78, 0.3, -0.75]} material={bodyMat}>
         <boxGeometry args={[0.06, 0.9, 0.08]} />
       </mesh>
+      <mesh position={[-0.84, -0.03, -0.28]} material={trimMat}>
+        <boxGeometry args={[0.12, 0.18, 1.18]} />
+      </mesh>
+      <mesh position={[0.84, -0.03, -0.28]} material={trimMat}>
+        <boxGeometry args={[0.12, 0.18, 1.18]} />
+      </mesh>
 
       {/* === ルーフ（ローター取り付け部） === */}
       <mesh position={[0, 0.95, 0]} material={bodyMat}>
         <boxGeometry args={[0.8, 0.15, 1.0]} />
+      </mesh>
+      <mesh position={[0, 1.07, 0.46]} material={engineMat}>
+        <boxGeometry args={[0.58, 0.14, 0.34]} />
+      </mesh>
+      <mesh position={[0, 1.15, 0.58]} material={trimMat}>
+        <boxGeometry args={[0.34, 0.06, 0.14]} />
       </mesh>
       <mesh position={[-0.42, 1.08, -0.2]} material={engineMat}>
         <boxGeometry args={[0.34, 0.2, 1.1]} />
       </mesh>
       <mesh position={[0.42, 1.08, -0.2]} material={engineMat}>
         <boxGeometry args={[0.34, 0.2, 1.1]} />
+      </mesh>
+      <mesh position={[-0.56, 1.02, -0.62]} material={trimMat}>
+        <boxGeometry args={[0.12, 0.12, 0.44]} />
+      </mesh>
+      <mesh position={[0.56, 1.02, -0.62]} material={trimMat}>
+        <boxGeometry args={[0.12, 0.12, 0.44]} />
       </mesh>
       <mesh position={[-0.48, 1.05, -0.75]} rotation={[Math.PI / 2, 0, 0]} material={trimMat}>
         <cylinderGeometry args={[0.05, 0.07, 0.42, 8]} />
@@ -484,12 +538,27 @@ export function Helicopter() {
         <mesh material={rotorMat}>
           <boxGeometry args={[0.3, 0.12, 0.3]} />
         </mesh>
+        <mesh position={[0.22, 0.02, 0]} rotation={[0, 0, 0.7]} material={trimMat}>
+          <boxGeometry args={[0.08, 0.12, 0.08]} />
+        </mesh>
+        <mesh position={[-0.22, 0.02, 0]} rotation={[0, 0, -0.7]} material={trimMat}>
+          <boxGeometry args={[0.08, 0.12, 0.08]} />
+        </mesh>
+        <mesh position={[0, 0.02, 0.22]} rotation={[0.7, 0, 0]} material={trimMat}>
+          <boxGeometry args={[0.08, 0.12, 0.08]} />
+        </mesh>
+        <mesh position={[0, 0.02, -0.22]} rotation={[-0.7, 0, 0]} material={trimMat}>
+          <boxGeometry args={[0.08, 0.12, 0.08]} />
+        </mesh>
       </group>
 
       {/* === テールローター === */}
       <group ref={tailRotorRef} position={[0.15, 0.9, -3.0]}>
         <mesh ref={tailRotorBlurRef} rotation={[0, Math.PI / 2, 0]} material={tailRotorBlurMat}>
           <circleGeometry args={[0.58, 16]} />
+        </mesh>
+        <mesh material={trimMat}>
+          <boxGeometry args={[0.08, 0.12, 0.12]} />
         </mesh>
         <mesh material={rotorMat}>
           <boxGeometry args={[0.05, 1.0, 0.15]} />
@@ -508,6 +577,12 @@ export function Helicopter() {
         <mesh material={skidMat}>
           <boxGeometry args={[0.08, 0.08, 2.4]} />
         </mesh>
+        <mesh position={[0, -0.02, 1.16]} material={trimMat}>
+          <boxGeometry args={[0.12, 0.04, 0.16]} />
+        </mesh>
+        <mesh position={[0, -0.02, -1.16]} material={trimMat}>
+          <boxGeometry args={[0.12, 0.04, 0.16]} />
+        </mesh>
         {/* 前の支柱 */}
         <mesh position={[0, 0.25, 0.7]} material={skidMat}>
           <boxGeometry args={[0.06, 0.5, 0.06]} />
@@ -516,17 +591,35 @@ export function Helicopter() {
         <mesh position={[0, 0.25, -0.7]} material={skidMat}>
           <boxGeometry args={[0.06, 0.5, 0.06]} />
         </mesh>
+        <mesh position={[0.08, 0.17, 0.7]} rotation={[0, 0, -0.45]} material={trimMat}>
+          <boxGeometry args={[0.04, 0.28, 0.04]} />
+        </mesh>
+        <mesh position={[0.08, 0.17, -0.7]} rotation={[0, 0, -0.45]} material={trimMat}>
+          <boxGeometry args={[0.04, 0.28, 0.04]} />
+        </mesh>
       </group>
       {/* 右スキッド */}
       <group position={[0.6, -0.5, 0]}>
         <mesh material={skidMat}>
           <boxGeometry args={[0.08, 0.08, 2.4]} />
         </mesh>
+        <mesh position={[0, -0.02, 1.16]} material={trimMat}>
+          <boxGeometry args={[0.12, 0.04, 0.16]} />
+        </mesh>
+        <mesh position={[0, -0.02, -1.16]} material={trimMat}>
+          <boxGeometry args={[0.12, 0.04, 0.16]} />
+        </mesh>
         <mesh position={[0, 0.25, 0.7]} material={skidMat}>
           <boxGeometry args={[0.06, 0.5, 0.06]} />
         </mesh>
         <mesh position={[0, 0.25, -0.7]} material={skidMat}>
           <boxGeometry args={[0.06, 0.5, 0.06]} />
+        </mesh>
+        <mesh position={[-0.08, 0.17, 0.7]} rotation={[0, 0, 0.45]} material={trimMat}>
+          <boxGeometry args={[0.04, 0.28, 0.04]} />
+        </mesh>
+        <mesh position={[-0.08, 0.17, -0.7]} rotation={[0, 0, 0.45]} material={trimMat}>
+          <boxGeometry args={[0.04, 0.28, 0.04]} />
         </mesh>
       </group>
       {/* スキッドをつなぐ補強パイプ */}

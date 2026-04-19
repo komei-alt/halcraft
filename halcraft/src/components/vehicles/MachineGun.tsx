@@ -61,7 +61,7 @@ const GUN_MOUNT_POSITIONS = {
 } as const;
 
 /** マズル（銃口）のローカルオフセット（銃本体原点から） */
-const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0, 0, 0.85);
+const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0, 0.03, 1.02);
 
 // ─── 色定義 ──────────────────────────────────────────
 const GUN_BARREL_COLOR = new THREE.Color(0x333333);
@@ -133,6 +133,10 @@ export function MachineGun() {
   const flashRightRef = useRef<THREE.Mesh>(null);
   const flashTimerLeft = useRef(0);
   const flashTimerRight = useRef(0);
+  const barrelSpinLeft = useRef(0);
+  const barrelSpinRight = useRef(0);
+  const barrelSpinVelocityLeft = useRef(0);
+  const barrelSpinVelocityRight = useRef(0);
 
   // 銃モデルのグループ参照（ワールド座標取得用）
   const gunGroupLeftRef = useRef<THREE.Group>(null);
@@ -146,6 +150,11 @@ export function MachineGun() {
   const shootDir = useRef(new THREE.Vector3());
   // マズルのワールド座標計算用
   const muzzleWorldPos = useRef(new THREE.Vector3());
+
+  const boostBarrelSpin = useCallback((side: 'left' | 'right', amount: number = 90) => {
+    const velocityRef = side === 'left' ? barrelSpinVelocityLeft : barrelSpinVelocityRight;
+    velocityRef.current = Math.min(velocityRef.current + amount, 140);
+  }, []);
 
   // マテリアル（メモ化）
   const barrelMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -216,6 +225,7 @@ export function MachineGun() {
     } else {
       flashTimerRight.current = 0.08;
     }
+    boostBarrelSpin(side);
 
     // サーバーに発射データを送信（他プレイヤーの弾道表示用）
     const sendGunFire = useMultiplayerStore.getState().sendGunFire;
@@ -224,7 +234,7 @@ export function MachineGun() {
       [shootDir.current.x, shootDir.current.y, shootDir.current.z],
       side,
     );
-  }, [camera]);
+  }, [boostBarrelSpin, camera]);
 
   // ─── マウスイベント ───────────────────────────────
   useEffect(() => {
@@ -272,9 +282,10 @@ export function MachineGun() {
       } else {
         flashTimerRight.current = 0.08;
       }
+      boostBarrelSpin(data.side, 72);
     });
     return unsubscribe;
-  }, []);
+  }, [boostBarrelSpin, camera]);
 
   // ─── インパクトエフェクト生成ヘルパー ─────────────
   const spawnImpact = useCallback((
@@ -331,6 +342,12 @@ export function MachineGun() {
         mat.opacity = flashTimerRight.current > 0 ? 1 : 0;
       }
     }
+
+    const spinDamping = Math.exp(-5.2 * delta);
+    barrelSpinVelocityLeft.current *= spinDamping;
+    barrelSpinVelocityRight.current *= spinDamping;
+    barrelSpinLeft.current = (barrelSpinLeft.current + barrelSpinVelocityLeft.current * delta) % (Math.PI * 2);
+    barrelSpinRight.current = (barrelSpinRight.current + barrelSpinVelocityRight.current * delta) % (Math.PI * 2);
 
     // 弾丸の物理更新
     setProjectiles((prev) => {
@@ -424,6 +441,7 @@ export function MachineGun() {
             side="left"
             flashRef={flashLeftRef}
             gunGroupRef={gunGroupLeftRef}
+            barrelSpinRef={barrelSpinLeft}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
@@ -434,6 +452,7 @@ export function MachineGun() {
             side="right"
             flashRef={flashRightRef}
             gunGroupRef={gunGroupRightRef}
+            barrelSpinRef={barrelSpinRight}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
@@ -460,6 +479,7 @@ function DoorMountedGun({
   side,
   flashRef,
   gunGroupRef,
+  barrelSpinRef,
   barrelMat,
   bodyMat,
   mountMat,
@@ -468,6 +488,7 @@ function DoorMountedGun({
   side: 'left' | 'right';
   flashRef: React.RefObject<THREE.Mesh | null>;
   gunGroupRef: React.RefObject<THREE.Group | null>;
+  barrelSpinRef: React.MutableRefObject<number>;
   barrelMat: THREE.MeshStandardMaterial;
   bodyMat: THREE.MeshStandardMaterial;
   mountMat: THREE.MeshStandardMaterial;
@@ -481,10 +502,10 @@ function DoorMountedGun({
   const pivotRef = useRef<THREE.Group>(null);
 
   // 回転計算用のワークベクトル
-  const targetDir = useRef(new THREE.Vector3());
-  const localDir = useRef(new THREE.Vector3());
-  const currentYaw = useRef(0);
-  const currentPitch = useRef(0);
+  const targetDirRef = useRef(new THREE.Vector3());
+  const localDirRef = useRef(new THREE.Vector3());
+  const currentYawRef = useRef(0);
+  const currentPitchRef = useRef(0);
 
   // 毎フレーム、ヘリの最新位置に銃の位置を同期（stale prop 回避）
   useFrame(() => {
@@ -528,15 +549,16 @@ function DoorMountedGun({
             gunGroupRef={gunGroupRef}
             isMyGun={isMyGun}
             flashRef={flashRef}
+            barrelSpinRef={barrelSpinRef}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
             flashMat={flashMat}
             camera={camera}
-            targetDir={targetDir}
-            localDir={localDir}
-            currentYaw={currentYaw}
-            currentPitch={currentPitch}
+            targetDirRef={targetDirRef}
+            localDirRef={localDirRef}
+            currentYawRef={currentYawRef}
+            currentPitchRef={currentPitchRef}
           />
         </group>
       </group>
@@ -552,40 +574,47 @@ function GunPivot({
   gunGroupRef,
   isMyGun,
   flashRef,
+  barrelSpinRef,
   barrelMat,
   bodyMat,
   mountMat,
   flashMat,
   camera,
-  targetDir,
-  localDir,
-  currentYaw,
-  currentPitch,
+  targetDirRef,
+  localDirRef,
+  currentYawRef,
+  currentPitchRef,
 }: {
   pivotRef: React.RefObject<THREE.Group | null>;
   gunGroupRef: React.RefObject<THREE.Group | null>;
   isMyGun: boolean;
   flashRef: React.RefObject<THREE.Mesh | null>;
+  barrelSpinRef: React.MutableRefObject<number>;
   barrelMat: THREE.MeshStandardMaterial;
   bodyMat: THREE.MeshStandardMaterial;
   mountMat: THREE.MeshStandardMaterial;
   flashMat: THREE.MeshBasicMaterial;
   camera: THREE.Camera;
-  targetDir: React.MutableRefObject<THREE.Vector3>;
-  localDir: React.MutableRefObject<THREE.Vector3>;
-  currentYaw: React.MutableRefObject<number>;
-  currentPitch: React.MutableRefObject<number>;
+  targetDirRef: React.MutableRefObject<THREE.Vector3>;
+  localDirRef: React.MutableRefObject<THREE.Vector3>;
+  currentYawRef: React.MutableRefObject<number>;
+  currentPitchRef: React.MutableRefObject<number>;
 }) {
+  const barrelClusterRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
     if (!pivotRef.current) return;
+
+    if (barrelClusterRef.current) {
+      barrelClusterRef.current.rotation.z = barrelSpinRef.current;
+    }
 
     // 毎フレーム最新のヘリ状態を取得（prop 経由だと stale になる可能性あり）
     const heli = useVehicleStore.getState().helicopter;
 
     if (isMyGun) {
       // カメラの前方向をワールド座標で取得
-      targetDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      targetDirRef.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
 
       // ヘリの回転の逆を適用してローカル座標系に変換
       // ヘリは rotationY で回転 + モデル内部で180度回転なので
@@ -594,19 +623,19 @@ function GunPivot({
       const cosY = Math.cos(-heliYaw);
       const sinY = Math.sin(-heliYaw);
 
-      localDir.current.set(
-        cosY * targetDir.current.x - sinY * targetDir.current.z,
-        targetDir.current.y,
-        sinY * targetDir.current.x + cosY * targetDir.current.z,
+      localDirRef.current.set(
+        cosY * targetDirRef.current.x - sinY * targetDirRef.current.z,
+        targetDirRef.current.y,
+        sinY * targetDirRef.current.x + cosY * targetDirRef.current.z,
       );
 
       // ローカルYaw（水平角）とPitch（仰角）を算出
-      const targetYaw = Math.atan2(localDir.current.x, localDir.current.z);
+      const targetYaw = Math.atan2(localDirRef.current.x, localDirRef.current.z);
       const horizontalDist = Math.sqrt(
-        localDir.current.x * localDir.current.x +
-        localDir.current.z * localDir.current.z,
+        localDirRef.current.x * localDirRef.current.x +
+        localDirRef.current.z * localDirRef.current.z,
       );
-      const targetPitch = -Math.atan2(localDir.current.y, horizontalDist);
+      const targetPitch = -Math.atan2(localDirRef.current.y, horizontalDist);
 
       // 制限: 左銃は右方向、右銃は左方向にあまり回らないように
       const maxYaw = Math.PI * 0.7; // ±126度
@@ -616,16 +645,16 @@ function GunPivot({
 
       // スムーズ補間
       const lerpSpeed = 12 * delta;
-      currentYaw.current += (clampedYaw - currentYaw.current) * Math.min(1, lerpSpeed);
-      currentPitch.current += (clampedPitch - currentPitch.current) * Math.min(1, lerpSpeed);
+      currentYawRef.current += (clampedYaw - currentYawRef.current) * Math.min(1, lerpSpeed);
+      currentPitchRef.current += (clampedPitch - currentPitchRef.current) * Math.min(1, lerpSpeed);
 
-      pivotRef.current.rotation.set(currentPitch.current, currentYaw.current, 0);
+      pivotRef.current.rotation.set(currentPitchRef.current, currentYawRef.current, 0);
     } else {
       // 自分のガンでない場合は正面向き
       const lerpSpeed = 5 * delta;
-      currentYaw.current *= (1 - Math.min(1, lerpSpeed));
-      currentPitch.current *= (1 - Math.min(1, lerpSpeed));
-      pivotRef.current.rotation.set(currentPitch.current, currentYaw.current, 0);
+      currentYawRef.current *= (1 - Math.min(1, lerpSpeed));
+      currentPitchRef.current *= (1 - Math.min(1, lerpSpeed));
+      pivotRef.current.rotation.set(currentPitchRef.current, currentYawRef.current, 0);
     }
   });
 
@@ -634,31 +663,63 @@ function GunPivot({
       {/* 銃本体のグループ（ワールドマトリクス取得用） */}
       <group ref={gunGroupRef}>
         {/* 旋回台座（ピボット上部） */}
-        <mesh material={mountMat} position={[0, 0.05, 0]}>
-          <boxGeometry args={[0.18, 0.12, 0.18]} />
+        <mesh material={mountMat} position={[0, 0.03, 0]}>
+          <boxGeometry args={[0.22, 0.1, 0.24]} />
+        </mesh>
+        <mesh material={mountMat} position={[0.11, -0.02, 0.04]} rotation={[0, 0, 0.28]}>
+          <boxGeometry args={[0.05, 0.16, 0.12]} />
+        </mesh>
+        <mesh material={mountMat} position={[-0.11, -0.02, 0.04]} rotation={[0, 0, -0.28]}>
+          <boxGeometry args={[0.05, 0.16, 0.12]} />
         </mesh>
         {/* 銃本体 */}
-        <mesh position={[0, 0.0, 0.22]} material={bodyMat}>
-          <boxGeometry args={[0.15, 0.12, 0.35]} />
+        <mesh position={[0, 0.02, 0.2]} material={bodyMat}>
+          <boxGeometry args={[0.22, 0.16, 0.42]} />
         </mesh>
-        {/* 銃身 */}
-        <mesh position={[0, 0.0, 0.55]} material={barrelMat}>
-          <boxGeometry args={[0.08, 0.08, 0.5]} />
-        </mesh>
-        {/* 銃身先端 */}
-        <mesh position={[0, 0.0, 0.82]} material={barrelMat}>
-          <boxGeometry args={[0.1, 0.1, 0.06]} />
+        <mesh position={[0, 0.12, 0.12]} material={bodyMat}>
+          <boxGeometry args={[0.16, 0.08, 0.18]} />
         </mesh>
         {/* 弾薬ボックス */}
-        <mesh position={[0, -0.12, 0.15]} material={bodyMat}>
-          <boxGeometry args={[0.12, 0.1, 0.18]} />
+        <mesh position={[0, -0.1, 0.12]} material={bodyMat}>
+          <boxGeometry args={[0.16, 0.1, 0.22]} />
         </mesh>
-        {/* グリップ */}
-        <mesh position={[0, -0.12, 0.35]} material={bodyMat}>
-          <boxGeometry args={[0.06, 0.12, 0.06]} />
+        <mesh position={[0.14, -0.04, 0.24]} material={mountMat}>
+          <boxGeometry args={[0.05, 0.12, 0.24]} />
         </mesh>
+        <mesh position={[-0.14, -0.04, 0.24]} material={mountMat}>
+          <boxGeometry args={[0.05, 0.12, 0.24]} />
+        </mesh>
+        <mesh position={[0, -0.14, 0.36]} material={bodyMat}>
+          <boxGeometry args={[0.07, 0.12, 0.08]} />
+        </mesh>
+        <mesh position={[0, 0.03, 0.52]} material={bodyMat}>
+          <boxGeometry args={[0.19, 0.19, 0.12]} />
+        </mesh>
+        <mesh position={[0, 0.03, 0.67]} material={bodyMat}>
+          <boxGeometry args={[0.17, 0.17, 0.1]} />
+        </mesh>
+        <group ref={barrelClusterRef} position={[0, 0.03, 0.73]}>
+          <mesh position={[0, 0, 0.06]} material={bodyMat}>
+            <boxGeometry args={[0.16, 0.16, 0.1]} />
+          </mesh>
+          <mesh position={[0.06, 0, 0.22]} material={barrelMat}>
+            <boxGeometry args={[0.04, 0.04, 0.56]} />
+          </mesh>
+          <mesh position={[-0.06, 0, 0.22]} material={barrelMat}>
+            <boxGeometry args={[0.04, 0.04, 0.56]} />
+          </mesh>
+          <mesh position={[0, 0.06, 0.22]} material={barrelMat}>
+            <boxGeometry args={[0.04, 0.04, 0.56]} />
+          </mesh>
+          <mesh position={[0, -0.06, 0.22]} material={barrelMat}>
+            <boxGeometry args={[0.04, 0.04, 0.56]} />
+          </mesh>
+          <mesh position={[0, 0, 0.48]} material={barrelMat}>
+            <boxGeometry args={[0.16, 0.16, 0.08]} />
+          </mesh>
+        </group>
         {/* マズルフラッシュ */}
-        <mesh ref={flashRef} position={[0, 0.0, 0.9]} material={flashMat.clone()}>
+        <mesh ref={flashRef} position={[0, 0.03, 1.08]} material={flashMat.clone()}>
           <boxGeometry args={[0.25, 0.25, 0.15]} />
         </mesh>
       </group>
@@ -672,6 +733,7 @@ function GunPivot({
 function ProjectileTrail({ projectile }: { projectile: Projectile }) {
   const groupRef = useRef<THREE.Group>(null);
   const bulletRef = useRef<THREE.Mesh>(null);
+  const glowBulletRef = useRef<THREE.Mesh>(null);
   const trailRef = useRef<THREE.Mesh>(null);
   const glowTrailRef = useRef<THREE.Mesh>(null);
 
@@ -680,6 +742,9 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
 
     // 弾頭の位置を更新
     bulletRef.current.position.copy(projectile.pos);
+    if (glowBulletRef.current) {
+      glowBulletRef.current.position.copy(projectile.pos);
+    }
 
     // トレイル（弾の尾）を計算
     if (projectile.prevPositions.length >= 2) {
@@ -723,7 +788,7 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
         <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} />
       </mesh>
       {/* 弾頭のグロー（外側の光芒） */}
-      <mesh position={projectile.pos.clone()}>
+      <mesh ref={glowBulletRef}>
         <sphereGeometry args={[0.35, 6, 6]} />
         <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.45} />
       </mesh>
@@ -748,6 +813,13 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
   const groupRef = useRef<THREE.Group>(null);
   const particlesRef = useRef<THREE.Mesh[]>([]);
   const flashRef = useRef<THREE.Mesh>(null);
+  const particleStateRef = useRef(
+    effect.particles.map((particle) => ({
+      vel: particle.vel.clone(),
+      pos: particle.pos.clone(),
+      size: particle.size,
+    })),
+  );
 
   useFrame(() => {
     const now = performance.now() / 1000;
@@ -756,8 +828,8 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
     if (progress >= 1) return;
 
     const dt = 1 / 60;
-    for (let i = 0; i < effect.particles.length; i++) {
-      const p = effect.particles[i];
+    for (let i = 0; i < particleStateRef.current.length; i++) {
+      const p = particleStateRef.current[i];
       p.vel.y -= 12 * dt;
       p.pos.x += p.vel.x * dt;
       p.pos.y += p.vel.y * dt;

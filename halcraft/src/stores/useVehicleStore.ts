@@ -47,7 +47,7 @@ export const SEAT_NAMES: Record<SeatType, string> = {
 /** 機関銃のパラメータ */
 export const GUN_CONSTANTS = {
   /** 発射クールダウン（秒） */
-  FIRE_COOLDOWN: 0.15,
+  FIRE_COOLDOWN: 0.11,
   /** ダメージ */
   DAMAGE: 3,
   /** 射程（ブロック） */
