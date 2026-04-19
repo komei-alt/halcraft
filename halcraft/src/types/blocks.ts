@@ -230,7 +230,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
   [BLOCK_IDS.TURRET]: {
     id: BLOCK_IDS.TURRET,
     name: '固定タレット',
-    texture: 'iron.png',
+    texture: 'turret.svg',
     transparent: false,
     unbreakable: false,
     emissive: true,

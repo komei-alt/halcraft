@@ -46,6 +46,10 @@ const GUN_BARREL_COLOR = new THREE.Color(0x333333);
 const GUN_BODY_COLOR = new THREE.Color(0x555555);
 const GUN_MOUNT_COLOR = new THREE.Color(0x444444);
 const BASE_COLOR = new THREE.Color(0x666666);
+const ARMOR_COLOR = new THREE.Color(0x7a808b);
+const AMMO_COLOR = new THREE.Color(0x756148);
+const ACCENT_COLOR = new THREE.Color(0xff5858);
+const SENSOR_COLOR = new THREE.Color(0x7fe6ff);
 const TRACER_COLOR = new THREE.Color(0xffdd44);
 // const TRACER_GLOW_COLOR = new THREE.Color(0xffaa22); // 将来使用
 const BLOCK_IMPACT_COLOR = new THREE.Color(0xccaa66);
@@ -142,6 +146,7 @@ export function TurretRenderer() {
 function SingleTurret({ position }: { position: TurretPos }) {
   const pivotRef = useRef<THREE.Group>(null);
   const gunGroupRef = useRef<THREE.Group>(null);
+  const muzzleRef = useRef<THREE.Group>(null);
   const flashRef = useRef<THREE.Mesh>(null);
   const lastFireTime = useRef(0);
   const flashTimer = useRef(0);
@@ -149,6 +154,10 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const currentPitch = useRef(0);
   const barrelRotation = useRef(0);
   const isMouseDown = useRef(false);
+  const muzzleWorld = useRef(new THREE.Vector3());
+  const muzzleQuat = useRef(new THREE.Quaternion());
+  const shootDir = useRef(new THREE.Vector3());
+  const turretPosVec = useRef(new THREE.Vector3());
   const { camera } = useThree();
 
   useEffect(() => {
@@ -176,11 +185,31 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: GUN_BODY_COLOR, roughness: 0.5, metalness: 0.3,
   }), []);
+  const armorMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: ARMOR_COLOR, roughness: 0.42, metalness: 0.52,
+  }), []);
   const mountMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: GUN_MOUNT_COLOR, roughness: 0.7, metalness: 0.2,
   }), []);
   const baseMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: BASE_COLOR, roughness: 0.4, metalness: 0.6,
+  }), []);
+  const ammoMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: AMMO_COLOR, roughness: 0.55, metalness: 0.32,
+  }), []);
+  const accentMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: ACCENT_COLOR,
+    roughness: 0.25,
+    metalness: 0.15,
+    emissive: ACCENT_COLOR,
+    emissiveIntensity: 0.7,
+  }), []);
+  const sensorMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: SENSOR_COLOR,
+    roughness: 0.18,
+    metalness: 0.2,
+    emissive: SENSOR_COLOR,
+    emissiveIntensity: 0.9,
   }), []);
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
@@ -224,7 +253,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
     const now = performance.now() / 1000;
     const mobs = useMobStore.getState().mobs;
     const getBlock = useWorldStore.getState().getBlock;
-    const turretPos = new THREE.Vector3(position.x, position.y, position.z);
+    const turretPos = turretPosVec.current.set(position.x, position.y, position.z);
 
     // プレイヤーがタレットの近くにいるか判定（プレイヤー操作モード）
     const camPos = camera.position;
@@ -271,7 +300,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
       const hDist = Math.sqrt(targetDir.x ** 2 + targetDir.z ** 2);
       const targetPitch = -Math.atan2(targetDir.y, hDist);
 
-      const lerpSpeed = 8 * delta;
+      const lerpSpeed = (isPlayerControlled ? 18 : 8) * delta;
       currentYaw.current += (targetYaw - currentYaw.current) * Math.min(1, lerpSpeed);
       currentPitch.current += (targetPitch - currentPitch.current) * Math.min(1, lerpSpeed);
       pivotRef.current.rotation.set(currentPitch.current, currentYaw.current, 0);
@@ -283,29 +312,29 @@ function SingleTurret({ position }: { position: TurretPos }) {
       ? (canFire && isMouseDown.current) // プレイヤー操作時は左クリック中のみ発射
       : (canFire && targetDir !== null);
 
-    if (shouldFire && targetDir && gunGroupRef.current) {
+    if (shouldFire && targetDir && muzzleRef.current) {
       lastFireTime.current = now;
 
-      // マズル位置を算出
-      gunGroupRef.current.updateWorldMatrix(true, false);
-      const muzzleLocal = new THREE.Vector3(0, 0, 0.85);
-      const muzzleWorld = muzzleLocal.applyMatrix4(gunGroupRef.current.matrixWorld);
+      // 銃口アンカーのワールド位置と実際の銃身前方向を取得
+      muzzleRef.current.updateWorldMatrix(true, false);
+      muzzleRef.current.getWorldPosition(muzzleWorld.current);
+      muzzleRef.current.getWorldQuaternion(muzzleQuat.current);
+      shootDir.current.set(0, 0, 1).applyQuaternion(muzzleQuat.current);
 
-      // 散布を追加
-      const spread = 0.025;
-      const dir = targetDir.clone();
-      dir.x += (Math.random() - 0.5) * spread;
-      dir.y += (Math.random() - 0.5) * spread;
-      dir.z += (Math.random() - 0.5) * spread;
-      dir.normalize();
+      // 散布を追加しつつ、弾道を銃身と一致させる
+      const spread = 0.018;
+      shootDir.current.x += (Math.random() - 0.5) * spread;
+      shootDir.current.y += (Math.random() - 0.5) * spread;
+      shootDir.current.z += (Math.random() - 0.5) * spread;
+      shootDir.current.normalize();
 
-      const vel = dir.multiplyScalar(BULLET_SPEED);
+      const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
       setProjectiles((prev) => [...prev, {
         id: nextTurretProjId++,
-        pos: muzzleWorld.clone(),
+        pos: muzzleWorld.current.clone(),
         vel,
         createdAt: now,
-        prevPos: muzzleWorld.clone(),
+        prevPos: muzzleWorld.current.clone(),
         dead: false,
       }]);
 
@@ -314,7 +343,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
       barrelRotation.current += Math.PI / 3; // 回転式バレル
 
       // 発射音
-      playMachineGunSound(muzzleWorld.distanceTo(camera.position));
+      playMachineGunSound(muzzleWorld.current.distanceTo(camera.position));
     }
 
     // --- マズルフラッシュ減衰 ---
@@ -379,13 +408,27 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
   return (
     <group position={[position.x, position.y, position.z]}>
-      {/* === 台座（ブロックの上に乗る鉄の台） === */}
-      <mesh material={baseMat} position={[0, -0.15, 0]}>
-        <cylinderGeometry args={[0.35, 0.45, 0.3, 8]} />
+      {/* === 台座（軽量形状のまま密度を上げる） === */}
+      <mesh material={baseMat} position={[0, -0.2, 0]}>
+        <cylinderGeometry args={[0.42, 0.5, 0.22, 10]} />
       </mesh>
-      {/* 支柱 */}
+      <mesh material={armorMat} position={[0, -0.06, 0]}>
+        <cylinderGeometry args={[0.3, 0.36, 0.1, 10]} />
+      </mesh>
       <mesh material={mountMat} position={[0, 0.1, 0]}>
         <cylinderGeometry args={[0.08, 0.1, 0.3, 6]} />
+      </mesh>
+      <mesh material={mountMat} position={[0.14, 0.02, 0]} rotation={[0, 0, 0.45]}>
+        <boxGeometry args={[0.05, 0.22, 0.05]} />
+      </mesh>
+      <mesh material={mountMat} position={[-0.14, 0.02, 0]} rotation={[0, 0, -0.45]}>
+        <boxGeometry args={[0.05, 0.22, 0.05]} />
+      </mesh>
+      <mesh material={accentMat} position={[0, 0.03, -0.16]}>
+        <boxGeometry args={[0.16, 0.04, 0.06]} />
+      </mesh>
+      <mesh material={sensorMat} position={[0, 0.34, -0.05]}>
+        <boxGeometry args={[0.08, 0.05, 0.08]} />
       </mesh>
 
       {/* === 旋回部分 === */}
@@ -393,14 +436,29 @@ function SingleTurret({ position }: { position: TurretPos }) {
         <group ref={gunGroupRef}>
           {/* 旋回台座 */}
           <mesh material={mountMat} position={[0, 0, 0]}>
-            <boxGeometry args={[0.22, 0.14, 0.22]} />
+            <boxGeometry args={[0.28, 0.14, 0.26]} />
+          </mesh>
+          <mesh material={armorMat} position={[0, 0.08, 0.02]}>
+            <boxGeometry args={[0.22, 0.08, 0.18]} />
           </mesh>
           {/* 銃本体 */}
           <mesh material={bodyMat} position={[0, 0.0, 0.22]}>
-            <boxGeometry args={[0.15, 0.12, 0.35]} />
+            <boxGeometry args={[0.18, 0.16, 0.42]} />
+          </mesh>
+          <mesh material={armorMat} position={[0, 0.08, 0.34]}>
+            <boxGeometry args={[0.14, 0.08, 0.22]} />
+          </mesh>
+          <mesh material={mountMat} position={[0.12, -0.02, 0.18]}>
+            <boxGeometry args={[0.05, 0.15, 0.18]} />
+          </mesh>
+          <mesh material={mountMat} position={[-0.12, -0.02, 0.18]}>
+            <boxGeometry args={[0.05, 0.15, 0.18]} />
           </mesh>
           {/* 回転式バレル（3本） */}
           <group position={[0, 0, 0.55]} rotation={[0, 0, barrelRotation.current]}>
+            <mesh material={armorMat} position={[0, 0, 0.08]}>
+              <boxGeometry args={[0.16, 0.16, 0.08]} />
+            </mesh>
             <mesh material={barrelMat} position={[0.04, 0, 0]}>
               <boxGeometry args={[0.05, 0.05, 0.5]} />
             </mesh>
@@ -410,29 +468,28 @@ function SingleTurret({ position }: { position: TurretPos }) {
             <mesh material={barrelMat} position={[-0.04, -0.04, 0]}>
               <boxGeometry args={[0.05, 0.05, 0.5]} />
             </mesh>
+            <mesh material={armorMat} position={[0, 0, 0.28]}>
+              <boxGeometry args={[0.18, 0.18, 0.08]} />
+            </mesh>
           </group>
           {/* 銃身先端 */}
-          <mesh material={barrelMat} position={[0, 0.0, 0.82]}>
-            <boxGeometry args={[0.12, 0.12, 0.06]} />
+          <mesh material={armorMat} position={[0, 0.0, 0.84]}>
+            <boxGeometry args={[0.14, 0.14, 0.08]} />
           </mesh>
           {/* 弾薬ボックス */}
-          <mesh material={bodyMat} position={[0, -0.14, 0.1]}>
-            <boxGeometry args={[0.14, 0.12, 0.2]} />
+          <mesh material={ammoMat} position={[0, -0.14, 0.1]}>
+            <boxGeometry args={[0.18, 0.14, 0.22]} />
+          </mesh>
+          <mesh material={sensorMat} position={[0, 0.06, 0.62]}>
+            <boxGeometry args={[0.08, 0.04, 0.08]} />
           </mesh>
           {/* マズルフラッシュ */}
-          <mesh ref={flashRef} position={[0, 0, 0.9]} material={flashMat.clone()}>
+          <group ref={muzzleRef} position={[0, 0, 0.9]} />
+          <mesh ref={flashRef} position={[0, 0, 0.96]} material={flashMat}>
             <boxGeometry args={[0.25, 0.25, 0.15]} />
           </mesh>
         </group>
       </group>
-
-      {/* === インジケーターライト（稼働中） === */}
-      <pointLight
-        position={[0, 0.4, 0]}
-        color={0xff4444}
-        intensity={0.5}
-        distance={3}
-      />
 
       {/* === 弾丸トレイル === */}
       {projectiles.map((proj) => (
@@ -493,6 +550,13 @@ function TurretTrail({ projectile }: { projectile: TurretProjectile }) {
 // ────────────────────────────────────────────────────────
 function TurretImpactEffect({ effect }: { effect: TurretImpact }) {
   const particlesRef = useRef<THREE.Mesh[]>([]);
+  const particleStateRef = useRef(
+    effect.particles.map((particle) => ({
+      vel: particle.vel.clone(),
+      pos: particle.pos.clone(),
+      size: particle.size,
+    })),
+  );
 
   useFrame(() => {
     const now = performance.now() / 1000;
@@ -501,8 +565,8 @@ function TurretImpactEffect({ effect }: { effect: TurretImpact }) {
     if (progress >= 1) return;
 
     const dt = 1 / 60;
-    for (let i = 0; i < effect.particles.length; i++) {
-      const p = effect.particles[i];
+    for (let i = 0; i < particleStateRef.current.length; i++) {
+      const p = particleStateRef.current[i];
       p.vel.y -= 10 * dt;
       p.pos.x += p.vel.x * dt;
       p.pos.y += p.vel.y * dt;
