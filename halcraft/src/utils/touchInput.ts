@@ -20,6 +20,8 @@ export const mobileActions = {
   breakBlock: false,
   /** ブロック設置トリガー（1回消費で自動false） */
   placeBlock: false,
+  /** ロケット発射トリガー（1回消費で自動false） */
+  fireRocket: false,
 };
 
 /**
@@ -47,6 +49,17 @@ export function consumeBreakBlock(): boolean {
 export function consumePlaceBlock(): boolean {
   if (mobileActions.placeBlock) {
     mobileActions.placeBlock = false;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * ロケット発射を消費
+ */
+export function consumeFireRocket(): boolean {
+  if (mobileActions.fireRocket) {
+    mobileActions.fireRocket = false;
     return true;
   }
   return false;

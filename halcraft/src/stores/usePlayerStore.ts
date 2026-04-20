@@ -28,6 +28,8 @@ const FALL_DAMAGE_PER_BLOCK = 1;
 
 /** 攻撃クールダウン時間（秒） */
 const ATTACK_COOLDOWN = 0.4;
+/** ロケットランチャーのクールダウン時間（秒） */
+const ROCKET_COOLDOWN = 2.8;
 /** HP自然回復の待機時間（最後にダメージを受けてから、秒） */
 const REGEN_DELAY = 30;
 /** HP自然回復量（毎秒） */
@@ -71,6 +73,12 @@ interface PlayerState {
   /** 攻撃チャージ率（0-1、1=フルチャージ） */
   attackCharge: number;
 
+  /** ロケットランチャーのクールダウン残り時間（秒） */
+  rocketCooldown: number;
+
+  /** ロケットランチャーのリチャージ率（0-1、1=発射可能） */
+  rocketCharge: number;
+
   /** カメラシェイク強度（0-1） */
   cameraShake: number;
 
@@ -98,6 +106,9 @@ interface PlayerState {
 
   /** 攻撃クールダウンを毎フレーム更新 */
   updateAttackCooldown: (dt: number) => void;
+
+  /** ロケットランチャーを発射し、成功時 true を返す */
+  fireRocket: () => boolean;
 
   /** ダメージを受ける（knockbackDir: ダメージ源からプレイヤーへの方向XZ） */
   takeDamage: (amount: number, knockbackDirX?: number, knockbackDirZ?: number) => void;
@@ -136,6 +147,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaceMode: false,
   attackCooldown: 0,
   attackCharge: 1,
+  rocketCooldown: 0,
+  rocketCharge: 1,
   cameraShake: 0,
   lastDamageTime: 0,
   knockbackVx: 0,
@@ -182,15 +195,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     const newCooldown = Math.max(0, state.attackCooldown - dt);
     const newCharge = newCooldown <= 0 ? 1 : Math.min(1, 1 - newCooldown / ATTACK_COOLDOWN);
+    const newRocketCooldown = Math.max(0, state.rocketCooldown - dt);
+    const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / ROCKET_COOLDOWN);
     const newShake = Math.max(0, state.cameraShake - SHAKE_DECAY * dt);
     // 変更がある場合のみ更新
-    if (newCooldown !== state.attackCooldown || newShake !== state.cameraShake) {
+    if (
+      newCooldown !== state.attackCooldown ||
+      newRocketCooldown !== state.rocketCooldown ||
+      newShake !== state.cameraShake
+    ) {
       set({
         attackCooldown: newCooldown,
         attackCharge: newCharge,
+        rocketCooldown: newRocketCooldown,
+        rocketCharge: newRocketCharge,
         cameraShake: newShake,
       });
     }
+  },
+
+  fireRocket: () => {
+    const state = get();
+    if (state.rocketCooldown > 0 || state.isDead) return false;
+
+    set({
+      rocketCooldown: ROCKET_COOLDOWN,
+      rocketCharge: 0,
+      cameraShake: Math.max(state.cameraShake, 0.45),
+    });
+    return true;
   },
 
   takeDamage: (amount, knockbackDirX, knockbackDirZ) => {
@@ -254,6 +287,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
+      rocketCooldown: 0,
+      rocketCharge: 1,
       invincibleUntil: Date.now() + 5000,
     });
     // サーバーへ復活通知
@@ -290,4 +325,3 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try { localStorage.setItem(SKIN_STORAGE_KEY, skinId); } catch { /* noop */ }
   },
 }));
-

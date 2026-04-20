@@ -494,7 +494,124 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
 }
 
 // ============================================
-// 9. ヘリコプターのローター音
+// 9. ロケットランチャー発射音
+// ============================================
+
+export function playRocketLaunchSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('rocketLaunch', 120)) return;
+
+  const maxDist = 50;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.55 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  const thump = ctx.createOscillator();
+  thump.type = 'triangle';
+  thump.frequency.setValueAtTime(96, now);
+  thump.frequency.exponentialRampToValueAtTime(36, now + 0.28);
+
+  const thumpGain = ctx.createGain();
+  thumpGain.gain.setValueAtTime(volume * 0.6, now);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+  thump.connect(thumpGain);
+  thumpGain.connect(ctx.destination);
+  thump.start(now);
+  thump.stop(now + 0.32);
+
+  const hiss = ctx.createBufferSource();
+  hiss.buffer = getNoiseBuffer(ctx);
+
+  const hissFilter = ctx.createBiquadFilter();
+  hissFilter.type = 'bandpass';
+  hissFilter.frequency.setValueAtTime(900, now);
+  hissFilter.Q.setValueAtTime(0.8, now);
+
+  const hissGain = ctx.createGain();
+  hissGain.gain.setValueAtTime(volume * 0.42, now);
+  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+  hiss.connect(hissFilter);
+  hissFilter.connect(hissGain);
+  hissGain.connect(ctx.destination);
+  hiss.start(now);
+  hiss.stop(now + 0.24);
+}
+
+// ============================================
+// 10. ロケット爆発音
+// ============================================
+
+export function playRocketExplosionSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('rocketExplosion', 80)) return;
+
+  const maxDist = 70;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.75 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  const boom = ctx.createOscillator();
+  boom.type = 'sawtooth';
+  boom.frequency.setValueAtTime(72, now);
+  boom.frequency.exponentialRampToValueAtTime(26, now + 0.5);
+
+  const boomFilter = ctx.createBiquadFilter();
+  boomFilter.type = 'lowpass';
+  boomFilter.frequency.setValueAtTime(180, now);
+  boomFilter.frequency.exponentialRampToValueAtTime(70, now + 0.45);
+
+  const boomGain = ctx.createGain();
+  boomGain.gain.setValueAtTime(volume * 0.75, now);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+
+  boom.connect(boomFilter);
+  boomFilter.connect(boomGain);
+  boomGain.connect(ctx.destination);
+  boom.start(now);
+  boom.stop(now + 0.55);
+
+  const crack = ctx.createBufferSource();
+  crack.buffer = getNoiseBuffer(ctx);
+
+  const crackFilter = ctx.createBiquadFilter();
+  crackFilter.type = 'highpass';
+  crackFilter.frequency.setValueAtTime(900, now);
+
+  const crackGain = ctx.createGain();
+  crackGain.gain.setValueAtTime(volume * 0.45, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+  crack.connect(crackFilter);
+  crackFilter.connect(crackGain);
+  crackGain.connect(ctx.destination);
+  crack.start(now);
+  crack.stop(now + 0.22);
+
+  const tail = ctx.createBufferSource();
+  tail.buffer = getNoiseBuffer(ctx);
+
+  const tailFilter = ctx.createBiquadFilter();
+  tailFilter.type = 'bandpass';
+  tailFilter.frequency.setValueAtTime(140, now);
+  tailFilter.Q.setValueAtTime(0.6, now);
+
+  const tailGain = ctx.createGain();
+  tailGain.gain.setValueAtTime(volume * 0.25, now + 0.05);
+  tailGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+
+  tail.connect(tailFilter);
+  tailFilter.connect(tailGain);
+  tailGain.connect(ctx.destination);
+  tail.start(now);
+  tail.stop(now + 0.65);
+}
+
+// ============================================
+// 11. ヘリコプターのローター音
 // ============================================
 
 export function playHelicopterRotor(distance: number): void {

@@ -12,6 +12,7 @@ import { BlockInteraction } from './components/BlockInteraction';
 import { BlockBreakEffect } from './components/BlockBreakEffect';
 import { DamagePopup } from './components/DamagePopup';
 import { MobDeathEffect } from './components/MobDeathEffect';
+import { RocketLauncher } from './components/RocketLauncher';
 import { DroppedItems } from './components/DroppedItems';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
@@ -39,6 +40,7 @@ import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
 import { DamageOverlay } from './components/ui/DamageOverlay';
 import { AttackIndicator } from './components/ui/AttackIndicator';
+import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
@@ -90,6 +92,7 @@ function GameCanvas() {
         <BlockBreakEffect />
         <DamagePopup />
         <MobDeathEffect />
+        <RocketLauncher />
         <DroppedItems />
         <MobManager />
         <Helicopter />
@@ -201,6 +204,7 @@ export default function App() {
           <TimeDisplay />
           <DamageOverlay />
           <AttackIndicator />
+          <RocketCooldownIndicator />
           <MissionOverlay />
           <CoreHealthBar />
           <BossHealthBar />

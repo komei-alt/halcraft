@@ -3,6 +3,7 @@
 
 import { useCallback } from 'react';
 import { usePlayerStore } from '../../../stores/usePlayerStore';
+import { mobileActions } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
 
@@ -29,8 +30,43 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     onOpenCrafting();
   }, [onOpenCrafting]);
 
+  // ロケット発射
+  const handleRocket = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.fireRocket = true;
+  }, []);
+
   return (
     <>
+      {/* ロケットランチャー */}
+      <div
+        onTouchStart={handleRocket}
+        style={{
+          position: 'fixed',
+          right: 20,
+          bottom: `calc(${64 + 80 + (BUTTON_SIZE + 12) * 2}px + env(safe-area-inset-bottom))`,
+          width: BUTTON_SIZE,
+          height: BUTTON_SIZE,
+          borderRadius: 8,
+          background: 'rgba(255, 150, 80, 0.18)',
+          border: '2px solid rgba(255, 170, 110, 0.38)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 120,
+          touchAction: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          fontSize: 20,
+          color: 'rgba(255, 245, 220, 0.85)',
+          textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+      >
+        🚀
+      </div>
+
       {/* 設置/破壊モード切替 */}
       <div
         onTouchStart={handleTogglePlace}

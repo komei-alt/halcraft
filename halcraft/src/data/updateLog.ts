@@ -45,6 +45,15 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-04-20',
+    items: [
+      { type: 'feature', text: 'かたにのせるロケットランチャーを追加！' },
+      { type: 'feature', text: '大きなばくはつで、まわりのみんなにもダメージ！' },
+      { type: 'improve', text: 'ロケットのえん・ひかり・ばくはつがもっとかっこよくなった' },
+      { type: 'improve', text: 'スマホでも🚀ボタンでロケットをうてるようにした' },
+    ],
+  },
+  {
     date: '2026-04-05',
     items: [
       { type: 'feature', text: 'アイアンゴーレムを追加！ SPAWNERブロックでよびだせるよ' },

@@ -74,6 +74,7 @@ function WalkingControls() {
       <Divider />
       <ControlRow keyName="左クリック" action="ブロック破壊 / 攻撃" />
       <ControlRow keyName="右クリック" action="ブロック設置" />
+      <ControlRow keyName="R" action="ロケット発射" keyColor="#ff9966" />
       <ControlRow keyName="1-9" action="ホットバー選択" />
       <Divider />
       <ControlRow keyName="E" action="クラフト画面" />
@@ -146,6 +147,7 @@ function MobileWalkingControls() {
       <ControlRow keyName="👆" action="右エリアで視点操作" />
       <ControlRow keyName="タップ" action="ブロック破壊" />
       <ControlRow keyName="長押し" action="ブロック設置" />
+      <ControlRow keyName="🚀" action="ロケット発射" />
     </>
   );
 }
