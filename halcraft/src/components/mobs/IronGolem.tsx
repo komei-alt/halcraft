@@ -55,14 +55,21 @@ export function IronGolem({ mob, animTime }: IronGolemProps) {
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   // 鉄テクスチャをロード
-  const ironTexture = useTexture('/textures/blocks/iron.png');
+  const ironTextureSource = useTexture('/textures/blocks/iron.png');
 
-  // テクスチャ設定（ピクセルアート風）
-  useMemo(() => {
-    ironTexture.magFilter = THREE.NearestFilter;
-    ironTexture.minFilter = THREE.NearestFilter;
-    ironTexture.wrapS = THREE.RepeatWrapping;
-    ironTexture.wrapT = THREE.RepeatWrapping;
+  // 共有テクスチャを直接変更せず、このコンポーネント専用のコピーを使う
+  const ironTexture = useMemo(() => {
+    const texture = ironTextureSource.clone();
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  }, [ironTextureSource]);
+
+  useEffect(() => () => {
+    ironTexture.dispose();
   }, [ironTexture]);
 
   // ダメージ中判定

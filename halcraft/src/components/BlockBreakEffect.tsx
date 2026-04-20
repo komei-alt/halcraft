@@ -32,6 +32,7 @@ function getBlockColor(blockId: BlockId): THREE.Color {
     'raw_wood.png': 0x7a5a3a, 'glass.png': 0xaaddff, 'enchant.png': 0x6633cc,
     'electric.png': 0x00ddff, 'spawner.png': 0xff4422, 'stairs.png': 0x9c7a4a,
     'torch.png': 0xff8833, 'bed.png': 0xcc4444, 'turret.svg': 0x787883,
+    'door.svg': 0x7c5b31, 'ladder.svg': 0x4524ff, 'campfire.svg': 0xff5522, 'candle.svg': 0xf4c9ba,
   };
 
   const texName = def.faceTextures?.top || def.texture;

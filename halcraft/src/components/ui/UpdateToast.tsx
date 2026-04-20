@@ -2,7 +2,7 @@
 // サーバーのバージョンが変わったときに画面上部にスライドインする通知
 // リロードボタン or 閉じるボタンを提供
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 
 /** 表示アニメーションの長さ（ms） */
@@ -15,30 +15,52 @@ export function UpdateToast() {
   const dismissUpdate = useGameStore((s) => s.dismissUpdate);
   const [visible, setVisible] = useState(false);
   const [slideIn, setSlideIn] = useState(false);
+  const dismissTimeoutRef = useRef<number | null>(null);
 
-  // updateAvailable が true になったらスライドイン
-  useEffect(() => {
-    if (updateAvailable) {
-      setVisible(true);
-      // 次のフレームでアニメーションを開始（CSSトランジションのため）
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setSlideIn(true));
-      });
+  const clearDismissTimeout = useCallback(() => {
+    if (dismissTimeoutRef.current === null) return;
+    window.clearTimeout(dismissTimeoutRef.current);
+    dismissTimeoutRef.current = null;
+  }, []);
 
-      if (AUTO_DISMISS_MS > 0) {
-        const timer = setTimeout(() => handleDismiss(), AUTO_DISMISS_MS);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [updateAvailable]);
-
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
+    clearDismissTimeout();
     setSlideIn(false);
-    setTimeout(() => {
+    dismissTimeoutRef.current = window.setTimeout(() => {
+      dismissTimeoutRef.current = null;
       setVisible(false);
       dismissUpdate();
     }, SLIDE_DURATION);
-  };
+  }, [clearDismissTimeout, dismissUpdate]);
+
+  // updateAvailable が true になったらスライドイン
+  useEffect(() => {
+    if (!updateAvailable) return;
+
+    let outerFrame = 0;
+    let innerFrame = 0;
+
+    // 次のフレームでアニメーションを開始（CSSトランジションのため）
+    outerFrame = window.requestAnimationFrame(() => {
+      setVisible(true);
+      innerFrame = window.requestAnimationFrame(() => setSlideIn(true));
+    });
+
+    let autoDismissTimer: number | null = null;
+    if (AUTO_DISMISS_MS > 0) {
+      autoDismissTimer = window.setTimeout(handleDismiss, AUTO_DISMISS_MS);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(outerFrame);
+      window.cancelAnimationFrame(innerFrame);
+      if (autoDismissTimer !== null) {
+        window.clearTimeout(autoDismissTimer);
+      }
+    };
+  }, [updateAvailable, handleDismiss]);
+
+  useEffect(() => clearDismissTimeout, [clearDismissTimeout]);
 
   const handleReload = () => {
     window.location.reload();

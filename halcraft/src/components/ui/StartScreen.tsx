@@ -18,6 +18,31 @@ import { STAGES } from '../../types/stages';
 const PLAYER_NAME_KEY = 'halcraft-player-name';
 const SELECTED_STAGE_KEY = 'halcraft-selected-stage';
 
+function extractStagePlayerCounts(payload: unknown): Record<string, number> | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const { stages } = payload as { stages?: unknown };
+  if (!Array.isArray(stages)) return null;
+
+  const counts: Record<string, number> = {};
+  for (const stage of stages) {
+    if (!stage || typeof stage !== 'object') return null;
+
+    const { id, playerCount } = stage as {
+      id?: unknown;
+      playerCount?: unknown;
+    };
+
+    if (typeof id !== 'string' || typeof playerCount !== 'number' || !Number.isFinite(playerCount)) {
+      return null;
+    }
+
+    counts[id] = playerCount;
+  }
+
+  return counts;
+}
+
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
@@ -46,17 +71,14 @@ export function StartScreen() {
       try {
         // 注: utils/socket.ts がない場合は /api/stages (プロキシ設定済であれば) を利用
         const res = await fetch('/api/stages');
-        if (res.ok) {
-          const data = await res.json();
-          if (mounted && data.stages) {
-            const counts: Record<string, number> = {};
-            data.stages.forEach((s: any) => {
-              counts[s.id] = s.playerCount;
-            });
-            setStagePlayerCounts(counts);
-          }
+        if (!res.ok) return;
+
+        const data: unknown = await res.json();
+        const counts = extractStagePlayerCounts(data);
+        if (mounted && counts) {
+          setStagePlayerCounts(counts);
         }
-      } catch (err) {
+      } catch {
         // 無視
       }
     };

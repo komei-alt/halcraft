@@ -49,7 +49,7 @@ function placeVillageHouse(
           if (isEdge) {
             // ドア穴
             if (isDoor && y <= floorY + 2) {
-              chunk[lx][y][lz] = BLOCK_IDS.AIR;
+              chunk[lx][y][lz] = y === floorY + 1 ? BLOCK_IDS.DOOR : BLOCK_IDS.AIR;
             }
             // 窓（壁の辺中央、高さ2段目、角ブロックは除外）
             else if (
@@ -94,6 +94,17 @@ function placeVillageHouse(
       if (ty < WORLD_HEIGHT) {
         chunk[lx][ty][lz] = BLOCK_IDS.TORCH;
       }
+    }
+  }
+
+  const candleWX = startWX + width - 2;
+  const candleWZ = startWZ + depth - 2;
+  const candleLX = candleWX - cx * CHUNK_SIZE;
+  const candleLZ = candleWZ - cz * CHUNK_SIZE;
+  if (candleLX >= 0 && candleLX < CHUNK_SIZE && candleLZ >= 0 && candleLZ < CHUNK_SIZE) {
+    const candleY = floorY + 1;
+    if (candleY < WORLD_HEIGHT) {
+      chunk[candleLX][candleY][candleLZ] = BLOCK_IDS.CANDLE;
     }
   }
 }
@@ -156,15 +167,20 @@ export function placeVillage(chunk: ChunkData, cx: number, cz: number): void {
     );
   }
 
-  // 村の中心に松明街灯を配置
+  // 村の中心に焚き火と松明街灯を配置
   const centerLX = VILLAGE_CENTER.x - cx * CHUNK_SIZE;
   const centerLZ = VILLAGE_CENTER.z - cz * CHUNK_SIZE;
   if (centerLX >= 0 && centerLX < CHUNK_SIZE && centerLZ >= 0 && centerLZ < CHUNK_SIZE) {
     const surfaceY = getTerrainHeight(VILLAGE_CENTER.x, VILLAGE_CENTER.z);
+    if (surfaceY + 1 < WORLD_HEIGHT) {
+      chunk[centerLX][surfaceY + 1][centerLZ] = BLOCK_IDS.CAMPFIRE;
+    }
     // 街灯（木の幹 + 松明）
     for (let h = 1; h <= 3; h++) {
       if (surfaceY + h < WORLD_HEIGHT) {
-        chunk[centerLX][surfaceY + h][centerLZ] = BLOCK_IDS.RAW_WOOD;
+        if (h !== 1) {
+          chunk[centerLX][surfaceY + h][centerLZ] = BLOCK_IDS.RAW_WOOD;
+        }
       }
     }
     if (surfaceY + 4 < WORLD_HEIGHT) {

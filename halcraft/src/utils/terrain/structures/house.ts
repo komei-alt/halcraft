@@ -92,7 +92,7 @@ export function placePlayerHouse(chunk: ChunkData, _cx: number, _cz: number): vo
   // ドア穴（前壁の中央、高さ2ブロック分を空ける）
   const doorX = hx + Math.floor(WIDTH / 2);
   if (doorX >= 0 && doorX < CHUNK_SIZE && hz >= 0 && hz < CHUNK_SIZE) {
-    if (fy < WORLD_HEIGHT) chunk[doorX][fy][hz] = BLOCK_IDS.AIR;
+    if (fy < WORLD_HEIGHT) chunk[doorX][fy][hz] = BLOCK_IDS.DOOR;
     if (fy + 1 < WORLD_HEIGHT) chunk[doorX][fy + 1][hz] = BLOCK_IDS.AIR;
   }
 
@@ -149,5 +149,17 @@ export function placePlayerHouse(chunk: ChunkData, _cx: number, _cz: number): vo
   const bedZ = hz + DEPTH - 2;
   if (fy < WORLD_HEIGHT && bedX >= 0 && bedX < CHUNK_SIZE && bedZ >= 0 && bedZ < CHUNK_SIZE) {
     chunk[bedX][fy][bedZ] = BLOCK_IDS.BED;
+  }
+
+  const candleX = hx + WIDTH - 4;
+  const candleZ = hz + DEPTH - 3;
+  if (fy < WORLD_HEIGHT && candleX >= 0 && candleX < CHUNK_SIZE && candleZ >= 0 && candleZ < CHUNK_SIZE) {
+    chunk[candleX][fy][candleZ] = BLOCK_IDS.CANDLE;
+  }
+
+  const ladderX = hx + 1;
+  const ladderZ = hz + DEPTH - 2;
+  if (fy < WORLD_HEIGHT && ladderX >= 0 && ladderX < CHUNK_SIZE && ladderZ >= 0 && ladderZ < CHUNK_SIZE) {
+    chunk[ladderX][fy][ladderZ] = BLOCK_IDS.LADDER;
   }
 }

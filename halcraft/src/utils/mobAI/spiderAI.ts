@@ -54,7 +54,7 @@ export function updateSpiderAI(
   }
 
   // 物理
-  const { onGround: _spiderOnGround } = applyMobGravityAndYCollision(m, dt, checkCollision, SPIDER_RADIUS, SPIDER_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, SPIDER_RADIUS, SPIDER_HEIGHT);
 
   // X衝突
   const newXS = m.x + m.vx * dt;

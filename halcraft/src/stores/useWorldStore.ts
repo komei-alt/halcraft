@@ -2,7 +2,7 @@
 // 全チャンク・ブロックの読み書き、ブロックの破壊・設置を管理
 
 import { create } from 'zustand';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
+import { BLOCK_DEFS, BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 import { generateChunk, type ChunkData } from '../utils/terrain';
 
 /** チャンクキーの生成 */
@@ -90,7 +90,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   breakBlock: (x, y, z) => {
     const block = get().getBlock(x, y, z);
-    if (block === BLOCK_IDS.AIR || block === BLOCK_IDS.BEDROCK) return false;
+    const blockDef = BLOCK_DEFS[block];
+    if (block === BLOCK_IDS.AIR || blockDef?.unbreakable) return false;
     get().setBlock(x, y, z, BLOCK_IDS.AIR);
     return true;
   },

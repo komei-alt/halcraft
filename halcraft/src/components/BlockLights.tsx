@@ -39,8 +39,8 @@ interface LightCluster {
   cz: number;
   /** クラスタ内の光源数 */
   count: number;
-  /** 松明を含むか */
-  hasTorch: boolean;
+  /** 炎系光源を含むか */
+  hasFlame: boolean;
   /** 代表する色（最も多い光源種別の色） */
   color: THREE.Color;
   /** 強度（光源数に応じてブースト） */
@@ -76,12 +76,18 @@ function clusterLightSources(sources: LightSource[]): LightCluster[] {
 
     // クラスタの中心を求める
     let sumX = 0, sumY = 0, sumZ = 0;
-    let hasTorch = false;
+    let hasFlame = false;
     for (const s of cluster) {
       sumX += s.x;
       sumY += s.y;
       sumZ += s.z;
-      if (s.blockId === BLOCK_IDS.TORCH) hasTorch = true;
+      if (
+        s.blockId === BLOCK_IDS.TORCH ||
+        s.blockId === BLOCK_IDS.CAMPFIRE ||
+        s.blockId === BLOCK_IDS.CANDLE
+      ) {
+        hasFlame = true;
+      }
     }
     const n = cluster.length;
 
@@ -100,7 +106,7 @@ function clusterLightSources(sources: LightSource[]): LightCluster[] {
       cy: sumY / n + 0.8,
       cz: sumZ / n + 0.5,
       count: n,
-      hasTorch,
+      hasFlame,
       color: baseColor,
       intensity: Math.min(baseIntensity * boostFactor, 6),
       distance: Math.min(baseDistance * boostFactor, 25),
@@ -201,7 +207,7 @@ export function BlockLights() {
         light.distance = cluster.distance;
 
         // 松明を含むクラスタにはフリッカーエフェクト
-        if (cluster.hasTorch) {
+        if (cluster.hasFlame) {
           const flicker = Math.sin(t * 8 + i * 1.7) * 0.12 +
                           Math.sin(t * 13 + i * 2.3) * 0.08 +
                           Math.sin(t * 21 + i * 3.1) * 0.04;

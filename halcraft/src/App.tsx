@@ -4,8 +4,7 @@
 
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useEffect, useRef } from 'react';
-import { Suspense, useState, useCallback } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
@@ -18,6 +17,7 @@ import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { TurretRenderer } from './components/TurretRenderer';
+import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from './components/DecorBlocks';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -79,6 +79,10 @@ function GameCanvas() {
         <World />
         <TorchRenderer />
         <BedRenderer />
+        <DoorRenderer />
+        <LadderRenderer />
+        <CampfireRenderer />
+        <CandleRenderer />
         <TurretRenderer />
         <BlockLights />
         <Player />
@@ -152,8 +156,18 @@ export default function App() {
 
   // スキン変更UI の開閉状態
   const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
-  const skinOpenRef = useRef(false);
-  skinOpenRef.current = skinSelectorOpen;
+
+  const toggleSkinSelector = useCallback(() => {
+    setSkinSelectorOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        document.exitPointerLock?.();
+      } else {
+        document.querySelector('canvas')?.requestPointerLock?.();
+      }
+      return next;
+    });
+  }, []);
 
   // Tab キーでスキンセレクターを開閉
   useEffect(() => {
@@ -161,19 +175,12 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         e.preventDefault();
-        const next = !skinOpenRef.current;
-        setSkinSelectorOpen(next);
-        // PointerLock を制御
-        if (next) {
-          document.exitPointerLock?.();
-        } else {
-          document.querySelector('canvas')?.requestPointerLock?.();
-        }
+        toggleSkinSelector();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [phase]);
+  }, [phase, toggleSkinSelector]);
 
   const handleCloseSkinSelector = useCallback(() => {
     setSkinSelectorOpen(false);
