@@ -4,9 +4,9 @@
 
 ```
 Status: 確定
-Version: 3.1
+Version: 3.2
 Created: 2026-03-21
-Updated: 2026-04-05
+Updated: 2026-04-20
 Replica of: CLAUDE.md
 Game: ハルクラ (HalCraft)
 ```
@@ -271,6 +271,9 @@ src/stores/
 
 Conventional Commits 形式、日本語。
 
+- 新機能（`feat`）を実装した際は、`halcraft/src/data/updateLog.ts` にリリースノートを追記し、`halcraft/package.json` と `halcraft/package-lock.json` のバージョンを更新する
+- 上記の更新を含めてコミットし、push まで完了させる
+
 ```
 feat: チャンクベースの地形生成システムを実装
 fix: プレイヤーの衝突判定バグを修正
@@ -320,4 +323,4 @@ cd halcraft && docker build -t halcraft:latest . && docker run -p 4000:80 halcra
 
 ---
 
-*最終更新: 2026-04-05 v3.1*
+*最終更新: 2026-04-20 v3.2*
