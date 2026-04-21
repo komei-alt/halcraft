@@ -19,6 +19,7 @@ import {
   mobileActions,
   resetTouchLookDelta,
 } from '../utils/touchInput';
+import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
 
 // 定数
@@ -120,13 +121,11 @@ export function Player() {
     // タッチデバイスではPointerLockを使わない
     if (isTouch.current) return;
 
-    const canvas = document.querySelector('canvas');
+    const canvas = getGameCanvas();
     if (!canvas) return;
 
     const handleClick = () => {
-      if (!document.pointerLockElement) {
-        canvas.requestPointerLock();
-      }
+      activateDesktopGameplayInput();
     };
     const handleLockChange = () => {
       if (document.pointerLockElement === canvas) {
@@ -246,7 +245,7 @@ export function Player() {
     }
 
     // --- 入力のアクティブ判定 ---
-    const isInputActive = isTouch.current ? true : !!document.pointerLockElement;
+    const isInputActive = isTouch.current ? true : isDesktopGameplayInputActive();
 
     // --- 乗り物ストアの状態を取得 ---
     const vehicleState = useVehicleStore.getState();

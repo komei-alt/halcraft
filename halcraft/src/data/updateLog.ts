@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-04-21',
+    items: [
+      { type: 'fix', text: 'ゲームをはじめたら、すぐロケットをうてるように修正！' },
+    ],
+  },
+  {
     date: '2026-04-20',
     items: [
       { type: 'feature', text: 'かたにのせるロケットランチャーを追加！' },

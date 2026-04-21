@@ -51,9 +51,11 @@ import { BossHealthBar } from './components/ui/BossHealthBar';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
+import { DesktopInputHint } from './components/ui/DesktopInputHint';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
 import { isTouchDevice } from './utils/device';
+import { activateDesktopGameplayInput } from './utils/gameCanvas';
 import './App.css';
 
 function GameCanvas() {
@@ -74,7 +76,8 @@ function GameCanvas() {
         stencil: false,
         depth: true,
       }}
-      style={{ position: 'fixed', inset: 0 }}
+      tabIndex={0}
+      style={{ position: 'fixed', inset: 0, outline: 'none' }}
     >
       <Suspense fallback={null}>
         <Environment />
@@ -187,7 +190,7 @@ export default function App() {
 
   const handleCloseSkinSelector = useCallback(() => {
     setSkinSelectorOpen(false);
-    document.querySelector('canvas')?.requestPointerLock?.();
+    activateDesktopGameplayInput();
   }, []);
 
   return (
@@ -211,6 +214,7 @@ export default function App() {
           <CockpitHUD />
           <MinimapHUD />
           <ControlsGuide />
+          {!isTouch && <DesktopInputHint />}
           <VoiceChatUI />
           <CraftingScreen
             externalOpen={isTouch ? craftingOpen : undefined}

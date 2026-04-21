@@ -12,6 +12,7 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
+import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
 import { spawnDamagePopup } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
@@ -378,7 +379,7 @@ export function RocketLauncher() {
     const canUseLauncher = phase === 'playing'
       && !helicopterBoarded
       && !isDead
-      && (isTouch.current ? true : !!document.pointerLockElement);
+      && (isTouch.current ? true : isDesktopGameplayInputActive());
 
     const touchFire = isTouch.current && consumeFireRocket();
     if (fireRequested.current || touchFire) {

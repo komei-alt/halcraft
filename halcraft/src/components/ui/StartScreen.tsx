@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
+import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { initAudio } from '../../utils/sounds';
 import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
@@ -111,6 +112,14 @@ export function StartScreen() {
     setStage(selectedStageId);
     startGame();
     join(trimmedName, selectedStageId);
+
+    // メニューのクリック直後に canvas をアクティブ化して操作不能に見える状態を防ぐ
+    window.requestAnimationFrame(() => {
+      activateDesktopGameplayInput();
+      window.setTimeout(() => {
+        activateDesktopGameplayInput();
+      }, 120);
+    });
   }, [isValidName, isJoining, name, selectedStageId, setStage, startGame, join]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
