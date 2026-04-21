@@ -18,6 +18,7 @@ import { spawnDamagePopup } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
 
 const FIRE_KEY = 'KeyR';
+const FIRE_MOUSE_BUTTON = 0;
 
 /** 弾道定数 */
 const ROCKET_SPEED = 30;
@@ -203,6 +204,7 @@ export function RocketLauncher() {
   const phase = useGameStore((s) => s.phase);
   const isDead = usePlayerStore((s) => s.isDead);
   const fireRocket = usePlayerStore((s) => s.fireRocket);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const getBlock = useWorldStore((s) => s.getBlock);
   const helicopterBoarded = useVehicleStore((s) => s.helicopter.isBoarded);
@@ -352,8 +354,20 @@ export function RocketLauncher() {
       }
     };
 
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== FIRE_MOUSE_BUTTON) return;
+      if (!isDesktopGameplayInputActive()) return;
+      if (usePlayerStore.getState().equippedItem !== 'rocket_launcher') return;
+      fireRequested.current = true;
+      e.preventDefault();
+    };
+
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
   }, []);
 
   useFrame((_, delta) => {
@@ -379,6 +393,7 @@ export function RocketLauncher() {
     const canUseLauncher = phase === 'playing'
       && !helicopterBoarded
       && !isDead
+      && equippedItem === 'rocket_launcher'
       && (isTouch.current ? true : isDesktopGameplayInputActive());
 
     const touchFire = isTouch.current && consumeFireRocket();
@@ -502,7 +517,10 @@ export function RocketLauncher() {
     }
   });
 
-  const showWeapon = phase === 'playing' && !helicopterBoarded && !isDead;
+  const showWeapon = phase === 'playing'
+    && !helicopterBoarded
+    && !isDead
+    && equippedItem === 'rocket_launcher';
 
   return (
     <>

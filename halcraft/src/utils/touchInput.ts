@@ -24,6 +24,13 @@ export const mobileActions = {
   fireRocket: false,
 };
 
+/** 一時的なタッチ操作トリガーを全てクリア */
+export function resetMobileActionTriggers(): void {
+  mobileActions.breakBlock = false;
+  mobileActions.placeBlock = false;
+  mobileActions.fireRocket = false;
+}
+
 /**
  * touchLookの変位量をリセット（毎フレーム呼ばれる）
  */

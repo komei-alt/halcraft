@@ -89,6 +89,7 @@ export function Player() {
   const cockpitOffset = useRef(new THREE.Vector3());
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
+  const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
   const getBlock = useWorldStore((s) => s.getBlock);
   const sendPosition = useMultiplayerStore((s) => s.sendPosition);
   const sendHelicopterBoard = useMultiplayerStore((s) => s.sendHelicopterBoard);
@@ -173,6 +174,9 @@ export function Player() {
             interactPressed.current = true;
           }
           break;
+        case 'KeyV':
+          cycleEquippedItem();
+          break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const digit = parseInt(e.code.replace('Digit', ''));
@@ -224,7 +228,7 @@ export function Player() {
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('wheel', onWheel);
     };
-  }, [selectSlot]);
+  }, [cycleEquippedItem, selectSlot]);
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {

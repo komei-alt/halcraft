@@ -48,6 +48,7 @@ export const UPDATES: UpdateGroup[] = [
     date: '2026-04-21',
     items: [
       { type: 'fix', text: 'ゲームをはじめたら、すぐロケットをうてるように修正！' },
+      { type: 'feature', text: '⛏️と🚀をきりかえてあそべるようにした！' },
     ],
   },
   {

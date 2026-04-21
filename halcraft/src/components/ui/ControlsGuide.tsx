@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useVehicleStore, SEAT_NAMES } from '../../stores/useVehicleStore';
 import type { SeatType } from '../../stores/useVehicleStore';
+import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
 
 /** キーバッジのスタイル */
@@ -66,15 +67,26 @@ function Divider() {
 
 /** 歩行時の操作ガイド */
 function WalkingControls() {
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
+
   return (
     <>
       <ControlRow keyName="W A S D" action="移動" />
       <ControlRow keyName="Shift / Q / WW" action="ダッシュ" />
       <ControlRow keyName="Space" action="ジャンプ" />
       <Divider />
-      <ControlRow keyName="左クリック" action="ブロック破壊 / 攻撃" />
-      <ControlRow keyName="右クリック" action="ブロック設置" />
-      <ControlRow keyName="R" action="ロケット発射" keyColor="#ff9966" />
+      {equippedItem === 'builder' ? (
+        <>
+          <ControlRow keyName="左クリック" action="ブロック破壊 / 攻撃" />
+          <ControlRow keyName="右クリック" action="ブロック設置" />
+        </>
+      ) : (
+        <>
+          <ControlRow keyName="左クリック / R" action="ロケット発射" keyColor="#ff9966" />
+          <ControlRow keyName="大ばくはつ" action="広いはんいにダメージ" keyColor="#ff9966" />
+        </>
+      )}
+      <ControlRow keyName="V" action="武器切り替え" keyColor="#ffd56d" />
       <ControlRow keyName="1-9" action="ホットバー選択" />
       <Divider />
       <ControlRow keyName="E" action="クラフト画面" />
@@ -141,13 +153,21 @@ function VehicleControls({ seat }: { seat: SeatType }) {
 
 /** モバイル歩行操作ガイド */
 function MobileWalkingControls() {
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
+
   return (
     <>
       <ControlRow keyName="🕹️" action="左スティックで移動" />
       <ControlRow keyName="👆" action="右エリアで視点操作" />
-      <ControlRow keyName="タップ" action="ブロック破壊" />
-      <ControlRow keyName="長押し" action="ブロック設置" />
-      <ControlRow keyName="🚀" action="ロケット発射" />
+      {equippedItem === 'builder' ? (
+        <>
+          <ControlRow keyName="タップ" action="ブロック破壊" />
+          <ControlRow keyName="長押し" action="ブロック設置" />
+        </>
+      ) : (
+        <ControlRow keyName="🚀" action="ロケット発射" />
+      )}
+      <ControlRow keyName="🔁" action="武器切り替え" />
     </>
   );
 }

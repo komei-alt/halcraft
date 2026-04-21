@@ -47,6 +47,7 @@ export function TouchLookArea() {
       longPressTimer.current = setTimeout(() => {
         const touchInfo = activeTouches.current.get(touch.identifier);
         if (touchInfo && !touchInfo.moved) {
+          if (usePlayerStore.getState().equippedItem !== 'builder') return;
           // 長押し → ブロック設置
           mobileActions.placeBlock = true;
         }
@@ -93,6 +94,10 @@ export function TouchLookArea() {
       // タップ判定（移動していない短いタッチ）
       const elapsed = Date.now() - info.startTime;
       if (!info.moved && elapsed < LONG_PRESS_DURATION) {
+        if (usePlayerStore.getState().equippedItem !== 'builder') {
+          activeTouches.current.delete(touch.identifier);
+          continue;
+        }
         // タップ → 設置モードならブロック設置、破壊モードならブロック破壊
         const isPlaceMode = usePlayerStore.getState().isPlaceMode;
         if (isPlaceMode) {

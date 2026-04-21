@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { usePlayerStore } from '../../../stores/usePlayerStore';
-import { mobileActions } from '../../../utils/touchInput';
+import { mobileActions, resetMobileActionTriggers } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
 
@@ -14,6 +14,8 @@ interface ActionButtonsProps {
 
 export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const isPlaceMode = usePlayerStore((s) => s.isPlaceMode);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
   const togglePlaceMode = usePlayerStore((s) => s.togglePlaceMode);
 
   // 設置/破壊モード切替
@@ -30,6 +32,13 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     onOpenCrafting();
   }, [onOpenCrafting]);
 
+  const handleWeaponSwitch = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetMobileActionTriggers();
+    cycleEquippedItem();
+  }, [cycleEquippedItem]);
+
   // ロケット発射
   const handleRocket = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
@@ -39,9 +48,9 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
 
   return (
     <>
-      {/* ロケットランチャー */}
+      {/* 武器切り替え */}
       <div
-        onTouchStart={handleRocket}
+        onTouchStart={handleWeaponSwitch}
         style={{
           position: 'fixed',
           right: 20,
@@ -49,8 +58,12 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           width: BUTTON_SIZE,
           height: BUTTON_SIZE,
           borderRadius: 8,
-          background: 'rgba(255, 150, 80, 0.18)',
-          border: '2px solid rgba(255, 170, 110, 0.38)',
+          background: equippedItem === 'rocket_launcher'
+            ? 'rgba(255, 150, 80, 0.22)'
+            : 'rgba(120, 180, 255, 0.18)',
+          border: equippedItem === 'rocket_launcher'
+            ? '2px solid rgba(255, 170, 110, 0.4)'
+            : '2px solid rgba(170, 215, 255, 0.34)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -62,43 +75,72 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
           userSelect: 'none',
           WebkitUserSelect: 'none',
-        }}
-      >
-        🚀
-      </div>
-
-      {/* 設置/破壊モード切替 */}
-      <div
-        onTouchStart={handleTogglePlace}
-        style={{
-          position: 'fixed',
-          right: 20,
-          bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
-          width: BUTTON_SIZE,
-          height: BUTTON_SIZE,
-          borderRadius: 8,
-          background: isPlaceMode
-            ? 'rgba(100, 200, 100, 0.2)'
-            : 'rgba(255, 100, 100, 0.2)',
-          border: `2px solid ${
-            isPlaceMode ? 'rgba(100, 200, 100, 0.4)' : 'rgba(255, 100, 100, 0.4)'
-          }`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 120,
-          touchAction: 'none',
-          WebkitTapHighlightColor: 'transparent',
-          fontSize: 20,
-          color: 'rgba(255, 255, 255, 0.7)',
-          textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
           transition: 'background 0.15s, border-color 0.15s',
         }}
       >
-        {isPlaceMode ? '🧱' : '⛏️'}
+        {equippedItem === 'rocket_launcher' ? '🚀' : '⛏️'}
       </div>
+
+      {equippedItem === 'rocket_launcher' ? (
+        <div
+          onTouchStart={handleRocket}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: 8,
+            background: 'rgba(255, 150, 80, 0.2)',
+            border: '2px solid rgba(255, 170, 110, 0.38)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: 20,
+            color: 'rgba(255, 245, 220, 0.85)',
+            textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          💥
+        </div>
+      ) : (
+        <div
+          onTouchStart={handleTogglePlace}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: 8,
+            background: isPlaceMode
+              ? 'rgba(100, 200, 100, 0.2)'
+              : 'rgba(255, 100, 100, 0.2)',
+            border: `2px solid ${
+              isPlaceMode ? 'rgba(100, 200, 100, 0.4)' : 'rgba(255, 100, 100, 0.4)'
+            }`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: 20,
+            color: 'rgba(255, 255, 255, 0.7)',
+            textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            transition: 'background 0.15s, border-color 0.15s',
+          }}
+        >
+          {isPlaceMode ? '🧱' : '⛏️'}
+        </div>
+      )}
 
       {/* クラフト画面ボタン */}
       <div

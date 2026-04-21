@@ -84,6 +84,7 @@ export function BlockInteraction() {
   const performAttack = usePlayerStore((s) => s.performAttack);
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -277,6 +278,7 @@ export function BlockInteraction() {
       if (usePlayerStore.getState().isDead) return;
       // ヘリコプター搭乗中はブロック操作を無効化
       if (useVehicleStore.getState().helicopter.isBoarded) return;
+      if (equippedItem !== 'builder') return;
 
       // 破壊
       if (consumeBreakBlock()) {
@@ -349,6 +351,7 @@ export function BlockInteraction() {
     if (usePlayerStore.getState().isDead) return;
     // ヘリコプター搭乗中はブロック操作を無効化
     if (useVehicleStore.getState().helicopter.isBoarded) return;
+    if (equippedItem !== 'builder') return;
 
     if (e.button === 0) {
       // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック破壊
@@ -407,7 +410,7 @@ export function BlockInteraction() {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

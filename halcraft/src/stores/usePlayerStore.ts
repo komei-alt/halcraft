@@ -21,6 +21,9 @@ function loadSkinId(): SkinId {
 /** ホットバーのスロット数 */
 const HOTBAR_SLOT_COUNT = HOTBAR_BLOCKS.length;
 
+/** 徒歩時に装備できるアイテム */
+export type EquippedItem = 'builder' | 'rocket_launcher';
+
 /** 落下ダメージの閾値（これ以上落ちるとダメージ） */
 const FALL_DAMAGE_THRESHOLD = 3;
 /** 落下1ブロックあたりのダメージ量 */
@@ -54,6 +57,9 @@ interface PlayerState {
 
   /** 動的ホットバースロット（ブロックIDの配列） */
   hotbarSlots: BlockId[];
+
+  /** 現在装備中の徒歩用アイテム */
+  equippedItem: EquippedItem;
 
   /** ダメージフラッシュ中か */
   isDamageFlash: boolean;
@@ -101,6 +107,12 @@ interface PlayerState {
   /** スロット選択（0-8） */
   selectSlot: (slot: number) => void;
 
+  /** 徒歩装備を変更 */
+  setEquippedItem: (item: EquippedItem) => void;
+
+  /** 徒歩装備を順番に切り替え */
+  cycleEquippedItem: () => void;
+
   /** 攻撃を実行しダメージ倍率を返す（0=クールダウン中で攻撃不可） */
   performAttack: (options?: { noShake?: boolean }) => number;
 
@@ -141,6 +153,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   maxHp: 20,
   selectedSlot: 0,
   hotbarSlots: [...HOTBAR_BLOCKS] as BlockId[],
+  equippedItem: 'builder',
   isDamageFlash: false,
   isDead: false,
   invincibleUntil: 0,
@@ -164,6 +177,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (slot >= 0 && slot < HOTBAR_SLOT_COUNT) {
       set({ selectedSlot: slot });
     }
+  },
+
+  setEquippedItem: (item) => {
+    set({ equippedItem: item });
+  },
+
+  cycleEquippedItem: () => {
+    set((state) => ({
+      equippedItem: state.equippedItem === 'builder' ? 'rocket_launcher' : 'builder',
+    }));
   },
 
   assignHotbarSlot: (slot, blockId) => {
@@ -287,6 +310,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
+      equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCharge: 1,
       invincibleUntil: Date.now() + 5000,

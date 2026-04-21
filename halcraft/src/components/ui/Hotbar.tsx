@@ -11,6 +11,8 @@ export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
 
   const isTouch = isTouchDevice();
 
@@ -32,7 +34,6 @@ export function Hotbar() {
 
   return (
     <div
-      id="hotbar"
       style={{
         position: 'fixed',
         bottom: isTouch
@@ -41,15 +42,76 @@ export function Hotbar() {
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
-        gap: 2,
-        padding: 4,
-        background: 'rgba(0,0,0,0.55)',
-        borderRadius: 6,
-        border: '2px solid rgba(255,255,255,0.15)',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
         zIndex: 100,
-        backdropFilter: 'blur(6px)',
       }}
     >
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          padding: 4,
+          background: 'rgba(0, 0, 0, 0.55)',
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.14)',
+          backdropFilter: 'blur(6px)',
+        }}
+      >
+        {[
+          { id: 'builder', icon: '⛏️', label: '建築' },
+          { id: 'rocket_launcher', icon: '🚀', label: 'ロケット' },
+        ].map((item) => {
+          const isSelected = equippedItem === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setEquippedItem(item.id as 'builder' | 'rocket_launcher')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: isTouch ? '7px 10px' : '6px 10px',
+                borderRadius: 999,
+                border: isSelected
+                  ? '1px solid rgba(255, 206, 120, 0.62)'
+                  : '1px solid rgba(255,255,255,0.08)',
+                background: isSelected
+                  ? item.id === 'rocket_launcher'
+                    ? 'rgba(255, 145, 72, 0.22)'
+                    : 'rgba(180, 220, 255, 0.14)'
+                  : 'rgba(255,255,255,0.04)',
+                color: isSelected ? '#fff0d0' : 'rgba(255,255,255,0.65)',
+                fontSize: isTouch ? 12 : 11,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+              }}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+              {!isTouch && item.id === 'rocket_launcher' && (
+                <span style={{ fontSize: 9, opacity: 0.7 }}>V</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        id="hotbar"
+        style={{
+          display: 'flex',
+          gap: 2,
+          padding: 4,
+          background: 'rgba(0,0,0,0.55)',
+          borderRadius: 6,
+          border: '2px solid rgba(255,255,255,0.15)',
+          backdropFilter: 'blur(6px)',
+        }}
+      >
       {hotbarSlots.map((blockId, index) => {
         const def = BLOCK_DEFS[blockId];
         const isSelected = index === selectedSlot;
@@ -119,6 +181,7 @@ export function Hotbar() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

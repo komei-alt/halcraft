@@ -5,8 +5,9 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 
 export function RocketCooldownIndicator() {
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
 
-  if (rocketCharge >= 1) return null;
+  if (equippedItem !== 'rocket_launcher' || rocketCharge >= 1) return null;
 
   return (
     <div

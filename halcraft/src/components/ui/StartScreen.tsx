@@ -389,6 +389,7 @@ export function StartScreen() {
               <span>Space — ジャンプ</span>
               <span>左クリック — 破壊</span>
               <span>右クリック — 設置</span>
+              <span>V — 武器切替</span>
               <span>1-9 — ブロック選択</span>
               <span>F — ✈ 飛行機にのる</span>
             </>
