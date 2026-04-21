@@ -112,75 +112,75 @@ export function Hotbar() {
           backdropFilter: 'blur(6px)',
         }}
       >
-      {hotbarSlots.map((blockId, index) => {
-        const def = BLOCK_DEFS[blockId];
-        const isSelected = index === selectedSlot;
-        const texUrl = textures.get(blockId);
+        {hotbarSlots.map((blockId, index) => {
+          const def = BLOCK_DEFS[blockId];
+          const isSelected = index === selectedSlot;
+          const texUrl = textures.get(blockId);
 
-        return (
-          <div
-            key={blockId}
-            onClick={() => selectSlot(index)}
-            onTouchStart={(e) => {
-              // モバイルではタッチで選択
-              if (isTouch) {
-                e.stopPropagation();
-                selectSlot(index);
-              }
-            }}
-            style={{
-              width: cellSize,
-              height: cellSize,
-              border: isSelected
-                ? '3px solid #fff'
-                : '2px solid rgba(255,255,255,0.2)',
-              borderRadius: 4,
-              background: isSelected
-                ? 'rgba(255,255,255,0.18)'
-                : 'rgba(0,0,0,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              transition: 'border 0.1s, background 0.1s',
-              imageRendering: 'pixelated',
-              touchAction: 'none',
-              WebkitTapHighlightColor: 'transparent',
-              cursor: 'pointer',
-            }}
-          >
-            {texUrl && (
-              <img
-                src={texUrl}
-                alt={def?.name}
-                style={{
-                  width: imgSize,
-                  height: imgSize,
-                  imageRendering: 'pixelated',
-                  objectFit: 'cover',
-                  pointerEvents: 'none',
-                }}
-              />
-            )}
-            {/* ショートカット番号（デスクトップのみ表示） */}
-            {!isTouch && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 1,
-                  left: 4,
-                  fontSize: 10,
-                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.5)',
-                  fontFamily: 'monospace',
-                  fontWeight: isSelected ? 'bold' : 'normal',
-                }}
-              >
-                {index + 1}
-              </span>
-            )}
-          </div>
-        );
-      })}
+          return (
+            <div
+              key={blockId}
+              onClick={() => selectSlot(index)}
+              onTouchStart={(e) => {
+                // モバイルではタッチで選択
+                if (isTouch) {
+                  e.stopPropagation();
+                  selectSlot(index);
+                }
+              }}
+              style={{
+                width: cellSize,
+                height: cellSize,
+                border: isSelected
+                  ? '3px solid #fff'
+                  : '2px solid rgba(255,255,255,0.2)',
+                borderRadius: 4,
+                background: isSelected
+                  ? 'rgba(255,255,255,0.18)'
+                  : 'rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                transition: 'border 0.1s, background 0.1s',
+                imageRendering: 'pixelated',
+                touchAction: 'none',
+                WebkitTapHighlightColor: 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              {texUrl && (
+                <img
+                  src={texUrl}
+                  alt={def?.name}
+                  style={{
+                    width: imgSize,
+                    height: imgSize,
+                    imageRendering: 'pixelated',
+                    objectFit: 'cover',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {/* ショートカット番号（デスクトップのみ表示） */}
+              {!isTouch && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 1,
+                    left: 4,
+                    fontSize: 10,
+                    color: isSelected ? '#fff' : 'rgba(255,255,255,0.5)',
+                    fontFamily: 'monospace',
+                    fontWeight: isSelected ? 'bold' : 'normal',
+                  }}
+                >
+                  {index + 1}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

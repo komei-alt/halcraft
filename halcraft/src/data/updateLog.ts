@@ -49,6 +49,7 @@ export const UPDATES: UpdateGroup[] = [
     items: [
       { type: 'fix', text: 'ゲームをはじめたら、すぐロケットをうてるように修正！' },
       { type: 'feature', text: '⛏️と🚀をきりかえてあそべるようにした！' },
+      { type: 'improve', text: '武器をもちかえると、つかいかたがポップで出るようにした！' },
     ],
   },
   {

@@ -52,6 +52,7 @@ import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
 import { DesktopInputHint } from './components/ui/DesktopInputHint';
+import { WeaponSwitchPopover } from './components/ui/WeaponSwitchPopover';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
 import { isTouchDevice } from './utils/device';
@@ -208,6 +209,7 @@ export default function App() {
           <DamageOverlay />
           <AttackIndicator />
           <RocketCooldownIndicator />
+          <WeaponSwitchPopover />
           <MissionOverlay />
           <CoreHealthBar />
           <BossHealthBar />
