@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-04-24',
     items: [
+      { type: 'improve', text: 'ロケットのばくはつが、火花・けむり・破片でもっとはくりょくアップ！' },
+      { type: 'fix', text: 'ほかの人にもロケットの弾とばくはつが見えるようにした' },
       { type: 'fix', text: 'ロケットのばくはつで、近くのブロックがこわれるようにした' },
       { type: 'fix', text: 'ロケットと固定タレットの弾が、ねらったところへ飛ぶように修正した' },
       { type: 'improve', text: 'ロケットが敵に当たった時の見た目をわかりやすくした' },

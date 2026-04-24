@@ -12,8 +12,9 @@ import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
 import { useVehicleStore, type SeatType } from './useVehicleStore';
-import type { BlockId } from '../types/blocks';
+import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import type { SkinId } from '../types/skins';
+import { spawnBlockBreakEffect } from '../utils/effectTriggers';
 
 /** リモートプレイヤーの状態 */
 export interface RemotePlayer {
@@ -106,6 +107,16 @@ interface MultiplayerState {
 
   /** 機関銃発射を送信 */
   sendGunFire: (pos: [number, number, number], dir: [number, number, number], side: 'left' | 'right') => void;
+
+  /** ロケット発射を送信 */
+  sendRocketFire: (
+    rocketId: string,
+    pos: [number, number, number],
+    vel: [number, number, number],
+  ) => void;
+
+  /** ロケット爆発を送信 */
+  sendRocketExplode: (rocketId: string, pos: [number, number, number]) => void;
 
 }
 
@@ -242,6 +253,18 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     socket.emit('gun:fire', { pos, dir, side });
   },
 
+  sendRocketFire: (rocketId, pos, vel) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('rocket:fire', { rocketId, pos, vel });
+  },
+
+  sendRocketExplode: (rocketId, pos) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('rocket:explode', { rocketId, pos });
+  },
+
 
 
   setRemoteSpeaking: (playerId, speaking) => {
@@ -356,9 +379,12 @@ function setupSocketListeners(
 
   // ブロック変更（他プレイヤーの操作）
   socket.on('block:changed', (data: { x: number; y: number; z: number; blockId: number }) => {
-    const { setBlock, breakBlock } = useWorldStore.getState();
+    const { setBlock, breakBlock, getBlock } = useWorldStore.getState();
     if (data.blockId === 0) {
-      breakBlock(data.x, data.y, data.z);
+      const previousBlock = getBlock(data.x, data.y, data.z);
+      if (breakBlock(data.x, data.y, data.z) && previousBlock !== BLOCK_IDS.AIR) {
+        spawnBlockBreakEffect(previousBlock, data.x, data.y, data.z);
+      }
     } else {
       setBlock(data.x, data.y, data.z, data.blockId as BlockId);
     }
@@ -521,6 +547,28 @@ function setupSocketListeners(
       cb(data);
     }
   });
+
+  // ── ロケット発射・爆発同期 ──
+  socket.on('rocket:fired', (data: {
+    playerId: string;
+    rocketId: string;
+    pos: [number, number, number];
+    vel: [number, number, number];
+  }) => {
+    for (const cb of remoteRocketFireCallbacks) {
+      cb(data);
+    }
+  });
+
+  socket.on('rocket:exploded', (data: {
+    playerId: string;
+    rocketId: string;
+    pos: [number, number, number];
+  }) => {
+    for (const cb of remoteRocketExplodeCallbacks) {
+      cb(data);
+    }
+  });
 }
 
 // ── リモート機関銃発射のコールバック管理 ──
@@ -539,5 +587,40 @@ export function onRemoteGunFire(cb: (data: RemoteGunFireData) => void): () => vo
   return () => {
     const idx = remoteGunFireCallbacks.indexOf(cb);
     if (idx >= 0) remoteGunFireCallbacks.splice(idx, 1);
+  };
+}
+
+// ── リモートロケット発射・爆発のコールバック管理 ──
+export interface RemoteRocketFireData {
+  playerId: string;
+  rocketId: string;
+  pos: [number, number, number];
+  vel: [number, number, number];
+}
+
+export interface RemoteRocketExplodeData {
+  playerId: string;
+  rocketId: string;
+  pos: [number, number, number];
+}
+
+const remoteRocketFireCallbacks: Array<(data: RemoteRocketFireData) => void> = [];
+const remoteRocketExplodeCallbacks: Array<(data: RemoteRocketExplodeData) => void> = [];
+
+/** リモートプレイヤーのロケット発射イベントを受け取るコールバックを登録 */
+export function onRemoteRocketFire(cb: (data: RemoteRocketFireData) => void): () => void {
+  remoteRocketFireCallbacks.push(cb);
+  return () => {
+    const idx = remoteRocketFireCallbacks.indexOf(cb);
+    if (idx >= 0) remoteRocketFireCallbacks.splice(idx, 1);
+  };
+}
+
+/** リモートプレイヤーのロケット爆発イベントを受け取るコールバックを登録 */
+export function onRemoteRocketExplode(cb: (data: RemoteRocketExplodeData) => void): () => void {
+  remoteRocketExplodeCallbacks.push(cb);
+  return () => {
+    const idx = remoteRocketExplodeCallbacks.indexOf(cb);
+    if (idx >= 0) remoteRocketExplodeCallbacks.splice(idx, 1);
   };
 }

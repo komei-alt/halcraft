@@ -782,6 +782,27 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('rocket:fire', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    socket.to(player.stageId).emit('rocket:fired', {
+      playerId: socket.id,
+      rocketId: data.rocketId,
+      pos: data.pos,
+      vel: data.vel,
+    });
+  });
+
+  socket.on('rocket:explode', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    socket.to(player.stageId).emit('rocket:exploded', {
+      playerId: socket.id,
+      rocketId: data.rocketId,
+      pos: data.pos,
+    });
+  });
+
   socket.on('player:died', () => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMobStore } from '../stores/useMobStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
-import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { onRemoteRocketExplode, onRemoteRocketFire, useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { isTouchDevice } from '../utils/device';
@@ -37,8 +37,10 @@ const EXPLOSION_LIFETIME = 1.45;
 const EXPLOSION_BLOCK_RADIUS = 2.8;
 const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
 const EXPLOSION_SURFACE_OFFSET = 0.36;
-const SPARK_COUNT = 20;
-const SMOKE_COUNT = 12;
+const SPARK_COUNT = 36;
+const SMOKE_COUNT = 24;
+const FIREBALL_COUNT = 10;
+const DEBRIS_COUNT = 22;
 
 /** 照準補正 */
 const ROCKET_AIM_DISTANCE = 80;
@@ -57,6 +59,7 @@ const MODEL_FORWARD = new THREE.Vector3(0, 0, -1);
 
 interface RocketProjectile {
   id: number;
+  syncId: string;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age: number;
@@ -64,6 +67,7 @@ interface RocketProjectile {
   trailTimer: number;
   trailPoints: THREE.Vector3[];
   orientation: THREE.Quaternion;
+  isRemote?: boolean;
 }
 
 interface TrailPuff {
@@ -83,6 +87,11 @@ interface ExplosionParticle {
   size: number;
 }
 
+interface ExplosionDebris extends ExplosionParticle {
+  rotation: THREE.Euler;
+  angularVel: THREE.Vector3;
+}
+
 interface ExplosionEffect {
   id: number;
   pos: THREE.Vector3;
@@ -90,6 +99,8 @@ interface ExplosionEffect {
   maxLife: number;
   sparks: ExplosionParticle[];
   smoke: ExplosionParticle[];
+  fireballs: ExplosionParticle[];
+  debris: ExplosionDebris[];
 }
 
 interface ExplosionBlockCandidate {
@@ -143,45 +154,101 @@ function calculateExplosionDamage(distance: number): number {
 function createExplosion(pos: THREE.Vector3): ExplosionEffect {
   const sparks: ExplosionParticle[] = [];
   const smoke: ExplosionParticle[] = [];
+  const fireballs: ExplosionParticle[] = [];
+  const debris: ExplosionDebris[] = [];
 
   for (let i = 0; i < SPARK_COUNT; i++) {
     const theta = Math.random() * Math.PI * 2;
-    const phi = (Math.random() - 0.2) * Math.PI * 0.8;
-    const speed = 6 + Math.random() * 10;
-    const life = 0.35 + Math.random() * 0.35;
+    const phi = (Math.random() - 0.16) * Math.PI * 0.78;
+    const speed = 8 + Math.random() * 16;
+    const life = 0.38 + Math.random() * 0.48;
 
     sparks.push({
-      pos: pos.clone(),
+      pos: pos.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.35,
+        (Math.random() - 0.5) * 0.5,
+      )),
       vel: new THREE.Vector3(
         Math.cos(theta) * Math.cos(phi) * speed,
-        Math.sin(phi) * speed + 2.5,
+        Math.sin(phi) * speed + 3.5,
         Math.sin(theta) * Math.cos(phi) * speed,
       ),
       life,
       maxLife: life,
-      size: 0.1 + Math.random() * 0.18,
+      size: 0.12 + Math.random() * 0.24,
+    });
+  }
+
+  for (let i = 0; i < FIREBALL_COUNT; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const speed = 1.8 + Math.random() * 4.6;
+    const life = 0.34 + Math.random() * 0.36;
+
+    fireballs.push({
+      pos: pos.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.7,
+        (Math.random() - 0.35) * 0.55,
+        (Math.random() - 0.5) * 0.7,
+      )),
+      vel: new THREE.Vector3(
+        Math.cos(theta) * speed,
+        1.4 + Math.random() * 3.8,
+        Math.sin(theta) * speed,
+      ),
+      life,
+      maxLife: life,
+      size: 0.46 + Math.random() * 0.7,
     });
   }
 
   for (let i = 0; i < SMOKE_COUNT; i++) {
     const theta = Math.random() * Math.PI * 2;
-    const speed = 1.2 + Math.random() * 2.8;
-    const life = 0.9 + Math.random() * 0.5;
+    const speed = 1.3 + Math.random() * 4.2;
+    const life = 1.15 + Math.random() * 0.9;
 
     smoke.push({
       pos: pos.clone().add(new THREE.Vector3(
-        (Math.random() - 0.5) * 0.6,
-        Math.random() * 0.2,
-        (Math.random() - 0.5) * 0.6,
+        (Math.random() - 0.5) * 1.1,
+        Math.random() * 0.35,
+        (Math.random() - 0.5) * 1.1,
       )),
       vel: new THREE.Vector3(
-        Math.cos(theta) * speed * 0.35,
-        1.5 + Math.random() * 1.8,
-        Math.sin(theta) * speed * 0.35,
+        Math.cos(theta) * speed * 0.48,
+        1.6 + Math.random() * 2.6,
+        Math.sin(theta) * speed * 0.48,
       ),
       life,
       maxLife: life,
-      size: 0.9 + Math.random() * 0.9,
+      size: 1.0 + Math.random() * 1.55,
+    });
+  }
+
+  for (let i = 0; i < DEBRIS_COUNT; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const speed = 3.0 + Math.random() * 8.5;
+    const life = 0.95 + Math.random() * 0.75;
+
+    debris.push({
+      pos: pos.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.8,
+        (Math.random() - 0.25) * 0.55,
+        (Math.random() - 0.5) * 0.8,
+      )),
+      vel: new THREE.Vector3(
+        Math.cos(theta) * speed,
+        3.2 + Math.random() * 5.8,
+        Math.sin(theta) * speed,
+      ),
+      life,
+      maxLife: life,
+      size: 0.08 + Math.random() * 0.16,
+      rotation: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
+      angularVel: new THREE.Vector3(
+        (Math.random() - 0.5) * 12,
+        (Math.random() - 0.5) * 12,
+        (Math.random() - 0.5) * 12,
+      ),
     });
   }
 
@@ -192,6 +259,8 @@ function createExplosion(pos: THREE.Vector3): ExplosionEffect {
     maxLife: EXPLOSION_LIFETIME,
     sparks,
     smoke,
+    fireballs,
+    debris,
   };
 }
 
@@ -396,9 +465,11 @@ export function RocketLauncher() {
     }
   }, [camera, takeDamage]);
 
-  const spawnExplosionAt = useCallback((pos: THREE.Vector3) => {
-    destroyExplosionBlocks(pos);
-    applyExplosionDamage(pos);
+  const spawnExplosionAt = useCallback((pos: THREE.Vector3, applyGameplay: boolean = true) => {
+    if (applyGameplay) {
+      destroyExplosionBlocks(pos);
+      applyExplosionDamage(pos);
+    }
     setExplosions((prev) => {
       const next = [...prev, createExplosion(pos)];
       return next.slice(-6);
@@ -455,8 +526,10 @@ export function RocketLauncher() {
     }
 
     const velocity = shootDir.current.clone().multiplyScalar(ROCKET_SPEED);
+    const rocketId = `rocket_${nextRocketId}_${Math.round(performance.now() * 1000)}`;
     const projectile: RocketProjectile = {
       id: nextRocketId++,
+      syncId: rocketId,
       pos: muzzleWorld.current.clone(),
       vel: velocity,
       age: 0,
@@ -471,7 +544,49 @@ export function RocketLauncher() {
     muzzleFlashTimer.current = 0.11;
     backblastTimer.current = 0.15;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
+    multi.sendRocketFire(
+      rocketId,
+      [muzzleWorld.current.x, muzzleWorld.current.y, muzzleWorld.current.z],
+      [velocity.x, velocity.y, velocity.z],
+    );
   }, [camera, fireRocket, getBlock, syncProjectiles]);
+
+  useEffect(() => {
+    const unsubscribeFire = onRemoteRocketFire((data) => {
+      const startPos = new THREE.Vector3(data.pos[0], data.pos[1], data.pos[2]);
+      const velocity = new THREE.Vector3(data.vel[0], data.vel[1], data.vel[2]);
+      const direction = velocity.clone().normalize();
+      if (direction.lengthSq() < 0.0001) direction.copy(MODEL_FORWARD);
+
+      const projectile: RocketProjectile = {
+        id: nextRocketId++,
+        syncId: data.rocketId,
+        pos: startPos,
+        vel: velocity,
+        age: 0,
+        maxAge: ROCKET_MAX_AGE,
+        trailTimer: 0,
+        trailPoints: [startPos.clone()],
+        orientation: new THREE.Quaternion().setFromUnitVectors(MODEL_FORWARD, direction),
+        isRemote: true,
+      };
+
+      const withoutDuplicate = projectilesRef.current.filter((p) => p.syncId !== data.rocketId);
+      syncProjectiles([...withoutDuplicate.slice(-7), projectile]);
+      playRocketLaunchSound(startPos.distanceTo(camera.position));
+    });
+
+    const unsubscribeExplode = onRemoteRocketExplode((data) => {
+      const explosionPos = new THREE.Vector3(data.pos[0], data.pos[1], data.pos[2]);
+      syncProjectiles(projectilesRef.current.filter((p) => p.syncId !== data.rocketId));
+      spawnExplosionAt(explosionPos, false);
+    });
+
+    return () => {
+      unsubscribeFire();
+      unsubscribeExplode();
+    };
+  }, [camera, spawnExplosionAt, syncProjectiles]);
 
   useEffect(() => {
     if (isTouch.current) return undefined;
@@ -538,7 +653,12 @@ export function RocketLauncher() {
     }
 
     const trailSpawns: TrailPuff[] = [];
-    const explosionsToSpawn: THREE.Vector3[] = [];
+    const explosionsToSpawn: Array<{
+      pos: THREE.Vector3;
+      syncId: string;
+      applyGameplay: boolean;
+      notifyRemote: boolean;
+    }> = [];
 
     if (projectilesRef.current.length > 0) {
       const alive: RocketProjectile[] = [];
@@ -547,7 +667,14 @@ export function RocketLauncher() {
       for (const projectile of projectilesRef.current) {
         projectile.age += dt;
         if (projectile.age >= projectile.maxAge) {
-          explosionsToSpawn.push(projectile.pos.clone());
+          if (!projectile.isRemote) {
+            explosionsToSpawn.push({
+              pos: projectile.pos.clone(),
+              syncId: projectile.syncId,
+              applyGameplay: true,
+              notifyRemote: true,
+            });
+          }
           continue;
         }
 
@@ -560,6 +687,15 @@ export function RocketLauncher() {
         projectile.vel.y -= ROCKET_GRAVITY * dt;
         moveDir.current.copy(projectile.vel).normalize();
         const moveDist = projectile.vel.length() * dt;
+
+        if (projectile.isRemote) {
+          projectile.pos.addScaledVector(moveDir.current, moveDist);
+          projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
+          projectile.trailPoints.push(projectile.pos.clone());
+          if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+          alive.push(projectile);
+          continue;
+        }
 
         const hitResult = rayMarchProjectile(
           projectile.pos,
@@ -576,11 +712,14 @@ export function RocketLauncher() {
         );
 
         if (hitResult.type !== 'none') {
-          explosionsToSpawn.push(
-            hitResult.type === 'block'
+          explosionsToSpawn.push({
+            pos: hitResult.type === 'block'
               ? getVisibleExplosionPosition(hitResult.hitPos, hitResult.normal)
               : hitResult.hitPos.clone(),
-          );
+            syncId: projectile.syncId,
+            applyGameplay: true,
+            notifyRemote: true,
+          });
           continue;
         }
 
@@ -621,21 +760,42 @@ export function RocketLauncher() {
           for (const spark of explosion.sparks) {
             spark.life -= dt;
             if (spark.life <= 0) continue;
-            spark.vel.y -= 16 * dt;
-            spark.vel.multiplyScalar(0.96);
+            spark.vel.y -= 17 * dt;
+            spark.vel.multiplyScalar(0.955);
             spark.pos.addScaledVector(spark.vel, dt);
+          }
+
+          for (const fireball of explosion.fireballs) {
+            fireball.life -= dt;
+            if (fireball.life <= 0) continue;
+            fireball.vel.y -= 4.5 * dt;
+            fireball.vel.multiplyScalar(0.92);
+            fireball.pos.addScaledVector(fireball.vel, dt);
           }
 
           for (const smoke of explosion.smoke) {
             smoke.life -= dt;
             if (smoke.life <= 0) continue;
             smoke.vel.multiplyScalar(0.985);
-            smoke.vel.y += 0.75 * dt;
+            smoke.vel.y += 0.9 * dt;
             smoke.pos.addScaledVector(smoke.vel, dt);
           }
 
+          for (const debris of explosion.debris) {
+            debris.life -= dt;
+            if (debris.life <= 0) continue;
+            debris.vel.y -= 18 * dt;
+            debris.vel.multiplyScalar(0.975);
+            debris.pos.addScaledVector(debris.vel, dt);
+            debris.rotation.x += debris.angularVel.x * dt;
+            debris.rotation.y += debris.angularVel.y * dt;
+            debris.rotation.z += debris.angularVel.z * dt;
+          }
+
           const hasLiveParticles = explosion.sparks.some((spark) => spark.life > 0)
-            || explosion.smoke.some((smoke) => smoke.life > 0);
+            || explosion.fireballs.some((fireball) => fireball.life > 0)
+            || explosion.smoke.some((smoke) => smoke.life > 0)
+            || explosion.debris.some((debris) => debris.life > 0);
 
           if (explosion.life > 0 || hasLiveParticles) {
             next.push(explosion);
@@ -647,8 +807,15 @@ export function RocketLauncher() {
     }
 
     if (explosionsToSpawn.length > 0) {
-      for (const explosionPos of explosionsToSpawn) {
-        spawnExplosionAt(explosionPos);
+      const multi = useMultiplayerStore.getState();
+      for (const explosion of explosionsToSpawn) {
+        spawnExplosionAt(explosion.pos, explosion.applyGameplay);
+        if (explosion.notifyRemote) {
+          multi.sendRocketExplode(
+            explosion.syncId,
+            [explosion.pos.x, explosion.pos.y, explosion.pos.z],
+          );
+        }
       }
     }
   });
@@ -840,18 +1007,19 @@ export function RocketLauncher() {
       {explosions.map((explosion) => {
         const ratio = clamp01(explosion.life / explosion.maxLife);
         const progress = 1 - ratio;
-        const flashScale = 0.9 + progress * 4.5;
-        const shockwaveScale = 0.8 + progress * EXPLOSION_RADIUS * 0.72;
-        const flashOpacity = progress < 0.35 ? (1 - progress / 0.35) * 0.7 : 0;
-        const emberOpacity = ratio * 0.44;
+        const flashScale = 1.0 + progress * 5.8;
+        const shockwaveScale = 0.9 + progress * EXPLOSION_RADIUS * 0.86;
+        const smokeDomeScale = 2.5 + progress * 4.2;
+        const flashOpacity = progress < 0.32 ? (1 - progress / 0.32) * 0.86 : 0;
+        const emberOpacity = ratio * 0.5;
 
         return (
           <group key={explosion.id} position={[explosion.pos.x, explosion.pos.y, explosion.pos.z]}>
             <pointLight
               color="#ffb56d"
-              intensity={ratio * 6.5}
-              distance={14}
-              decay={2.2}
+              intensity={ratio * 11}
+              distance={20}
+              decay={2.1}
             />
 
             <mesh scale={[flashScale, flashScale, flashScale]}>
@@ -862,6 +1030,16 @@ export function RocketLauncher() {
                 opacity={flashOpacity}
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+
+            <mesh scale={[smokeDomeScale, smokeDomeScale * 0.62, smokeDomeScale]}>
+              <sphereGeometry args={[0.24, 24, 16]} />
+              <meshBasicMaterial
+                color="#4b403a"
+                transparent
+                opacity={ratio * 0.16}
+                depthWrite={false}
               />
             </mesh>
 
@@ -881,11 +1059,55 @@ export function RocketLauncher() {
               <meshBasicMaterial
                 color="#ffb46a"
                 transparent
-                opacity={ratio * 0.42}
+                opacity={ratio * 0.52}
                 depthWrite={false}
                 side={THREE.DoubleSide}
               />
             </mesh>
+
+            <mesh rotation={[0, Math.PI / 2, 0]} scale={[shockwaveScale * 0.72, shockwaveScale * 0.72, shockwaveScale * 0.72]}>
+              <ringGeometry args={[0.7, 1, 36]} />
+              <meshBasicMaterial
+                color="#fff0c4"
+                transparent
+                opacity={ratio * 0.24}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+
+            <mesh rotation={[0.7, 0.45, 0.15]} scale={[shockwaveScale * 0.56, shockwaveScale * 0.56, shockwaveScale * 0.56]}>
+              <ringGeometry args={[0.6, 1, 32]} />
+              <meshBasicMaterial
+                color="#ff7f3d"
+                transparent
+                opacity={ratio * 0.28}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+
+            {explosion.fireballs.map((fireball, index) => {
+              if (fireball.life <= 0) return null;
+              const fireRatio = fireball.life / fireball.maxLife;
+              const scale = fireball.size * (0.8 + (1 - fireRatio) * 1.3);
+              return (
+                <sprite
+                  key={`fireball_${explosion.id}_${index}`}
+                  position={[fireball.pos.x - explosion.pos.x, fireball.pos.y - explosion.pos.y, fireball.pos.z - explosion.pos.z]}
+                  scale={[scale, scale, 1]}
+                >
+                  <spriteMaterial
+                    map={glowTexture}
+                    color={index % 2 === 0 ? '#fff2b3' : '#ff6f2f'}
+                    transparent
+                    opacity={fireRatio * 0.82}
+                    depthWrite={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </sprite>
+              );
+            })}
 
             {explosion.sparks.map((spark, index) => {
               if (spark.life <= 0) return null;
@@ -909,10 +1131,33 @@ export function RocketLauncher() {
               );
             })}
 
+            {explosion.debris.map((debris, index) => {
+              if (debris.life <= 0) return null;
+              const debrisRatio = debris.life / debris.maxLife;
+              const scale = debris.size * (0.8 + debrisRatio * 1.2);
+              return (
+                <mesh
+                  key={`debris_${explosion.id}_${index}`}
+                  position={[debris.pos.x - explosion.pos.x, debris.pos.y - explosion.pos.y, debris.pos.z - explosion.pos.z]}
+                  rotation={debris.rotation}
+                  scale={[scale, scale * (0.5 + (index % 3) * 0.25), scale]}
+                >
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshStandardMaterial
+                    color={index % 2 === 0 ? '#6b4a32' : '#3e322b'}
+                    roughness={0.88}
+                    metalness={0.04}
+                    transparent
+                    opacity={Math.min(1, debrisRatio * 1.25)}
+                  />
+                </mesh>
+              );
+            })}
+
             {explosion.smoke.map((smoke, index) => {
               if (smoke.life <= 0) return null;
               const smokeRatio = smoke.life / smoke.maxLife;
-              const scale = smoke.size * (1.1 + (1 - smokeRatio) * 1.8);
+              const scale = smoke.size * (1.2 + (1 - smokeRatio) * 2.25);
               return (
                 <sprite
                   key={`smoke_${explosion.id}_${index}`}
@@ -923,7 +1168,7 @@ export function RocketLauncher() {
                     map={smokeTexture}
                     color="#7a726d"
                     transparent
-                    opacity={smokeRatio * 0.42}
+                    opacity={smokeRatio * 0.5}
                     depthWrite={false}
                   />
                 </sprite>
