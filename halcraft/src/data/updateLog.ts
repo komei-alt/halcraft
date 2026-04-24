@@ -45,6 +45,15 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-04-24',
+    items: [
+      { type: 'fix', text: 'こうげきのクールダウンがちゃんと効くように修正！' },
+      { type: 'fix', text: 'かべの向こうの敵にこうげきが当たらないようにした' },
+      { type: 'improve', text: 'こうげきが当たった時の火花とダメージ表示をかっこよくした！' },
+      { type: 'improve', text: 'ゾンビやクモがそれぞれ自然にこうげきするようにした' },
+    ],
+  },
+  {
     date: '2026-04-21',
     items: [
       { type: 'fix', text: 'ゲームをはじめたら、すぐロケットをうてるように修正！' },

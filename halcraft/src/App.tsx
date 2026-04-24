@@ -11,6 +11,7 @@ import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
 import { BlockBreakEffect } from './components/BlockBreakEffect';
 import { DamagePopup } from './components/DamagePopup';
+import { HitImpactEffect } from './components/HitImpactEffect';
 import { MobDeathEffect } from './components/MobDeathEffect';
 import { RocketLauncher } from './components/RocketLauncher';
 import { DroppedItems } from './components/DroppedItems';
@@ -95,6 +96,7 @@ function GameCanvas() {
         <BlockInteraction />
         <BlockBreakEffect />
         <DamagePopup />
+        <HitImpactEffect />
         <MobDeathEffect />
         <RocketLauncher />
         <DroppedItems />

@@ -16,6 +16,33 @@ export function registerDamagePopupSpawner(fn: typeof _spawnDamagePopupFn): void
   _spawnDamagePopupFn = fn;
 }
 
+// ========== HitImpactEffect ==========
+let _spawnHitImpactEffectFn: (
+  x: number,
+  y: number,
+  z: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number,
+  isCritical: boolean,
+) => void = () => {};
+
+export function spawnHitImpactEffect(
+  x: number,
+  y: number,
+  z: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number,
+  isCritical: boolean,
+): void {
+  _spawnHitImpactEffectFn(x, y, z, dirX, dirY, dirZ, isCritical);
+}
+
+export function registerHitImpactEffectSpawner(fn: typeof _spawnHitImpactEffectFn): void {
+  _spawnHitImpactEffectFn = fn;
+}
+
 // ========== MobDeathEffect ==========
 let _spawnMobDeathEffectFn: (mobType: MobType, x: number, y: number, z: number) => void = () => {};
 

@@ -47,6 +47,7 @@ export function updateZombieAI(
   let targetX = playerX;
   let targetZ = playerZ;
   let targetY = playerY;
+  let targetingCore = false;
 
   // コアが存在し、プレイヤーより近い場合はコアを狙う
   const pDist = Math.sqrt((playerX - m.x)**2 + (playerZ - m.z)**2);
@@ -57,6 +58,7 @@ export function updateZombieAI(
       targetX = corePosition.x;
       targetZ = corePosition.z;
       targetY = corePosition.y;
+      targetingCore = true;
     }
   }
 
@@ -143,25 +145,34 @@ export function updateZombieAI(
 
   // 攻撃対象への距離計算
   let attack: ZombieAttackResult | null = null;
+  let blockAttack: ZombieBlockAttackResult | null = null;
   const targetDy = m.y - targetY;
   const yClose = Math.abs(targetDy) < MOB_HEIGHT + 0.5;
 
   if (distXZ < ZOMBIE_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
-    attack = {
-      damage: ZOMBIE_ATTACK_DAMAGE,
-      kbDirX: playerX - m.x, // ノックバックはプレイヤー中心で計算
-      kbDirZ: playerZ - m.z,
-    };
+    if (targetingCore && corePosition) {
+      blockAttack = {
+        x: corePosition.x,
+        y: corePosition.y,
+        z: corePosition.z,
+        damage: ZOMBIE_ATTACK_DAMAGE,
+      };
+    } else {
+      attack = {
+        damage: ZOMBIE_ATTACK_DAMAGE,
+        kbDirX: playerX - m.x,
+        kbDirZ: playerZ - m.z,
+      };
+    }
     state.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
   }
 
   // 障害物ブロックへの攻撃判定（もし移動が詰まってかつ目の前にブロックがあれば）
-  let blockAttack: ZombieBlockAttackResult | null = null;
   if (!state.blockAttackCooldown) state.blockAttackCooldown = 0;
   state.blockAttackCooldown = Math.max(0, state.blockAttackCooldown - dt);
 
   // ZOMBIEが止まってしまっている && ノックバック中ではない
-  if (distXZ > ZOMBIE_STOP_RANGE && Math.abs(m.vx) < 0.1 && Math.abs(m.vz) < 0.1 && m.hitTimer <= 0) {
+  if (!blockAttack && distXZ > ZOMBIE_STOP_RANGE && Math.abs(m.vx) < 0.1 && Math.abs(m.vz) < 0.1 && m.hitTimer <= 0) {
     // 進行方向のブロックを取得
     const lookAngle = m.rotation;
     // 目の前 1.0 ブロック先の座標
