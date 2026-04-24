@@ -12,7 +12,7 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
-import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
+import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
 import { spawnDamagePopup } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
@@ -356,7 +356,11 @@ export function RocketLauncher() {
 
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button !== FIRE_MOUSE_BUTTON) return;
-      if (!isDesktopGameplayInputActive()) return;
+      const canvas = getGameCanvas();
+      if (!canvas) return;
+      const isPointerLockedToCanvas = document.pointerLockElement === canvas;
+      const isCanvasMouseDown = e.target === canvas;
+      if (!isPointerLockedToCanvas && !isCanvasMouseDown) return;
       if (usePlayerStore.getState().equippedItem !== 'rocket_launcher') return;
       fireRequested.current = true;
       e.preventDefault();

@@ -45,7 +45,7 @@ export function Hotbar() {
         flexDirection: 'column',
         alignItems: 'center',
         gap: 8,
-        zIndex: 100,
+        zIndex: isTouch ? 125 : 100,
       }}
     >
       <div

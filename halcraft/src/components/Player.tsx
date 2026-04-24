@@ -175,7 +175,9 @@ export function Player() {
           }
           break;
         case 'KeyV':
-          cycleEquippedItem();
+          if (!e.repeat && isDesktopGameplayInputActive()) {
+            cycleEquippedItem();
+          }
           break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
