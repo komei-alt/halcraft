@@ -9,14 +9,14 @@ import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
-import { useMobStore } from '../stores/useMobStore';
+import { useMobStore, type MobData } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
-import { spawnBlockBreakEffect, spawnDamagePopup } from '../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playHitSound } from '../utils/sounds';
 
 /** ブロック操作のリーチ距離 */
@@ -48,7 +48,35 @@ interface TargetBlock {
   placeZ: number;
   /** 設置先が有効かどうか */
   hasPlaceTarget: boolean;
+  /** カメラからヒットしたブロックまでの距離 */
+  distance: number;
 }
+
+interface TargetPlayer {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  distance: number;
+}
+
+interface TargetMob {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  hitY: number;
+  distance: number;
+}
+
+const MOB_ATTACK_HITBOX: Record<MobData['type'], { height: number; radius: number }> = {
+  zombie: { height: 1.8, radius: 0.65 },
+  spider: { height: 0.7, radius: 0.75 },
+  chicken: { height: 0.6, radius: 0.45 },
+  prototype: { height: 3.6, radius: 0.95 },
+  iron_golem: { height: 3.6, radius: 1.0 },
+  boss_giant: { height: 4.8, radius: 1.45 },
+};
 
 /** ブロック選択ハイライト用の共有ジオメトリ */
 const highlightGeometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
@@ -135,7 +163,13 @@ export function BlockInteraction() {
   const tempClosest = useRef(new THREE.Vector3());
 
   // 照準先のリモートプレイヤーを検索
-  const findTargetPlayer = useCallback((): string | null => {
+  const getAttackDistanceLimit = useCallback((): number => {
+    const blockTarget = targetRef.current;
+    if (!blockTarget) return ATTACK_REACH;
+    return Math.min(ATTACK_REACH, Math.max(0, blockTarget.distance - 0.05));
+  }, []);
+
+  const findTargetPlayer = useCallback((maxDistance = ATTACK_REACH): TargetPlayer | null => {
     const multiState = useMultiplayerStore.getState();
     if (!multiState.connected) return null;
 
@@ -145,8 +179,8 @@ export function BlockInteraction() {
     const origin = tempOrigin.current;
     const remotePlayers = multiState.remotePlayers;
 
-    let closestPlayerId: string | null = null;
-    let closestDist = ATTACK_REACH;
+    let closestPlayer: TargetPlayer | null = null;
+    let closestDist = Math.min(ATTACK_REACH, maxDistance);
 
     for (const [, player] of remotePlayers) {
       tempToTarget.current.set(
@@ -169,46 +203,114 @@ export function BlockInteraction() {
 
       if (distance < PLAYER_HIT_RADIUS + 0.3 && projection < closestDist) {
         closestDist = projection;
-        closestPlayerId = player.id;
+        closestPlayer = {
+          id: player.id,
+          x: targetX,
+          y: targetY,
+          z: targetZ,
+          distance: projection,
+        };
       }
     }
 
-    return closestPlayerId;
+    return closestPlayer;
   }, [camera]);
 
   // 照準先のモブを検索（データごと返す版）
-  const findTargetMobData = useCallback((): { id: string; x: number; y: number; z: number } | null => {
+  const findTargetMobData = useCallback((maxDistance = ATTACK_REACH): TargetMob | null => {
     attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     const dir = attackDir.current;
     tempOrigin.current.copy(camera.position);
     const origin = tempOrigin.current;
     const mobs = useMobStore.getState().mobs;
 
-    let closestMob: { id: string; x: number; y: number; z: number } | null = null;
-    let closestDist = ATTACK_REACH;
+    let closestMob: TargetMob | null = null;
+    let closestDist = Math.min(ATTACK_REACH, maxDistance);
 
     for (const mob of mobs) {
       // ニワトリは攻撃対象外（中立パッシブ）。味方モブはフレンドリーファイヤー可能
       if (mob.type === 'chicken') continue;
 
-      tempToTarget.current.set(mob.x - origin.x, mob.y + 0.9 - origin.y, mob.z - origin.z);
+      const hitbox = MOB_ATTACK_HITBOX[mob.type];
+      const minY = mob.y + 0.05;
+      const maxY = mob.y + hitbox.height;
+      const centerY = mob.y + hitbox.height * 0.5;
+
+      tempToTarget.current.set(mob.x - origin.x, centerY - origin.y, mob.z - origin.z);
       const projection = tempToTarget.current.dot(dir);
-      if (projection < 0 || projection > ATTACK_REACH) continue;
+      if (projection < 0 || projection > closestDist) continue;
 
       tempClosest.current.copy(origin).addScaledVector(dir, projection);
       const dx = tempClosest.current.x - mob.x;
-      const dy = tempClosest.current.y - (mob.y + 0.9);
+      const hitY = Math.max(minY, Math.min(maxY, tempClosest.current.y));
+      const dy = tempClosest.current.y - hitY;
       const dz = tempClosest.current.z - mob.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      if (distance < 0.8 && projection < closestDist) {
+      if (distance < hitbox.radius && projection < closestDist) {
         closestDist = projection;
-        closestMob = { id: mob.id, x: mob.x, y: mob.y, z: mob.z };
+        closestMob = { id: mob.id, x: mob.x, y: mob.y, z: mob.z, hitY, distance: projection };
       }
     }
 
     return closestMob;
   }, [camera]);
+
+  const tryMeleeAttack = useCallback((): boolean => {
+    const maxAttackDistance = getAttackDistanceLimit();
+    if (maxAttackDistance <= 0) return false;
+
+    const targetPlayer = findTargetPlayer(maxAttackDistance);
+    if (targetPlayer) {
+      const multiplier = performAttack();
+      if (multiplier <= 0) return true;
+
+      attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      const actualDamage = Math.max(1, Math.round(PVP_DAMAGE * multiplier));
+      useMultiplayerStore.getState().sendPlayerAttack(
+        targetPlayer.id,
+        actualDamage,
+        attackDir.current.x,
+        attackDir.current.z,
+      );
+      spawnHitImpactEffect(
+        targetPlayer.x,
+        targetPlayer.y,
+        targetPlayer.z,
+        attackDir.current.x,
+        attackDir.current.y,
+        attackDir.current.z,
+        false,
+      );
+      playHitSound();
+      return true;
+    }
+
+    const targetMob = findTargetMobData(maxAttackDistance);
+    if (targetMob) {
+      const multiplier = performAttack();
+      if (multiplier <= 0) return true;
+
+      attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      const actualDamage = Math.max(1, Math.round(ATTACK_DAMAGE * multiplier));
+      const isCritical = multiplier >= 0.9;
+      damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
+      spawnDamagePopup(actualDamage, targetMob.x, targetMob.hitY - 1.0, targetMob.z, isCritical);
+      spawnHitImpactEffect(
+        targetMob.x,
+        targetMob.hitY,
+        targetMob.z,
+        attackDir.current.x,
+        attackDir.current.y,
+        attackDir.current.z,
+        isCritical,
+      );
+      playHitSound();
+      return true;
+    }
+
+    return false;
+  }, [camera, damageMob, findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack]);
 
   // レイマーチングで照準先のブロックを検出
   useFrame(() => {
@@ -253,6 +355,7 @@ export function BlockInteraction() {
           placeY: lastAirY,
           placeZ: lastAirZ,
           hasPlaceTarget: hasLastAir,
+          distance: t,
         };
         break;
       } else {
@@ -282,34 +385,16 @@ export function BlockInteraction() {
 
       // 破壊
       if (consumeBreakBlock()) {
-        // まずプレイヤー攻撃をチェック → モブ攻撃 → ブロック破壊
-        const targetPlayerId = findTargetPlayer();
-        if (targetPlayerId) {
-          const multiplier = performAttack({ noShake: true });
-          attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-          const actualDamage = Math.round(PVP_DAMAGE * multiplier);
-          useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
-          playHitSound();
-        } else {
-          const targetMob = findTargetMobData();
-          if (targetMob) {
-            const multiplier = performAttack({ noShake: true });
-            attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-            const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
-            const isCritical = multiplier >= 0.9;
-            damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
-            spawnDamagePopup(actualDamage, targetMob.x, targetMob.y, targetMob.z, isCritical);
-            playHitSound();
-          } else {
-            const t = targetRef.current;
-            if (t) {
-              const blockId = getBlock(t.x, t.y, t.z);
-              if (breakBlock(t.x, t.y, t.z)) {
-                // パーティクルエフェクト + ドロップアイテム
-                spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-                dropItem(blockId, t.x, t.y, t.z);
-                sendBlockBreak(t.x, t.y, t.z);
-              }
+        // まずプレイヤー攻撃 → モブ攻撃 → ブロック破壊
+        if (!tryMeleeAttack()) {
+          const t = targetRef.current;
+          if (t) {
+            const blockId = getBlock(t.x, t.y, t.z);
+            if (breakBlock(t.x, t.y, t.z)) {
+              // パーティクルエフェクト + ドロップアイテム
+              spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
+              dropItem(blockId, t.x, t.y, t.z);
+              sendBlockBreak(t.x, t.y, t.z);
             }
           }
         }
@@ -355,38 +440,16 @@ export function BlockInteraction() {
 
     if (e.button === 0) {
       // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック破壊
-      const targetPlayerId = findTargetPlayer();
-
-      if (targetPlayerId) {
-        // プレイヤーを殴る
-        const multiplier = performAttack({ noShake: true });
-        attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-        const actualDamage = Math.round(PVP_DAMAGE * multiplier);
-        useMultiplayerStore.getState().sendPlayerAttack(targetPlayerId, actualDamage, attackDir.current.x, attackDir.current.z);
-        playHitSound();
-      } else {
-        const targetMob = findTargetMobData();
-
-        if (targetMob) {
-          // モブを殴る
-          const multiplier = performAttack({ noShake: true });
-          attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-          const actualDamage = Math.round(ATTACK_DAMAGE * multiplier);
-          const isCritical = multiplier >= 0.9;
-          damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
-          spawnDamagePopup(actualDamage, targetMob.x, targetMob.y, targetMob.z, isCritical);
-          playHitSound();
-        } else {
-          // ブロック破壊
-          const t = targetRef.current;
-          if (!t) return;
-          const blockId = getBlock(t.x, t.y, t.z);
-          if (breakBlock(t.x, t.y, t.z)) {
-            // パーティクルエフェクト + ドロップアイテム
-            spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-            dropItem(blockId, t.x, t.y, t.z);
-            sendBlockBreak(t.x, t.y, t.z);
-          }
+      if (!tryMeleeAttack()) {
+        // ブロック破壊
+        const t = targetRef.current;
+        if (!t) return;
+        const blockId = getBlock(t.x, t.y, t.z);
+        if (breakBlock(t.x, t.y, t.z)) {
+          // パーティクルエフェクト + ドロップアイテム
+          spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
+          dropItem(blockId, t.x, t.y, t.z);
+          sendBlockBreak(t.x, t.y, t.z);
         }
       }
     } else if (e.button === 2) {
@@ -410,7 +473,7 @@ export function BlockInteraction() {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, damageMob, spawnMob, performAttack, findTargetMobData, findTargetPlayer, camera, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

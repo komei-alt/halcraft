@@ -208,8 +208,8 @@ function MobileVehicleControls({ seat }: { seat: SeatType }) {
 
 export function ControlsGuide() {
   const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
-  const [visible, setVisible] = useState(true);
   const isTouch = isTouchDevice();
+  const [visible, setVisible] = useState(() => !isTouch);
 
   // Hキーで表示/非表示トグル
   useEffect(() => {

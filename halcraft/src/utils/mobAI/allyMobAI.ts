@@ -36,7 +36,7 @@ export function updateAllyMobAI(
   m: MobData,
   ctx: MobAIContext,
   state: AllyMobState,
-  takeDamage: (damage: number, kbX: number, kbZ: number) => void,
+  takeDamage: (damage: number, kbX: number, kbZ: number) => boolean,
 ): boolean {
   const { dt, playerX, playerZ, checkCollision, allMobs } = ctx;
 
@@ -103,8 +103,9 @@ export function updateAllyMobAI(
       if (state.attackCooldown <= 0 && distP > 0.01) {
         const kbDirX = playerX - m.x;
         const kbDirZ = playerZ - m.z;
-        takeDamage(PROTOTYPE_ATTACK_DAMAGE, kbDirX, kbDirZ);
-        playHurtSound();
+        if (takeDamage(PROTOTYPE_ATTACK_DAMAGE, kbDirX, kbDirZ)) {
+          playHurtSound();
+        }
         state.attackCooldown = PROTOTYPE_ATTACK_COOLDOWN;
       }
     }

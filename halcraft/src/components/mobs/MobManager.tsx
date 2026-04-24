@@ -20,7 +20,7 @@ import { Spider } from './Spider';
 import { IronGolem } from './IronGolem';
 import { BossRenderer } from './BossRenderer';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
-import { spawnMobDeathEffect } from '../../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTriggers';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -28,7 +28,22 @@ import {
   updateAllyMobAI, type AllyMobState,
   updateBossAI, type BossState,
   type MobAIContext,
+  type ZombieAttackResult,
 } from '../../utils/mobAI';
+
+function getMobState<T>(states: Map<string, T>, id: string, create: () => T): T {
+  const existing = states.get(id);
+  if (existing) return existing;
+  const next = create();
+  states.set(id, next);
+  return next;
+}
+
+function pruneMobStates<T>(states: Map<string, T>, activeIds: Set<string>): void {
+  for (const id of states.keys()) {
+    if (!activeIds.has(id)) states.delete(id);
+  }
+}
 
 export function MobManager() {
   const { camera } = useThree();
@@ -55,21 +70,14 @@ export function MobManager() {
   const wasNight = useRef(false);
 
   // --- モブ種別ごとの状態 ---
-  const zombieState = useRef<ZombieState>({ attackCooldown: 0, flankTimer: 0 });
-  const spiderState = useRef<SpiderState>({ attackCooldown: 0 });
+  const zombieStates = useRef(new Map<string, ZombieState>());
+  const spiderStates = useRef(new Map<string, SpiderState>());
   const chickenState = useRef<ChickenState>({
     wanderTimers: new Map(),
     wanderDirs: new Map(),
   });
-  const allyState = useRef<AllyMobState>({
-    attackCooldown: 0,
-    stuckTimer: 0,
-    lastPos: { x: 0, z: 0 },
-  });
-  const bossState = useRef<BossState>({
-    attackCooldown: 0,
-    summonCooldown: 0,
-  });
+  const allyStates = useRef(new Map<string, AllyMobState>());
+  const bossStates = useRef(new Map<string, BossState>());
 
   // 衝突チェック関数（可変サイズ版）
   const checkCollisionFn = useCallback(
@@ -93,11 +101,6 @@ export function MobManager() {
     }
 
     animTimeRef.current += dt;
-    zombieState.current.attackCooldown = Math.max(0, zombieState.current.attackCooldown - dt);
-    spiderState.current.attackCooldown = Math.max(0, spiderState.current.attackCooldown - dt);
-    allyState.current.attackCooldown = Math.max(0, allyState.current.attackCooldown - dt);
-    bossState.current.attackCooldown = Math.max(0, bossState.current.attackCooldown - dt);
-    zombieState.current.flankTimer += dt;
 
     // HP回復を毎フレーム更新
     updateRegen(dt);
@@ -160,7 +163,13 @@ export function MobManager() {
     if (currentMobs.length === 0) return;
 
     const updatedMobs: MobData[] = [];
-    let zombieHitMob: MobData | null = null;
+    const zombieAttacks: Array<{ mob: MobData; attack: ZombieAttackResult }> = [];
+    const originalMobMap = new Map(currentMobs.map((mob) => [mob.id, mob]));
+    const activeMobIds = new Set(currentMobs.map((mob) => mob.id));
+    pruneMobStates(zombieStates.current, activeMobIds);
+    pruneMobStates(spiderStates.current, activeMobIds);
+    pruneMobStates(allyStates.current, activeMobIds);
+    pruneMobStates(bossStates.current, activeMobIds);
 
     // 共通AIコンテキスト
     const aiCtx: MobAIContext = {
@@ -188,10 +197,13 @@ export function MobManager() {
 
       // ─── クモ ───
       if (m.type === 'spider') {
-        const { alive, attack } = updateSpiderAI(m, aiCtx, spiderState.current);
+        const state = getMobState(spiderStates.current, m.id, () => ({ attackCooldown: 0 }));
+        state.attackCooldown = Math.max(0, state.attackCooldown - dt);
+        const { alive, attack } = updateSpiderAI(m, aiCtx, state);
         if (attack) {
-          takeDamage(attack.damage, attack.kbDirX, attack.kbDirZ);
-          playHurtSound();
+          if (takeDamage(attack.damage, attack.kbDirX, attack.kbDirZ)) {
+            playHurtSound();
+          }
         }
         if (alive) updatedMobs.push(m);
         continue;
@@ -199,26 +211,46 @@ export function MobManager() {
 
       // ─── 味方モブ（プロトタイプ / アイアンゴーレム） ───
       if (m.type === 'prototype' || m.type === 'iron_golem') {
-        updateAllyMobAI(m, aiCtx, allyState.current, takeDamage);
+        const state = getMobState(allyStates.current, m.id, () => ({
+          attackCooldown: 0,
+          stuckTimer: 0,
+          lastPos: { x: m.x, z: m.z },
+        }));
+        state.attackCooldown = Math.max(0, state.attackCooldown - dt);
+        updateAllyMobAI(m, aiCtx, state, takeDamage);
         updatedMobs.push(m);
         continue;
       }
 
       // ─── 巨大ボス ───
       if (m.type === 'boss_giant') {
-        const { alive, attack } = updateBossAI(m, aiCtx, bossState.current, breakBlock);
+        const state = getMobState(bossStates.current, m.id, () => ({
+          attackCooldown: 0,
+          summonCooldown: 0,
+        }));
+        state.attackCooldown = Math.max(0, state.attackCooldown - dt);
+        const { alive, attack } = updateBossAI(m, aiCtx, state, breakBlock);
         if (attack) {
-          takeDamage(attack.damage, attack.kbDirX, attack.kbDirZ);
-          playHurtSound();
+          if (takeDamage(attack.damage, attack.kbDirX, attack.kbDirZ)) {
+            playHurtSound();
+          }
         }
         if (alive) updatedMobs.push(m);
         continue;
       }
 
       // ─── ゾンビ（デフォルト） ───
-      const { alive, attack, blockAttack } = updateZombieAI(m, aiCtx, zombieState.current);
+      const state = getMobState(zombieStates.current, m.id, () => ({
+        attackCooldown: 0,
+        flankTimer: 0,
+        blockAttackCooldown: 0,
+      }));
+      state.attackCooldown = Math.max(0, state.attackCooldown - dt);
+      state.flankTimer += dt;
+
+      const { alive, attack, blockAttack } = updateZombieAI(m, aiCtx, state);
       if (attack) {
-        zombieHitMob = m;
+        zombieAttacks.push({ mob: m, attack });
       }
       if (blockAttack) {
         const blockId = getBlock(blockAttack.x, blockAttack.y, blockAttack.z);
@@ -228,8 +260,7 @@ export function MobManager() {
         } else {
           // コア以外の障害物ブロックは破壊する
           if (breakBlock(blockAttack.x, blockAttack.y, blockAttack.z)) {
-            // ブロック破壊のエフェクト用：ここでアイテムをドロップするかパーティクルを出す
-            spawnMobDeathEffect('chicken', blockAttack.x + 0.5, blockAttack.y + 0.5, blockAttack.z + 0.5); // 仮エフェクト
+            spawnBlockBreakEffect(blockId, blockAttack.x, blockAttack.y, blockAttack.z);
           }
         }
       }
@@ -237,16 +268,42 @@ export function MobManager() {
     }
 
     // プレイヤーへのダメージ適用（ゾンビ）
-    if (zombieHitMob) {
-      const kbDirX = playerX - zombieHitMob.x;
-      const kbDirZ = playerZ - zombieHitMob.z;
-      takeDamage(2, kbDirX, kbDirZ);
-      playHurtSound();
+    for (const { mob, attack } of zombieAttacks) {
+      const kbDirX = playerX - mob.x;
+      const kbDirZ = playerZ - mob.z;
+      if (takeDamage(attack.damage, kbDirX, kbDirZ)) {
+        playHurtSound();
+        break;
+      }
     }
 
-    // setMobs前に、damageMob で同フレーム中に削除されたモブを除外
-    const latestMobIds = new Set(useMobStore.getState().mobs.map((m) => m.id));
-    const safeUpdatedMobs = updatedMobs.filter((m) => latestMobIds.has(m.id));
+    // setMobs前に、damageMob で同フレーム中に削除/被弾したモブを反映する
+    const latestMobMap = new Map(useMobStore.getState().mobs.map((m) => [m.id, m]));
+    const safeUpdatedMobs = updatedMobs.flatMap((m) => {
+      const latest = latestMobMap.get(m.id);
+      if (!latest) return [];
+
+      const original = originalMobMap.get(m.id);
+      const wasDamagedDuringFrame = original !== undefined && latest !== original && (
+        latest.hp !== original.hp ||
+        latest.hitTimer !== original.hitTimer ||
+        latest.angryAtPlayer !== original.angryAtPlayer ||
+        latest.angryTimer !== original.angryTimer
+      );
+
+      if (!wasDamagedDuringFrame) return [m];
+      return [{
+        ...m,
+        hp: latest.hp,
+        maxHp: latest.maxHp,
+        vx: latest.vx,
+        vy: latest.vy,
+        vz: latest.vz,
+        hitTimer: latest.hitTimer,
+        angryAtPlayer: latest.angryAtPlayer,
+        angryTimer: latest.angryTimer,
+      }];
+    });
 
     setMobs(safeUpdatedMobs);
 

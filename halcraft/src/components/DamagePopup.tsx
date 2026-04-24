@@ -14,6 +14,10 @@ interface DamagePopupData {
   z: number;
   life: number;
   isCritical: boolean;
+  vx: number;
+  vz: number;
+  spin: number;
+  scale: number;
 }
 
 /** ポップアップの表示時間（秒） */
@@ -27,9 +31,11 @@ const MAX_POPUPS = 16;
 function createDamageTexture(damage: number, isCritical: boolean): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   const size = isCritical ? 128 : 64;
-  canvas.width = size;
-  canvas.height = size;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
   const ctx = canvas.getContext('2d')!;
+  ctx.scale(dpr, dpr);
 
   const text = `${damage}`;
   const fontSize = isCritical ? 48 : 32;
@@ -42,17 +48,29 @@ function createDamageTexture(damage: number, isCritical: boolean): THREE.CanvasT
   ctx.lineJoin = 'round';
   ctx.strokeText(text, size / 2, size / 2);
 
-  ctx.fillStyle = isCritical ? '#FFD700' : '#FFFFFF';
+  const fill = ctx.createLinearGradient(0, size * 0.25, 0, size * 0.75);
+  if (isCritical) {
+    fill.addColorStop(0, '#fff7a8');
+    fill.addColorStop(0.55, '#ffd23f');
+    fill.addColorStop(1, '#ff7a3d');
+  } else {
+    fill.addColorStop(0, '#ffffff');
+    fill.addColorStop(1, '#d9f4ff');
+  }
+  ctx.fillStyle = fill;
   ctx.fillText(text, size / 2, size / 2);
 
   if (isCritical) {
-    ctx.font = 'bold 16px sans-serif';
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText('✦', size / 2 - 20, size / 2 - 20);
-    ctx.fillText('✦', size / 2 + 20, size / 2 - 15);
+    ctx.font = 'bold 14px sans-serif';
+    ctx.strokeStyle = '#3a1700';
+    ctx.lineWidth = 3;
+    ctx.strokeText('CRIT', size / 2, size / 2 + 32);
+    ctx.fillStyle = '#fff1a6';
+    ctx.fillText('CRIT', size / 2, size / 2 + 32);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -90,6 +108,10 @@ export function DamagePopup() {
       z: z + (Math.random() - 0.5) * 0.5,
       life: POPUP_LIFETIME,
       isCritical,
+      vx: (Math.random() - 0.5) * 0.45,
+      vz: (Math.random() - 0.5) * 0.45,
+      spin: (Math.random() - 0.5) * (isCritical ? 0.45 : 0.25),
+      scale: 0.92 + Math.random() * 0.16,
     });
   }, []);
 
@@ -118,6 +140,8 @@ export function DamagePopup() {
       if (i < popups.length) {
         const popup = popups[i];
         popup.y += RISE_SPEED * dt;
+        popup.x += popup.vx * dt;
+        popup.z += popup.vz * dt;
         const lifeRatio = popup.life / POPUP_LIFETIME;
 
         sprite.position.set(popup.x, popup.y, popup.z);
@@ -128,10 +152,11 @@ export function DamagePopup() {
           ? lifeRatio / 0.3
           : 1.0;
         const baseScale = popup.isCritical ? 1.2 : 0.7;
-        sprite.scale.set(baseScale * popScale, baseScale * popScale, 1);
+        sprite.scale.set(baseScale * popScale * popup.scale, baseScale * popScale * popup.scale, 1);
 
         const mat = sprite.material as THREE.SpriteMaterial;
         mat.opacity = Math.min(1, lifeRatio * 2);
+        mat.rotation = popup.spin * (1 - lifeRatio);
 
         const cacheKey = `${popup.damage}_${popup.isCritical}`;
         if (!textureCache.current.has(cacheKey)) {

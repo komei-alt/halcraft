@@ -122,8 +122,8 @@ interface PlayerState {
   /** ロケットランチャーを発射し、成功時 true を返す */
   fireRocket: () => boolean;
 
-  /** ダメージを受ける（knockbackDir: ダメージ源からプレイヤーへの方向XZ） */
-  takeDamage: (amount: number, knockbackDirX?: number, knockbackDirZ?: number) => void;
+  /** ダメージを受ける（knockbackDir: ダメージ源からプレイヤーへの方向XZ）。実際に通った場合 true */
+  takeDamage: (amount: number, knockbackDirX?: number, knockbackDirZ?: number) => boolean;
 
   /** 落下ダメージを計算して適用 */
   applyFallDamage: (fallDistance: number) => void;
@@ -200,6 +200,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   performAttack: (options) => {
     const state = get();
+    if (state.isDead || state.attackCooldown > 0) return 0;
+
     // チャージ率をダメージ倍率として返す（最低0.2倍）
     const charge = state.attackCharge;
     const multiplier = 0.2 + charge * 0.8;
@@ -208,7 +210,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       attackCooldown: ATTACK_COOLDOWN,
       attackCharge: 0,
-      ...(options?.noShake ? {} : { cameraShake: 0.3 + charge * 0.4 }),
+      ...(options?.noShake ? {} : { cameraShake: Math.max(state.cameraShake, 0.3 + charge * 0.4) }),
     });
 
     return multiplier;
@@ -251,9 +253,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   takeDamage: (amount, knockbackDirX, knockbackDirZ) => {
     // 死亡中はダメージを受けない
-    if (get().isDead) return;
+    if (get().isDead) return false;
     // 無敵時間中はダメージを受けない
-    if (Date.now() < get().invincibleUntil) return;
+    if (Date.now() < get().invincibleUntil) return false;
     const newHp = Math.max(0, get().hp - amount);
 
     // ノックバック計算
@@ -288,6 +290,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     // フラッシュを一定時間後にリセット
     setTimeout(() => set({ isDamageFlash: false, damageDirection: null }), 400);
+    return true;
   },
 
   applyFallDamage: (fallDistance) => {
@@ -310,6 +313,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
+      damageDirection: null,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      cameraShake: 0,
+      attackCooldown: 0,
+      attackCharge: 1,
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCharge: 1,
