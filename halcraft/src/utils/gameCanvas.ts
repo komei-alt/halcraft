@@ -4,6 +4,14 @@ function isHtmlCanvasElement(node: Element | null): node is HTMLCanvasElement {
   return node instanceof HTMLCanvasElement;
 }
 
+function isEditableElement(node: Element | null): boolean {
+  return node instanceof HTMLInputElement
+    || node instanceof HTMLTextAreaElement
+    || (node instanceof HTMLElement && node.isContentEditable);
+}
+
+let desktopGameplayActivated = false;
+
 /** ゲーム描画用の canvas 要素を取得 */
 export function getGameCanvas(): HTMLCanvasElement | null {
   const canvas = document.querySelector('canvas');
@@ -26,9 +34,17 @@ export function activateDesktopGameplayInput(): boolean {
   canvas.focus();
 
   if (document.pointerLockElement !== canvas) {
-    canvas.requestPointerLock?.();
+    try {
+      const lockRequest = canvas.requestPointerLock?.();
+      if (lockRequest instanceof Promise) {
+        lockRequest.catch(() => undefined);
+      }
+    } catch {
+      // 埋め込みブラウザなど Pointer Lock が使えない環境では focus だけで操作を有効にする
+    }
   }
 
+  desktopGameplayActivated = true;
   return isDesktopGameplayInputActive();
 }
 
@@ -37,5 +53,9 @@ export function isDesktopGameplayInputActive(): boolean {
   const canvas = getGameCanvas();
   if (!canvas) return false;
 
-  return document.pointerLockElement === canvas || document.activeElement === canvas;
+  if (document.pointerLockElement === canvas || document.activeElement === canvas) {
+    return true;
+  }
+
+  return desktopGameplayActivated && document.hasFocus() && !isEditableElement(document.activeElement);
 }

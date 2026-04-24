@@ -36,6 +36,7 @@ const EXPLOSION_MIN_DAMAGE = 3;
 const EXPLOSION_LIFETIME = 1.45;
 const EXPLOSION_BLOCK_RADIUS = 2.8;
 const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
+const EXPLOSION_SURFACE_OFFSET = 0.36;
 const SPARK_COUNT = 20;
 const SMOKE_COUNT = 12;
 
@@ -194,6 +195,11 @@ function createExplosion(pos: THREE.Vector3): ExplosionEffect {
   };
 }
 
+function getVisibleExplosionPosition(hitPos: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 {
+  if (normal.lengthSq() < 0.0001) return hitPos.clone();
+  return hitPos.clone().addScaledVector(normal.clone().normalize(), EXPLOSION_SURFACE_OFFSET);
+}
+
 function createTrailPuff(pos: THREE.Vector3, vel: THREE.Vector3): TrailPuff {
   const life = TRAIL_PUFF_LIFETIME * (0.8 + Math.random() * 0.35);
   return {
@@ -223,7 +229,6 @@ export function RocketLauncher() {
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const getBlock = useWorldStore((s) => s.getBlock);
   const helicopterBoarded = useVehicleStore((s) => s.helicopter.isBoarded);
-  const mobs = useMobStore((s) => s.mobs);
 
   const isTouch = useRef(isTouchDevice());
   const fireRequested = useRef(false);
@@ -268,6 +273,12 @@ export function RocketLauncher() {
   const [projectiles, setProjectiles] = useState<RocketProjectile[]>([]);
   const [trailPuffs, setTrailPuffs] = useState<TrailPuff[]>([]);
   const [explosions, setExplosions] = useState<ExplosionEffect[]>([]);
+  const projectilesRef = useRef<RocketProjectile[]>([]);
+
+  const syncProjectiles = useCallback((next: RocketProjectile[]) => {
+    projectilesRef.current = next;
+    setProjectiles(next);
+  }, []);
 
   const destroyExplosionBlocks = useCallback((center: THREE.Vector3) => {
     const world = useWorldStore.getState();
@@ -455,12 +466,12 @@ export function RocketLauncher() {
       orientation: new THREE.Quaternion().setFromUnitVectors(MODEL_FORWARD, shootDir.current),
     };
 
-    setProjectiles((prev) => [...prev.slice(-4), projectile]);
+    syncProjectiles([...projectilesRef.current.slice(-4), projectile]);
     recoil.current = 1;
     muzzleFlashTimer.current = 0.11;
     backblastTimer.current = 0.15;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
-  }, [camera, fireRocket, getBlock]);
+  }, [camera, fireRocket, getBlock, syncProjectiles]);
 
   useEffect(() => {
     if (isTouch.current) return undefined;
@@ -529,54 +540,57 @@ export function RocketLauncher() {
     const trailSpawns: TrailPuff[] = [];
     const explosionsToSpawn: THREE.Vector3[] = [];
 
-    if (projectiles.length > 0) {
-      setProjectiles((prev) => {
-        const alive: RocketProjectile[] = [];
+    if (projectilesRef.current.length > 0) {
+      const alive: RocketProjectile[] = [];
+      const currentMobs = useMobStore.getState().mobs;
 
-        for (const projectile of prev) {
-          projectile.age += dt;
-          if (projectile.age >= projectile.maxAge) {
-            explosionsToSpawn.push(projectile.pos.clone());
-            continue;
-          }
-
-          projectile.trailTimer += dt;
-          while (projectile.trailTimer >= TRAIL_INTERVAL) {
-            projectile.trailTimer -= TRAIL_INTERVAL;
-            trailSpawns.push(createTrailPuff(projectile.pos, projectile.vel));
-          }
-
-          projectile.vel.y -= ROCKET_GRAVITY * dt;
-          moveDir.current.copy(projectile.vel).normalize();
-          const moveDist = projectile.vel.length() * dt;
-
-          const hitResult = rayMarchProjectile(
-            projectile.pos,
-            moveDir.current,
-            moveDist,
-            getBlock,
-            mobs,
-            ROCKET_HIT_RADIUS,
-            {
-              remotePlayers: useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>,
-              playerHitRadius: PLAYER_HIT_RADIUS,
-              playerHitHeight: PLAYER_HIT_HEIGHT,
-            },
-          );
-
-          if (hitResult.type !== 'none') {
-            explosionsToSpawn.push(hitResult.hitPos.clone());
-            continue;
-          }
-
-          projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
-          projectile.trailPoints.push(projectile.pos.clone());
-          if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
-          alive.push(projectile);
+      for (const projectile of projectilesRef.current) {
+        projectile.age += dt;
+        if (projectile.age >= projectile.maxAge) {
+          explosionsToSpawn.push(projectile.pos.clone());
+          continue;
         }
 
-        return alive;
-      });
+        projectile.trailTimer += dt;
+        while (projectile.trailTimer >= TRAIL_INTERVAL) {
+          projectile.trailTimer -= TRAIL_INTERVAL;
+          trailSpawns.push(createTrailPuff(projectile.pos, projectile.vel));
+        }
+
+        projectile.vel.y -= ROCKET_GRAVITY * dt;
+        moveDir.current.copy(projectile.vel).normalize();
+        const moveDist = projectile.vel.length() * dt;
+
+        const hitResult = rayMarchProjectile(
+          projectile.pos,
+          moveDir.current,
+          moveDist,
+          getBlock,
+          currentMobs,
+          ROCKET_HIT_RADIUS,
+          {
+            remotePlayers: useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>,
+            playerHitRadius: PLAYER_HIT_RADIUS,
+            playerHitHeight: PLAYER_HIT_HEIGHT,
+          },
+        );
+
+        if (hitResult.type !== 'none') {
+          explosionsToSpawn.push(
+            hitResult.type === 'block'
+              ? getVisibleExplosionPosition(hitResult.hitPos, hitResult.normal)
+              : hitResult.hitPos.clone(),
+          );
+          continue;
+        }
+
+        projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
+        projectile.trailPoints.push(projectile.pos.clone());
+        if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+        alive.push(projectile);
+      }
+
+      syncProjectiles(alive);
     }
 
     if (trailPuffs.length > 0 || trailSpawns.length > 0) {
