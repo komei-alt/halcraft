@@ -14,8 +14,9 @@ import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
-import { spawnDamagePopup } from '../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
 
 const FIRE_KEY = 'KeyR';
 const FIRE_MOUSE_BUTTON = 0;
@@ -33,8 +34,14 @@ const EXPLOSION_RADIUS = 7.5;
 const EXPLOSION_DAMAGE = 22;
 const EXPLOSION_MIN_DAMAGE = 3;
 const EXPLOSION_LIFETIME = 1.45;
+const EXPLOSION_BLOCK_RADIUS = 2.8;
+const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
 const SPARK_COUNT = 20;
 const SMOKE_COUNT = 12;
+
+/** 照準補正 */
+const ROCKET_AIM_DISTANCE = 80;
+const ROCKET_MIN_AIM_DISTANCE = 1.5;
 
 /** 残煙・トレイル */
 const TRAIL_INTERVAL = 0.03;
@@ -82,6 +89,14 @@ interface ExplosionEffect {
   maxLife: number;
   sparks: ExplosionParticle[];
   smoke: ExplosionParticle[];
+}
+
+interface ExplosionBlockCandidate {
+  x: number;
+  y: number;
+  z: number;
+  blockId: BlockId;
+  distSq: number;
 }
 
 let nextRocketId = 0;
@@ -224,6 +239,8 @@ export function RocketLauncher() {
   const shootDir = useRef(new THREE.Vector3());
   const moveDir = useRef(new THREE.Vector3());
   const muzzleWorld = useRef(new THREE.Vector3());
+  const cameraAimDir = useRef(new THREE.Vector3());
+  const aimPoint = useRef(new THREE.Vector3());
   const playerCenter = useRef(new THREE.Vector3());
   const localTiltQuat = useMemo(() => {
     const euler = new THREE.Euler(-0.16, -0.22, -0.1);
@@ -252,6 +269,45 @@ export function RocketLauncher() {
   const [trailPuffs, setTrailPuffs] = useState<TrailPuff[]>([]);
   const [explosions, setExplosions] = useState<ExplosionEffect[]>([]);
 
+  const destroyExplosionBlocks = useCallback((center: THREE.Vector3) => {
+    const world = useWorldStore.getState();
+    const multi = useMultiplayerStore.getState();
+    const radiusSq = EXPLOSION_BLOCK_RADIUS * EXPLOSION_BLOCK_RADIUS;
+    const minX = Math.floor(center.x - EXPLOSION_BLOCK_RADIUS);
+    const maxX = Math.floor(center.x + EXPLOSION_BLOCK_RADIUS);
+    const minY = Math.floor(center.y - EXPLOSION_BLOCK_RADIUS);
+    const maxY = Math.floor(center.y + EXPLOSION_BLOCK_RADIUS);
+    const minZ = Math.floor(center.z - EXPLOSION_BLOCK_RADIUS);
+    const maxZ = Math.floor(center.z + EXPLOSION_BLOCK_RADIUS);
+    const candidates: ExplosionBlockCandidate[] = [];
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          const dx = x + 0.5 - center.x;
+          const dy = y + 0.5 - center.y;
+          const dz = z + 0.5 - center.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+          if (distSq > radiusSq) continue;
+
+          const blockId = world.getBlock(x, y, z);
+          if (blockId === BLOCK_IDS.AIR) continue;
+          if (BLOCK_DEFS[blockId]?.unbreakable) continue;
+
+          candidates.push({ x, y, z, blockId, distSq });
+        }
+      }
+    }
+
+    candidates.sort((a, b) => a.distSq - b.distSq);
+
+    for (const block of candidates.slice(0, EXPLOSION_MAX_DESTROY_BLOCKS)) {
+      if (!world.breakBlock(block.x, block.y, block.z)) continue;
+      spawnBlockBreakEffect(block.blockId, block.x, block.y, block.z);
+      multi.sendBlockBreak(block.x, block.y, block.z);
+    }
+  }, []);
+
   const applyExplosionDamage = useCallback((center: THREE.Vector3) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
@@ -277,6 +333,21 @@ export function RocketLauncher() {
       const dirZ = mob.z - center.z;
       multi.sendMobDamage(mob.id, damage, dirX * 1.8, dirZ * 1.8);
       mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      const impactDir = mobCenter.clone().sub(center);
+      if (impactDir.lengthSq() < 0.001) {
+        impactDir.set(0, 1, 0);
+      } else {
+        impactDir.normalize();
+      }
+      spawnHitImpactEffect(
+        mob.x,
+        mob.y + 0.9,
+        mob.z,
+        impactDir.x,
+        Math.max(0.2, impactDir.y),
+        impactDir.z,
+        damage >= EXPLOSION_DAMAGE * 0.7,
+      );
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
     }
 
@@ -295,23 +366,60 @@ export function RocketLauncher() {
       const dirX = player.position[0] - center.x;
       const dirZ = player.position[2] - center.z;
       multi.sendPlayerAttack(player.id, damage, dirX * 1.8, dirZ * 1.8);
+      const impactDir = playerBody.clone().sub(center);
+      if (impactDir.lengthSq() < 0.001) {
+        impactDir.set(0, 1, 0);
+      } else {
+        impactDir.normalize();
+      }
+      spawnHitImpactEffect(
+        player.position[0],
+        player.position[1] + 0.9,
+        player.position[2],
+        impactDir.x,
+        Math.max(0.2, impactDir.y),
+        impactDir.z,
+        false,
+      );
       spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
     }
   }, [camera, takeDamage]);
 
   const spawnExplosionAt = useCallback((pos: THREE.Vector3) => {
+    destroyExplosionBlocks(pos);
     applyExplosionDamage(pos);
     setExplosions((prev) => {
       const next = [...prev, createExplosion(pos)];
       return next.slice(-6);
     });
     playRocketExplosionSound(pos.distanceTo(camera.position));
-  }, [applyExplosionDamage, camera]);
+  }, [applyExplosionDamage, camera, destroyExplosionBlocks]);
 
   const fireLauncher = useCallback(() => {
     if (!fireRocket()) return;
 
-    shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    cameraAimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const currentMobs = useMobStore.getState().mobs;
+    const multi = useMultiplayerStore.getState();
+    const aimHit = rayMarchProjectile(
+      camera.position.clone(),
+      cameraAimDir.current.clone(),
+      ROCKET_AIM_DISTANCE,
+      getBlock,
+      currentMobs,
+      ROCKET_HIT_RADIUS,
+      {
+        remotePlayers: multi.remotePlayers as Map<string, RemotePlayerTarget>,
+        playerHitRadius: PLAYER_HIT_RADIUS,
+        playerHitHeight: PLAYER_HIT_HEIGHT,
+      },
+    );
+
+    if (aimHit.type !== 'none') {
+      aimPoint.current.copy(aimHit.hitPos);
+    } else {
+      aimPoint.current.copy(camera.position).addScaledVector(cameraAimDir.current, ROCKET_AIM_DISTANCE);
+    }
 
     const weaponGroup = weaponGroupRef.current;
     if (weaponGroup) {
@@ -320,10 +428,20 @@ export function RocketLauncher() {
     } else {
       muzzleWorld.current
         .copy(camera.position)
-        .addScaledVector(shootDir.current, 1.25);
+        .addScaledVector(cameraAimDir.current, 1.25);
     }
 
-    muzzleWorld.current.addScaledVector(shootDir.current, 0.22);
+    muzzleWorld.current.addScaledVector(cameraAimDir.current, 0.22);
+
+    shootDir.current.copy(aimPoint.current).sub(muzzleWorld.current);
+    if (shootDir.current.lengthSq() < ROCKET_MIN_AIM_DISTANCE * ROCKET_MIN_AIM_DISTANCE) {
+      shootDir.current.copy(cameraAimDir.current);
+    } else {
+      shootDir.current.normalize();
+      if (shootDir.current.dot(cameraAimDir.current) < 0.2) {
+        shootDir.current.copy(cameraAimDir.current);
+      }
+    }
 
     const velocity = shootDir.current.clone().multiplyScalar(ROCKET_SPEED);
     const projectile: RocketProjectile = {
@@ -342,7 +460,7 @@ export function RocketLauncher() {
     muzzleFlashTimer.current = 0.11;
     backblastTimer.current = 0.15;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
-  }, [camera, fireRocket]);
+  }, [camera, fireRocket, getBlock]);
 
   useEffect(() => {
     if (isTouch.current) return undefined;

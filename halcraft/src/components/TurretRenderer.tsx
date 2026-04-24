@@ -155,8 +155,8 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const barrelRotation = useRef(0);
   const isMouseDown = useRef(false);
   const muzzleWorld = useRef(new THREE.Vector3());
-  const muzzleQuat = useRef(new THREE.Quaternion());
   const shootDir = useRef(new THREE.Vector3());
+  const targetPoint = useRef(new THREE.Vector3());
   const turretPosVec = useRef(new THREE.Vector3());
   const { camera } = useThree();
 
@@ -262,10 +262,27 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
     // --- ターゲット検索（敵モブのみ） ---
     let targetDir: THREE.Vector3 | null = null;
+    let hasTargetPoint = false;
 
     if (isPlayerControlled) {
-      // プレイヤー操作: カメラの向きに従う
-      targetDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      // プレイヤー操作: カメラ照準の先をタレットの狙点にする
+      const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+      const aimHit = rayMarchProjectile(
+        camera.position.clone(),
+        cameraDir.clone(),
+        TURRET_RANGE,
+        getBlock,
+        mobs,
+        MOB_HIT_RADIUS,
+        { excludeBlockIds: new Set([BLOCK_IDS.TURRET]) },
+      );
+      if (aimHit.type !== 'none') {
+        targetPoint.current.copy(aimHit.hitPos);
+      } else {
+        targetPoint.current.copy(camera.position).addScaledVector(cameraDir, TURRET_RANGE);
+      }
+      targetDir = targetPoint.current.clone().sub(turretPos).normalize();
+      hasTargetPoint = true;
     } else {
       // 自動モード: 最も近い敵モブを追尾
       let closestDist = TURRET_RANGE;
@@ -286,11 +303,9 @@ function SingleTurret({ position }: { position: TurretPos }) {
       }
 
       if (closestMob) {
-        targetDir = new THREE.Vector3(
-          closestMob.x - turretPos.x,
-          closestMob.y - turretPos.y,
-          closestMob.z - turretPos.z,
-        ).normalize();
+        targetPoint.current.set(closestMob.x, closestMob.y, closestMob.z);
+        targetDir = targetPoint.current.clone().sub(turretPos).normalize();
+        hasTargetPoint = true;
       }
     }
 
@@ -315,11 +330,19 @@ function SingleTurret({ position }: { position: TurretPos }) {
     if (shouldFire && targetDir && muzzleRef.current) {
       lastFireTime.current = now;
 
-      // 銃口アンカーのワールド位置と実際の銃身前方向を取得
+      // 銃口アンカーから狙点へ飛ばし、見た目の砲身と弾道のズレを抑える
       muzzleRef.current.updateWorldMatrix(true, false);
       muzzleRef.current.getWorldPosition(muzzleWorld.current);
-      muzzleRef.current.getWorldQuaternion(muzzleQuat.current);
-      shootDir.current.set(0, 0, 1).applyQuaternion(muzzleQuat.current);
+      if (hasTargetPoint) {
+        shootDir.current.copy(targetPoint.current).sub(muzzleWorld.current);
+        if (shootDir.current.lengthSq() < 0.001) {
+          shootDir.current.copy(targetDir);
+        } else {
+          shootDir.current.normalize();
+        }
+      } else {
+        shootDir.current.copy(targetDir);
+      }
 
       // 散布を追加しつつ、弾道を銃身と一致させる
       const spread = 0.018;
