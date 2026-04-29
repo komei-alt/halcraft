@@ -3,6 +3,7 @@
 
 import { useCallback } from 'react';
 import { usePlayerStore } from '../../../stores/usePlayerStore';
+import { useVehicleStore } from '../../../stores/useVehicleStore';
 import { mobileActions, resetMobileActionTriggers } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
@@ -17,6 +18,7 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
   const togglePlaceMode = usePlayerStore((s) => s.togglePlaceMode);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
   // 設置/破壊モード切替
   const handleTogglePlace = useCallback((e: React.TouchEvent) => {
@@ -45,6 +47,87 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     e.stopPropagation();
     mobileActions.fireRocket = true;
   }, []);
+
+  const handleVehicleGunStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.vehicleGun = true;
+  }, []);
+
+  const handleVehicleGunEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.vehicleGun = false;
+  }, []);
+
+  const handleVehicleRocket = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.vehicleRocket = true;
+  }, []);
+
+  if (activeVehicle === 'tank' || activeVehicle === 'airplane') {
+    return (
+      <>
+        <div
+          onTouchStart={handleVehicleGunStart}
+          onTouchEnd={handleVehicleGunEnd}
+          onTouchCancel={handleVehicleGunEnd}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: 8,
+            background: 'rgba(255, 220, 100, 0.2)',
+            border: '2px solid rgba(255, 230, 130, 0.42)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: 20,
+            color: 'rgba(255, 245, 220, 0.85)',
+            textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          🔫
+        </div>
+        {activeVehicle === 'tank' && (
+          <div
+            onTouchStart={handleVehicleRocket}
+            style={{
+              position: 'fixed',
+              right: 20,
+              bottom: `calc(${64 + 80 + BUTTON_SIZE + 12}px + env(safe-area-inset-bottom))`,
+              width: BUTTON_SIZE,
+              height: BUTTON_SIZE,
+              borderRadius: 8,
+              background: 'rgba(255, 130, 70, 0.22)',
+              border: '2px solid rgba(255, 170, 110, 0.42)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 120,
+              touchAction: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              fontSize: 20,
+              color: 'rgba(255, 245, 220, 0.85)',
+              textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            💥
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <>

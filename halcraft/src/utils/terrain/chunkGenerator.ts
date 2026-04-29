@@ -6,6 +6,7 @@ import { getTerrainHeight } from './heightmap';
 import { placeTreesInChunk } from './structures/trees';
 import { placePlayerHouse } from './structures/house';
 import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
+import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
 import type { ChunkData } from './types';
 
@@ -59,6 +60,11 @@ export function generateChunk(cx: number, cz: number): ChunkData {
   // ヘリポートを配置
   if (chunkContainsHeliport(cx, cz)) {
     placeHeliport(chunk, cx, cz);
+  }
+
+  // 滑走路を配置
+  if (chunkContainsRunway(cx, cz)) {
+    placeRunway(chunk, cx, cz);
   }
 
   // 村を配置

@@ -128,6 +128,17 @@ const SKIN_COLORS = [
 
 const DAY_DURATION_SECONDS = 600;
 const HELIPORT_CENTER = { x: 15, z: -12 };
+const RUNWAY_CENTER = { x: 52, z: -34 };
+const RUNWAY_LENGTH = 72;
+const RUNWAY_WIDTH = 13;
+const AIRPLANE_SPAWN = {
+  x: RUNWAY_CENTER.x - Math.floor(RUNWAY_LENGTH / 2) + 8,
+  z: RUNWAY_CENTER.z,
+};
+const TANK_SPAWN = {
+  x: RUNWAY_CENTER.x - 8,
+  z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 7,
+};
 const SEAT_PRIORITY = ['pilot', 'gunner_left', 'gunner_right'];
 
 // モブ定数
@@ -139,11 +150,16 @@ const ZOMBIE_ATTACK_RANGE = 1.5;
 const ZOMBIE_ATTACK_DAMAGE = 2;
 const ZOMBIE_ATTACK_COOLDOWN = 1.0;
 const ZOMBIE_HP = 10;
+const DARWIN_HP = 24;
+const DARWIN_SPEED = 2.9;
+const DARWIN_ATTACK_DAMAGE = 3;
+const MAX_DARWINS = 2;
 const MAX_MOBS = 20;
 const SPAWN_DISTANCE_MIN = 30;
 const SPAWN_DISTANCE_MAX = 45;
 const DESPAWN_DISTANCE = 60;
 const SPAWN_INTERVAL = 2.5;
+const DARWIN_SPAWN_INTERVAL = 18;
 
 const PROTOTYPE_SPEED = 3.0;
 const PROTOTYPE_FOLLOW_MIN = 4;
@@ -157,20 +173,86 @@ const PROTOTYPE_JUMP_VEL = 10;
 const PROTOTYPE_HP = 50;
 
 function makeDefaultHeliState() {
+  const x = HELIPORT_CENTER.x;
+  const y = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2;
+  const z = HELIPORT_CENTER.z;
   return {
     spawned: true,
     seats: { pilot: null, gunner_left: null, gunner_right: null },
     isBoarded: false,
     pilotId: null,
     pilotName: null,
-    x: HELIPORT_CENTER.x,
-    y: getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2,
-    z: HELIPORT_CENTER.z,
+    x,
+    y,
+    z,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
     rotationY: 0,
     pitch: 0,
     roll: 0,
     speed: 0,
+    engineOn: false,
     rotorAngle: 0,
+  };
+}
+
+function makeDefaultTankState() {
+  const x = TANK_SPAWN.x;
+  const y = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z) + 1.15;
+  const z = TANK_SPAWN.z;
+  return {
+    spawned: true,
+    seats: { pilot: null },
+    isBoarded: false,
+    pilotId: null,
+    x,
+    y,
+    z,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
+    rotationY: Math.PI / 2,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    engineOn: false,
+    turretYaw: 0,
+    gunSpin: 0,
+  };
+}
+
+function makeDefaultAirplaneState() {
+  const x = AIRPLANE_SPAWN.x;
+  const y = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z) + 1.8;
+  const z = AIRPLANE_SPAWN.z;
+  return {
+    spawned: true,
+    seats: { pilot: null },
+    isBoarded: false,
+    pilotId: null,
+    x,
+    y,
+    z,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
+    rotationY: -Math.PI / 2,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    engineOn: false,
+    throttle: 0,
+    airborne: false,
+    propellerAngle: 0,
+  };
+}
+
+function makeDefaultVehiclesState() {
+  return {
+    helicopter: makeDefaultHeliState(),
+    tank: makeDefaultTankState(),
+    airplane: makeDefaultAirplaneState(),
   };
 }
 
@@ -188,11 +270,14 @@ class Stage {
     this.protoAttackCooldown = 0;
     this.lastMobUpdate = Date.now();
     this.wasNight = false;
-    this.helicopterState = makeDefaultHeliState();
+    this.lastDarwinSpawnTime = 0;
+    this.vehicleStates = makeDefaultVehiclesState();
+    this.helicopterState = this.vehicleStates.helicopter;
   }
 
-  hasAnyPassenger() {
-    return Object.values(this.helicopterState.seats).some((id) => id !== null);
+  hasAnyPassenger(type = 'helicopter') {
+    const vehicle = this.vehicleStates[type];
+    return vehicle ? Object.values(vehicle.seats).some((id) => id !== null) : false;
   }
 
   syncLegacyFields() {
@@ -201,10 +286,12 @@ class Stage {
     const pilotPlayer = pilotSocketId ? connectedPlayers.get(pilotSocketId) : null;
     this.helicopterState.pilotName = pilotPlayer?.name || null;
     this.helicopterState.isBoarded = this.helicopterState.seats.pilot !== null;
+    this.helicopterState.engineOn = this.hasAnyPassenger('helicopter');
   }
 
   resetHelicopterToHeliport() {
-    this.helicopterState = makeDefaultHeliState();
+    this.vehicleStates.helicopter = makeDefaultHeliState();
+    this.helicopterState = this.vehicleStates.helicopter;
   }
 
   removePlayerFromHelicopter(socketId) {
@@ -231,6 +318,44 @@ class Stage {
     return removedSeat;
   }
 
+  resetSingleSeatVehicle(type) {
+    if (type === 'tank') {
+      this.vehicleStates.tank = makeDefaultTankState();
+    } else if (type === 'airplane') {
+      this.vehicleStates.airplane = makeDefaultAirplaneState();
+    }
+  }
+
+  removePlayerFromVehicle(socketId, type) {
+    if (type === 'helicopter') return this.removePlayerFromHelicopter(socketId);
+
+    const vehicle = this.vehicleStates[type];
+    if (!vehicle || vehicle.seats.pilot !== socketId) return null;
+    this.resetSingleSeatVehicle(type);
+    return 'pilot';
+  }
+
+  removePlayerFromAllVehicles(socketId) {
+    const changed = [];
+    for (const type of ['helicopter', 'tank', 'airplane']) {
+      const removed = this.removePlayerFromVehicle(socketId, type);
+      if (removed !== null) changed.push(type);
+    }
+    return changed;
+  }
+
+  syncVehicleLegacy(type) {
+    const vehicle = this.vehicleStates[type];
+    if (!vehicle) return;
+    vehicle.pilotId = vehicle.seats.pilot;
+    vehicle.isBoarded = vehicle.seats.pilot !== null;
+    vehicle.engineOn = vehicle.seats.pilot !== null;
+    if (type === 'helicopter') {
+      this.helicopterState = vehicle;
+      this.syncLegacyFields();
+    }
+  }
+
   updateTime() {
     const now = Date.now();
     const deltaSec = (now - this.lastTimeUpdate) / 1000;
@@ -246,7 +371,7 @@ class Stage {
   }
 
   spawnMob(type, x, y, z) {
-    const hp = type === 'prototype' ? PROTOTYPE_HP : ZOMBIE_HP;
+    const hp = type === 'prototype' ? PROTOTYPE_HP : type === 'darwin' ? DARWIN_HP : ZOMBIE_HP;
     const mob = {
       id: `${this.id}_mob_${this.nextMobId++}`,
       type, x, y, z, hp, maxHp: hp,
@@ -319,6 +444,17 @@ class Stage {
         this.spawnMob('zombie', sx, sy, sz);
         this.lastSpawnTime = nowSec;
       }
+
+      const darwinCount = this.mobs.filter((m) => m.type === 'darwin').length;
+      if (darwinCount < MAX_DARWINS && nowSec - this.lastDarwinSpawnTime > DARWIN_SPAWN_INTERVAL) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = SPAWN_DISTANCE_MIN + 8 + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+        const sx = avgX + Math.cos(angle) * distance;
+        const sz = avgZ + Math.sin(angle) * distance;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 1;
+        this.spawnMob('darwin', sx, sy, sz);
+        this.lastDarwinSpawnTime = nowSec;
+      }
     }
 
     const hasPrototype = this.mobs.some((m) => m.type === 'prototype');
@@ -368,7 +504,7 @@ class Stage {
         let targetZombie = null;
         let closestZDist = PROTOTYPE_DETECT_RANGE;
         for (const other of this.mobs) {
-          if (other.type === 'zombie') {
+          if (!other.isAlly) {
             const odx = other.x - m.x;
             const odz = other.z - m.z;
             const oDist = Math.sqrt(odx * odx + odz * odz);
@@ -450,8 +586,9 @@ class Stage {
         if (m.hitTimer <= 0) {
           const nx = dx / distXZ;
           const nz = dz / distXZ;
-          m.vx = nx * ZOMBIE_SPEED;
-          m.vz = nz * ZOMBIE_SPEED;
+          const speed = m.type === 'darwin' ? DARWIN_SPEED : ZOMBIE_SPEED;
+          m.vx = nx * speed;
+          m.vz = nz * speed;
         }
       } else {
         m.vx = 0; m.vz = 0;
@@ -480,7 +617,7 @@ class Stage {
         const cd = this.attackCooldowns.get(target.id) || 0;
         if (cd <= 0) {
           const prevDmg = playerDamages.get(target.id) || 0;
-          playerDamages.set(target.id, prevDmg + ZOMBIE_ATTACK_DAMAGE);
+          playerDamages.set(target.id, prevDmg + (m.type === 'darwin' ? DARWIN_ATTACK_DAMAGE : ZOMBIE_ATTACK_DAMAGE));
           this.attackCooldowns.set(target.id, ZOMBIE_ATTACK_COOLDOWN);
         }
       }
@@ -514,7 +651,7 @@ class Stage {
 }
 
 const stages = new Map();
-['world-1', 'world-2', 'world-3'].forEach(id => stages.set(id, new Stage(id)));
+['world-1', 'world-2', 'world-3', 'world-4', 'world-5'].forEach(id => stages.set(id, new Stage(id)));
 
 let tickCounter = 0;
 setInterval(() => {
@@ -600,6 +737,7 @@ io.on('connection', (socket) => {
   socket.on('player:join', (data) => {
     const rawName = String(data.name || '').replace(/<[^>]*>/g, '').trim();
     const name = rawName.slice(0, 8) || 'ゲスト';
+    const skinId = typeof data.skinId === 'string' ? data.skinId.slice(0, 32) : undefined;
     const colorIndex = Math.floor(Math.random() * SKIN_COLORS.length);
     const stageId = data.stageId || 'world-1';
 
@@ -613,6 +751,7 @@ io.on('connection', (socket) => {
       id: socket.id,
       name,
       color: SKIN_COLORS[colorIndex],
+      skinId,
       position: [8, 40, 8],
       rotation: [0, 0],
       stageId,
@@ -643,6 +782,7 @@ io.on('connection', (socket) => {
       isNight: stage.serverGameTime >= 0.5,
     });
 
+    socket.emit('vehicles:sync', { vehicles: stage.vehicleStates });
     socket.emit('helicopter:sync', { helicopter: stage.helicopterState });
 
     socket.to(stageId).emit('player:joined', player);
@@ -741,6 +881,8 @@ io.on('connection', (socket) => {
 
     stage.helicopterState.seats[assignedSeat] = socket.id;
     stage.syncLegacyFields();
+    stage.vehicleStates.helicopter = stage.helicopterState;
+    io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
     io.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
   });
 
@@ -751,6 +893,7 @@ io.on('connection', (socket) => {
     if (!stage) return;
     const removedSeat = stage.removePlayerFromHelicopter(socket.id);
     if (removedSeat === null) return;
+    io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
     io.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
   });
 
@@ -768,7 +911,92 @@ io.on('connection', (socket) => {
     stage.helicopterState.roll = data.roll;
     stage.helicopterState.speed = data.speed;
     stage.helicopterState.rotorAngle = data.rotorAngle;
+    stage.vehicleStates.helicopter = stage.helicopterState;
+    socket.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
     socket.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
+  });
+
+  socket.on('vehicle:board', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (!stage) return;
+
+    const type = data?.type;
+    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    if (stage.removePlayerFromAllVehicles(socket.id).length > 0) {
+      io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+    }
+
+    if (type === 'helicopter') return;
+
+    const vehicle = stage.vehicleStates[type];
+    if (!vehicle || vehicle.seats.pilot !== null) return;
+    vehicle.seats.pilot = socket.id;
+    stage.syncVehicleLegacy(type);
+    io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+  });
+
+  socket.on('vehicle:dismount', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (!stage) return;
+
+    const type = data?.type;
+    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    const removedSeat = stage.removePlayerFromVehicle(socket.id, type);
+    if (removedSeat === null) return;
+    io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+    if (type === 'helicopter') {
+      io.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
+    }
+  });
+
+  socket.on('vehicle:move', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (!stage) return;
+
+    const type = data?.type;
+    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    const vehicle = stage.vehicleStates[type];
+    if (!vehicle || vehicle.seats.pilot !== socket.id) return;
+
+    const state = data.state || {};
+    for (const key of [
+      'x', 'y', 'z', 'rotationY', 'pitch', 'roll', 'speed',
+      'rotorAngle', 'turretYaw', 'gunSpin', 'throttle', 'propellerAngle',
+    ]) {
+      if (typeof state[key] === 'number') vehicle[key] = state[key];
+    }
+    if (typeof state.airborne === 'boolean') vehicle.airborne = state.airborne;
+
+    stage.syncVehicleLegacy(type);
+    socket.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+    if (type === 'helicopter') {
+      socket.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
+    }
+  });
+
+  socket.on('vehicle:gun-fire', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (!stage) return;
+    const type = data?.type;
+    if (!['tank', 'airplane'].includes(type)) return;
+    const vehicle = stage.vehicleStates[type];
+    if (!vehicle || vehicle.seats.pilot !== socket.id) return;
+
+    socket.to(player.stageId).emit('vehicle:gun-fired', {
+      playerId: socket.id,
+      type,
+      pos: data.pos,
+      dir: data.dir,
+      mount: data.mount || 'center',
+    });
   });
 
   socket.on('gun:fire', (data) => {
@@ -854,8 +1082,11 @@ io.on('connection', (socket) => {
     if (player) {
       const stage = stages.get(player.stageId);
       if (stage) {
-        const removedSeat = stage.removePlayerFromHelicopter(socket.id);
-        if (removedSeat !== null) {
+        const changedVehicles = stage.removePlayerFromAllVehicles(socket.id);
+        if (changedVehicles.length > 0) {
+          io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+        }
+        if (changedVehicles.includes('helicopter')) {
           io.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
         }
         stage.players.delete(socket.id);

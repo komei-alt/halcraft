@@ -10,6 +10,7 @@ import { registerMobDeathEffectSpawner } from '../utils/effectTriggers';
 /** モブタイプごとのパーティクル色 */
 const MOB_COLORS: Record<MobType, THREE.Color> = {
   zombie: new THREE.Color(0x4a6741),
+  darwin: new THREE.Color(0x6b3cff),
   prototype: new THREE.Color(0x8888cc),
   chicken: new THREE.Color('#ffffff'),
   spider: new THREE.Color('#333333'), // 黒

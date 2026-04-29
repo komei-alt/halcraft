@@ -297,7 +297,7 @@ export function RocketLauncher() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const getBlock = useWorldStore((s) => s.getBlock);
-  const helicopterBoarded = useVehicleStore((s) => s.helicopter.isBoarded);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
   const isTouch = useRef(isTouchDevice());
   const fireRequested = useRef(false);
@@ -639,7 +639,7 @@ export function RocketLauncher() {
     }
 
     const canUseLauncher = phase === 'playing'
-      && !helicopterBoarded
+      && activeVehicle === null
       && !isDead
       && equippedItem === 'rocket_launcher'
       && (isTouch.current ? true : isDesktopGameplayInputActive());
@@ -821,7 +821,7 @@ export function RocketLauncher() {
   });
 
   const showWeapon = phase === 'playing'
-    && !helicopterBoarded
+    && activeVehicle === null
     && !isDead
     && equippedItem === 'rocket_launcher';
 

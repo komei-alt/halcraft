@@ -71,6 +71,7 @@ interface TargetMob {
 
 const MOB_ATTACK_HITBOX: Record<MobData['type'], { height: number; radius: number }> = {
   zombie: { height: 1.8, radius: 0.65 },
+  darwin: { height: 3.2, radius: 1.0 },
   spider: { height: 0.7, radius: 0.75 },
   chicken: { height: 0.6, radius: 0.45 },
   prototype: { height: 3.6, radius: 0.95 },
@@ -381,7 +382,7 @@ export function BlockInteraction() {
     if (isTouch.current) {
       if (usePlayerStore.getState().isDead) return;
       // ヘリコプター搭乗中はブロック操作を無効化
-      if (useVehicleStore.getState().helicopter.isBoarded) return;
+      if (useVehicleStore.getState().isInVehicle()) return;
       if (equippedItem !== 'builder') return;
 
       // 破壊
@@ -438,7 +439,7 @@ export function BlockInteraction() {
     // 死亡中は操作不可
     if (usePlayerStore.getState().isDead) return;
     // ヘリコプター搭乗中はブロック操作を無効化
-    if (useVehicleStore.getState().helicopter.isBoarded) return;
+    if (useVehicleStore.getState().isInVehicle()) return;
     if (equippedItem !== 'builder') return;
 
     if (e.button === 0) {

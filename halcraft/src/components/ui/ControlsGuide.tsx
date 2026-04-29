@@ -4,8 +4,8 @@
 // Hキーで表示/非表示を切り替え可能
 
 import { useState, useEffect } from 'react';
-import { useVehicleStore, SEAT_NAMES } from '../../stores/useVehicleStore';
-import type { SeatType } from '../../stores/useVehicleStore';
+import { useVehicleStore, SEAT_NAMES, VEHICLE_NAMES } from '../../stores/useVehicleStore';
+import type { SeatType, VehicleType } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { isTouchDevice } from '../../utils/device';
@@ -110,8 +110,40 @@ function WalkingControls() {
   );
 }
 
-/** ヘリコプター搭乗時の操作ガイド（座席別） */
-function VehicleControls({ seat }: { seat: SeatType }) {
+/** 乗り物搭乗時の操作ガイド */
+function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' }) {
+  if (vehicle === 'tank') {
+    return (
+      <>
+        <VehicleHeader icon="🛞" label={VEHICLE_NAMES.tank} />
+        <Divider />
+        <ControlRow keyName="W / S" action="前進 / 後退" keyColor="#50c878" />
+        <ControlRow keyName="A / D" action="旋回" keyColor="#50c878" />
+        <ControlRow keyName="マウス" action="砲塔を回す" keyColor="#ffdd66" />
+        <ControlRow keyName="左クリック" action="ガトリング" keyColor="#ff6644" />
+        <ControlRow keyName="R" action="主砲ロケット" keyColor="#ff9966" />
+        <Divider />
+        <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
+      </>
+    );
+  }
+
+  if (vehicle === 'airplane') {
+    return (
+      <>
+        <VehicleHeader icon="✈️" label={VEHICLE_NAMES.airplane} />
+        <Divider />
+        <ControlRow keyName="W / S" action="加速 / 減速" keyColor="#50c878" />
+        <ControlRow keyName="A / D" action="旋回" keyColor="#50c878" />
+        <ControlRow keyName="Space" action="離陸 / 機首上げ" keyColor="#88ccff" />
+        <ControlRow keyName="Shift" action="機首下げ" keyColor="#88ccff" />
+        <ControlRow keyName="左クリック" action="ガトリング" keyColor="#ff6644" />
+        <Divider />
+        <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
+      </>
+    );
+  }
+
   const seatName = SEAT_NAMES[seat];
   const isPilot = seat === 'pilot';
   const isGunner = seat === 'gunner_left' || seat === 'gunner_right';
@@ -119,22 +151,7 @@ function VehicleControls({ seat }: { seat: SeatType }) {
   return (
     <>
       {/* 現在の座席表示 */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        marginBottom: '2px',
-      }}>
-        <span style={{ fontSize: '12px' }}>🚁</span>
-        <span style={{
-          color: '#ffdd00',
-          fontSize: '11px',
-          fontWeight: 'bold',
-          fontFamily: 'monospace',
-        }}>
-          {seatName}
-        </span>
-      </div>
+      <VehicleHeader icon="🚁" label={seatName} />
       <Divider />
 
       {/* パイロット操作 */}
@@ -163,6 +180,27 @@ function VehicleControls({ seat }: { seat: SeatType }) {
       <ControlRow keyName="1-3" action="座席を移動" keyColor="#88ccff" />
       <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
     </>
+  );
+}
+
+function VehicleHeader({ icon, label }: { icon: string; label: string }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      marginBottom: '2px',
+    }}>
+      <span style={{ fontSize: '12px' }}>{icon}</span>
+      <span style={{
+        color: '#ffdd00',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        fontFamily: 'monospace',
+      }}>
+        {label}
+      </span>
+    </div>
   );
 }
 
@@ -202,8 +240,21 @@ function MobileWalkingControls() {
   );
 }
 
-/** モバイルヘリ操作ガイド */
-function MobileVehicleControls({ seat }: { seat: SeatType }) {
+/** モバイル乗り物操作ガイド */
+function MobileVehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' }) {
+  if (vehicle === 'tank' || vehicle === 'airplane') {
+    return (
+      <>
+        <VehicleHeader icon={vehicle === 'tank' ? '🛞' : '✈️'} label={VEHICLE_NAMES[vehicle]} />
+        <Divider />
+        <ControlRow keyName="🕹️" action={vehicle === 'tank' ? '走行' : '操縦'} />
+        <ControlRow keyName="⬆️" action={vehicle === 'airplane' ? '離陸補助' : 'ジャンプボタン'} />
+        <ControlRow keyName="🔫" action="ガトリング" keyColor="#ff6644" />
+        {vehicle === 'tank' && <ControlRow keyName="💥" action="主砲ロケット" keyColor="#ff9966" />}
+      </>
+    );
+  }
+
   const seatName = SEAT_NAMES[seat];
   const isPilot = seat === 'pilot';
 
@@ -237,7 +288,10 @@ function MobileVehicleControls({ seat }: { seat: SeatType }) {
 }
 
 export function ControlsGuide() {
-  const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const helicopterSeat = useVehicleStore((s) => s.helicopter.mySeat);
+  const tankSeat = useVehicleStore((s) => s.tank.mySeat);
+  const airplaneSeat = useVehicleStore((s) => s.airplane.mySeat);
   const isTouch = isTouchDevice();
   const [visible, setVisible] = useState(() => !isTouch);
 
@@ -256,7 +310,14 @@ export function ControlsGuide() {
 
   if (!visible) return null;
 
-  const isInVehicle = mySeat !== null;
+  const mySeat = activeVehicle === 'helicopter'
+    ? helicopterSeat
+    : activeVehicle === 'tank'
+      ? tankSeat
+      : activeVehicle === 'airplane'
+        ? airplaneSeat
+        : null;
+  const isInVehicle = activeVehicle !== null && mySeat !== null;
 
   return (
     <div style={{
@@ -306,13 +367,13 @@ export function ControlsGuide() {
       {/* コンテンツ */}
       {isTouch ? (
         isInVehicle ? (
-          <MobileVehicleControls seat={mySeat} />
+          <MobileVehicleControls vehicle={activeVehicle} seat={mySeat} />
         ) : (
           <MobileWalkingControls />
         )
       ) : (
         isInVehicle ? (
-          <VehicleControls seat={mySeat} />
+          <VehicleControls vehicle={activeVehicle} seat={mySeat} />
         ) : (
           <WalkingControls />
         )

@@ -11,7 +11,15 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useGameStore } from '../stores/useGameStore';
-import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS, ALL_SEATS } from '../stores/useVehicleStore';
+import {
+  AIRPLANE_CONSTANTS,
+  HELICOPTER_CONSTANTS,
+  SEAT_OFFSETS,
+  TANK_CONSTANTS,
+  useVehicleStore,
+  ALL_SEATS,
+  type VehicleType,
+} from '../stores/useVehicleStore';
 import { checkAABBCollision, isBlockSolid } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
 import {
@@ -103,6 +111,9 @@ export function Player() {
   const sendHelicopterBoard = useMultiplayerStore((s) => s.sendHelicopterBoard);
   const sendHelicopterDismount = useMultiplayerStore((s) => s.sendHelicopterDismount);
   const sendHelicopterMove = useMultiplayerStore((s) => s.sendHelicopterMove);
+  const sendVehicleBoard = useMultiplayerStore((s) => s.sendVehicleBoard);
+  const sendVehicleDismount = useMultiplayerStore((s) => s.sendVehicleDismount);
+  const sendVehicleMove = useMultiplayerStore((s) => s.sendVehicleMove);
 
   // マルチプレイ位置送信のスロットリング
   const lastSendTime = useRef(0);
@@ -289,12 +300,12 @@ export function Player() {
     // --- 乗り物ストアの状態を取得 ---
     const vehicleState = useVehicleStore.getState();
     const heli = vehicleState.helicopter;
-    const isInHeli = heli.mySeat !== null;
+    const isInVehicle = vehicleState.isInVehicle();
     const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
     const jumpJustPressed = jumpRequested && !lastJumpDown.current;
     lastJumpDown.current = jumpRequested;
 
-    if (!isInHeli && isInputActive && gameMode === 'creative' && jumpJustPressed) {
+    if (!isInVehicle && isInputActive && gameMode === 'creative' && jumpJustPressed) {
       const now = performance.now();
       if (now - lastJumpPressTime.current <= CREATIVE_DOUBLE_JUMP_MS) {
         creativeFlying = !creativeFlying;
@@ -313,52 +324,83 @@ export function Player() {
     if (interactPressed.current && isInputActive) {
       interactPressed.current = false;
 
-      if (isInHeli) {
-        // 降車: ヘリコプターから降りる
-        vehicleState.dismountHelicopter();
-        sendHelicopterDismount(); // サーバーに降車を通知
-        // プレイヤーをヘリの横（右側）に配置（ヘリの向きを考慮）
-        const dismountOffset = 2.5;
-        const cosR = Math.cos(heli.rotationY + Math.PI / 2);
-        const sinR = Math.sin(heli.rotationY + Math.PI / 2);
-        const dismountX = heli.x + sinR * dismountOffset;
-        const dismountZ = heli.z + cosR * dismountOffset;
-        // ヘリの高度から下方向に地面を探す
-        let landingY = heli.y;
-        let foundGround = false;
-        for (let checkY = Math.floor(heli.y); checkY >= 0; checkY--) {
-          if (checkCollision(dismountX, checkY, dismountZ)) {
-            // このブロックの上面に着地
-            landingY = checkY + 1.001;
-            foundGround = true;
-            break;
-          }
+      const activeVehicle = vehicleState.getActiveVehicle();
+
+      if (activeVehicle !== null) {
+        const vehicle =
+          activeVehicle === 'helicopter' ? vehicleState.helicopter :
+          activeVehicle === 'tank' ? vehicleState.tank :
+          vehicleState.airplane;
+        const dismountOffset = activeVehicle === 'airplane' ? 5 : 3;
+        const cosR = Math.cos(vehicle.rotationY + Math.PI / 2);
+        const sinR = Math.sin(vehicle.rotationY + Math.PI / 2);
+        const dismountX = vehicle.x + sinR * dismountOffset;
+        const dismountZ = vehicle.z + cosR * dismountOffset;
+        const groundY = getTerrainHeight(Math.floor(dismountX), Math.floor(dismountZ)) + 1.001;
+
+        if (activeVehicle === 'helicopter') {
+          vehicleState.dismountHelicopter();
+          sendHelicopterDismount();
+        } else {
+          vehicleState.dismountVehicle(activeVehicle);
+          sendVehicleDismount(activeVehicle);
         }
-        if (!foundGround) {
-          landingY = 1;
-        }
+
         pos.x = dismountX;
-        pos.y = landingY;
+        pos.y = groundY;
         pos.z = dismountZ;
         vel.set(0, 0, 0);
         onGround.current = true;
         lastGroundY.current = pos.y;
-        // カメラの向きをヘリの向きに合わせてリセット
         euler.current.x = 0;
         camera.quaternion.setFromEuler(euler.current);
-      } else if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
-        // 搭乗: ヘリに近いかチェック（空席がある場合のみ）
-        const dx = pos.x - heli.x;
-        const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
-        const dz = pos.z - heli.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) {
+      } else {
+        const candidates: Array<{ type: VehicleType; dist: number }> = [];
+
+        if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
+          const dx = pos.x - heli.x;
+          const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
+          const dz = pos.z - heli.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'helicopter', dist });
+        }
+
+        const tank = vehicleState.tank;
+        if (tank.spawned && tank.seats.pilot === null) {
+          const dx = pos.x - tank.x;
+          const dy = (pos.y + PLAYER_HEIGHT / 2) - tank.y;
+          const dz = pos.z - tank.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < TANK_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'tank', dist });
+        }
+
+        const airplane = vehicleState.airplane;
+        if (airplane.spawned && airplane.seats.pilot === null) {
+          const dx = pos.x - airplane.x;
+          const dy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
+          const dz = pos.z - airplane.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'airplane', dist });
+        }
+
+        candidates.sort((a, b) => a.dist - b.dist);
+        const nearest = candidates[0]?.type;
+
+        if (nearest === 'helicopter') {
           const assignedSeat = vehicleState.boardHelicopter();
           if (assignedSeat) {
-            sendHelicopterBoard(assignedSeat); // サーバーに搭乗を通知（座席指定）
-            // カメラの向きをヘリの正面に合わせる
+            sendHelicopterBoard(assignedSeat);
             euler.current.y = heli.rotationY;
-            euler.current.x = -0.1; // 少し下向き（前方が見やすい）
+            euler.current.x = -0.1;
+            camera.quaternion.setFromEuler(euler.current);
+          }
+        } else if (nearest === 'tank' || nearest === 'airplane') {
+          const assignedSeat = vehicleState.boardVehicle(nearest);
+          if (assignedSeat) {
+            sendVehicleBoard(nearest);
+            const v = nearest === 'tank' ? vehicleState.tank : vehicleState.airplane;
+            euler.current.y = v.rotationY;
+            euler.current.x = nearest === 'airplane' ? -0.04 : -0.08;
             camera.quaternion.setFromEuler(euler.current);
           }
         }
@@ -531,6 +573,206 @@ export function Player() {
       }
 
       return; // 通常の物理処理をスキップ
+    }
+
+    // ========================================
+    // 戦車搭乗中の物理
+    // ========================================
+    const latestTank = useVehicleStore.getState().tank;
+    if (latestTank.mySeat === 'pilot') {
+      updateAttackCooldown(dt);
+      consumeKnockback();
+
+      let tankSpeed = latestTank.speed;
+      let tankRotY = latestTank.rotationY;
+      let tankX = latestTank.x;
+      let tankZ = latestTank.z;
+
+      const inputForward = isTouch.current
+        ? -joystickInput.y
+        : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+      const inputTurn = isTouch.current
+        ? -joystickInput.x
+        : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+
+      if (inputForward > 0) {
+        tankSpeed = Math.min(TANK_CONSTANTS.MAX_SPEED, tankSpeed + TANK_CONSTANTS.ACCELERATION * dt);
+      } else if (inputForward < 0) {
+        tankSpeed = Math.max(-TANK_CONSTANTS.REVERSE_SPEED, tankSpeed - TANK_CONSTANTS.ACCELERATION * dt);
+      } else if (tankSpeed > 0) {
+        tankSpeed = Math.max(0, tankSpeed - TANK_CONSTANTS.DECELERATION * dt);
+      } else {
+        tankSpeed = Math.min(0, tankSpeed + TANK_CONSTANTS.DECELERATION * dt);
+      }
+
+      const turnFactor = Math.min(1, (Math.abs(tankSpeed) + 1) / 5);
+      const turnDelta = inputTurn * TANK_CONSTANTS.TURN_SPEED * dt * turnFactor;
+      tankRotY += turnDelta;
+      euler.current.y += turnDelta;
+
+      flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, tankRotY);
+      tankX += flyForward.current.x * tankSpeed * dt;
+      tankZ += flyForward.current.z * tankSpeed * dt;
+
+      const tankY = getTerrainHeight(Math.floor(tankX), Math.floor(tankZ)) + TANK_CONSTANTS.BODY_HEIGHT;
+      const turretYaw = ((euler.current.y - tankRotY + Math.PI) % (Math.PI * 2)) - Math.PI;
+      const nextGunSpin = latestTank.gunSpin + Math.abs(tankSpeed) * dt;
+      const tankRoll = -inputTurn * 0.05;
+
+      useVehicleStore.getState().updateTank({
+        x: tankX,
+        y: tankY,
+        z: tankZ,
+        rotationY: tankRotY,
+        pitch: 0,
+        roll: tankRoll,
+        speed: tankSpeed,
+        turretYaw,
+        gunSpin: nextGunSpin,
+      });
+
+      cockpitOffset.current.set(0, TANK_CONSTANTS.CAMERA_HEIGHT, TANK_CONSTANTS.CAMERA_BACK);
+      cockpitOffset.current.applyAxisAngle(Y_AXIS, tankRotY);
+      pos.x = tankX + cockpitOffset.current.x;
+      pos.y = tankY + cockpitOffset.current.y;
+      pos.z = tankZ + cockpitOffset.current.z;
+
+      camera.quaternion.setFromEuler(euler.current);
+      camera.position.set(pos.x, pos.y, pos.z);
+
+      const now = performance.now();
+      if (now - lastSendTime.current > 50) {
+        sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+        sendVehicleMove('tank', {
+          x: tankX,
+          y: tankY,
+          z: tankZ,
+          rotationY: tankRotY,
+          pitch: 0,
+          roll: tankRoll,
+          speed: tankSpeed,
+          turretYaw,
+          gunSpin: nextGunSpin,
+        });
+        lastSendTime.current = now;
+      }
+
+      return;
+    }
+
+    // ========================================
+    // 飛行機搭乗中の物理
+    // ========================================
+    const latestAirplane = useVehicleStore.getState().airplane;
+    if (latestAirplane.mySeat === 'pilot') {
+      updateAttackCooldown(dt);
+      consumeKnockback();
+
+      let planeSpeed = latestAirplane.speed;
+      let planeRotY = latestAirplane.rotationY;
+      let planePitch = latestAirplane.pitch;
+      let planeRoll = latestAirplane.roll;
+      let planeX = latestAirplane.x;
+      let planeY = latestAirplane.y;
+      let planeZ = latestAirplane.z;
+      let airborne = latestAirplane.airborne;
+
+      const inputForward = isTouch.current
+        ? -joystickInput.y
+        : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+      const inputTurn = isTouch.current
+        ? -joystickInput.x
+        : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+      const inputPitch = isTouch.current
+        ? (mobileActions.jump ? 1 : 0)
+        : (isInputActive ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0) : 0);
+
+      if (inputForward > 0) {
+        planeSpeed = Math.min(AIRPLANE_CONSTANTS.MAX_SPEED, planeSpeed + AIRPLANE_CONSTANTS.ACCELERATION * dt);
+      } else if (inputForward < 0) {
+        planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 1.4 * dt);
+      } else {
+        planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 0.35 * dt);
+      }
+
+      const groundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
+      if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && inputPitch > 0) {
+        airborne = true;
+        planeY = Math.max(planeY, groundY + 0.5);
+      }
+
+      const turnDelta = inputTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * Math.min(1, planeSpeed / 12);
+      planeRotY += turnDelta;
+      euler.current.y += turnDelta;
+
+      const targetPitch = airborne
+        ? Math.max(-0.38, Math.min(0.42, planePitch + inputPitch * AIRPLANE_CONSTANTS.PITCH_SPEED * dt))
+        : 0;
+      planePitch += (targetPitch - planePitch) * 3 * dt;
+      const targetRoll = -inputTurn * (airborne ? 0.45 : 0.12);
+      planeRoll += (targetRoll - planeRoll) * 3 * dt;
+
+      flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, planeRotY);
+      planeX += flyForward.current.x * planeSpeed * dt;
+      planeZ += flyForward.current.z * planeSpeed * dt;
+
+      const nextGroundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
+      if (airborne) {
+        const lift = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.STALL_SPEED) * AIRPLANE_CONSTANTS.LIFT;
+        const verticalSpeed = planePitch * planeSpeed * 0.55 + lift - AIRPLANE_CONSTANTS.GRAVITY * 0.38;
+        planeY += verticalSpeed * dt;
+        if (planeY <= nextGroundY + 0.15) {
+          planeY = nextGroundY;
+          airborne = planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.8 && inputPitch > 0;
+          planePitch = airborne ? Math.max(planePitch, 0.08) : 0;
+        }
+      } else {
+        planeY = nextGroundY;
+      }
+
+      const nextPropellerAngle = latestAirplane.propellerAngle + AIRPLANE_CONSTANTS.PROPELLER_SPEED * dt;
+      const throttle = planeSpeed / AIRPLANE_CONSTANTS.MAX_SPEED;
+      useVehicleStore.getState().updateAirplane({
+        x: planeX,
+        y: planeY,
+        z: planeZ,
+        rotationY: planeRotY,
+        pitch: planePitch,
+        roll: planeRoll,
+        speed: planeSpeed,
+        throttle,
+        airborne,
+        propellerAngle: nextPropellerAngle,
+      });
+
+      cockpitOffset.current.set(0, AIRPLANE_CONSTANTS.CAMERA_HEIGHT, AIRPLANE_CONSTANTS.CAMERA_BACK);
+      cockpitOffset.current.applyAxisAngle(Y_AXIS, planeRotY);
+      pos.x = planeX + cockpitOffset.current.x;
+      pos.y = planeY + cockpitOffset.current.y;
+      pos.z = planeZ + cockpitOffset.current.z;
+
+      camera.quaternion.setFromEuler(euler.current);
+      camera.position.set(pos.x, pos.y, pos.z);
+
+      const now = performance.now();
+      if (now - lastSendTime.current > 50) {
+        sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+        sendVehicleMove('airplane', {
+          x: planeX,
+          y: planeY,
+          z: planeZ,
+          rotationY: planeRotY,
+          pitch: planePitch,
+          roll: planeRoll,
+          speed: planeSpeed,
+          throttle,
+          airborne,
+          propellerAngle: nextPropellerAngle,
+        });
+        lastSendTime.current = now;
+      }
+
+      return;
     }
 
     // ========================================

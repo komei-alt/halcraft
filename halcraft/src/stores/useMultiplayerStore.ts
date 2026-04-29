@@ -11,7 +11,12 @@ import { useWorldStore } from './useWorldStore';
 import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
-import { useVehicleStore, type SeatType } from './useVehicleStore';
+import {
+  useVehicleStore,
+  type SeatType,
+  type VehicleType,
+  type VehiclesSyncPayload,
+} from './useVehicleStore';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import type { SkinId } from '../types/skins';
 import { spawnBlockBreakEffect } from '../utils/effectTriggers';
@@ -105,8 +110,25 @@ interface MultiplayerState {
     speed: number; rotorAngle: number;
   }) => void;
 
+  /** 共通乗り物搭乗を送信 */
+  sendVehicleBoard: (type: VehicleType) => void;
+
+  /** 共通乗り物降車を送信 */
+  sendVehicleDismount: (type: VehicleType) => void;
+
+  /** 共通乗り物位置更新を送信 */
+  sendVehicleMove: (type: VehicleType, data: Record<string, number | boolean>) => void;
+
   /** 機関銃発射を送信 */
   sendGunFire: (pos: [number, number, number], dir: [number, number, number], side: 'left' | 'right') => void;
+
+  /** 乗り物ガトリング発射を送信 */
+  sendVehicleGunFire: (
+    type: VehicleType,
+    pos: [number, number, number],
+    dir: [number, number, number],
+    mount: 'center' | 'left' | 'right',
+  ) => void;
 
   /** ロケット発射を送信 */
   sendRocketFire: (
@@ -247,10 +269,34 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     socket.emit('helicopter:move', data);
   },
 
+  sendVehicleBoard: (type) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:board', { type });
+  },
+
+  sendVehicleDismount: (type) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:dismount', { type });
+  },
+
+  sendVehicleMove: (type, data) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:move', { type, state: data });
+  },
+
   sendGunFire: (pos, dir, side) => {
     const socket = getSocket();
     if (!socket?.connected) return;
     socket.emit('gun:fire', { pos, dir, side });
+  },
+
+  sendVehicleGunFire: (type, pos, dir, mount) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:gun-fire', { type, pos, dir, mount });
   },
 
   sendRocketFire: (rocketId, pos, vel) => {
@@ -469,6 +515,11 @@ function setupSocketListeners(
     get().setRemoteMicStatus(data.id, data.micEnabled);
   });
 
+  // ── 共通乗り物同期（ヘリ / 戦車 / 飛行機） ──
+  socket.on('vehicles:sync', (data: { vehicles: VehiclesSyncPayload }) => {
+    useVehicleStore.getState().syncVehicles(data.vehicles, get().myId);
+  });
+
   // ── ヘリコプター同期（3人乗り対応） ──
   socket.on('helicopter:sync', (data: {
     helicopter: {
@@ -548,6 +599,18 @@ function setupSocketListeners(
     }
   });
 
+  socket.on('vehicle:gun-fired', (data: {
+    playerId: string;
+    type: VehicleType;
+    pos: [number, number, number];
+    dir: [number, number, number];
+    mount: 'center' | 'left' | 'right';
+  }) => {
+    for (const cb of remoteVehicleGunFireCallbacks) {
+      cb(data);
+    }
+  });
+
   // ── ロケット発射・爆発同期 ──
   socket.on('rocket:fired', (data: {
     playerId: string;
@@ -579,7 +642,16 @@ export interface RemoteGunFireData {
   side: 'left' | 'right';
 }
 
+export interface RemoteVehicleGunFireData {
+  playerId: string;
+  type: VehicleType;
+  pos: [number, number, number];
+  dir: [number, number, number];
+  mount: 'center' | 'left' | 'right';
+}
+
 const remoteGunFireCallbacks: Array<(data: RemoteGunFireData) => void> = [];
+const remoteVehicleGunFireCallbacks: Array<(data: RemoteVehicleGunFireData) => void> = [];
 
 /** リモートプレイヤーの機関銃発射イベントを受け取るコールバックを登録 */
 export function onRemoteGunFire(cb: (data: RemoteGunFireData) => void): () => void {
@@ -587,6 +659,15 @@ export function onRemoteGunFire(cb: (data: RemoteGunFireData) => void): () => vo
   return () => {
     const idx = remoteGunFireCallbacks.indexOf(cb);
     if (idx >= 0) remoteGunFireCallbacks.splice(idx, 1);
+  };
+}
+
+/** リモート乗り物のガトリング発射イベントを受け取るコールバックを登録 */
+export function onRemoteVehicleGunFire(cb: (data: RemoteVehicleGunFireData) => void): () => void {
+  remoteVehicleGunFireCallbacks.push(cb);
+  return () => {
+    const idx = remoteVehicleGunFireCallbacks.indexOf(cb);
+    if (idx >= 0) remoteVehicleGunFireCallbacks.splice(idx, 1);
   };
 }
 

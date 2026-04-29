@@ -25,8 +25,11 @@ import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
 import { Helicopter } from './components/vehicles/Helicopter';
+import { Tank } from './components/vehicles/Tank';
+import { Airplane } from './components/vehicles/Airplane';
 // CockpitView は無効化済み — ヘリ胴体自体がガラス化するため不要
 import { MachineGun } from './components/vehicles/MachineGun';
+import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
@@ -35,7 +38,7 @@ import { useGameStore } from './stores/useGameStore';
 import { useMobStore } from './stores/useMobStore';
 import { BLOCK_IDS } from './types/blocks';
 import { getTerrainHeight } from './utils/terrain';
-import { HELIPORT_CENTER } from './utils/terrain';
+import { AIRPLANE_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
@@ -102,7 +105,10 @@ function GameCanvas() {
         <DroppedItems />
         <MobManager />
         <Helicopter />
+        <Tank />
+        <Airplane />
         <MachineGun />
+        <VehicleWeapons />
         {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
         {/* <CockpitView /> */}
         <RemotePlayers />
@@ -117,9 +123,13 @@ export default function App() {
   const phase = useGameStore((s) => s.phase);
   const isTouch = isTouchDevice();
   const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
+  const spawnTank = useVehicleStore((s) => s.spawnTank);
+  const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
   const helicopterSpawned = useVehicleStore((s) => s.helicopter.spawned);
+  const tankSpawned = useVehicleStore((s) => s.tank.spawned);
+  const airplaneSpawned = useVehicleStore((s) => s.airplane.spawned);
 
-  // ゲーム開始時にヘリコプターをヘリポートにスポーン
+  // ゲーム開始時に乗り物を各専用エリアにスポーン
   useEffect(() => {
     if (phase === 'playing' && !helicopterSpawned) {
       const spawnX = HELIPORT_CENTER.x;
@@ -127,7 +137,23 @@ export default function App() {
       const terrainY = getTerrainHeight(spawnX, spawnZ);
       spawnHelicopter(spawnX, terrainY + 2.0, spawnZ);
     }
-  }, [phase, helicopterSpawned, spawnHelicopter]);
+    if (phase === 'playing' && !tankSpawned) {
+      const terrainY = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z);
+      spawnTank(TANK_SPAWN.x, terrainY + 1.15, TANK_SPAWN.z);
+    }
+    if (phase === 'playing' && !airplaneSpawned) {
+      const terrainY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
+      spawnAirplane(AIRPLANE_SPAWN.x, terrainY + 1.8, AIRPLANE_SPAWN.z);
+    }
+  }, [
+    phase,
+    helicopterSpawned,
+    tankSpawned,
+    airplaneSpawned,
+    spawnHelicopter,
+    spawnTank,
+    spawnAirplane,
+  ]);
 
   const currentStage = useGameStore((s) => s.currentStage);
   const setCorePosition = useGameStore((s) => s.setCorePosition);

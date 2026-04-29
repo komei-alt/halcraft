@@ -47,6 +47,10 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-04-29',
     items: [
+      { type: 'feature', text: '新しい3Dモデルのゾンビ、アイアンゴーレム、ダーウィンが出るようになった！' },
+      { type: 'feature', text: '戦車に乗ってガトリングと主砲ロケットをうてるようにした' },
+      { type: 'feature', text: '滑走路と飛行機を追加して、走って離陸できるようにした' },
+      { type: 'feature', text: 'ウォーデン装備が新しい3Dモデルで表示されるようになった' },
       { type: 'feature', text: 'サバイバルとクリエイティブをえらんでスタートできるようにした！' },
       { type: 'feature', text: 'クリエイティブではジャンプ2回で空を飛んで建築できるよ' },
       { type: 'improve', text: 'スマホでもジャンプ2回で飛行、▲と▼で上下に動けるようにした' },

@@ -4,5 +4,13 @@
 export { getTerrainHeight } from './heightmap';
 export { generateChunk } from './chunkGenerator';
 export { isBlockExposed } from './blockExposure';
-export { HELIPORT_CENTER, VILLAGE_CENTER } from './constants';
+export {
+  AIRPLANE_SPAWN,
+  HELIPORT_CENTER,
+  RUNWAY_CENTER,
+  RUNWAY_LENGTH,
+  RUNWAY_WIDTH,
+  TANK_SPAWN,
+  VILLAGE_CENTER,
+} from './constants';
 export type { ChunkData } from './types';

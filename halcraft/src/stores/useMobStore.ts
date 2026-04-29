@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { useGameStore } from './useGameStore';
 
 /** モブの種類 */
-export type MobType = 'zombie' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
+export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
 
 /** モブのデータ */
 export interface MobData {
@@ -57,6 +57,8 @@ const DESPAWN_DISTANCE = 60;
 const SPAWN_INTERVAL = 2.5;
 /** ゾンビのHP */
 const ZOMBIE_HP = 10;
+/** ダーウィンのHP（夜に出る強めの敵） */
+const DARWIN_HP = 24;
 /** プロトタイプのHP（味方は頑丈） */
 const PROTOTYPE_HP = 50;
 /** プロトタイプの追従距離（スポーン位置） */
@@ -71,6 +73,10 @@ const CHICKEN_SPAWN_INTERVAL = 8;
 const SPIDER_HP = 8;
 /** クモの最大同時数 */
 const MAX_SPIDERS = 5;
+/** ダーウィンの最大同時数 */
+const MAX_DARWINS = 2;
+/** ダーウィンのスポーン間隔（秒） */
+const DARWIN_SPAWN_INTERVAL = 18;
 /** アイアンゴーレムのHP（頑丈な味方） */
 const IRON_GOLEM_HP = 40;
 /** ボスジャイアントのHP */
@@ -120,6 +126,9 @@ interface MobState {
   /** 夜間のクモスポーン */
   trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
+  /** 夜間のダーウィンスポーン */
+  trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+
   /** 巨大ボスのスポーンロジック */
   trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
@@ -142,11 +151,13 @@ export const useMobStore = create<MobState>((set, get) => ({
   lastProtoSpawnTime: 0,
   _lastChickenSpawnTime: 0,
   _lastSpiderSpawnTime: 0,
+  _lastDarwinSpawnTime: 0,
   _deathEvents: [] as MobDeathEvent[],
 
   spawnMob: (type, x, y, z) => {
     const hpMap: Record<MobType, number> = {
       zombie: ZOMBIE_HP,
+      darwin: DARWIN_HP,
       prototype: PROTOTYPE_HP,
       chicken: CHICKEN_HP,
       spider: SPIDER_HP,
@@ -321,6 +332,25 @@ export const useMobStore = create<MobState>((set, get) => ({
 
     get().spawnMob('spider', spawnX, spawnY, spawnZ);
     set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
+  },
+
+  trySpawnDarwin: (playerX, playerZ, surfaceYFn) => {
+    const state = get();
+    const darwinCount = state.mobs.filter((m) => m.type === 'darwin').length;
+    if (darwinCount >= MAX_DARWINS) return;
+
+    const now = performance.now() / 1000;
+    const lastTime = (state as MobState & { _lastDarwinSpawnTime: number })._lastDarwinSpawnTime;
+    if (now - lastTime < DARWIN_SPAWN_INTERVAL) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const spawnX = playerX + Math.cos(angle) * distance;
+    const spawnZ = playerZ + Math.sin(angle) * distance;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+
+    get().spawnMob('darwin', spawnX, spawnY, spawnZ);
+    set({ _lastDarwinSpawnTime: now } as Partial<MobState>);
   },
 
   trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => {

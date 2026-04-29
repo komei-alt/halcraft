@@ -5,8 +5,9 @@
 // スキン対応: skinId で各パーツの色を変更
 // ============================================
 
-import { useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
 
@@ -25,6 +26,7 @@ interface VoxelAvatarProps {
 
 /** 死亡アニメーションの総時間（秒） */
 const DEATH_ANIM_DURATION = 1.2;
+const WARDEN_MODEL_PATH = '/models/2026-04-29/warden.glb';
 
 /** 各パーツの崩壊パラメータ */
 interface PartPhysics {
@@ -47,6 +49,89 @@ const PART_PHYSICS: Record<string, PartPhysics> = {
   leftLeg:  { spreadX: -0.3, spreadZ: 0.2, rotSpeed: -2.5, delay: 0.2 },
   rightLeg: { spreadX: 0.35, spreadZ: -0.1, rotSpeed: 2, delay: 0.25 },
 };
+
+function cloneWardenScene(scene: THREE.Group): THREE.Group {
+  const clone = scene.clone(true);
+  clone.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      if (Array.isArray(child.material)) {
+        child.material = child.material.map((mat) => mat.clone());
+      } else {
+        child.material = child.material.clone();
+      }
+    }
+  });
+  return clone;
+}
+
+function WardenAvatar({
+  isMoving,
+  isDead,
+  deathTime,
+}: {
+  isMoving: boolean;
+  isDead: boolean;
+  deathTime: number;
+}) {
+  const { scene } = useGLTF(WARDEN_MODEL_PATH);
+  const groupRef = useRef<THREE.Group>(null);
+  const clonedScene = useMemo(() => cloneWardenScene(scene), [scene]);
+  const originalColors = useMemo(() => {
+    const colors: THREE.Color[] = [];
+    clonedScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of materials) {
+          if ('color' in mat && mat.color instanceof THREE.Color) {
+            colors.push(mat.color.clone());
+          }
+        }
+      }
+    });
+    return colors;
+  }, [clonedScene]);
+
+  useEffect(() => {
+    let colorIndex = 0;
+    clonedScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of materials) {
+          if ('color' in mat && mat.color instanceof THREE.Color) {
+            const original = originalColors[colorIndex] ?? mat.color;
+            mat.color.copy(original);
+            if (isDead) {
+              mat.color.multiplyScalar(0.45);
+            }
+            colorIndex++;
+          }
+        }
+      }
+    });
+  }, [clonedScene, isDead, originalColors]);
+
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const elapsed = deathTime > 0 ? (Date.now() - deathTime) / 1000 : 0;
+    if (isDead) {
+      const t = Math.min(elapsed / DEATH_ANIM_DURATION, 1);
+      groupRef.current.rotation.x = t * (Math.PI / 2);
+      groupRef.current.position.y = 0.48 - t * 0.45;
+      return;
+    }
+
+    groupRef.current.rotation.x = 0;
+    groupRef.current.position.y = 0.48 + (isMoving ? Math.sin(performance.now() * 0.008) * 0.025 : 0);
+  });
+
+  return (
+    <group ref={groupRef} scale={0.22} rotation={[0, Math.PI, 0]}>
+      <primitive object={clonedScene} />
+    </group>
+  );
+}
 
 export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime = 0 }: VoxelAvatarProps) {
   const leftArmRef = useRef<THREE.Mesh>(null);
@@ -237,6 +322,10 @@ export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime
     }
   });
 
+  if (skinId === 'warden') {
+    return <WardenAvatar isMoving={isMoving} isDead={isDead} deathTime={deathTime} />;
+  }
+
   return (
     <group ref={groupRef}>
       {/* 頭 */}
@@ -303,3 +392,5 @@ export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime
     </group>
   );
 }
+
+useGLTF.preload(WARDEN_MODEL_PATH);

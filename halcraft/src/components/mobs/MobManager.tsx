@@ -14,6 +14,7 @@ import { getTerrainHeight } from '../../utils/terrain';
 import { BLOCK_IDS } from '../../types/blocks';
 import { checkAABBCollision } from '../../utils/collision';
 import { Zombie } from './Zombie';
+import { Darwin } from './Darwin';
 import { Prototype } from './Prototype';
 import { Chicken } from './Chicken';
 import { Spider } from './Spider';
@@ -50,6 +51,7 @@ export function MobManager() {
   const mobs = useMobStore((s) => s.mobs);
   const setMobs = useMobStore((s) => s.setMobs);
   const trySpawnZombie = useMobStore((s) => s.trySpawnZombie);
+  const trySpawnDarwin = useMobStore((s) => s.trySpawnDarwin);
   const trySpawnChicken = useMobStore((s) => s.trySpawnChicken);
   const trySpawnSpider = useMobStore((s) => s.trySpawnSpider);
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
@@ -121,6 +123,7 @@ export function MobManager() {
     if (isNight) {
       trySpawnZombie(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
       trySpawnSpider(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+      trySpawnDarwin(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
     }
 
     // 昼間はニワトリスポーン
@@ -239,7 +242,7 @@ export function MobManager() {
         continue;
       }
 
-      // ─── ゾンビ（デフォルト） ───
+      // ─── ゾンビ / ダーウィン（夜間の敵） ───
       const state = getMobState(zombieStates.current, m.id, () => ({
         attackCooldown: 0,
         flankTimer: 0,
@@ -317,7 +320,7 @@ export function MobManager() {
       const distance = Math.sqrt(ddx * ddx + ddz * ddz);
       playMobDeathSound(distance);
 
-      if (event.type === 'zombie' || event.type === 'spider') {
+      if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin') {
         const roll = Math.random();
         if (roll < 0.4) {
           dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
@@ -343,6 +346,8 @@ export function MobManager() {
         switch (mob.type) {
           case 'zombie':
             return <Zombie key={mob.id} mob={mob} animTime={animTimeValue} />;
+          case 'darwin':
+            return <Darwin key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'prototype':
             return <Prototype key={mob.id} mob={mob} animTime={animTimeValue} />;
           case 'chicken':

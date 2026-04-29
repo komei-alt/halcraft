@@ -1,126 +1,32 @@
 // ゾンビモブコンポーネント
-// ボクセルスタイルの3Dモデル、AIで歩行、プレイヤーに接触するとダメージ
+// 2026-04-29 のGLBモデルを既存AIの見た目として表示する
 
-import { useMemo } from 'react';
-import { Billboard } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
+import { GlbMob, type GlbMobModelConfig } from './GlbMob';
 
-/** ゾンビの色定義 */
-const ZOMBIE_BODY_COLOR = new THREE.Color(0x4a6741);    // 暗い緑（腐敗した肌）
-const ZOMBIE_SHIRT_COLOR = new THREE.Color(0x3a5a6a);   // 暗い青（ボロ服）
-const ZOMBIE_PANTS_COLOR = new THREE.Color(0x4a3a2a);   // 暗い茶（ズボン）
-const ZOMBIE_EYE_COLOR = new THREE.Color(0xff2222);      // 赤い目
-const ZOMBIE_DAMAGED_COLOR = new THREE.Color(0xff4444);  // ダメージ時
+const MODEL_PATH = '/models/2026-04-29/zombie.glb';
+
+const ZOMBIE_MODEL: GlbMobModelConfig = {
+  path: MODEL_PATH,
+  scale: 2.1,
+  modelPosition: [0, 0.95, 0],
+  modelRotation: [0, Math.PI, 0],
+  hpBarY: 2.0,
+  hpBarWidth: 0.7,
+  damagedTint: new THREE.Color(0xff4444),
+  bobAmount: 0.03,
+  bobSpeed: 5,
+};
 
 interface ZombieProps {
   mob: MobData;
-  /** アニメーション時間（歩行用） */
   animTime: number;
 }
 
 export function Zombie({ mob, animTime }: ZombieProps) {
-  // ダメージ中は赤くフラッシュ
-  const isDamaged = mob.hitTimer > 0;
-
-  // 歩行アニメーション（移動中のみ）
-  const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
-  const walkCycle = isMoving ? Math.sin(animTime * 6) * 0.4 : 0;
-  const armSwing = isMoving ? Math.sin(animTime * 6) * 0.6 : Math.sin(animTime * 1.5) * 0.08;
-
-  // ダメージ時の傾き（ヒット感）
-  const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 20) * 0.15 : 0;
-
-  // 体の色（ダメージ中は赤）
-  const bodyColor = isDamaged ? ZOMBIE_DAMAGED_COLOR : ZOMBIE_BODY_COLOR;
-  const shirtColor = isDamaged ? ZOMBIE_DAMAGED_COLOR : ZOMBIE_SHIRT_COLOR;
-  const pantsColor = isDamaged ? ZOMBIE_DAMAGED_COLOR : ZOMBIE_PANTS_COLOR;
-
-  // マテリアルをメモ化
-  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.9 }), [bodyColor]);
-  const shirtMat = useMemo(() => new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.9 }), [shirtColor]);
-  const pantsMat = useMemo(() => new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.9 }), [pantsColor]);
-  const eyeMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: ZOMBIE_EYE_COLOR,
-    emissive: ZOMBIE_EYE_COLOR,
-    emissiveIntensity: 0.8,
-  }), []);
-
-  // HPバーの色計算
-  const hpRatio = mob.hp / mob.maxHp;
-  const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
-
-  return (
-    <group
-      position={[mob.x, mob.y, mob.z]}
-      rotation={[0, mob.rotation, 0]}
-    >
-      {/* 体（胴体） — ダメージ時に少し傾く */}
-      <group rotation={[hitTilt, 0, hitTilt * 0.5]}>
-        {/* 体（胴体） */}
-        <mesh position={[0, 0.9, 0]} material={shirtMat}>
-          <boxGeometry args={[0.5, 0.6, 0.3]} />
-        </mesh>
-
-        {/* 頭 */}
-        <mesh position={[0, 1.45, 0]} material={bodyMat}>
-          <boxGeometry args={[0.4, 0.4, 0.4]} />
-        </mesh>
-
-        {/* 目（左） */}
-        <mesh position={[-0.1, 1.48, 0.21]} material={eyeMat}>
-          <boxGeometry args={[0.08, 0.06, 0.02]} />
-        </mesh>
-
-        {/* 目（右） */}
-        <mesh position={[0.1, 1.48, 0.21]} material={eyeMat}>
-          <boxGeometry args={[0.08, 0.06, 0.02]} />
-        </mesh>
-
-        {/* 左腕（前に伸ばす） */}
-        <group position={[-0.35, 0.9, 0]} rotation={[-1.2 + armSwing * 0.3, 0, 0]}>
-          <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
-            <boxGeometry args={[0.2, 0.5, 0.2]} />
-          </mesh>
-        </group>
-
-        {/* 右腕（前に伸ばす） */}
-        <group position={[0.35, 0.9, 0]} rotation={[-1.2 - armSwing * 0.3, 0, 0]}>
-          <mesh position={[0, -0.2, 0.15]} material={bodyMat}>
-            <boxGeometry args={[0.2, 0.5, 0.2]} />
-          </mesh>
-        </group>
-
-        {/* 左脚 */}
-        <group position={[-0.12, 0.55, 0]} rotation={[walkCycle, 0, 0]}>
-          <mesh position={[0, -0.25, 0]} material={pantsMat}>
-            <boxGeometry args={[0.22, 0.5, 0.25]} />
-          </mesh>
-        </group>
-
-        {/* 右脚 */}
-        <group position={[0.12, 0.55, 0]} rotation={[-walkCycle, 0, 0]}>
-          <mesh position={[0, -0.25, 0]} material={pantsMat}>
-            <boxGeometry args={[0.22, 0.5, 0.25]} />
-          </mesh>
-        </group>
-      </group>
-
-      {/* HPバー（頭上・Billboard — dreiで軽量ビルボード化） */}
-      {mob.hp < mob.maxHp && (
-        <Billboard position={[0, 1.85, 0]}>
-          {/* 背景 */}
-          <mesh>
-            <planeGeometry args={[0.6, 0.08]} />
-            <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} />
-          </mesh>
-          {/* HP量 */}
-          <mesh position={[-(0.6 - 0.6 * hpRatio) / 2, 0, 0.001]}>
-            <planeGeometry args={[0.6 * hpRatio, 0.06]} />
-            <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} />
-          </mesh>
-        </Billboard>
-      )}
-    </group>
-  );
+  return <GlbMob mob={mob} animTime={animTime} config={ZOMBIE_MODEL} />;
 }
+
+useGLTF.preload(MODEL_PATH);
