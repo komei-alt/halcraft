@@ -6,6 +6,7 @@ import { usePlayerStore } from './usePlayerStore';
 import { STAGES, type StageDefinition } from '../types/stages';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
+export type GameMode = 'survival' | 'creative';
 
 /** 昼夜サイクルの定数 */
 // リアル10分 = ゲーム内1日 (600秒 = 1日サイクル)
@@ -14,6 +15,12 @@ const DAY_DURATION_SECONDS = 600;
 interface GameState {
   /** 現在のゲームフェーズ */
   phase: GamePhase;
+
+  /** プレイモード */
+  gameMode: GameMode;
+
+  /** クリエイティブ飛行中か */
+  creativeFlying: boolean;
 
   /** 選択中のステージID */
   currentStageId: string | null;
@@ -49,6 +56,12 @@ interface GameState {
 
   /** ゲーム開始 */
   startGame: () => void;
+
+  /** プレイモードを変更 */
+  setGameMode: (mode: GameMode) => void;
+
+  /** クリエイティブ飛行状態を変更 */
+  setCreativeFlying: (flying: boolean) => void;
 
   /** ミッション進捗を加算 */
   addMissionProgress: (amount: number) => void;
@@ -86,6 +99,8 @@ interface GameState {
 
 export const useGameStore = create<GameState>((set, get) => ({
   phase: 'menu',
+  gameMode: 'survival',
+  creativeFlying: false,
   currentStageId: null,
   currentStage: null,
   missionProgress: 0,
@@ -105,10 +120,49 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   startGame: () => {
-    set({ phase: 'playing', gameTime: 0.0, dayCount: 1, missionProgress: 0, missionCleared: false, coreHp: 100, coreMaxHp: 100 });
-    // ゲーム開始時に5秒間の無敵時間を付与
-    usePlayerStore.setState({ invincibleUntil: Date.now() + 5000 });
+    const { gameMode } = get();
+    set({
+      phase: 'playing',
+      creativeFlying: false,
+      gameTime: 0.0,
+      dayCount: 1,
+      missionProgress: 0,
+      missionCleared: false,
+      coreHp: 100,
+      coreMaxHp: 100,
+    });
+
+    const player = usePlayerStore.getState();
+    usePlayerStore.setState({
+      hp: player.maxHp,
+      isDead: false,
+      isDamageFlash: false,
+      damageDirection: null,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      cameraShake: 0,
+      equippedItem: 'builder',
+      invincibleUntil: gameMode === 'creative' ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+    });
   },
+
+  setGameMode: (gameMode) => {
+    set({ gameMode, creativeFlying: false });
+
+    const player = usePlayerStore.getState();
+    usePlayerStore.setState({
+      hp: gameMode === 'creative' ? player.maxHp : player.hp,
+      isDead: false,
+      isDamageFlash: false,
+      damageDirection: null,
+      knockbackVx: 0,
+      knockbackVz: 0,
+      cameraShake: 0,
+      invincibleUntil: gameMode === 'creative' ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+    });
+  },
+
+  setCreativeFlying: (creativeFlying) => set({ creativeFlying }),
 
   damageCore: (amount: number) => {
     const { coreHp, phase, gameOver } = get();
@@ -143,7 +197,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   gameOver: () => set({ phase: 'gameover' }),
-  returnToMenu: () => set({ phase: 'menu' }),
+  returnToMenu: () => set({ phase: 'menu', creativeFlying: false }),
 
   setMultiplayer: (value) => set({ isMultiplayer: value }),
 

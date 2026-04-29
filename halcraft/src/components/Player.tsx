@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { useGameStore } from '../stores/useGameStore';
 import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_OFFSETS, ALL_SEATS } from '../stores/useVehicleStore';
 import { checkAABBCollision, isBlockSolid } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
@@ -27,6 +28,10 @@ const MOVE_SPEED = 4.5;
 const SPRINT_SPEED = 7.5;
 const JUMP_VELOCITY = 8;
 const GRAVITY = -25;
+const CREATIVE_FLY_SPEED = 8.5;
+const CREATIVE_FLY_SPRINT_SPEED = 14;
+const CREATIVE_FLY_VERTICAL_SPEED = 6.8;
+const CREATIVE_DOUBLE_JUMP_MS = 350;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
@@ -63,6 +68,7 @@ export function Player() {
     right: false,
     jump: false,
     sprint: false,
+    descend: false,
     interact: false, // Fキー（搭乗/降車）
   });
 
@@ -72,6 +78,8 @@ export function Player() {
   // Wキーダブルタップでダッシュ用タイマー
   const lastWPressTime = useRef(0);
   const doubleTapSprint = useRef(false);
+  const lastJumpPressTime = useRef(0);
+  const lastJumpDown = useRef(false);
 
   // 視点回転
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
@@ -166,7 +174,15 @@ export function Player() {
         case 'KeyA': keys.current.left = true; break;
         case 'KeyD': keys.current.right = true; break;
         case 'Space': keys.current.jump = true; e.preventDefault(); break;
-        case 'ShiftLeft': keys.current.sprint = true; break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          keys.current.sprint = true;
+          keys.current.descend = true;
+          break;
+        case 'ControlLeft':
+        case 'ControlRight':
+          keys.current.sprint = true;
+          break;
         case 'KeyQ': keys.current.sprint = true; break;
         case 'KeyF':
           if (!keys.current.interact) {
@@ -209,7 +225,15 @@ export function Player() {
         case 'KeyA': keys.current.left = false; break;
         case 'KeyD': keys.current.right = false; break;
         case 'Space': keys.current.jump = false; break;
-        case 'ShiftLeft': keys.current.sprint = false; break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          keys.current.sprint = false;
+          keys.current.descend = false;
+          break;
+        case 'ControlLeft':
+        case 'ControlRight':
+          keys.current.sprint = false;
+          break;
         case 'KeyQ': keys.current.sprint = false; break;
         case 'KeyF': keys.current.interact = false; break;
       }
@@ -240,6 +264,15 @@ export function Player() {
     const dt = Math.min(delta, 0.05); // フレーム落ち対策
     const vel = velocity.current;
     const pos = position.current;
+    const gameState = useGameStore.getState();
+    if (gameState.phase !== 'playing') return;
+    const gameMode = gameState.gameMode;
+    let creativeFlying = gameMode === 'creative' && gameState.creativeFlying;
+
+    if (gameMode !== 'creative' && gameState.creativeFlying) {
+      useGameStore.getState().setCreativeFlying(false);
+      creativeFlying = false;
+    }
 
     // --- タッチ視点操作の適用 ---
     if (isTouch.current) {
@@ -257,6 +290,24 @@ export function Player() {
     const vehicleState = useVehicleStore.getState();
     const heli = vehicleState.helicopter;
     const isInHeli = heli.mySeat !== null;
+    const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
+    const jumpJustPressed = jumpRequested && !lastJumpDown.current;
+    lastJumpDown.current = jumpRequested;
+
+    if (!isInHeli && isInputActive && gameMode === 'creative' && jumpJustPressed) {
+      const now = performance.now();
+      if (now - lastJumpPressTime.current <= CREATIVE_DOUBLE_JUMP_MS) {
+        creativeFlying = !creativeFlying;
+        useGameStore.getState().setCreativeFlying(creativeFlying);
+        vel.y = 0;
+        onGround.current = false;
+        wasFalling.current = false;
+        lastGroundY.current = pos.y;
+        lastJumpPressTime.current = 0;
+      } else {
+        lastJumpPressTime.current = now;
+      }
+    }
 
     // --- 搭乗/降車の処理（Fキー） ---
     if (interactPressed.current && isInputActive) {
@@ -361,7 +412,7 @@ export function Player() {
           inputForward = isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
           inputTurn = isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
           inputVertical = isInputActive
-            ? (keys.current.jump ? 1 : 0) - (keys.current.sprint ? 1 : 0)
+            ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0)
             : 0;
         }
 
@@ -483,11 +534,90 @@ export function Player() {
     }
 
     // ========================================
+    // クリエイティブ飛行（Space二度押しでホバー、Space上昇 / Shift下降）
+    // ========================================
+    if (creativeFlying) {
+      updateAttackCooldown(dt);
+      consumeKnockback();
+
+      onGround.current = false;
+      wasFalling.current = false;
+      lastGroundY.current = pos.y;
+      vel.set(0, 0, 0);
+
+      let inputX: number;
+      let inputZ: number;
+      if (isTouch.current) {
+        inputX = joystickInput.x;
+        inputZ = -joystickInput.y;
+      } else {
+        inputZ = isInputActive ? (keys.current.backward ? 1 : 0) - (keys.current.forward ? 1 : 0) : 0;
+        inputX = isInputActive ? (keys.current.right ? 1 : 0) - (keys.current.left ? 1 : 0) : 0;
+      }
+
+      const descendRequested = isTouch.current ? mobileActions.descend : keys.current.descend;
+      const inputY = (jumpRequested ? 1 : 0) - (descendRequested ? 1 : 0);
+      const flySpeed = keys.current.sprint && !keys.current.descend
+        ? CREATIVE_FLY_SPRINT_SPEED
+        : CREATIVE_FLY_SPEED;
+
+      if (Math.abs(inputX) > 0.1 || Math.abs(inputZ) > 0.1) {
+        moveDir.current.set(inputX, 0, inputZ).normalize();
+        moveEuler.current.set(0, euler.current.y, 0);
+        moveDir.current.applyEuler(moveEuler.current);
+        vel.x = moveDir.current.x * flySpeed;
+        vel.z = moveDir.current.z * flySpeed;
+      }
+      vel.y = inputY * CREATIVE_FLY_VERTICAL_SPEED;
+
+      const newY = pos.y + vel.y * dt;
+      if (!checkCollision(pos.x, newY, pos.z)) {
+        pos.y = Math.max(0.5, newY);
+      }
+
+      const newX = pos.x + vel.x * dt;
+      if (!checkCollision(newX, pos.y, pos.z)) {
+        pos.x = newX;
+      }
+
+      const newZ = pos.z + vel.z * dt;
+      if (!checkCollision(pos.x, pos.y, newZ)) {
+        pos.z = newZ;
+      }
+
+      const targetCameraY = pos.y + PLAYER_HEIGHT - 0.1;
+      smoothCameraY.current += (targetCameraY - smoothCameraY.current) * Math.min(1, 30 * dt);
+      if (Math.abs(smoothCameraY.current - targetCameraY) < 0.0005) {
+        smoothCameraY.current = targetCameraY;
+      }
+
+      camera.position.set(pos.x, smoothCameraY.current, pos.z);
+
+      const now = performance.now();
+      if (now - lastSendTime.current > 50) {
+        sendPosition(
+          [pos.x, pos.y, pos.z],
+          [euler.current.y, euler.current.x],
+        );
+        lastSendTime.current = now;
+      }
+
+      if (pos.y < -20) {
+        const respawnY = getSpawnY();
+        pos.set(SPAWN_X, respawnY, SPAWN_Z);
+        vel.set(0, 0, 0);
+        lastGroundY.current = respawnY;
+        smoothCameraY.current = respawnY + PLAYER_HEIGHT - 0.1;
+      }
+
+      return;
+    }
+
+    // ========================================
     // 通常の歩行物理（ヘリコプターに乗っていない場合）
     // ========================================
 
     // --- ジャンプ（重力適用前に処理） ---
-    const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
     if (isInputActive && jumpRequested && onGround.current) {
       vel.y = JUMP_VELOCITY;
       onGround.current = false;

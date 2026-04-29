@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { useGameStore } from '../../stores/useGameStore';
 
 /** 回復中かどうかを判定（定期ポーリングで更新） */
 function useIsRegenerating(): boolean {
@@ -98,7 +99,10 @@ function Heart({ filled, half, regenerating, index }: {
 export function HealthBar() {
   const hp = usePlayerStore((s) => s.hp);
   const maxHp = usePlayerStore((s) => s.maxHp);
+  const gameMode = useGameStore((s) => s.gameMode);
   const isRegenerating = useIsRegenerating();
+
+  if (gameMode === 'creative') return null;
 
   // ハートの数（1ハート = 2HP、マイクラ方式）
   const totalHearts = Math.ceil(maxHp / 2);

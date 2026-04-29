@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useVehicleStore, SEAT_NAMES } from '../../stores/useVehicleStore';
 import type { SeatType } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { useGameStore } from '../../stores/useGameStore';
 import { isTouchDevice } from '../../utils/device';
 
 /** キーバッジのスタイル */
@@ -68,12 +69,26 @@ function Divider() {
 /** 歩行時の操作ガイド */
 function WalkingControls() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const gameMode = useGameStore((s) => s.gameMode);
+  const creativeFlying = useGameStore((s) => s.creativeFlying);
+  const isCreative = gameMode === 'creative';
 
   return (
     <>
       <ControlRow keyName="W A S D" action="移動" />
-      <ControlRow keyName="Shift / Q / WW" action="ダッシュ" />
-      <ControlRow keyName="Space" action="ジャンプ" />
+      <ControlRow keyName="Ctrl / Q / WW" action="ダッシュ" />
+      {creativeFlying ? (
+        <>
+          <ControlRow keyName="Space" action="上昇" keyColor="#88ccff" />
+          <ControlRow keyName="Shift" action="下降" keyColor="#88ccff" />
+          <ControlRow keyName="Space×2" action="飛行オフ" keyColor="#88ccff" />
+        </>
+      ) : (
+        <>
+          <ControlRow keyName="Space" action="ジャンプ" />
+          {isCreative && <ControlRow keyName="Space×2" action="飛行オン" keyColor="#88ccff" />}
+        </>
+      )}
       <Divider />
       {equippedItem === 'builder' ? (
         <>
@@ -154,11 +169,26 @@ function VehicleControls({ seat }: { seat: SeatType }) {
 /** モバイル歩行操作ガイド */
 function MobileWalkingControls() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const gameMode = useGameStore((s) => s.gameMode);
+  const creativeFlying = useGameStore((s) => s.creativeFlying);
+  const isCreative = gameMode === 'creative';
 
   return (
     <>
       <ControlRow keyName="🕹️" action="左スティックで移動" />
       <ControlRow keyName="👆" action="右エリアで視点操作" />
+      {creativeFlying ? (
+        <>
+          <ControlRow keyName="▲" action="上昇" keyColor="#88ccff" />
+          <ControlRow keyName="▼" action="下降" keyColor="#88ccff" />
+          <ControlRow keyName="▲×2" action="飛行オフ" keyColor="#88ccff" />
+        </>
+      ) : (
+        <>
+          <ControlRow keyName="▲" action="ジャンプ" />
+          {isCreative && <ControlRow keyName="▲×2" action="飛行オン" keyColor="#88ccff" />}
+        </>
+      )}
       {equippedItem === 'builder' ? (
         <>
           <ControlRow keyName="タップ" action="ブロック破壊" />

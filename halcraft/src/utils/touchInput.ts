@@ -16,6 +16,7 @@ export const touchLook = {
 /** モバイルアクションの状態 */
 export const mobileActions = {
   jump: false,
+  descend: false,
   /** ブロック破壊トリガー（1回消費で自動false） */
   breakBlock: false,
   /** ブロック設置トリガー（1回消費で自動false） */

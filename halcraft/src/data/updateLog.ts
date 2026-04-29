@@ -45,6 +45,14 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-04-29',
+    items: [
+      { type: 'feature', text: 'サバイバルとクリエイティブをえらんでスタートできるようにした！' },
+      { type: 'feature', text: 'クリエイティブではジャンプ2回で空を飛んで建築できるよ' },
+      { type: 'improve', text: 'スマホでもジャンプ2回で飛行、▲と▼で上下に動けるようにした' },
+    ],
+  },
+  {
     date: '2026-04-24',
     items: [
       { type: 'improve', text: 'ロケットのばくはつが、火花・けむり・破片でもっとはくりょくアップ！' },

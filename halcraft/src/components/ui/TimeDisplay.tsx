@@ -38,7 +38,13 @@ export function TimeDisplay() {
   const gameTime = useGameStore((s) => s.gameTime);
   const dayCount = useGameStore((s) => s.dayCount);
   const isNight = useGameStore((s) => s.isNight);
+  const gameMode = useGameStore((s) => s.gameMode);
+  const creativeFlying = useGameStore((s) => s.creativeFlying);
   const isTouch = isTouchDevice();
+  const modeLabel = gameMode === 'creative'
+    ? creativeFlying ? 'Creative / 飛行中' : 'Creative'
+    : 'Survival';
+  const modeColor = gameMode === 'creative' ? '#9bdcff' : '#b9f28f';
 
   return (
     <div
@@ -88,6 +94,22 @@ export function TimeDisplay() {
         }}
       >
         Day {dayCount}
+      </div>
+
+      <div
+        style={{
+          padding: '3px 8px',
+          borderRadius: 4,
+          border: `1px solid ${modeColor}55`,
+          background: 'rgba(0,0,0,0.38)',
+          color: modeColor,
+          fontSize: isTouch ? 11 : 10,
+          fontWeight: 800,
+          textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+          fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        }}
+      >
+        {modeLabel}
       </div>
     </div>
   );

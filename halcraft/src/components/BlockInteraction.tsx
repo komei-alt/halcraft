@@ -113,6 +113,7 @@ export function BlockInteraction() {
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const gameMode = useGameStore((s) => s.gameMode);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -393,7 +394,9 @@ export function BlockInteraction() {
             if (breakBlock(t.x, t.y, t.z)) {
               // パーティクルエフェクト + ドロップアイテム
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-              dropItem(blockId, t.x, t.y, t.z);
+              if (gameMode === 'survival') {
+                dropItem(blockId, t.x, t.y, t.z);
+              }
               sendBlockBreak(t.x, t.y, t.z);
             }
           }
@@ -448,7 +451,9 @@ export function BlockInteraction() {
         if (breakBlock(t.x, t.y, t.z)) {
           // パーティクルエフェクト + ドロップアイテム
           spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-          dropItem(blockId, t.x, t.y, t.z);
+          if (gameMode === 'survival') {
+            dropItem(blockId, t.x, t.y, t.z);
+          }
           sendBlockBreak(t.x, t.y, t.z);
         }
       }
@@ -473,7 +478,7 @@ export function BlockInteraction() {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, gameMode]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

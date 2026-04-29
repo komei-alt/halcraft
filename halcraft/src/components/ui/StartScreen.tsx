@@ -4,7 +4,7 @@
 // デバイスに応じて操作説明を切り替え
 
 import { useState, useCallback, useEffect } from 'react';
-import { useGameStore } from '../../stores/useGameStore';
+import { useGameStore, type GameMode } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
@@ -18,6 +18,24 @@ import { STAGES } from '../../types/stages';
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
 const SELECTED_STAGE_KEY = 'halcraft-selected-stage';
+const SELECTED_GAME_MODE_KEY = 'halcraft-selected-game-mode';
+
+const GAME_MODE_OPTIONS: Array<{
+  id: GameMode;
+  name: string;
+  caption: string;
+}> = [
+  { id: 'survival', name: 'サバイバル', caption: 'HPあり・夜の敵あり' },
+  { id: 'creative', name: 'クリエイティブ', caption: '二段ジャンプで空中建築' },
+];
+
+function loadGameMode(): GameMode {
+  try {
+    const saved = localStorage.getItem(SELECTED_GAME_MODE_KEY);
+    if (saved === 'survival' || saved === 'creative') return saved;
+  } catch { /* noop */ }
+  return 'survival';
+}
 
 function extractStagePlayerCounts(payload: unknown): Record<string, number> | null {
   if (!payload || typeof payload !== 'object') return null;
@@ -48,6 +66,7 @@ export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
   const setStage = useGameStore((s) => s.setStage);
+  const setGameMode = useGameStore((s) => s.setGameMode);
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
 
@@ -57,6 +76,7 @@ export function StartScreen() {
   const [selectedStageId, setSelectedStageId] = useState(() => {
     try { return localStorage.getItem(SELECTED_STAGE_KEY) || STAGES[0].id; } catch { return STAGES[0].id; }
   });
+  const [selectedGameMode, setSelectedGameMode] = useState<GameMode>(loadGameMode);
   const [isJoining, setIsJoining] = useState(false);
   const [stagePlayerCounts, setStagePlayerCounts] = useState<Record<string, number>>({});
 
@@ -102,6 +122,7 @@ export function StartScreen() {
     try { 
       localStorage.setItem(PLAYER_NAME_KEY, trimmedName); 
       localStorage.setItem(SELECTED_STAGE_KEY, selectedStageId); 
+      localStorage.setItem(SELECTED_GAME_MODE_KEY, selectedGameMode);
     } catch { /* noop */ }
 
     // ゲーム開始 + マルチプレイ接続
@@ -110,6 +131,7 @@ export function StartScreen() {
     initPushIfPWA().catch(() => { /* noop */ });
 
     setStage(selectedStageId);
+    setGameMode(selectedGameMode);
     startGame();
     join(trimmedName, selectedStageId);
 
@@ -120,7 +142,7 @@ export function StartScreen() {
         activateDesktopGameplayInput();
       }, 120);
     });
-  }, [isValidName, isJoining, name, selectedStageId, setStage, startGame, join]);
+  }, [isValidName, isJoining, name, selectedGameMode, selectedStageId, setGameMode, setStage, startGame, join]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -240,6 +262,65 @@ export function StartScreen() {
                   {players > 0 ? `🟢 ${players}人がプレイ中` : '○ 誰もいない'}
                 </div>
               </div>
+            );
+          })}
+        </div>
+
+        {/* ゲームモード選択UI */}
+        <div
+          style={{
+            marginBottom: 16,
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 10,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            maxWidth: 460,
+          }}
+        >
+          {GAME_MODE_OPTIONS.map((mode) => {
+            const isSelected = selectedGameMode === mode.id;
+            const isCreative = mode.id === 'creative';
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setSelectedGameMode(mode.id)}
+                style={{
+                  width: isTouch ? 170 : 200,
+                  padding: isTouch ? '9px 12px' : '10px 14px',
+                  background: isSelected
+                    ? isCreative
+                      ? 'rgba(80, 170, 255, 0.36)'
+                      : 'rgba(50, 180, 50, 0.36)'
+                    : 'rgba(0,0,0,0.48)',
+                  backdropFilter: 'blur(8px)',
+                  border: '2px solid',
+                  borderColor: isSelected
+                    ? isCreative
+                      ? 'rgba(130, 210, 255, 0.82)'
+                      : 'rgba(100, 220, 100, 0.82)'
+                    : 'rgba(255,255,255,0.18)',
+                  borderRadius: 8,
+                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.68)',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 4,
+                  boxShadow: isSelected
+                    ? isCreative
+                      ? '0 0 16px rgba(100,190,255,0.34)'
+                      : '0 0 16px rgba(100,220,100,0.34)'
+                    : 'none',
+                  fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: isTouch ? 14 : 15, fontWeight: 800 }}>{mode.name}</span>
+                <span style={{ fontSize: 11, opacity: 0.82 }}>{mode.caption}</span>
+              </button>
             );
           })}
         </div>
@@ -381,12 +462,13 @@ export function StartScreen() {
               <span>左スティック — 移動</span>
               <span>右スワイプ — 視点</span>
               <span>タップ — 破壊/設置</span>
-              <span>▲ ボタン — ジャンプ</span>
+              <span>▲ ボタン — ジャンプ / 2回で飛行</span>
             </>
           ) : (
             <>
               <span>WASD — 移動</span>
               <span>Space — ジャンプ</span>
+              <span>Creative: Space×2 — 飛行</span>
               <span>左クリック — 破壊</span>
               <span>右クリック — 設置</span>
               <span>V — 武器切替</span>
