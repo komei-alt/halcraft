@@ -1,0 +1,17 @@
+# RSDM / Session Orchestrator project configuration for HalCraft.
+# RSDM Auto-Heal reads this file from the Git root.
+
+project:
+  name: halcraft
+  project_title: ハルクラ
+  health_urls:
+    - https://halcraft.rosch.jp
+    - https://halcraft-ws.rosch.jp/api/health
+  verify_commands:
+    - cd halcraft && npm run build
+    - cd halcraft && npm run lint
+    - node --check server/index.js
+
+rsdm:
+  auto_heal:
+    enabled: true

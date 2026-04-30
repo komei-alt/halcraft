@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-04-30',
     items: [
+      { type: 'improve', text: 'エラーが起きた時に自動で気づいて直しやすくなったよ' },
       { type: 'feature', text: '岩盤ブロックがクラフト画面で作れるようになったよ' },
     ],
   },

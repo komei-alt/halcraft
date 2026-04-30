@@ -202,6 +202,17 @@ curl -s https://halcraft.rosch.jp
 curl -s https://deploy.rosch.jp/health
 ```
 
+## 7.5 RSDM Auto-Heal
+
+ハルクラは RSDM 参加プロジェクト。`server` はサーバー例外、Socket.IO 接続エラー、ブラウザの未処理エラーを RSDM v2 schema で送信する。
+
+- 参加設定: `.agents/project.yml`
+- Hub 送信先: `RSDM_HUB_URL`（既定 `http://192.168.100.100:3102`）
+- health URL: `https://halcraft.rosch.jp`, `https://halcraft-ws.rosch.jp/api/health`
+- Auto-Heal 検証候補: `cd halcraft && npm run build`, `cd halcraft && npm run lint`, `node --check server/index.js`
+
+RSDM Hub が落ちていてもゲームは停止しない。ログはローカル `.rosch/` にフォールバック保存される。
+
 ---
 
 ## 8. 緊急時のリカバリ
@@ -220,4 +231,3 @@ ssh nas "sudo /usr/local/bin/docker image prune -f"
 ---
 
 *最終更新: 2026-03-22 v1.2*
-

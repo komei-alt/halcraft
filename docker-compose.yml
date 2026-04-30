@@ -40,6 +40,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4001
+      - RSDM_PROJECT=halcraft
+      - RSDM_HUB_URL=${RSDM_HUB_URL:-http://192.168.100.100:3102}
+      - RSDM_HUB_API_KEY=${RSDM_HUB_API_KEY:-}
     volumes:
       - halcraft-server-data:/app/data
     networks:

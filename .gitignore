@@ -27,3 +27,6 @@ docker-compose.override.yml
 
 # サーバーのランタイムデータ（ゲームプレイ中に動的変更）
 server/data/
+
+# RSDM agent memory（コミットしない）
+.rosch/

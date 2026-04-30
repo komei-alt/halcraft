@@ -13,13 +13,18 @@ import { fileURLToPath } from 'url';
 import webpush from 'web-push';
 import { WorldChanges } from './WorldChanges.js';
 import { getTerrainHeight } from './terrain.js';
+import { createErrorFingerprint, createHalcraftLogger, sanitizeRsdmPayload } from './rsdm.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = fs.existsSync(path.join(__dirname, '..', 'AGENTS.md'))
+  ? path.resolve(__dirname, '..')
+  : __dirname;
 
 const PORT = process.env.PORT || 4001;
 const MAX_PLAYERS = 10;
 const DATA_DIR = path.join(__dirname, 'data');
+const rsdm = createHalcraftLogger(PROJECT_ROOT);
 
 // サーバー起動バージョン（デプロイ検知用）
 const SERVER_VERSION = Date.now().toString();
@@ -36,10 +41,44 @@ app.use((_req, res, next) => {
   next();
 });
 
+function firstStackFrame(stack) {
+  return String(stack || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('at '));
+}
+
+function errorFields(error, extra = {}) {
+  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+  const stack = error instanceof Error ? error.stack : undefined;
+  return sanitizeRsdmPayload({
+    kind: 'server_error',
+    error_message: message,
+    error_stack_top_frame: firstStackFrame(stack),
+    error_fingerprint: createErrorFingerprint(message, stack),
+    ...extra,
+  });
+}
+
+function reportServerError(component, message, error, extra = {}) {
+  rsdm.error(component, message, errorFields(error, extra));
+}
+
 const httpServer = createServer(app);
 const io = new SocketIO(httpServer, {
   cors: { origin: '*' },
   maxHttpBufferSize: 1e6,
+});
+io.engine.on('connection_error', (err) => {
+  reportServerError('socket.io', 'Socket.IO connection error', err, {
+    kind: 'socket_connection_error',
+    route: 'socket.io',
+    request_context: {
+      code: err.code,
+      message: err.message,
+      context: err.context,
+    },
+  });
 });
 
 const worldChanges = new WorldChanges(DATA_DIR);
@@ -678,8 +717,17 @@ setInterval(() => {
 // ============================================
 
 app.get('/api/health', (_req, res) => {
+  const status = stages.size > 0 ? 'ok' : 'degraded';
+  if (status !== 'ok') {
+    rsdm.warn('health', 'HalCraft health degraded', {
+      kind: 'health_check',
+      route: '/api/health',
+      healthUrl: 'https://halcraft-ws.rosch.jp/api/health',
+      stage_count: stages.size,
+    });
+  }
   res.json({
-    status: 'ok',
+    status,
     players: connectedPlayers.size,
     maxPlayers: MAX_PLAYERS,
     uptime: process.uptime(),
@@ -693,6 +741,24 @@ app.get('/api/stages', (_req, res) => {
     playerCount: s.players.size
   }));
   res.json({ stages: stageInfo });
+});
+
+app.post('/api/telemetry/client-error', (req, res) => {
+  const body = req.body || {};
+  const message = String(body.message || body.errorMessage || 'Unknown client error').slice(0, 500);
+  const stack = typeof body.stack === 'string' ? body.stack : undefined;
+  rsdm.error('client', `Client error: ${message}`, {
+    kind: 'client_error',
+    route: typeof body.route === 'string' ? body.route.slice(0, 300) : undefined,
+    page_url: typeof body.pageUrl === 'string' ? body.pageUrl.slice(0, 500) : undefined,
+    error_message: message,
+    error_stack_top_frame: firstStackFrame(stack),
+    error_fingerprint: createErrorFingerprint(message, stack),
+    user_agent: typeof body.userAgent === 'string' ? body.userAgent.slice(0, 300) : undefined,
+    viewport: body.viewport,
+    source: body.source,
+  });
+  res.status(202).json({ ok: true });
 });
 
 // プッシュ通知 API
@@ -733,6 +799,14 @@ io.on('connection', (socket) => {
   }
 
   socket.emit('server:version', { version: SERVER_VERSION });
+
+  socket.on('error', (err) => {
+    reportServerError('socket.io', 'Socket error', err, {
+      kind: 'socket_error',
+      route: 'socket.io',
+      socket_id: socket.id,
+    });
+  });
 
   socket.on('player:join', (data) => {
     const rawName = String(data.name || '').replace(/<[^>]*>/g, '').trim();
@@ -1102,7 +1176,23 @@ io.on('connection', (socket) => {
 worldChanges.init();
 loadPushSubscriptions();
 
+app.use((err, req, res, _next) => {
+  reportServerError('express', 'Express request error', err, {
+    kind: 'server_request_error',
+    route: req.originalUrl,
+    method: req.method,
+  });
+  res.status(500).json({ error: 'internal_server_error' });
+});
+
 httpServer.listen(PORT, '0.0.0.0', () => {
+  rsdm.event('server', 'HalCraft server started', {
+    kind: 'server_lifecycle',
+    route: '/api/health',
+    healthUrl: 'https://halcraft-ws.rosch.jp/api/health',
+    port: PORT,
+    server_version: SERVER_VERSION,
+  });
   console.log(`
 ╔══════════════════════════════════════╗
 ║     HalCraft Server v2 (AI)          ║
@@ -1116,8 +1206,25 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 
 const shutdown = () => {
   console.log('\n[Server] シャットダウン中...');
+  rsdm.event('server', 'HalCraft server shutdown', {
+    kind: 'server_lifecycle',
+    deploy_event: 'shutdown',
+  });
   worldChanges.dispose();
-  process.exit(0);
+  void rsdm.dispose().finally(() => process.exit(0));
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+process.on('unhandledRejection', (reason) => {
+  reportServerError('process', 'Unhandled promise rejection', reason, {
+    kind: 'unhandled_rejection',
+    route: 'process',
+  });
+});
+process.on('uncaughtException', (err) => {
+  rsdm.fatal('process', 'Uncaught exception', errorFields(err, {
+    kind: 'uncaught_exception',
+    route: 'process',
+  }));
+  setTimeout(() => process.exit(1), 50);
+});
