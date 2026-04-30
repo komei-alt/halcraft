@@ -87,11 +87,15 @@ export function StartScreen() {
   useEffect(() => {
     if (phase !== 'menu') return;
 
+    // Socket.IO サーバーと同じ URL を使用（Nginx ではなく Express API へ直接リクエスト）
+    const serverUrl = import.meta.env.PROD
+      ? 'https://halcraft-ws.rosch.jp'
+      : `http://${window.location.hostname}:4001`;
+
     let mounted = true;
     const fetchStages = async () => {
       try {
-        // 注: utils/socket.ts がない場合は /api/stages (プロキシ設定済であれば) を利用
-        const res = await fetch('/api/stages');
+        const res = await fetch(`${serverUrl}/api/stages`);
         if (!res.ok) return;
 
         const data: unknown = await res.json();
