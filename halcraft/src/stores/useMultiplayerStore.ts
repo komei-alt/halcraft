@@ -359,10 +359,10 @@ function setupSocketListeners(
       // 初回接続: バージョンを記憶
       knownServerVersion = data.version;
     } else if (knownServerVersion !== data.version) {
-      // バージョンが変わった → デプロイされた → UI通知
-      console.log(`[Multiplayer] サーバー更新検知: ${knownServerVersion} → ${data.version}`);
+      // バージョンが変わった → デプロイされた → 即座にリロード
+      console.log(`[Multiplayer] サーバー更新検知: ${knownServerVersion} → ${data.version} — 自動リロード`);
       knownServerVersion = data.version;
-      useGameStore.getState().showUpdateNotice();
+      window.location.reload();
     }
   });
 

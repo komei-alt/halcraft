@@ -54,7 +54,6 @@ import { MissionOverlay } from './components/ui/MissionOverlay';
 import { CoreHealthBar } from './components/ui/CoreHealthBar';
 import { BossHealthBar } from './components/ui/BossHealthBar';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
-import { UpdateToast } from './components/ui/UpdateToast';
 import { ControlsGuide } from './components/ui/ControlsGuide';
 import { DesktopInputHint } from './components/ui/DesktopInputHint';
 import { WeaponSwitchPopover } from './components/ui/WeaponSwitchPopover';
@@ -227,7 +226,6 @@ export default function App() {
     <>
       <StartScreen />
       <MaintenanceOverlay />
-      <UpdateToast />
       {phase !== 'menu' && (
         <>
           <GameCanvas />

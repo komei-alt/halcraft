@@ -87,14 +87,6 @@ interface GameState {
   /** マルチプレイ状態を設定 */
   setMultiplayer: (value: boolean) => void;
 
-  /** 新バージョンが利用可能か */
-  updateAvailable: boolean;
-
-  /** アップデート通知を表示 */
-  showUpdateNotice: () => void;
-
-  /** アップデート通知を閉じる */
-  dismissUpdate: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -112,7 +104,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   dayCount: 1,
   isNight: false,
   isMultiplayer: false,
-  updateAvailable: false,
 
   setStage: (stageId) => {
     const stage = STAGES.find(s => s.id === stageId) || null;
@@ -201,8 +192,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setMultiplayer: (value) => set({ isMultiplayer: value }),
 
-  showUpdateNotice: () => set({ updateAvailable: true }),
-  dismissUpdate: () => set({ updateAvailable: false }),
 
   advanceTime: (deltaSeconds) => {
     if (get().phase !== 'playing') return;
