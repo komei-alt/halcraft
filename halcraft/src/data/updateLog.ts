@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-04-30',
+    items: [
+      { type: 'feature', text: '岩盤ブロックがクラフト画面で作れるようになったよ' },
+    ],
+  },
+  {
     date: '2026-04-29',
     items: [
       { type: 'feature', text: '新しい3Dモデルのゾンビ、アイアンゴーレム、ダーウィンが出るようになった！' },

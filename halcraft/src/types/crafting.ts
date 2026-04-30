@@ -134,4 +134,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.CANDLE,
     resultCount: 2,
   },
+  {
+    id: 'bedrock',
+    name: '岩盤ブロック',
+    description: '絶対に壊れない最強のブロック',
+    ingredients: { [BLOCK_IDS.IRON]: 4, [BLOCK_IDS.ENCHANT]: 1 },
+    result: BLOCK_IDS.BEDROCK,
+    resultCount: 1,
+  },
 ];
