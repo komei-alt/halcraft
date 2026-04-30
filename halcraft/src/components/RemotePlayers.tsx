@@ -52,8 +52,10 @@ function RemotePlayerModel({
   useFrame(() => {
     if (!groupRef.current) return;
 
-    // ヘリコプター搭乗判定（全座席からプレイヤーIDを検索）
-    const heli = useVehicleStore.getState().helicopter;
+    // 乗り物搭乗判定（車内描画側に任せる）
+    const vehicleState = useVehicleStore.getState();
+    const heli = vehicleState.helicopter;
+    const tank = vehicleState.tank;
     let occupiedSeat: string | null = null;
     if (heli.spawned) {
       for (const [seat, id] of Object.entries(heli.seats)) {
@@ -63,10 +65,11 @@ function RemotePlayerModel({
         }
       }
     }
-    const isInHelicopter = occupiedSeat !== null;
+    const isInTank = tank.spawned && tank.seats.pilot === player.id;
+    const isInVehicle = occupiedSeat !== null || isInTank;
 
-    if (isInHelicopter) {
-      // 搭乗中: Helicopter.tsx の PassengerAvatars が描画するので非表示
+    if (isInVehicle) {
+      // 搭乗中: 乗り物コンポーネント側の PassengerAvatar が描画するので非表示
       groupRef.current.visible = false;
       setIsMoving((prev: boolean) => prev ? false : prev);
     } else {

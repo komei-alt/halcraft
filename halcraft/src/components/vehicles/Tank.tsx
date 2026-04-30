@@ -6,6 +6,10 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Billboard, Text, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { TANK_CONSTANTS, useVehicleStore } from '../../stores/useVehicleStore';
+import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { usePlayerStore } from '../../stores/usePlayerStore';
+import { isValidSkinId } from '../../types/skins';
+import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
 
 const TANK_MODEL_PATH = '/models/2026-04-29/tank.glb';
@@ -14,6 +18,8 @@ const TANK_MODEL_SCALE = 0.58;
 const TANK_MODEL_YAW = -Math.PI / 2;
 const TANK_MODEL_POSITION: [number, number, number] = [0, 0.42, 0];
 const TANK_TURRET_PIVOT: [number, number, number] = [0.95, 1.92, -0.05];
+const TANK_AVATAR_POSITION: [number, number, number] = [0.2, 1.72, 0.18];
+const TANK_AVATAR_SCALE = 0.82;
 
 interface TankModelParts {
   hull: THREE.Object3D;
@@ -22,13 +28,16 @@ interface TankModelParts {
 
 function createTankModelParts(scene: THREE.Object3D): TankModelParts {
   const hullSource = scene.getObjectByName('nomad_unskew_1') ?? scene.getObjectByName('ボックス_25');
-  const hull = hullSource ? cloneSceneWithMaterials(hullSource) : new THREE.Group();
+  const hull = new THREE.Group();
+  if (hullSource) hull.add(cloneSceneWithMaterials(hullSource));
+  const tracks = scene.getObjectByName('円柱');
+  if (tracks) hull.add(cloneSceneWithMaterials(tracks));
+  const gatling = scene.getObjectByName('円柱_1');
+  if (gatling) hull.add(cloneSceneWithMaterials(gatling));
 
   const turret = new THREE.Group();
-  for (const child of scene.children) {
-    if (child.name === 'nomad_unskew_1') continue;
-    turret.add(cloneSceneWithMaterials(child));
-  }
+  const turretSource = scene.getObjectByName('nomad_unskew') ?? scene.getObjectByName('円錐');
+  if (turretSource) turret.add(cloneSceneWithMaterials(turretSource));
 
   return {
     hull,
@@ -80,6 +89,7 @@ export function Tank() {
           ]}
           rotation={[0, TANK_MODEL_YAW, 0]}
         />
+        <TankPassengerAvatar />
       </group>
 
       {tank.engineOn && (
@@ -98,6 +108,45 @@ export function Tank() {
           F 戦車に乗る
         </Text>
       </Billboard>
+    </group>
+  );
+}
+
+function TankPassengerAvatar() {
+  const pilotId = useVehicleStore((s) => s.tank.seats.pilot);
+  const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
+  const myId = useMultiplayerStore((s) => s.myId);
+  const localSkinId = usePlayerStore((s) => s.skinId);
+
+  if (pilotId === null) return null;
+
+  const isLocalPilot = pilotId === '__local__' || pilotId === myId;
+  const remotePilot = isLocalPilot ? null : remotePlayers.get(pilotId);
+  if (!isLocalPilot && !remotePilot) return null;
+
+  const skinId = isLocalPilot
+    ? localSkinId
+    : remotePilot?.skinId && isValidSkinId(remotePilot.skinId)
+      ? remotePilot.skinId
+      : undefined;
+
+  return (
+    <group
+      position={[
+        TANK_AVATAR_POSITION[0] - TANK_TURRET_PIVOT[0],
+        TANK_AVATAR_POSITION[1] - TANK_TURRET_PIVOT[1],
+        TANK_AVATAR_POSITION[2] - TANK_TURRET_PIVOT[2],
+      ]}
+      rotation={[0, Math.PI, 0]}
+      scale={TANK_AVATAR_SCALE}
+    >
+      <VoxelAvatar
+        skinId={skinId}
+        color={remotePilot?.color}
+        isMoving={false}
+        isDead={remotePilot?.isDead ?? false}
+        deathTime={remotePilot?.deathTime ?? 0}
+      />
     </group>
   );
 }

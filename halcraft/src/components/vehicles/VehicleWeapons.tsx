@@ -113,11 +113,18 @@ function getTankTurretWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
   );
 }
 
+function getTankBodyWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
+  const tank = useVehicleStore.getState().tank;
+  return localPoint.clone().applyAxisAngle(Y_AXIS, tank.rotationY).add(
+    new THREE.Vector3(tank.x, tank.y, tank.z),
+  );
+}
+
 function getVehicleMuzzle(type: VehicleType, mount: 'center' | 'left' | 'right'): THREE.Vector3 {
   const vehicles = useVehicleStore.getState();
   if (type === 'tank') {
     const lateral = mount === 'left' ? -0.28 : mount === 'right' ? 0.28 : 0;
-    return getTankTurretWorldPoint(TANK_GATLING_MUZZLE_LOCAL.clone().add(new THREE.Vector3(lateral, 0, 0)));
+    return getTankBodyWorldPoint(TANK_GATLING_MUZZLE_LOCAL.clone().add(new THREE.Vector3(lateral, 0, 0)));
   }
 
   const airplane = vehicles.airplane;
