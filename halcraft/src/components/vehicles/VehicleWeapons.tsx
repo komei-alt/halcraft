@@ -49,8 +49,8 @@ const EXPLOSION_SURFACE_OFFSET = 0.36;
 const ROCKET_AIM_DISTANCE = 80;
 const ROCKET_MIN_AIM_DISTANCE = 1.5;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
-const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.05, 2.1, -3.25);
-const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(0.72, 1.92, -2.45);
+const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.95, 2.1, -3.25);
+const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(1.18, 1.35, -2.35);
 
 interface BulletProjectile {
   id: number;

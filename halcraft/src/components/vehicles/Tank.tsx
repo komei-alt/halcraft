@@ -11,9 +11,9 @@ import { cloneSceneWithMaterials } from './modelUtils';
 const TANK_MODEL_PATH = '/models/2026-04-29/tank.glb';
 const PROMPT_COLOR = '#9be7ff';
 const TANK_MODEL_SCALE = 0.58;
-const TANK_MODEL_YAW = Math.PI;
+const TANK_MODEL_YAW = -Math.PI / 2;
 const TANK_MODEL_POSITION: [number, number, number] = [0, 0.42, 0];
-const TANK_TURRET_PIVOT: [number, number, number] = [0.05, 1.92, 0.95];
+const TANK_TURRET_PIVOT: [number, number, number] = [0.95, 1.92, -0.05];
 
 interface TankModelParts {
   hull: THREE.Object3D;
