@@ -490,7 +490,7 @@ export function Player() {
 
         // ビジュアル: ピッチとロール
         const targetPitch = inputForward > 0 ? -0.1 : inputForward < 0 ? 0.15 : 0;
-        const targetRoll = -inputTurn * 0.4;
+        const targetRoll = inputTurn * 0.4;
         apPitch += (targetPitch - apPitch) * 3 * dt;
         apRoll += (targetRoll - apRoll) * 3 * dt;
 
@@ -709,7 +709,7 @@ export function Player() {
         ? Math.max(-0.38, Math.min(0.42, planePitch + inputPitch * AIRPLANE_CONSTANTS.PITCH_SPEED * dt))
         : 0;
       planePitch += (targetPitch - planePitch) * 3 * dt;
-      const targetRoll = -inputTurn * (airborne ? 0.45 : 0.12);
+      const targetRoll = inputTurn * (airborne ? 0.45 : 0.12);
       planeRoll += (targetRoll - planeRoll) * 3 * dt;
 
       flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, planeRotY);

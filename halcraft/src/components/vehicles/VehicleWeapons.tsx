@@ -16,16 +16,18 @@ import {
 } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMobStore } from '../../stores/useMobStore';
+import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
-import { spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
   playBulletImpactSound,
   playMachineGunSound,
   playRocketExplosionSound,
   playRocketLaunchSound,
 } from '../../utils/sounds';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 
 const BULLET_SPEED = 130;
 const BULLET_MAX_AGE = 0.95;
@@ -34,11 +36,21 @@ const MOB_HIT_RADIUS = 1.2;
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
 
-const ROCKET_SPEED = 34;
-const ROCKET_MAX_AGE = 4;
+const ROCKET_SPEED = 30;
+const ROCKET_MAX_AGE = 4.2;
+const ROCKET_GRAVITY = 9.5;
 const ROCKET_HIT_RADIUS = 0.9;
 const EXPLOSION_RADIUS = 7.5;
 const EXPLOSION_DAMAGE = 22;
+const EXPLOSION_MIN_DAMAGE = 3;
+const EXPLOSION_BLOCK_RADIUS = 2.8;
+const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
+const EXPLOSION_SURFACE_OFFSET = 0.36;
+const ROCKET_AIM_DISTANCE = 80;
+const ROCKET_MIN_AIM_DISTANCE = 1.5;
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.05, 2.1, -3.25);
+const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(0.72, 1.92, -2.45);
 
 interface BulletProjectile {
   id: number;
@@ -67,15 +79,45 @@ interface ExplosionFlash {
 
 let nextProjectileId = 0;
 
+interface ExplosionBlockCandidate {
+  x: number;
+  y: number;
+  z: number;
+  blockId: BlockId;
+  distSq: number;
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || (target instanceof HTMLElement && target.isContentEditable);
+}
+
+function calculateExplosionDamage(distance: number): number {
+  if (distance >= EXPLOSION_RADIUS) return 0;
+  const falloff = 1 - distance / EXPLOSION_RADIUS;
+  const eased = falloff * falloff;
+  return Math.max(1, Math.round(EXPLOSION_MIN_DAMAGE + (EXPLOSION_DAMAGE - EXPLOSION_MIN_DAMAGE) * eased));
+}
+
+function getVisibleExplosionPosition(hitPos: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 {
+  if (normal.lengthSq() < 0.0001) return hitPos.clone();
+  return hitPos.clone().addScaledVector(normal.clone().normalize(), EXPLOSION_SURFACE_OFFSET);
+}
+
+function getTankTurretWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
+  const tank = useVehicleStore.getState().tank;
+  const yaw = tank.rotationY + tank.turretYaw;
+  return localPoint.clone().applyAxisAngle(Y_AXIS, yaw).add(
+    new THREE.Vector3(tank.x, tank.y, tank.z),
+  );
+}
+
 function getVehicleMuzzle(type: VehicleType, mount: 'center' | 'left' | 'right'): THREE.Vector3 {
   const vehicles = useVehicleStore.getState();
   if (type === 'tank') {
-    const tank = vehicles.tank;
-    const yaw = tank.rotationY + tank.turretYaw;
-    const lateral = mount === 'left' ? -0.42 : mount === 'right' ? 0.42 : 0.62;
-    return new THREE.Vector3(lateral, 1.92, -2.1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(
-      new THREE.Vector3(tank.x, tank.y, tank.z),
-    );
+    const lateral = mount === 'left' ? -0.28 : mount === 'right' ? 0.28 : 0;
+    return getTankTurretWorldPoint(TANK_GATLING_MUZZLE_LOCAL.clone().add(new THREE.Vector3(lateral, 0, 0)));
   }
 
   const airplane = vehicles.airplane;
@@ -86,11 +128,7 @@ function getVehicleMuzzle(type: VehicleType, mount: 'center' | 'left' | 'right')
 }
 
 function getTankCannonMuzzle(): THREE.Vector3 {
-  const tank = useVehicleStore.getState().tank;
-  const yaw = tank.rotationY + tank.turretYaw;
-  return new THREE.Vector3(0, 2.0, -3.0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(
-    new THREE.Vector3(tank.x, tank.y, tank.z),
-  );
+  return getTankTurretWorldPoint(TANK_CANNON_MUZZLE_LOCAL);
 }
 
 export function VehicleWeapons() {
@@ -102,6 +140,8 @@ export function VehicleWeapons() {
   const lastGunFire = useRef(0);
   const lastRocketFire = useRef(0);
   const shootDir = useRef(new THREE.Vector3());
+  const cameraAimDir = useRef(new THREE.Vector3());
+  const aimPoint = useRef(new THREE.Vector3());
 
   const fireGatling = useCallback((type: VehicleType, mount: 'center' | 'left' | 'right' = 'center', isRemote = false, remoteDir?: THREE.Vector3, remotePos?: THREE.Vector3) => {
     const now = performance.now() / 1000;
@@ -140,14 +180,126 @@ export function VehicleWeapons() {
     }
   }, [camera]);
 
+  const destroyExplosionBlocks = useCallback((center: THREE.Vector3) => {
+    const world = useWorldStore.getState();
+    const multi = useMultiplayerStore.getState();
+    const radiusSq = EXPLOSION_BLOCK_RADIUS * EXPLOSION_BLOCK_RADIUS;
+    const minX = Math.floor(center.x - EXPLOSION_BLOCK_RADIUS);
+    const maxX = Math.floor(center.x + EXPLOSION_BLOCK_RADIUS);
+    const minY = Math.floor(center.y - EXPLOSION_BLOCK_RADIUS);
+    const maxY = Math.floor(center.y + EXPLOSION_BLOCK_RADIUS);
+    const minZ = Math.floor(center.z - EXPLOSION_BLOCK_RADIUS);
+    const maxZ = Math.floor(center.z + EXPLOSION_BLOCK_RADIUS);
+    const candidates: ExplosionBlockCandidate[] = [];
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          const dx = x + 0.5 - center.x;
+          const dy = y + 0.5 - center.y;
+          const dz = z + 0.5 - center.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+          if (distSq > radiusSq) continue;
+
+          const blockId = world.getBlock(x, y, z);
+          if (blockId === BLOCK_IDS.AIR) continue;
+          if (BLOCK_DEFS[blockId]?.unbreakable) continue;
+
+          candidates.push({ x, y, z, blockId, distSq });
+        }
+      }
+    }
+
+    candidates.sort((a, b) => a.distSq - b.distSq);
+
+    for (const block of candidates.slice(0, EXPLOSION_MAX_DESTROY_BLOCKS)) {
+      if (!world.breakBlock(block.x, block.y, block.z)) continue;
+      spawnBlockBreakEffect(block.blockId, block.x, block.y, block.z);
+      multi.sendBlockBreak(block.x, block.y, block.z);
+    }
+  }, []);
+
+  const applyRocketExplosionDamage = useCallback((center: THREE.Vector3) => {
+    const mobStore = useMobStore.getState();
+    const multi = useMultiplayerStore.getState();
+    const playerStore = usePlayerStore.getState();
+    const playerCenter = new THREE.Vector3(camera.position.x, camera.position.y - 0.85, camera.position.z);
+    const selfDamage = calculateExplosionDamage(playerCenter.distanceTo(center));
+
+    if (selfDamage > 0) {
+      playerStore.takeDamage(selfDamage, playerCenter.x - center.x, playerCenter.z - center.z);
+    }
+
+    for (const mob of mobStore.mobs) {
+      if (mob.hp <= 0) continue;
+      const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
+      const damage = calculateExplosionDamage(mobCenter.distanceTo(center));
+      if (damage <= 0) continue;
+
+      const dirX = mob.x - center.x;
+      const dirZ = mob.z - center.z;
+      multi.sendMobDamage(mob.id, damage, dirX * 1.8, dirZ * 1.8);
+      mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
+      spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= EXPLOSION_DAMAGE * 0.7);
+    }
+
+    for (const [, player] of multi.remotePlayers) {
+      if (player.isDead) continue;
+      const playerBody = new THREE.Vector3(
+        player.position[0],
+        player.position[1] + PLAYER_HIT_HEIGHT * 0.5,
+        player.position[2],
+      );
+      const damage = calculateExplosionDamage(playerBody.distanceTo(center));
+      if (damage <= 0) continue;
+
+      const dirX = player.position[0] - center.x;
+      const dirZ = player.position[2] - center.z;
+      multi.sendPlayerAttack(player.id, damage, dirX * 1.8, dirZ * 1.8);
+      spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
+      spawnHitImpactEffect(player.position[0], player.position[1] + 0.9, player.position[2], dirX, 0.35, dirZ, false);
+    }
+  }, [camera]);
+
   const fireTankRocket = useCallback(() => {
     const now = performance.now() / 1000;
     if (now - lastRocketFire.current < TANK_CONSTANTS.CANNON_COOLDOWN) return;
     lastRocketFire.current = now;
 
     const startPos = getTankCannonMuzzle();
-    const dir = shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize().clone();
-    const vel = dir.multiplyScalar(ROCKET_SPEED);
+    cameraAimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const currentMobs = useMobStore.getState().mobs;
+    const multi = useMultiplayerStore.getState();
+    const aimHit = rayMarchProjectile(
+      camera.position.clone(),
+      cameraAimDir.current.clone(),
+      ROCKET_AIM_DISTANCE,
+      useWorldStore.getState().getBlock,
+      currentMobs,
+      ROCKET_HIT_RADIUS,
+      {
+        remotePlayers: multi.remotePlayers as Map<string, RemotePlayerTarget>,
+        playerHitRadius: PLAYER_HIT_RADIUS,
+        playerHitHeight: PLAYER_HIT_HEIGHT,
+      },
+    );
+
+    if (aimHit.type !== 'none') {
+      aimPoint.current.copy(aimHit.hitPos);
+    } else {
+      aimPoint.current.copy(camera.position).addScaledVector(cameraAimDir.current, ROCKET_AIM_DISTANCE);
+    }
+
+    shootDir.current.copy(aimPoint.current).sub(startPos);
+    if (
+      shootDir.current.lengthSq() < ROCKET_MIN_AIM_DISTANCE * ROCKET_MIN_AIM_DISTANCE
+      || shootDir.current.normalize().dot(cameraAimDir.current) < 0.2
+    ) {
+      shootDir.current.copy(cameraAimDir.current);
+    }
+
+    const vel = shootDir.current.clone().multiplyScalar(ROCKET_SPEED);
     const syncId = `tank_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
     setRockets((prev) => [...prev, {
@@ -168,25 +320,13 @@ export function VehicleWeapons() {
   }, [camera]);
 
   const explodeRocket = useCallback((rocket: CannonRocket, pos: THREE.Vector3) => {
-    const mobs = useMobStore.getState().mobs;
-    const multiplayer = useMultiplayerStore.getState();
-
-    for (const mob of mobs) {
-      if (mob.hp <= 0) continue;
-      const dist = pos.distanceTo(new THREE.Vector3(mob.x, mob.y + 0.8, mob.z));
-      if (dist > EXPLOSION_RADIUS) continue;
-      const damage = Math.max(3, Math.round(EXPLOSION_DAMAGE * (1 - dist / EXPLOSION_RADIUS)));
-      const knockback = new THREE.Vector3(mob.x - pos.x, 0, mob.z - pos.z).normalize();
-      multiplayer.sendMobDamage(mob.id, damage, knockback.x * 4, knockback.z * 4);
-      useMobStore.getState().damageMob(mob.id, damage, knockback.x, knockback.z);
-      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= 16);
-    }
-
+    destroyExplosionBlocks(pos);
+    applyRocketExplosionDamage(pos);
     spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
     playRocketExplosionSound(pos.distanceTo(camera.position));
     useMultiplayerStore.getState().sendRocketExplode(rocket.syncId, [pos.x, pos.y, pos.z]);
     setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.45 }]);
-  }, [camera]);
+  }, [applyRocketExplosionDamage, camera, destroyExplosionBlocks]);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -197,7 +337,7 @@ export function VehicleWeapons() {
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const active = useVehicleStore.getState().getActiveVehicle();
-      if (e.code === 'KeyR' && active === 'tank' && isDesktopGameplayInputActive()) {
+      if (e.code === 'KeyR' && active === 'tank' && !isEditableTarget(e.target)) {
         e.preventDefault();
         fireTankRocket();
       }
@@ -297,12 +437,23 @@ export function VehicleWeapons() {
         }
 
         rocket.prev.copy(rocket.pos);
-        rocket.vel.y -= 8.5 * delta;
+        rocket.vel.y -= ROCKET_GRAVITY * delta;
         const moveDir = rocket.vel.clone().normalize();
         const moveDist = rocket.vel.length() * delta;
-        const hit = rayMarchProjectile(rocket.pos, moveDir, moveDist, getBlock, mobs, ROCKET_HIT_RADIUS);
+        const hit = rayMarchProjectile(
+          rocket.pos,
+          moveDir,
+          moveDist,
+          getBlock,
+          mobs,
+          ROCKET_HIT_RADIUS,
+          { remotePlayers, playerHitRadius: PLAYER_HIT_RADIUS, playerHitHeight: PLAYER_HIT_HEIGHT },
+        );
         if (hit.type !== 'none') {
-          explodeRocket(rocket, hit.hitPos);
+          const explosionPos = hit.type === 'block'
+            ? getVisibleExplosionPosition(hit.hitPos, hit.normal)
+            : hit.hitPos;
+          explodeRocket(rocket, explosionPos);
           continue;
         }
         alive.push(rocket);

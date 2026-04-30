@@ -1,5 +1,5 @@
 // 戦車コンポーネント
-// GLB車体 + 視点方向へ回るボクセル砲塔 + 搭乗プロンプト
+// GLB車体 + 視点方向へ回るアセット砲塔 + 搭乗プロンプト
 
 import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -10,17 +10,41 @@ import { cloneSceneWithMaterials } from './modelUtils';
 
 const TANK_MODEL_PATH = '/models/2026-04-29/tank.glb';
 const PROMPT_COLOR = '#9be7ff';
+const TANK_MODEL_SCALE = 0.58;
+const TANK_MODEL_YAW = Math.PI;
+const TANK_MODEL_POSITION: [number, number, number] = [0, 0.42, 0];
+const TANK_TURRET_PIVOT: [number, number, number] = [0.05, 1.92, 0.95];
+
+interface TankModelParts {
+  hull: THREE.Object3D;
+  turret: THREE.Group;
+}
+
+function createTankModelParts(scene: THREE.Object3D): TankModelParts {
+  const hullSource = scene.getObjectByName('nomad_unskew_1') ?? scene.getObjectByName('ボックス_25');
+  const hull = hullSource ? cloneSceneWithMaterials(hullSource) : new THREE.Group();
+
+  const turret = new THREE.Group();
+  for (const child of scene.children) {
+    if (child.name === 'nomad_unskew_1') continue;
+    turret.add(cloneSceneWithMaterials(child));
+  }
+
+  return {
+    hull,
+    turret,
+  };
+}
 
 export function Tank() {
   const tank = useVehicleStore((s) => s.tank);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const { camera } = useThree();
   const gltf = useGLTF(TANK_MODEL_PATH);
-  const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
+  const modelParts = useMemo(() => createTankModelParts(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
-  const gunSpinRef = useRef<THREE.Group>(null);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (promptRef.current) {
       const dist = camera.position.distanceTo(new THREE.Vector3(tank.x, tank.y, tank.z));
       promptRef.current.visible =
@@ -28,11 +52,6 @@ export function Tank() {
         activeVehicle === null &&
         tank.seats.pilot === null &&
         dist < TANK_CONSTANTS.BOARD_DISTANCE + 2;
-    }
-
-    if (gunSpinRef.current) {
-      const spinSpeed = tank.engineOn ? 10 + Math.abs(tank.speed) * 1.6 : 0;
-      gunSpinRef.current.rotation.z += spinSpeed * delta;
     }
   });
 
@@ -44,29 +63,23 @@ export function Tank() {
       rotation={[tank.pitch, tank.rotationY, tank.roll]}
     >
       <primitive
-        object={model}
-        scale={0.58}
-        position={[0, 0.42, 0]}
-        rotation={[0, Math.PI, 0]}
+        object={modelParts.hull}
+        scale={TANK_MODEL_SCALE}
+        position={TANK_MODEL_POSITION}
+        rotation={[0, TANK_MODEL_YAW, 0]}
       />
 
-      <group position={[0, 1.88, 0]} rotation={[0, tank.turretYaw, 0]}>
-        <mesh castShadow receiveShadow position={[0, 0, 0]}>
-          <boxGeometry args={[1.55, 0.42, 1.25]} />
-          <meshStandardMaterial color="#385058" roughness={0.7} metalness={0.25} />
-        </mesh>
-        <mesh castShadow receiveShadow position={[0, 0.04, -1.45]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.12, 0.16, 2.25, 12]} />
-          <meshStandardMaterial color="#263238" roughness={0.5} metalness={0.4} />
-        </mesh>
-        <group ref={gunSpinRef} position={[0.62, 0.03, -0.95]}>
-          {[-0.09, 0, 0.09].map((x) => (
-            <mesh key={x} castShadow position={[x, 0, -0.45]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.035, 0.035, 0.95, 8]} />
-              <meshStandardMaterial color="#1f1f1f" roughness={0.45} metalness={0.55} />
-            </mesh>
-          ))}
-        </group>
+      <group position={TANK_TURRET_PIVOT} rotation={[0, tank.turretYaw, 0]}>
+        <primitive
+          object={modelParts.turret}
+          scale={TANK_MODEL_SCALE}
+          position={[
+            TANK_MODEL_POSITION[0] - TANK_TURRET_PIVOT[0],
+            TANK_MODEL_POSITION[1] - TANK_TURRET_PIVOT[1],
+            TANK_MODEL_POSITION[2] - TANK_TURRET_PIVOT[2],
+          ]}
+          rotation={[0, TANK_MODEL_YAW, 0]}
+        />
       </group>
 
       {tank.engineOn && (
