@@ -285,6 +285,24 @@ function vehicleHasLocalSeat(state: Pick<VehicleState, 'helicopter' | 'tank' | '
   return null;
 }
 
+function getHelicopterSeatForPlayer(
+  seats: Record<SeatType, string | null>,
+  playerId: string | null,
+): SeatType | null {
+  if (playerId === null) return null;
+  for (const [seat, seatPlayerId] of Object.entries(seats)) {
+    if (seatPlayerId === playerId) return seat as SeatType;
+  }
+  return null;
+}
+
+function getSingleSeatForPlayer(
+  seats: Record<SingleSeatType, string | null>,
+  playerId: string | null,
+): SingleSeatType | null {
+  return playerId !== null && seats.pilot === playerId ? 'pilot' : null;
+}
+
 interface VehicleState {
   helicopter: HelicopterState;
   tank: TankState;
@@ -525,41 +543,41 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
       if (vehicles.helicopter) {
         const seats = vehicles.helicopter.seats ?? helicopter.seats;
-        let mySeat: SeatType | null = null;
-        for (const [seat, playerId] of Object.entries(seats)) {
-          if (playerId === myId) {
-            mySeat = seat as SeatType;
-            break;
-          }
-        }
+        const mySeat = getHelicopterSeatForPlayer(seats, myId);
+        const keepLocalPilotMotion = helicopter.mySeat === 'pilot' && mySeat === 'pilot';
         helicopter = syncHelicopterLegacy({
           ...helicopter,
-          ...vehicles.helicopter,
+          ...(keepLocalPilotMotion ? {} : vehicles.helicopter),
           seats,
           mySeat,
-          spawned: vehicles.helicopter.spawned ?? true,
+          spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
         });
       }
 
       if (vehicles.tank) {
         const seats = vehicles.tank.seats ?? tank.seats;
+        const mySeat = getSingleSeatForPlayer(seats, myId);
+        const keepLocalPilotMotion = tank.mySeat === 'pilot' && mySeat === 'pilot';
         tank = syncSingleLegacy({
           ...tank,
-          ...vehicles.tank,
+          ...(keepLocalPilotMotion ? {} : vehicles.tank),
           seats,
-          mySeat: seats.pilot === myId ? 'pilot' : null,
-          spawned: vehicles.tank.spawned ?? true,
+          mySeat,
+          spawned: vehicles.tank.spawned ?? tank.spawned,
         });
       }
 
       if (vehicles.airplane) {
         const seats = vehicles.airplane.seats ?? airplane.seats;
+        const mySeat = getSingleSeatForPlayer(seats, myId);
+        const keepLocalPilotMotion = airplane.mySeat === 'pilot' && mySeat === 'pilot';
         airplane = syncSingleLegacy({
           ...airplane,
-          ...vehicles.airplane,
+          // ローカル操縦中の機体は、古いサーバースナップショットで位置・速度を戻さない。
+          ...(keepLocalPilotMotion ? {} : vehicles.airplane),
           seats,
-          mySeat: seats.pilot === myId ? 'pilot' : null,
-          spawned: vehicles.airplane.spawned ?? true,
+          mySeat,
+          spawned: vehicles.airplane.spawned ?? airplane.spawned,
         });
       }
 

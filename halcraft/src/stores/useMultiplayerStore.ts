@@ -550,10 +550,12 @@ function setupSocketListeners(
 
     // 自分がどの席にいるか判定
     let mySeat: SeatType | null = null;
-    for (const [seat, playerId] of Object.entries(serverSeats)) {
-      if (playerId === myId) {
-        mySeat = seat as SeatType;
-        break;
+    if (myId !== null) {
+      for (const [seat, playerId] of Object.entries(serverSeats)) {
+        if (playerId === myId) {
+          mySeat = seat as SeatType;
+          break;
+        }
       }
     }
 
