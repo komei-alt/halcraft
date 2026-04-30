@@ -7,7 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
-import { isBlockExposed } from '../utils/terrain';
+import { isBlockExposed } from '../utils/terrain/blockExposure';
 
 /** テクスチャキャッシュ（コンポーネント外で管理） */
 const textureCache = new Map<string, THREE.Texture>();

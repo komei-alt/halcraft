@@ -3,7 +3,8 @@
 
 import { create } from 'zustand';
 import { BLOCK_DEFS, BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
-import { generateChunk, type ChunkData } from '../utils/terrain';
+import { generateChunk } from '../utils/terrain/chunkGenerator';
+import type { ChunkData } from '../utils/terrain/types';
 
 /** チャンクキーの生成 */
 const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;

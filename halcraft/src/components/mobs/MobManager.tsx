@@ -10,7 +10,7 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useDroppedItemStore } from '../../stores/useDroppedItemStore';
-import { getTerrainHeight } from '../../utils/terrain';
+import { getTerrainHeight } from '../../utils/terrain/heightmap';
 import { BLOCK_IDS } from '../../types/blocks';
 import { checkAABBCollision } from '../../utils/collision';
 import { Zombie } from './Zombie';
