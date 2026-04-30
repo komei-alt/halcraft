@@ -47,6 +47,8 @@ const PLAYER_RADIUS = 0.25;
 const AIRCRAFT_MOUSE_YAW_RANGE = 0.72;
 const HELICOPTER_BANK_LIMIT = 0.45;
 const AIRPLANE_BANK_LIMIT = 0.58;
+const AIRPLANE_PITCH_CLIMB_RATE = 9.5;
+const AIRPLANE_LOW_SPEED_SINK_RATE = 2.2;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -771,8 +773,16 @@ export function Player() {
 
       const nextGroundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (airborne) {
-        const lift = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.STALL_SPEED) * AIRPLANE_CONSTANTS.LIFT;
-        const verticalSpeed = planePitch * planeSpeed * 0.55 + lift - AIRPLANE_CONSTANTS.GRAVITY * 0.38;
+        const controllableSpeedRange = Math.max(0.001, AIRPLANE_CONSTANTS.TAKEOFF_SPEED - AIRPLANE_CONSTANTS.STALL_SPEED);
+        const controlAuthority = clamp(
+          (planeSpeed - AIRPLANE_CONSTANTS.STALL_SPEED) / controllableSpeedRange,
+          0,
+          1,
+        );
+        const stallSink = Math.pow(1 - controlAuthority, 2) * AIRPLANE_CONSTANTS.GRAVITY;
+        const landingSink = (1 - controlAuthority) * AIRPLANE_LOW_SPEED_SINK_RATE;
+        const pitchVerticalSpeed = planePitch * AIRPLANE_PITCH_CLIMB_RATE * (0.25 + controlAuthority * 0.75);
+        const verticalSpeed = pitchVerticalSpeed - stallSink - landingSink;
         planeY += verticalSpeed * dt;
         if (planeY <= nextGroundY + 0.15) {
           planeY = nextGroundY;
