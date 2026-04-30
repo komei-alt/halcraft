@@ -30,6 +30,7 @@ import {
 } from '../utils/touchInput';
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
+import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
 
 // 定数
 const MOVE_SPEED = 4.5;
@@ -43,6 +44,9 @@ const CREATIVE_DOUBLE_JUMP_MS = 350;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
+const AIRCRAFT_MOUSE_YAW_RANGE = 0.72;
+const HELICOPTER_BANK_LIMIT = 0.45;
+const AIRPLANE_BANK_LIMIT = 0.58;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -51,6 +55,14 @@ const SPAWN_X = 8;
 const SPAWN_Z = 8;
 // プレイヤーの家の基準高さ（x=7, z=7 の地形高さ）を取得し、床(y=floorY)の上(空気ブロック)にスポーンさせる
 const getSpawnY = () => getTerrainHeight(7, 7) + 1.1;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeAngle(angle: number): number {
+  return ((angle + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
 
 export function Player() {
   const { camera } = useThree();
@@ -103,6 +115,8 @@ export function Player() {
   const flyForward = useRef(new THREE.Vector3());
   // ヘリコプター操縦席オフセット（GCプレッシャー防止）
   const cockpitOffset = useRef(new THREE.Vector3());
+  const tankCameraOffset = useRef(new THREE.Vector3());
+  const tankTurretPivot = useRef(new THREE.Vector3());
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
@@ -471,13 +485,36 @@ export function Player() {
           }
         }
 
+        const mouseTurn = !isTouch.current && isInputActive
+          ? clamp(normalizeAngle(euler.current.y - apRotY) / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1)
+          : 0;
+        const steeringInput = isTouch.current
+          ? inputTurn
+          : clamp(inputTurn + mouseTurn, -1, 1);
+
+        // ビジュアル: ピッチとロール。ロール量を旋回入力として使う。
+        const mousePitch = !isTouch.current && isInputActive
+          ? clamp(euler.current.x / 0.7, -1, 1)
+          : 0;
+        const targetPitch = clamp(
+          mousePitch * 0.2 + (inputForward > 0 ? -0.08 : inputForward < 0 ? 0.12 : 0),
+          -0.32,
+          0.32,
+        );
+        const targetRoll = steeringInput * HELICOPTER_BANK_LIMIT;
+        apPitch += (targetPitch - apPitch) * 3 * dt;
+        apRoll += (targetRoll - apRoll) * 4 * dt;
+
         // 旋回
         const turnFactor = Math.min(1, (Math.abs(apSpeed) + 2) / 5);
-        const turnDelta = inputTurn * TURN_SPEED * dt * turnFactor;
+        const bankTurn = clamp(apRoll / HELICOPTER_BANK_LIMIT, -1, 1);
+        const turnDelta = bankTurn * TURN_SPEED * dt * turnFactor;
         apRotY += turnDelta;
 
-        // カメラの向きも旋回に同期
-        euler.current.y += turnDelta;
+        // キーボード旋回時は視点目標も一緒に動かす。マウス旋回時は機体が照準へ追従する。
+        if (!isTouch.current && Math.abs(inputTurn) > 0.01) {
+          euler.current.y += turnDelta;
+        }
 
         // 上昇/下降
         apY += inputVertical * VERTICAL_SPEED * dt;
@@ -487,12 +524,6 @@ export function Player() {
         flyForward.current.applyAxisAngle(Y_AXIS, apRotY);
         apX += flyForward.current.x * apSpeed * dt;
         apZ += flyForward.current.z * apSpeed * dt;
-
-        // ビジュアル: ピッチとロール
-        const targetPitch = inputForward > 0 ? -0.1 : inputForward < 0 ? 0.15 : 0;
-        const targetRoll = inputTurn * 0.4;
-        apPitch += (targetPitch - apPitch) * 3 * dt;
-        apRoll += (targetRoll - apRoll) * 3 * dt;
 
         // 地面衝突チェック
         const heliBottomY = apY - 0.5;
@@ -631,11 +662,19 @@ export function Player() {
         gunSpin: nextGunSpin,
       });
 
-      cockpitOffset.current.set(0, TANK_CONSTANTS.CAMERA_HEIGHT, TANK_CONSTANTS.CAMERA_BACK);
-      cockpitOffset.current.applyAxisAngle(Y_AXIS, tankRotY);
-      pos.x = tankX + cockpitOffset.current.x;
-      pos.y = tankY + cockpitOffset.current.y;
-      pos.z = tankZ + cockpitOffset.current.z;
+      tankTurretPivot.current.set(TANK_TURRET_PIVOT[0], TANK_TURRET_PIVOT[1], TANK_TURRET_PIVOT[2]);
+      tankCameraOffset.current
+        .set(
+          TANK_CAMERA_POSITION[0] - TANK_TURRET_PIVOT[0],
+          TANK_CAMERA_POSITION[1] - TANK_TURRET_PIVOT[1],
+          TANK_CAMERA_POSITION[2] - TANK_TURRET_PIVOT[2],
+        )
+        .applyAxisAngle(Y_AXIS, turretYaw)
+        .add(tankTurretPivot.current)
+        .applyAxisAngle(Y_AXIS, tankRotY);
+      pos.x = tankX + tankCameraOffset.current.x;
+      pos.y = tankY + tankCameraOffset.current.y;
+      pos.z = tankZ + tankCameraOffset.current.z;
 
       camera.quaternion.setFromEuler(euler.current);
       camera.position.set(pos.x, pos.y, pos.z);
@@ -695,22 +734,36 @@ export function Player() {
         planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 0.35 * dt);
       }
 
+      const mouseTurn = !isTouch.current && isInputActive
+        ? clamp(normalizeAngle(euler.current.y - planeRotY) / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1)
+        : 0;
+      const steeringInput = isTouch.current
+        ? inputTurn
+        : clamp(inputTurn + mouseTurn, -1, 1);
+      const pitchDemand = isTouch.current
+        ? inputPitch * 0.42
+        : clamp(euler.current.x + inputPitch * 0.28, -0.38, 0.42);
+
       const groundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
-      if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && inputPitch > 0) {
+      if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && pitchDemand > 0.07) {
         airborne = true;
         planeY = Math.max(planeY, groundY + 0.5);
       }
 
-      const turnDelta = inputTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * Math.min(1, planeSpeed / 12);
+      const bankLimit = airborne ? AIRPLANE_BANK_LIMIT : 0.18;
+      const targetRoll = steeringInput * bankLimit;
+      planeRoll += (targetRoll - planeRoll) * 4 * dt;
+      const bankTurn = clamp(planeRoll / bankLimit, -1, 1);
+      const turnDelta = bankTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * Math.min(1, planeSpeed / 12);
       planeRotY += turnDelta;
-      euler.current.y += turnDelta;
+      if (!isTouch.current && Math.abs(inputTurn) > 0.01) {
+        euler.current.y += turnDelta;
+      }
 
       const targetPitch = airborne
-        ? Math.max(-0.38, Math.min(0.42, planePitch + inputPitch * AIRPLANE_CONSTANTS.PITCH_SPEED * dt))
+        ? clamp(pitchDemand, -0.38, 0.42)
         : 0;
       planePitch += (targetPitch - planePitch) * 3 * dt;
-      const targetRoll = inputTurn * (airborne ? 0.45 : 0.12);
-      planeRoll += (targetRoll - planeRoll) * 3 * dt;
 
       flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, planeRotY);
       planeX += flyForward.current.x * planeSpeed * dt;
@@ -723,7 +776,7 @@ export function Player() {
         planeY += verticalSpeed * dt;
         if (planeY <= nextGroundY + 0.15) {
           planeY = nextGroundY;
-          airborne = planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.8 && inputPitch > 0;
+          airborne = planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.8 && pitchDemand > 0.07;
           planePitch = airborne ? Math.max(planePitch, 0.08) : 0;
         }
       } else {

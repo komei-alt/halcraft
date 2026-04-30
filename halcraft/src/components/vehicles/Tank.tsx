@@ -11,15 +11,17 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isValidSkinId } from '../../types/skins';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
+import {
+  TANK_AVATAR_POSITION,
+  TANK_AVATAR_SCALE,
+  TANK_MODEL_POSITION,
+  TANK_MODEL_SCALE,
+  TANK_MODEL_YAW,
+  TANK_TURRET_PIVOT,
+} from './vehicleModelConfig';
 
 const TANK_MODEL_PATH = '/models/2026-04-29/tank.glb';
 const PROMPT_COLOR = '#9be7ff';
-const TANK_MODEL_SCALE = 0.58;
-const TANK_MODEL_YAW = -Math.PI / 2;
-const TANK_MODEL_POSITION: [number, number, number] = [0, 0.42, 0];
-const TANK_TURRET_PIVOT: [number, number, number] = [0.95, 1.92, -0.05];
-const TANK_AVATAR_POSITION: [number, number, number] = [0.2, 1.72, 0.18];
-const TANK_AVATAR_SCALE = 0.82;
 
 interface TankModelParts {
   hull: THREE.Object3D;
@@ -113,6 +115,7 @@ export function Tank() {
 }
 
 function TankPassengerAvatar() {
+  const mySeat = useVehicleStore((s) => s.tank.mySeat);
   const pilotId = useVehicleStore((s) => s.tank.seats.pilot);
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
   const myId = useMultiplayerStore((s) => s.myId);
@@ -121,6 +124,8 @@ function TankPassengerAvatar() {
   if (pilotId === null) return null;
 
   const isLocalPilot = pilotId === '__local__' || pilotId === myId;
+  if (mySeat === 'pilot' && isLocalPilot) return null;
+
   const remotePilot = isLocalPilot ? null : remotePlayers.get(pilotId);
   if (!isLocalPilot && !remotePilot) return null;
 

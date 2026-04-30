@@ -1,5 +1,5 @@
 // 戦車・飛行機の武器制御
-// 左クリック長押し = ガトリング、R = 戦車主砲ロケット
+// 左クリック長押し = ガトリング、右クリック = 戦車主砲ロケット
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -28,10 +28,12 @@ import {
   playRocketLaunchSound,
 } from '../../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
+import { TANK_TURRET_PIVOT } from './vehicleModelConfig';
 
 const BULLET_SPEED = 130;
 const BULLET_MAX_AGE = 0.95;
 const BULLET_GRAVITY = 2.2;
+const BULLET_MIN_AIM_DISTANCE = 1.2;
 const MOB_HIT_RADIUS = 1.2;
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -51,6 +53,7 @@ const ROCKET_MIN_AIM_DISTANCE = 1.5;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.95, 2.1, -3.25);
 const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(1.18, 1.35, -2.35);
+const AIRPLANE_GATLING_MUZZLE_LOCAL = new THREE.Vector3(0, 1.2, -7.05);
 
 interface BulletProjectile {
   id: number;
@@ -107,10 +110,53 @@ function getVisibleExplosionPosition(hitPos: THREE.Vector3, normal: THREE.Vector
 
 function getTankTurretWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
   const tank = useVehicleStore.getState().tank;
-  const yaw = tank.rotationY + tank.turretYaw;
-  return localPoint.clone().applyAxisAngle(Y_AXIS, yaw).add(
-    new THREE.Vector3(tank.x, tank.y, tank.z),
+  const pivot = new THREE.Vector3(TANK_TURRET_PIVOT[0], TANK_TURRET_PIVOT[1], TANK_TURRET_PIVOT[2]);
+  return localPoint.clone()
+    .sub(pivot)
+    .applyAxisAngle(Y_AXIS, tank.turretYaw)
+    .add(pivot)
+    .applyAxisAngle(Y_AXIS, tank.rotationY)
+    .add(
+      new THREE.Vector3(tank.x, tank.y, tank.z),
+    );
+}
+
+function getAirplaneWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
+  const airplane = useVehicleStore.getState().airplane;
+  return localPoint.clone().applyEuler(
+    new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll),
+  ).add(
+    new THREE.Vector3(airplane.x, airplane.y, airplane.z),
   );
+}
+
+function getCameraAimDirection(camera: THREE.Camera, startPos: THREE.Vector3, range: number): THREE.Vector3 {
+  const aimDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const multi = useMultiplayerStore.getState();
+  const hit = rayMarchProjectile(
+    camera.position.clone(),
+    aimDir.clone(),
+    range,
+    useWorldStore.getState().getBlock,
+    useMobStore.getState().mobs,
+    MOB_HIT_RADIUS,
+    {
+      remotePlayers: multi.remotePlayers as Map<string, RemotePlayerTarget>,
+      playerHitRadius: PLAYER_HIT_RADIUS,
+      playerHitHeight: PLAYER_HIT_HEIGHT,
+    },
+  );
+  const point = hit.type === 'none'
+    ? camera.position.clone().addScaledVector(aimDir, range)
+    : hit.hitPos;
+  const dir = point.sub(startPos);
+  if (
+    dir.lengthSq() < BULLET_MIN_AIM_DISTANCE * BULLET_MIN_AIM_DISTANCE
+    || dir.normalize().dot(aimDir) < 0.2
+  ) {
+    return aimDir;
+  }
+  return dir.clone();
 }
 
 function getTankBodyWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
@@ -121,17 +167,13 @@ function getTankBodyWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
 }
 
 function getVehicleMuzzle(type: VehicleType, mount: 'center' | 'left' | 'right'): THREE.Vector3 {
-  const vehicles = useVehicleStore.getState();
   if (type === 'tank') {
     const lateral = mount === 'left' ? -0.28 : mount === 'right' ? 0.28 : 0;
     return getTankBodyWorldPoint(TANK_GATLING_MUZZLE_LOCAL.clone().add(new THREE.Vector3(lateral, 0, 0)));
   }
 
-  const airplane = vehicles.airplane;
-  const lateral = mount === 'left' ? -1.25 : mount === 'right' ? 1.25 : 0;
-  return new THREE.Vector3(lateral, 1.05, -4.75).applyAxisAngle(new THREE.Vector3(0, 1, 0), airplane.rotationY).add(
-    new THREE.Vector3(airplane.x, airplane.y, airplane.z),
-  );
+  const lateral = mount === 'left' ? -1.85 : mount === 'right' ? 1.85 : 0;
+  return getAirplaneWorldPoint(AIRPLANE_GATLING_MUZZLE_LOCAL.clone().add(new THREE.Vector3(lateral, 0, 0)));
 }
 
 function getTankCannonMuzzle(): THREE.Vector3 {
@@ -156,7 +198,7 @@ export function VehicleWeapons() {
     if (!isRemote) lastGunFire.current = now;
 
     const startPos = remotePos ?? getVehicleMuzzle(type, mount);
-    const dir = remoteDir ?? shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize().clone();
+    const dir = remoteDir ?? getCameraAimDirection(camera, startPos, GUN_CONSTANTS.RANGE);
 
     if (!isRemote) {
       const spread = 0.012;
@@ -337,25 +379,32 @@ export function VehicleWeapons() {
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) isMouseDown.current = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) isMouseDown.current = false;
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
       const active = useVehicleStore.getState().getActiveVehicle();
-      if (e.code === 'KeyR' && active === 'tank' && !isEditableTarget(e.target)) {
+      if (e.button === 0) {
+        isMouseDown.current = true;
+        return;
+      }
+      if (e.button === 2 && active === 'tank' && !isEditableTarget(e.target)) {
         e.preventDefault();
         fireTankRocket();
       }
     };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) isMouseDown.current = false;
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      const active = useVehicleStore.getState().getActiveVehicle();
+      if (active === 'tank') {
+        e.preventDefault();
+      }
+    };
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mouseup', onMouseUp);
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('contextmenu', onContextMenu);
     return () => {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('mouseup', onMouseUp);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('contextmenu', onContextMenu);
     };
   }, [fireTankRocket]);
 

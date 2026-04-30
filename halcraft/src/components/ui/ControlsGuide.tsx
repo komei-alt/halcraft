@@ -121,7 +121,7 @@ function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatTy
         <ControlRow keyName="A / D" action="旋回" keyColor="#50c878" />
         <ControlRow keyName="マウス" action="砲塔を回す" keyColor="#ffdd66" />
         <ControlRow keyName="左クリック" action="ガトリング" keyColor="#ff6644" />
-        <ControlRow keyName="R" action="主砲ロケット" keyColor="#ff9966" />
+        <ControlRow keyName="右クリック" action="主砲ロケット" keyColor="#ff9966" />
         <Divider />
         <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
       </>
@@ -134,8 +134,9 @@ function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatTy
         <VehicleHeader icon="✈️" label={VEHICLE_NAMES.airplane} />
         <Divider />
         <ControlRow keyName="W / S" action="加速 / 減速" keyColor="#50c878" />
-        <ControlRow keyName="A / D" action="旋回" keyColor="#50c878" />
-        <ControlRow keyName="Space" action="離陸 / 機首上げ" keyColor="#88ccff" />
+        <ControlRow keyName="マウス" action="機首 / 旋回" keyColor="#ffdd66" />
+        <ControlRow keyName="A / D" action="旋回補助" keyColor="#50c878" />
+        <ControlRow keyName="Space" action="機首上げ補助" keyColor="#88ccff" />
         <ControlRow keyName="Shift" action="機首下げ" keyColor="#88ccff" />
         <ControlRow keyName="左クリック" action="ガトリング" keyColor="#ff6644" />
         <Divider />
@@ -158,7 +159,8 @@ function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatTy
       {isPilot && (
         <>
           <ControlRow keyName="W / S" action="前進 / 後退" keyColor="#50c878" />
-          <ControlRow keyName="A / D" action="旋回" keyColor="#50c878" />
+          <ControlRow keyName="マウス" action="傾けて旋回" keyColor="#ffdd66" />
+          <ControlRow keyName="A / D" action="旋回補助" keyColor="#50c878" />
           <ControlRow keyName="Space" action="上昇" keyColor="#50c878" />
           <ControlRow keyName="Shift" action="下降" keyColor="#50c878" />
         </>

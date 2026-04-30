@@ -31,6 +31,7 @@ import { Airplane } from './components/vehicles/Airplane';
 import { MachineGun } from './components/vehicles/MachineGun';
 import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
 import { CockpitHUD } from './components/ui/CockpitHUD';
+import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
 import { useWorldStore } from './stores/useWorldStore';
@@ -238,6 +239,7 @@ export default function App() {
           <AttackIndicator />
           <RocketCooldownIndicator />
           <WeaponSwitchPopover />
+          <VehicleAimHUD />
           <MissionOverlay />
           <CoreHealthBar />
           <BossHealthBar />

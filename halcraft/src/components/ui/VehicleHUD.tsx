@@ -111,7 +111,7 @@ export function VehicleHUD() {
         {mySeat === 'pilot' && (
           <>
             <span><b style={{ color: '#ffcc00' }}>W/S</b> 前進/後退</span>
-            <span><b style={{ color: '#ffcc00' }}>A/D</b> 旋回</span>
+            <span><b style={{ color: '#ffcc00' }}>マウス</b> 傾けて旋回</span>
             <span><b style={{ color: '#ffcc00' }}>Space</b> 上昇</span>
             <span><b style={{ color: '#ffcc00' }}>Shift</b> 下降</span>
           </>

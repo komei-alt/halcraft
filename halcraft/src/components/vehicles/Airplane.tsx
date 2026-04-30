@@ -6,7 +6,18 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Billboard, Text, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { AIRPLANE_CONSTANTS, useVehicleStore } from '../../stores/useVehicleStore';
+import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { usePlayerStore } from '../../stores/usePlayerStore';
+import { isValidSkinId } from '../../types/skins';
+import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
+import {
+  AIRPLANE_AVATAR_POSITION,
+  AIRPLANE_AVATAR_SCALE,
+  AIRPLANE_MODEL_POSITION,
+  AIRPLANE_MODEL_SCALE,
+  AIRPLANE_MODEL_YAW,
+} from './vehicleModelConfig';
 
 const AIRPLANE_MODEL_PATH = '/models/2026-04-29/airplane.glb';
 
@@ -38,10 +49,11 @@ export function Airplane() {
     >
       <primitive
         object={model}
-        scale={0.105}
-        position={[0, 1.0, 0]}
-        rotation={[0, Math.PI, 0]}
+        scale={AIRPLANE_MODEL_SCALE}
+        position={AIRPLANE_MODEL_POSITION}
+        rotation={[0, AIRPLANE_MODEL_YAW, 0]}
       />
+      <AirplanePassengerAvatar />
 
       {airplane.engineOn && (
         <pointLight position={[0, 1.8, -4.2]} color="#fff4c8" intensity={1.4} distance={26} />
@@ -59,6 +71,41 @@ export function Airplane() {
           F 飛行機に乗る
         </Text>
       </Billboard>
+    </group>
+  );
+}
+
+function AirplanePassengerAvatar() {
+  const pilotId = useVehicleStore((s) => s.airplane.seats.pilot);
+  const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
+  const myId = useMultiplayerStore((s) => s.myId);
+  const localSkinId = usePlayerStore((s) => s.skinId);
+
+  if (pilotId === null) return null;
+
+  const isLocalPilot = pilotId === '__local__' || pilotId === myId;
+  const remotePilot = isLocalPilot ? null : remotePlayers.get(pilotId);
+  if (!isLocalPilot && !remotePilot) return null;
+
+  const skinId = isLocalPilot
+    ? localSkinId
+    : remotePilot?.skinId && isValidSkinId(remotePilot.skinId)
+      ? remotePilot.skinId
+      : undefined;
+
+  return (
+    <group
+      position={AIRPLANE_AVATAR_POSITION}
+      rotation={[0, Math.PI, 0]}
+      scale={AIRPLANE_AVATAR_SCALE}
+    >
+      <VoxelAvatar
+        skinId={skinId}
+        color={remotePilot?.color}
+        isMoving={false}
+        isDead={remotePilot?.isDead ?? false}
+        deathTime={remotePilot?.deathTime ?? 0}
+      />
     </group>
   );
 }
