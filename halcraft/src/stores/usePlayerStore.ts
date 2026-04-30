@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
 import { getSocket } from '../utils/socket';
+import { useGameStore } from './useGameStore';
 import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 
 /** localStorage のキー（スキン保存用） */
@@ -252,6 +253,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   takeDamage: (amount, knockbackDirX, knockbackDirZ) => {
+    // クリエイティブモードではダメージを受けない
+    if (useGameStore.getState().gameMode === 'creative') return false;
     // 死亡中はダメージを受けない
     if (get().isDead) return false;
     // 無敵時間中はダメージを受けない
@@ -294,6 +297,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   applyFallDamage: (fallDistance) => {
+    // クリエイティブモードでは落下ダメージなし
+    if (useGameStore.getState().gameMode === 'creative') return;
     if (fallDistance > FALL_DAMAGE_THRESHOLD) {
       const damage = Math.floor((fallDistance - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_PER_BLOCK);
       if (damage > 0) {
@@ -309,6 +314,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   respawn: () => {
+    const isCreative = useGameStore.getState().gameMode === 'creative';
     set({
       hp: 20,
       isDead: false,
@@ -322,7 +328,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCharge: 1,
-      invincibleUntil: Date.now() + 5000,
+      invincibleUntil: isCreative ? Number.POSITIVE_INFINITY : Date.now() + 5000,
     });
     // サーバーへ復活通知
     const socket = getSocket();
