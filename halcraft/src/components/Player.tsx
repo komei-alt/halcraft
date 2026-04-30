@@ -54,6 +54,7 @@ const AIRPLANE_KEYBOARD_PITCH_RATE = 0.75;
 const AIRPLANE_YAW_FOLLOW_RATE = 2.6;
 const AIRPLANE_PITCH_CLIMB_RATE = 9.5;
 const AIRPLANE_LOW_SPEED_SINK_RATE = 2.2;
+const AIRPLANE_CAMERA_FOLLOW_RATE = 8;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -128,9 +129,15 @@ export function Player() {
   const cockpitOffset = useRef(new THREE.Vector3());
   const tankCameraOffset = useRef(new THREE.Vector3());
   const tankTurretPivot = useRef(new THREE.Vector3());
+  const airplaneOrigin = useRef(new THREE.Vector3());
+  const airplaneCameraTarget = useRef(new THREE.Vector3());
+  const airplaneCameraPosition = useRef(new THREE.Vector3());
+  const airplaneLookTarget = useRef(new THREE.Vector3());
+  const airplaneLookForward = useRef(new THREE.Vector3());
   const airplaneControlYaw = useRef(0);
   const airplaneControlPitch = useRef(0);
   const airplaneControlActive = useRef(false);
+  const airplaneCameraActive = useRef(false);
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
@@ -386,6 +393,7 @@ export function Player() {
           sendVehicleDismount(activeVehicle);
           if (activeVehicle === 'airplane') {
             airplaneControlActive.current = false;
+            airplaneCameraActive.current = false;
           }
         }
 
@@ -448,6 +456,7 @@ export function Player() {
               airplaneControlYaw.current = v.rotationY;
               airplaneControlPitch.current = 0;
               airplaneControlActive.current = true;
+              airplaneCameraActive.current = false;
             }
             camera.quaternion.setFromEuler(euler.current);
           }
@@ -861,16 +870,32 @@ export function Player() {
         propellerAngle: nextPropellerAngle,
       });
 
-      cockpitOffset.current.set(0, AIRPLANE_CONSTANTS.CAMERA_HEIGHT, AIRPLANE_CONSTANTS.CAMERA_BACK);
-      cockpitOffset.current.applyAxisAngle(Y_AXIS, planeRotY);
-      pos.x = planeX + cockpitOffset.current.x;
-      pos.y = planeY + cockpitOffset.current.y;
-      pos.z = planeZ + cockpitOffset.current.z;
+      airplaneCameraTarget.current
+        .set(0, AIRPLANE_CONSTANTS.CAMERA_HEIGHT, AIRPLANE_CONSTANTS.CAMERA_BACK)
+        .applyAxisAngle(Y_AXIS, planeRotY)
+        .add(airplaneOrigin.current.set(planeX, planeY, planeZ));
+      if (!airplaneCameraActive.current) {
+        airplaneCameraPosition.current.copy(airplaneCameraTarget.current);
+        airplaneCameraActive.current = true;
+      } else {
+        airplaneCameraPosition.current.lerp(
+          airplaneCameraTarget.current,
+          1 - Math.exp(-AIRPLANE_CAMERA_FOLLOW_RATE * dt),
+        );
+      }
 
-      euler.current.y = planeRotY;
-      euler.current.x = planePitch;
-      camera.quaternion.setFromEuler(euler.current);
-      camera.position.set(pos.x, pos.y, pos.z);
+      pos.copy(airplaneCameraPosition.current);
+      airplaneLookForward.current
+        .set(0, Math.sin(planePitch) * 0.75, -Math.cos(planePitch))
+        .applyAxisAngle(Y_AXIS, planeRotY)
+        .normalize();
+      airplaneLookTarget.current
+        .set(planeX, planeY + AIRPLANE_CONSTANTS.CAMERA_LOOK_HEIGHT, planeZ)
+        .addScaledVector(airplaneLookForward.current, AIRPLANE_CONSTANTS.CAMERA_LOOK_AHEAD);
+
+      camera.position.copy(airplaneCameraPosition.current);
+      camera.lookAt(airplaneLookTarget.current);
+      euler.current.setFromQuaternion(camera.quaternion, 'YXZ');
 
       const now = performance.now();
       if (now - lastSendTime.current > 50) {
