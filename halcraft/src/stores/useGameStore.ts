@@ -51,6 +51,12 @@ interface GameState {
   /** 昼か夜か */
   isNight: boolean;
 
+  /** 更新通知を表示するか */
+  updateAvailable: boolean;
+
+  /** 更新通知を閉じる */
+  dismissUpdate: () => void;
+
   /** プレイするステージを設定 */
   setStage: (stageId: string) => void;
 
@@ -103,7 +109,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameTime: 0.0, // 朝スタート
   dayCount: 1,
   isNight: false,
+  updateAvailable: false,
   isMultiplayer: false,
+
+  dismissUpdate: () => set({ updateAvailable: false }),
 
   setStage: (stageId) => {
     const stage = STAGES.find(s => s.id === stageId) || null;

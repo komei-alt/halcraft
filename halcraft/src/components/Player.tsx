@@ -47,6 +47,11 @@ const PLAYER_RADIUS = 0.25;
 const AIRCRAFT_MOUSE_YAW_RANGE = 0.72;
 const HELICOPTER_BANK_LIMIT = 0.45;
 const AIRPLANE_BANK_LIMIT = 0.58;
+const AIRPLANE_MOUSE_PITCH_LIMIT = 0.42;
+const AIRPLANE_MOUSE_YAW_RATE = 1.2;
+const AIRPLANE_KEYBOARD_YAW_RATE = 1.15;
+const AIRPLANE_KEYBOARD_PITCH_RATE = 0.75;
+const AIRPLANE_YAW_FOLLOW_RATE = 2.6;
 const AIRPLANE_PITCH_CLIMB_RATE = 9.5;
 const AIRPLANE_LOW_SPEED_SINK_RATE = 2.2;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
@@ -64,6 +69,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function normalizeAngle(angle: number): number {
   return ((angle + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
+
+function smoothValue(current: number, target: number, rate: number, dt: number): number {
+  return current + (target - current) * (1 - Math.exp(-rate * dt));
 }
 
 export function Player() {
@@ -119,6 +128,9 @@ export function Player() {
   const cockpitOffset = useRef(new THREE.Vector3());
   const tankCameraOffset = useRef(new THREE.Vector3());
   const tankTurretPivot = useRef(new THREE.Vector3());
+  const airplaneControlYaw = useRef(0);
+  const airplaneControlPitch = useRef(0);
+  const airplaneControlActive = useRef(false);
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
@@ -146,6 +158,18 @@ export function Player() {
 
   // マウスによる視点回転（デスクトップ用）
   const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (useVehicleStore.getState().getActiveVehicle() === 'airplane') {
+      airplaneControlYaw.current = normalizeAngle(
+        airplaneControlYaw.current - e.movementX * MOUSE_SENSITIVITY * AIRPLANE_MOUSE_YAW_RATE,
+      );
+      airplaneControlPitch.current = clamp(
+        airplaneControlPitch.current - e.movementY * MOUSE_SENSITIVITY,
+        -AIRPLANE_MOUSE_PITCH_LIMIT,
+        AIRPLANE_MOUSE_PITCH_LIMIT,
+      );
+      return;
+    }
+
     euler.current.y -= e.movementX * MOUSE_SENSITIVITY;
     euler.current.x -= e.movementY * MOUSE_SENSITIVITY;
     euler.current.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, euler.current.x));
@@ -360,6 +384,9 @@ export function Player() {
         } else {
           vehicleState.dismountVehicle(activeVehicle);
           sendVehicleDismount(activeVehicle);
+          if (activeVehicle === 'airplane') {
+            airplaneControlActive.current = false;
+          }
         }
 
         pos.x = dismountX;
@@ -417,6 +444,11 @@ export function Player() {
             const v = nearest === 'tank' ? vehicleState.tank : vehicleState.airplane;
             euler.current.y = v.rotationY;
             euler.current.x = nearest === 'airplane' ? -0.04 : -0.08;
+            if (nearest === 'airplane') {
+              airplaneControlYaw.current = v.rotationY;
+              airplaneControlPitch.current = 0;
+              airplaneControlActive.current = true;
+            }
             camera.quaternion.setFromEuler(euler.current);
           }
         }
@@ -718,6 +750,12 @@ export function Player() {
       let planeZ = latestAirplane.z;
       let airborne = latestAirplane.airborne;
 
+      if (!airplaneControlActive.current) {
+        airplaneControlYaw.current = planeRotY;
+        airplaneControlPitch.current = planePitch;
+        airplaneControlActive.current = true;
+      }
+
       const inputForward = isTouch.current
         ? -joystickInput.y
         : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
@@ -736,15 +774,25 @@ export function Player() {
         planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 0.35 * dt);
       }
 
-      const mouseTurn = !isTouch.current && isInputActive
-        ? clamp(normalizeAngle(euler.current.y - planeRotY) / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1)
-        : 0;
+      if (!isTouch.current && isInputActive) {
+        airplaneControlYaw.current = normalizeAngle(
+          airplaneControlYaw.current + inputTurn * AIRPLANE_KEYBOARD_YAW_RATE * dt,
+        );
+        airplaneControlPitch.current = clamp(
+          airplaneControlPitch.current + inputPitch * AIRPLANE_KEYBOARD_PITCH_RATE * dt,
+          -AIRPLANE_MOUSE_PITCH_LIMIT,
+          AIRPLANE_MOUSE_PITCH_LIMIT,
+        );
+      }
+
+      const yawAuthority = clamp(planeSpeed / 12, 0.18, 1);
+      const yawError = normalizeAngle(airplaneControlYaw.current - planeRotY);
       const steeringInput = isTouch.current
         ? inputTurn
-        : clamp(inputTurn + mouseTurn, -1, 1);
+        : clamp(yawError / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1);
       const pitchDemand = isTouch.current
         ? inputPitch * 0.42
-        : clamp(euler.current.x + inputPitch * 0.28, -0.38, 0.42);
+        : airplaneControlPitch.current;
 
       const groundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && pitchDemand > 0.07) {
@@ -754,18 +802,23 @@ export function Player() {
 
       const bankLimit = airborne ? AIRPLANE_BANK_LIMIT : 0.18;
       const targetRoll = steeringInput * bankLimit;
-      planeRoll += (targetRoll - planeRoll) * 4 * dt;
-      const bankTurn = clamp(planeRoll / bankLimit, -1, 1);
-      const turnDelta = bankTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * Math.min(1, planeSpeed / 12);
-      planeRotY += turnDelta;
-      if (!isTouch.current && Math.abs(inputTurn) > 0.01) {
-        euler.current.y += turnDelta;
+      planeRoll = smoothValue(planeRoll, targetRoll, 6.5, dt);
+
+      if (isTouch.current) {
+        const bankTurn = clamp(planeRoll / bankLimit, -1, 1);
+        planeRotY = normalizeAngle(
+          planeRotY + bankTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * yawAuthority,
+        );
+      } else {
+        const maxTurnRate = AIRPLANE_CONSTANTS.TURN_SPEED * yawAuthority;
+        const turnRate = clamp(yawError * AIRPLANE_YAW_FOLLOW_RATE, -maxTurnRate, maxTurnRate);
+        planeRotY = normalizeAngle(planeRotY + turnRate * dt);
       }
 
       const targetPitch = airborne
         ? clamp(pitchDemand, -0.38, 0.42)
         : 0;
-      planePitch += (targetPitch - planePitch) * 3 * dt;
+      planePitch = smoothValue(planePitch, targetPitch, 6.5, dt);
 
       flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, planeRotY);
       planeX += flyForward.current.x * planeSpeed * dt;
@@ -814,6 +867,8 @@ export function Player() {
       pos.y = planeY + cockpitOffset.current.y;
       pos.z = planeZ + cockpitOffset.current.z;
 
+      euler.current.y = planeRotY;
+      euler.current.x = planePitch;
       camera.quaternion.setFromEuler(euler.current);
       camera.position.set(pos.x, pos.y, pos.z);
 
