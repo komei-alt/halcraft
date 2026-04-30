@@ -134,6 +134,8 @@ export const HELICOPTER_CONSTANTS = {
   HEIGHT: 2.5,
   LENGTH: 5.5,
   MAX_PASSENGERS: 3,
+  PILOT_CAMERA_HEIGHT: 4.8,
+  PILOT_CAMERA_BACK: 8.8,
 } as const;
 
 /** 戦車の定数 */

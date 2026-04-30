@@ -46,6 +46,8 @@ const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
 const AIRCRAFT_MOUSE_YAW_RANGE = 0.72;
 const HELICOPTER_BANK_LIMIT = 0.45;
+const HELICOPTER_PILOT_CAMERA_FOLLOW_RATE = 8;
+const HELICOPTER_PILOT_CAMERA_PITCH_BIAS = -0.16;
 const AIRPLANE_BANK_LIMIT = 0.58;
 const AIRPLANE_MOUSE_PITCH_LIMIT = 0.42;
 const AIRPLANE_MOUSE_YAW_RATE = 1.2;
@@ -129,6 +131,11 @@ export function Player() {
   const cockpitOffset = useRef(new THREE.Vector3());
   const tankCameraOffset = useRef(new THREE.Vector3());
   const tankTurretPivot = useRef(new THREE.Vector3());
+  const helicopterOrigin = useRef(new THREE.Vector3());
+  const helicopterCameraTarget = useRef(new THREE.Vector3());
+  const helicopterCameraPosition = useRef(new THREE.Vector3());
+  const helicopterCameraEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const helicopterCameraActive = useRef(false);
   const airplaneOrigin = useRef(new THREE.Vector3());
   const airplaneCameraTarget = useRef(new THREE.Vector3());
   const airplaneCameraPosition = useRef(new THREE.Vector3());
@@ -388,6 +395,7 @@ export function Player() {
         if (activeVehicle === 'helicopter') {
           vehicleState.dismountHelicopter();
           sendHelicopterDismount();
+          helicopterCameraActive.current = false;
         } else {
           vehicleState.dismountVehicle(activeVehicle);
           sendVehicleDismount(activeVehicle);
@@ -443,6 +451,9 @@ export function Player() {
             sendHelicopterBoard(assignedSeat);
             euler.current.y = heli.rotationY;
             euler.current.x = -0.1;
+            if (assignedSeat === 'pilot') {
+              helicopterCameraActive.current = false;
+            }
             camera.quaternion.setFromEuler(euler.current);
           }
         } else if (nearest === 'tank' || nearest === 'airplane') {
@@ -595,17 +606,30 @@ export function Player() {
           speed: apSpeed, rotorAngle: apRotorAngle,
         });
 
-        // カメラをパイロット席に配置
-        const seatOff = SEAT_OFFSETS.pilot;
-        cockpitOffset.current.set(seatOff.x, seatOff.y, seatOff.z);
-        cockpitOffset.current.applyAxisAngle(Y_AXIS, apRotY);
+        // パイロット席のみ、機体の後ろ上方から見る三人称カメラにする
+        helicopterCameraTarget.current
+          .set(0, HELICOPTER_CONSTANTS.PILOT_CAMERA_HEIGHT, HELICOPTER_CONSTANTS.PILOT_CAMERA_BACK)
+          .applyAxisAngle(Y_AXIS, apRotY)
+          .add(helicopterOrigin.current.set(apX, apY, apZ));
+        if (!helicopterCameraActive.current) {
+          helicopterCameraPosition.current.copy(helicopterCameraTarget.current);
+          helicopterCameraActive.current = true;
+        } else {
+          helicopterCameraPosition.current.lerp(
+            helicopterCameraTarget.current,
+            1 - Math.exp(-HELICOPTER_PILOT_CAMERA_FOLLOW_RATE * dt),
+          );
+        }
 
-        pos.x = apX + cockpitOffset.current.x;
-        pos.y = apY + cockpitOffset.current.y;
-        pos.z = apZ + cockpitOffset.current.z;
-
-        camera.quaternion.setFromEuler(euler.current);
-        camera.position.set(pos.x, pos.y, pos.z);
+        pos.copy(helicopterCameraPosition.current);
+        helicopterCameraEuler.current.set(
+          clamp(euler.current.x + HELICOPTER_PILOT_CAMERA_PITCH_BIAS, -Math.PI / 2.1, Math.PI / 2.1),
+          euler.current.y,
+          0,
+          'YXZ',
+        );
+        camera.quaternion.setFromEuler(helicopterCameraEuler.current);
+        camera.position.copy(helicopterCameraPosition.current);
 
         // マルチプレイ送信
         const now = performance.now();
