@@ -140,6 +140,12 @@ interface MultiplayerState {
   /** ロケット爆発を送信 */
   sendRocketExplode: (rocketId: string, pos: [number, number, number]) => void;
 
+  /** 乗り物破壊を同期 */
+  sendVehicleDestroy: (type: VehicleType, pos: [number, number, number]) => void;
+
+  /** 乗り物リスポーンを同期 */
+  sendVehicleRespawn: (type: VehicleType) => void;
+
 }
 
 let lastSentPos: [number, number, number] | null = null;
@@ -309,6 +315,18 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     const socket = getSocket();
     if (!socket?.connected) return;
     socket.emit('rocket:explode', { rocketId, pos });
+  },
+
+  sendVehicleDestroy: (type, pos) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:destroy', { type, pos });
+  },
+
+  sendVehicleRespawn: (type) => {
+    const socket = getSocket();
+    if (!socket?.connected) return;
+    socket.emit('vehicle:respawn', { type });
   },
 
 
@@ -634,6 +652,21 @@ function setupSocketListeners(
       cb(data);
     }
   });
+
+  // ── 乗り物破壊・リスポーン同期 ──
+  socket.on('vehicle:destroyed', (data: { type: VehicleType; pos: [number, number, number] }) => {
+    // リモートプレイヤーが乗り物を破壊した
+    for (const cb of remoteVehicleDestroyCallbacks) {
+      cb(data);
+    }
+  });
+
+  socket.on('vehicle:respawned', (data: { type: VehicleType }) => {
+    // リモートプレイヤーが乗り物をリスポーンさせた
+    for (const cb of remoteVehicleRespawnCallbacks) {
+      cb(data);
+    }
+  });
 }
 
 // ── リモート機関銃発射のコールバック管理 ──
@@ -705,5 +738,37 @@ export function onRemoteRocketExplode(cb: (data: RemoteRocketExplodeData) => voi
   return () => {
     const idx = remoteRocketExplodeCallbacks.indexOf(cb);
     if (idx >= 0) remoteRocketExplodeCallbacks.splice(idx, 1);
+  };
+}
+
+// ── 乗り物破壊・リスポーン同期のコールバック管理 ──
+
+export interface RemoteVehicleDestroyData {
+  type: VehicleType;
+  pos: [number, number, number];
+}
+
+export interface RemoteVehicleRespawnData {
+  type: VehicleType;
+}
+
+const remoteVehicleDestroyCallbacks: Array<(data: RemoteVehicleDestroyData) => void> = [];
+const remoteVehicleRespawnCallbacks: Array<(data: RemoteVehicleRespawnData) => void> = [];
+
+/** リモートプレイヤーの乗り物破壊イベントを受け取るコールバックを登録 */
+export function onRemoteVehicleDestroy(cb: (data: RemoteVehicleDestroyData) => void): () => void {
+  remoteVehicleDestroyCallbacks.push(cb);
+  return () => {
+    const idx = remoteVehicleDestroyCallbacks.indexOf(cb);
+    if (idx >= 0) remoteVehicleDestroyCallbacks.splice(idx, 1);
+  };
+}
+
+/** リモートプレイヤーの乗り物リスポーンイベントを受け取るコールバックを登録 */
+export function onRemoteVehicleRespawn(cb: (data: RemoteVehicleRespawnData) => void): () => void {
+  remoteVehicleRespawnCallbacks.push(cb);
+  return () => {
+    const idx = remoteVehicleRespawnCallbacks.indexOf(cb);
+    if (idx >= 0) remoteVehicleRespawnCallbacks.splice(idx, 1);
   };
 }

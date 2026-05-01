@@ -3,8 +3,9 @@
 // - 乗り物同士の衝突でダメージ
 // - 乗り物破壊時に搭乗者即死 + 近接プレイヤーにダメージ
 // - 破壊後タイマーでリスポーン
+// - マルチプレイヤー同期（破壊・リスポーン）
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { onRemoteVehicleDestroy, onRemoteVehicleRespawn } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { spawnVehicleExplosion, spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
@@ -87,8 +89,16 @@ export function VehicleCombat() {
     car: 0,
   });
 
+  /** 前フレームの destroyed 状態を追跡して、新たに破壊されたかを検知 */
+  const prevDestroyed = useRef<Record<VehicleType, boolean>>({
+    helicopter: false,
+    tank: false,
+    airplane: false,
+    car: false,
+  });
+
   /** 乗り物の爆発処理（ブロック破壊 + 周囲ダメージ + 搭乗者即死） */
-  const handleVehicleExplosion = useCallback((type: VehicleType) => {
+  const handleVehicleExplosion = useCallback((type: VehicleType, isRemote: boolean = false) => {
     const state = useVehicleStore.getState();
     const vehicle = state[type];
     const cx = vehicle.x;
@@ -134,14 +144,14 @@ export function VehicleCombat() {
     for (const block of candidates.slice(0, 100)) {
       if (!world.breakBlock(block.x, block.y, block.z)) continue;
       spawnBlockBreakEffect(block.blockId, block.x, block.y, block.z);
-      multi.sendBlockBreak(block.x, block.y, block.z);
+      if (!isRemote) {
+        multi.sendBlockBreak(block.x, block.y, block.z);
+      }
     }
 
     // 4. 搭乗者に即死ダメージ（自分が乗っていた場合）
     const wasMyVehicle = state.activeVehicle === type;
     if (wasMyVehicle) {
-      // 乗り物を降ろす（destroyVehicleで既に処理済み）
-      // プレイヤーに即死ダメージ
       usePlayerStore.getState().takeDamage(VEHICLE_EXPLOSION.RIDER_DAMAGE);
     }
 
@@ -157,32 +167,36 @@ export function VehicleCombat() {
       }
     }
 
-    // 6. 近くのリモートプレイヤーにダメージ通知
-    for (const [, player] of multi.remotePlayers) {
-      if (player.isDead) continue;
-      const pPos = new THREE.Vector3(player.position[0], player.position[1] + 0.85, player.position[2]);
-      const dist = pPos.distanceTo(new THREE.Vector3(cx, cy, cz));
-      const damage = calculateProximityDamage(dist);
-      if (damage <= 0) continue;
-      const dirX = player.position[0] - cx;
-      const dirZ = player.position[2] - cz;
-      multi.sendPlayerAttack(player.id, damage, dirX * 2, dirZ * 2);
-      spawnDamagePopup(damage, player.position[0], player.position[1] + 1.5, player.position[2], damage >= VEHICLE_EXPLOSION.PROXIMITY_MAX_DAMAGE * 0.7);
+    // 6. 近くのリモートプレイヤーにダメージ通知（ローカル側のみ送信）
+    if (!isRemote) {
+      for (const [, player] of multi.remotePlayers) {
+        if (player.isDead) continue;
+        const pPos = new THREE.Vector3(player.position[0], player.position[1] + 0.85, player.position[2]);
+        const dist = pPos.distanceTo(new THREE.Vector3(cx, cy, cz));
+        const damage = calculateProximityDamage(dist);
+        if (damage <= 0) continue;
+        const dirX = player.position[0] - cx;
+        const dirZ = player.position[2] - cz;
+        multi.sendPlayerAttack(player.id, damage, dirX * 2, dirZ * 2);
+        spawnDamagePopup(damage, player.position[0], player.position[1] + 1.5, player.position[2], damage >= VEHICLE_EXPLOSION.PROXIMITY_MAX_DAMAGE * 0.7);
+      }
     }
 
-    // 7. 近くのモブにダメージ
-    const mobs = useMobStore.getState().mobs;
-    for (const mob of mobs) {
-      if (mob.hp <= 0) continue;
-      const mobPos = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
-      const dist = mobPos.distanceTo(new THREE.Vector3(cx, cy, cz));
-      const damage = calculateProximityDamage(dist);
-      if (damage <= 0) continue;
-      const dirX = mob.x - cx;
-      const dirZ = mob.z - cz;
-      multi.sendMobDamage(mob.id, damage, dirX * 2, dirZ * 2);
-      useMobStore.getState().damageMob(mob.id, damage, dirX, dirZ);
-      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, false);
+    // 7. 近くのモブにダメージ（ローカル側のみ処理）
+    if (!isRemote) {
+      const mobs = useMobStore.getState().mobs;
+      for (const mob of mobs) {
+        if (mob.hp <= 0) continue;
+        const mobPos = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
+        const dist = mobPos.distanceTo(new THREE.Vector3(cx, cy, cz));
+        const damage = calculateProximityDamage(dist);
+        if (damage <= 0) continue;
+        const dirX = mob.x - cx;
+        const dirZ = mob.z - cz;
+        multi.sendMobDamage(mob.id, damage, dirX * 2, dirZ * 2);
+        useMobStore.getState().damageMob(mob.id, damage, dirX, dirZ);
+        spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, false);
+      }
     }
 
     // 8. カメラシェイク
@@ -192,13 +206,58 @@ export function VehicleCombat() {
       usePlayerStore.setState({ cameraShake: Math.max(usePlayerStore.getState().cameraShake, shakeIntensity) });
     }
 
-    // 9. リスポーンタイマー開始
-    respawnTimers.current[type] = VEHICLE_EXPLOSION.RESPAWN_DELAY;
+    // 9. リスポーンタイマー開始（ローカル管理のみ）
+    if (!isRemote) {
+      respawnTimers.current[type] = VEHICLE_EXPLOSION.RESPAWN_DELAY;
+
+      // 10. 他プレイヤーに破壊を通知
+      useMultiplayerStore.getState().sendVehicleDestroy(type, [cx, cy, cz]);
+    }
   }, [camera]);
+
+  // リモートプレイヤーからの破壊・リスポーンイベントを受信
+  useEffect(() => {
+    const unsubDestroy = onRemoteVehicleDestroy((data) => {
+      const vehicleStore = useVehicleStore.getState();
+      const vehicle = vehicleStore[data.type];
+      // まだローカルで破壊されていなければ破壊処理を実行
+      if (vehicle.spawned && !vehicle.destroyed) {
+        vehicleStore.destroyVehicle(data.type);
+      }
+      handleVehicleExplosion(data.type, true);
+    });
+
+    const unsubRespawn = onRemoteVehicleRespawn((data) => {
+      const vehicleStore = useVehicleStore.getState();
+      const vehicle = vehicleStore[data.type];
+      if (vehicle.destroyed) {
+        vehicleStore.respawnVehicle(data.type);
+      }
+    });
+
+    return () => {
+      unsubDestroy();
+      unsubRespawn();
+    };
+  }, [handleVehicleExplosion]);
 
   useFrame((_, delta) => {
     const vehicleStore = useVehicleStore.getState();
     const dt = Math.min(delta, 0.05);
+
+    // === 新規破壊の検知（バグ修正: どの武器から damageVehicle が呼ばれても爆発を発火） ===
+    for (const type of ALL_VEHICLE_TYPES) {
+      const vehicle = vehicleStore[type];
+      const wasDestroyed = prevDestroyed.current[type];
+      const isNowDestroyed = vehicle.destroyed;
+
+      if (!wasDestroyed && isNowDestroyed) {
+        // このフレームで新たに破壊された → 爆発を発火
+        handleVehicleExplosion(type, false);
+      }
+
+      prevDestroyed.current[type] = isNowDestroyed;
+    }
 
     // === 乗り物同士の衝突判定 ===
     for (let i = 0; i < ALL_VEHICLE_TYPES.length; i++) {
@@ -236,28 +295,17 @@ export function VehicleCombat() {
           const damage = Math.ceil(relativeSpeed * VEHICLE_EXPLOSION.COLLISION_DAMAGE_MULTIPLIER);
 
           if (damage > 0) {
-            const destroyedA = vehicleStore.damageVehicle(typeA, damage);
-            const destroyedB = vehicleStore.damageVehicle(typeB, damage);
+            // damageVehicle の結果は prevDestroyed の差分で検知するため、ここでは呼ぶだけ
+            vehicleStore.damageVehicle(typeA, damage);
+            vehicleStore.damageVehicle(typeB, damage);
 
             // 衝突エフェクト
             const hitX = (vehicleA.x + vehicleB.x) / 2;
             const hitY = (vehicleA.y + vehicleB.y) / 2 + 1;
             const hitZ = (vehicleA.z + vehicleB.z) / 2;
             spawnHitImpactEffect(hitX, hitY, hitZ, 0, 1, 0, true);
-
-            if (destroyedA) handleVehicleExplosion(typeA);
-            if (destroyedB) handleVehicleExplosion(typeB);
           }
         }
-      }
-    }
-
-    // === 破壊判定（HP == 0 かつ未処理） ===
-    for (const type of ALL_VEHICLE_TYPES) {
-      const vehicle = vehicleStore[type];
-      if (vehicle.destroyed && vehicle.hp <= 0) {
-        // 既にdestroyedフラグが立っている場合、爆発は handleVehicleExplosion() で
-        // damageVehicle 経由で既に呼ばれているはず
       }
     }
 
@@ -269,6 +317,9 @@ export function VehicleCombat() {
         if (respawnTimers.current[type] <= 0) {
           respawnTimers.current[type] = 0;
           vehicleStore.respawnVehicle(type);
+
+          // リスポーンを他プレイヤーに通知
+          useMultiplayerStore.getState().sendVehicleRespawn(type);
         }
       }
     }

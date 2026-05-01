@@ -29,6 +29,8 @@ export const mobileActions = {
   vehicleGun: false,
   /** 乗り物ロケット発射トリガー（1回消費で自動false） */
   vehicleRocket: false,
+  /** 飛行機爆弾投下トリガー（1回消費で自動false） */
+  vehicleBomb: false,
 };
 
 /** 一時的なタッチ操作トリガーを全てクリア */
@@ -38,6 +40,7 @@ export function resetMobileActionTriggers(): void {
   mobileActions.fireRocket = false;
   mobileActions.fireMachineGun = false;
   mobileActions.vehicleRocket = false;
+  mobileActions.vehicleBomb = false;
 }
 
 /**
@@ -87,6 +90,17 @@ export function consumeFireRocket(): boolean {
 export function consumeVehicleRocket(): boolean {
   if (mobileActions.vehicleRocket) {
     mobileActions.vehicleRocket = false;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 飛行機爆弾投下を消費
+ */
+export function consumeVehicleBomb(): boolean {
+  if (mobileActions.vehicleBomb) {
+    mobileActions.vehicleBomb = false;
     return true;
   }
   return false;

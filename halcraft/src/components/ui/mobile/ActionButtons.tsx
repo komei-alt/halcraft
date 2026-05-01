@@ -78,6 +78,12 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     mobileActions.vehicleRocket = true;
   }, []);
 
+  const handleVehicleBomb = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.vehicleBomb = true;
+  }, []);
+
   if (activeVehicle === 'tank' || activeVehicle === 'airplane') {
     return (
       <>
@@ -135,6 +141,34 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
             }}
           >
             💥
+          </div>
+        )}
+        {activeVehicle === 'airplane' && (
+          <div
+            onTouchStart={handleVehicleBomb}
+            style={{
+              position: 'fixed',
+              right: 20,
+              bottom: `calc(${64 + 80 + BUTTON_SIZE + 12}px + env(safe-area-inset-bottom))`,
+              width: BUTTON_SIZE,
+              height: BUTTON_SIZE,
+              borderRadius: 8,
+              background: 'rgba(255, 80, 50, 0.25)',
+              border: '2px solid rgba(255, 120, 80, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 120,
+              touchAction: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              fontSize: 20,
+              color: 'rgba(255, 245, 220, 0.85)',
+              textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            💣
           </div>
         )}
       </>

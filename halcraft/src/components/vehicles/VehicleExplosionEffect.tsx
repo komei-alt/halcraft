@@ -2,7 +2,7 @@
 // 乗り物が破壊された時の超派手な爆発演出
 // 火花・金属破片・黒煙・衝撃波リングの4層パーティクル
 
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleType } from '../../stores/useVehicleStore';
@@ -42,14 +42,18 @@ interface ExplosionParticle {
   kind: 'fire' | 'metal' | 'smoke';
 }
 
-interface ExplosionEffect {
+interface FireballState {
+  id: string;
+  cx: number; cy: number; cz: number;
+  shockwaveProgress: number;
+  fireballLife: number;
+}
+
+interface ExplosionEffectInternal {
   id: string;
   particles: ExplosionParticle[];
-  /** 衝撃波リングの進行度 (0-1) */
   shockwaveProgress: number;
-  /** 中心位置 */
   cx: number; cy: number; cz: number;
-  /** 火球の残り寿命 */
   fireballLife: number;
 }
 
@@ -65,12 +69,12 @@ const SHOCKWAVE_DURATION = 0.6;
 let effectIdCounter = 0;
 
 export function VehicleExplosionEffect() {
-  const effectsRef = useRef<ExplosionEffect[]>([]);
+  const effectsRef = useRef<ExplosionEffectInternal[]>([]);
   const pointsRef = useRef<THREE.Points>(null);
   const maxParticles = MAX_EFFECTS * TOTAL_PARTICLES;
 
-  // 衝撃波リングのメッシュ用
-  const shockwaveRingsRef = useRef<THREE.Mesh[]>([]);
+  // 衝撃波リング + 火球を表示するための React state
+  const [fireballs, setFireballs] = useState<FireballState[]>([]);
 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -181,8 +185,9 @@ export function VehicleExplosionEffect() {
       });
     }
 
-    const effect: ExplosionEffect = {
-      id: `vex_${effectIdCounter++}`,
+    const id = `vex_${effectIdCounter++}`;
+    const effect: ExplosionEffectInternal = {
+      id,
       particles,
       shockwaveProgress: 0,
       cx: x,
@@ -196,6 +201,12 @@ export function VehicleExplosionEffect() {
     if (effects.length > MAX_EFFECTS) {
       effects.splice(0, effects.length - MAX_EFFECTS);
     }
+
+    // 衝撃波 + 火球の React state を更新（JSX 再レンダー）
+    setFireballs((prev) => {
+      const next = [...prev, { id, cx: x, cy: centerY, cz: z, shockwaveProgress: 0, fireballLife: FIREBALL_DURATION }];
+      return next.slice(-MAX_EFFECTS);
+    });
   }, []);
 
   // グローバルトリガーに登録
@@ -206,7 +217,7 @@ export function VehicleExplosionEffect() {
 
   useFrame((_, delta) => {
     const effects = effectsRef.current;
-    if (effects.length === 0) {
+    if (effects.length === 0 && fireballs.length === 0) {
       geometry.setDrawRange(0, 0);
       return;
     }
@@ -292,6 +303,17 @@ export function VehicleExplosionEffect() {
     posAttr.needsUpdate = true;
     colAttr.needsUpdate = true;
     sizeAttr.needsUpdate = true;
+
+    // 衝撃波 + 火球の React state 更新
+    let fbChanged = false;
+    for (const fb of fireballs) {
+      fb.shockwaveProgress += dt / SHOCKWAVE_DURATION;
+      fb.fireballLife -= dt;
+      fbChanged = true;
+    }
+    if (fbChanged) {
+      setFireballs((prev) => prev.filter((fb) => fb.shockwaveProgress < 1.5 || fb.fireballLife > -0.3));
+    }
   });
 
   return (
@@ -299,30 +321,25 @@ export function VehicleExplosionEffect() {
       <points ref={pointsRef} geometry={geometry} material={material} />
 
       {/* 衝撃波リング + 火球 */}
-      {effectsRef.current.map((effect) => (
-        <group key={effect.id}>
+      {fireballs.map((fb) => (
+        <group key={fb.id}>
           {/* 衝撃波リング */}
-          {effect.shockwaveProgress < 1 && (
+          {fb.shockwaveProgress < 1 && (
             <mesh
-              position={[effect.cx, effect.cy, effect.cz]}
+              position={[fb.cx, fb.cy, fb.cz]}
               rotation={[-Math.PI / 2, 0, 0]}
-              ref={(ref) => {
-                if (ref && !shockwaveRingsRef.current.includes(ref)) {
-                  shockwaveRingsRef.current.push(ref);
-                }
-              }}
             >
               <ringGeometry
                 args={[
-                  Math.max(0.1, effect.shockwaveProgress * 12),
-                  effect.shockwaveProgress * 12 + 0.8,
+                  Math.max(0.1, fb.shockwaveProgress * 12),
+                  fb.shockwaveProgress * 12 + 0.8,
                   32,
                 ]}
               />
               <meshBasicMaterial
                 color="#ffaa33"
                 transparent
-                opacity={Math.max(0, (1 - effect.shockwaveProgress) * 0.4)}
+                opacity={Math.max(0, (1 - fb.shockwaveProgress) * 0.4)}
                 side={THREE.DoubleSide}
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
@@ -331,22 +348,22 @@ export function VehicleExplosionEffect() {
           )}
 
           {/* 中心の火球 */}
-          {effect.fireballLife > 0 && (
+          {fb.fireballLife > 0 && (
             <>
-              <mesh position={[effect.cx, effect.cy, effect.cz]}>
-                <sphereGeometry args={[2.5 * (1 - effect.fireballLife / FIREBALL_DURATION * 0.3), 16, 12]} />
+              <mesh position={[fb.cx, fb.cy, fb.cz]}>
+                <sphereGeometry args={[2.5 * (1 - fb.fireballLife / FIREBALL_DURATION * 0.3), 16, 12]} />
                 <meshBasicMaterial
                   color="#ff6600"
                   transparent
-                  opacity={Math.max(0, effect.fireballLife / FIREBALL_DURATION * 0.6)}
+                  opacity={Math.max(0, fb.fireballLife / FIREBALL_DURATION * 0.6)}
                   depthWrite={false}
                   blending={THREE.AdditiveBlending}
                 />
               </mesh>
               <pointLight
-                position={[effect.cx, effect.cy + 1, effect.cz]}
+                position={[fb.cx, fb.cy + 1, fb.cz]}
                 color="#ff5500"
-                intensity={Math.max(0, effect.fireballLife / FIREBALL_DURATION * 8)}
+                intensity={Math.max(0, fb.fireballLife / FIREBALL_DURATION * 8)}
                 distance={25}
               />
             </>

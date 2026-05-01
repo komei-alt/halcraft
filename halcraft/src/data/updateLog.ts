@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-01',
     items: [
+      { type: 'feature', text: '飛行機から爆弾を投下できるようになった！右クリックかBキーで大爆発！' },
       { type: 'feature', text: '乗り物を攻撃して壊せるようになった！戦車、ヘリ、飛行機、車にダメージを与えると大爆発するよ' },
       { type: 'feature', text: '乗り物が壊れると超派手な爆発！乗っている人は死亡、近くの人もダメージを受けるよ' },
       { type: 'feature', text: '乗り物同士がぶつかるとお互いにダメージ！体当たりでも壊せるよ' },

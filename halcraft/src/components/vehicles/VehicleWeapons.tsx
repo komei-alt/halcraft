@@ -1,5 +1,5 @@
 // 戦車・飛行機の武器制御
-// 左クリック長押し = ガトリング、右クリック = 戦車主砲ロケット
+// 左クリック長押し = ガトリング、右クリック = 戦車主砲ロケット、B / 右クリック(飛行機) = 爆弾投下
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -18,7 +18,7 @@ import { useWorldStore } from '../../stores/useWorldStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
-import { consumeVehicleRocket, mobileActions } from '../../utils/touchInput';
+import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
@@ -56,6 +56,18 @@ const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.95, 2.1, -3.25);
 const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(1.18, 1.35, -2.35);
 const AIRPLANE_GATLING_MUZZLE_LOCAL = new THREE.Vector3(0, 1.2, -7.05);
 
+/** 爆弾の定数 */
+const BOMB_GRAVITY = 22;
+const BOMB_MAX_AGE = 8;
+const BOMB_COOLDOWN = 1.2;
+const BOMB_HIT_RADIUS = 1.0;
+const BOMB_EXPLOSION_RADIUS = 10;
+const BOMB_EXPLOSION_DAMAGE = 35;
+const BOMB_EXPLOSION_MIN_DAMAGE = 5;
+const BOMB_EXPLOSION_BLOCK_RADIUS = 4.0;
+const BOMB_EXPLOSION_MAX_DESTROY_BLOCKS = 120;
+const BOMB_DROP_OFFSET = new THREE.Vector3(0, -1.5, 0);
+
 interface BulletProjectile {
   id: number;
   pos: THREE.Vector3;
@@ -81,6 +93,15 @@ interface ExplosionFlash {
   life: number;
 }
 
+interface BombProjectile {
+  id: number;
+  syncId: string;
+  pos: THREE.Vector3;
+  prev: THREE.Vector3;
+  vel: THREE.Vector3;
+  age: number;
+}
+
 let nextProjectileId = 0;
 
 interface ExplosionBlockCandidate {
@@ -102,6 +123,13 @@ function calculateExplosionDamage(distance: number): number {
   const falloff = 1 - distance / EXPLOSION_RADIUS;
   const eased = falloff * falloff;
   return Math.max(1, Math.round(EXPLOSION_MIN_DAMAGE + (EXPLOSION_DAMAGE - EXPLOSION_MIN_DAMAGE) * eased));
+}
+
+function calculateBombExplosionDamage(distance: number): number {
+  if (distance >= BOMB_EXPLOSION_RADIUS) return 0;
+  const falloff = 1 - distance / BOMB_EXPLOSION_RADIUS;
+  const eased = falloff * falloff;
+  return Math.max(1, Math.round(BOMB_EXPLOSION_MIN_DAMAGE + (BOMB_EXPLOSION_DAMAGE - BOMB_EXPLOSION_MIN_DAMAGE) * eased));
 }
 
 function getVisibleExplosionPosition(hitPos: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 {
@@ -185,10 +213,12 @@ export function VehicleWeapons() {
   const { camera } = useThree();
   const [bullets, setBullets] = useState<BulletProjectile[]>([]);
   const [rockets, setRockets] = useState<CannonRocket[]>([]);
+  const [bombs, setBombs] = useState<BombProjectile[]>([]);
   const [explosions, setExplosions] = useState<ExplosionFlash[]>([]);
   const isMouseDown = useRef(false);
   const lastGunFire = useRef(0);
   const lastRocketFire = useRef(0);
+  const lastBombDrop = useRef(0);
   const shootDir = useRef(new THREE.Vector3());
   const cameraAimDir = useRef(new THREE.Vector3());
   const aimPoint = useRef(new THREE.Vector3());
@@ -269,6 +299,46 @@ export function VehicleWeapons() {
     }
   }, []);
 
+  /** 爆弾用のブロック破壊（広範囲） */
+  const destroyBombBlocks = useCallback((center: THREE.Vector3) => {
+    const world = useWorldStore.getState();
+    const multi = useMultiplayerStore.getState();
+    const radiusSq = BOMB_EXPLOSION_BLOCK_RADIUS * BOMB_EXPLOSION_BLOCK_RADIUS;
+    const minX = Math.floor(center.x - BOMB_EXPLOSION_BLOCK_RADIUS);
+    const maxX = Math.floor(center.x + BOMB_EXPLOSION_BLOCK_RADIUS);
+    const minY = Math.floor(center.y - BOMB_EXPLOSION_BLOCK_RADIUS);
+    const maxY = Math.floor(center.y + BOMB_EXPLOSION_BLOCK_RADIUS);
+    const minZ = Math.floor(center.z - BOMB_EXPLOSION_BLOCK_RADIUS);
+    const maxZ = Math.floor(center.z + BOMB_EXPLOSION_BLOCK_RADIUS);
+    const candidates: ExplosionBlockCandidate[] = [];
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          const dx = x + 0.5 - center.x;
+          const dy = y + 0.5 - center.y;
+          const dz = z + 0.5 - center.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+          if (distSq > radiusSq) continue;
+
+          const blockId = world.getBlock(x, y, z);
+          if (blockId === BLOCK_IDS.AIR) continue;
+          if (BLOCK_DEFS[blockId]?.unbreakable) continue;
+
+          candidates.push({ x, y, z, blockId, distSq });
+        }
+      }
+    }
+
+    candidates.sort((a, b) => a.distSq - b.distSq);
+
+    for (const block of candidates.slice(0, BOMB_EXPLOSION_MAX_DESTROY_BLOCKS)) {
+      if (!world.breakBlock(block.x, block.y, block.z)) continue;
+      spawnBlockBreakEffect(block.blockId, block.x, block.y, block.z);
+      multi.sendBlockBreak(block.x, block.y, block.z);
+    }
+  }, []);
+
   const applyRocketExplosionDamage = useCallback((center: THREE.Vector3) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
@@ -307,6 +377,50 @@ export function VehicleWeapons() {
       const dirX = player.position[0] - center.x;
       const dirZ = player.position[2] - center.z;
       multi.sendPlayerAttack(player.id, damage, dirX * 1.8, dirZ * 1.8);
+      spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
+      spawnHitImpactEffect(player.position[0], player.position[1] + 0.9, player.position[2], dirX, 0.35, dirZ, false);
+    }
+  }, [camera]);
+
+  /** 爆弾の爆発ダメージ適用 */
+  const applyBombExplosionDamage = useCallback((center: THREE.Vector3) => {
+    const mobStore = useMobStore.getState();
+    const multi = useMultiplayerStore.getState();
+    const playerStore = usePlayerStore.getState();
+    const playerCenter = new THREE.Vector3(camera.position.x, camera.position.y - 0.85, camera.position.z);
+    const selfDamage = calculateBombExplosionDamage(playerCenter.distanceTo(center));
+
+    if (selfDamage > 0) {
+      playerStore.takeDamage(selfDamage, playerCenter.x - center.x, playerCenter.z - center.z);
+    }
+
+    for (const mob of mobStore.mobs) {
+      if (mob.hp <= 0) continue;
+      const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
+      const damage = calculateBombExplosionDamage(mobCenter.distanceTo(center));
+      if (damage <= 0) continue;
+
+      const dirX = mob.x - center.x;
+      const dirZ = mob.z - center.z;
+      multi.sendMobDamage(mob.id, damage, dirX * 2.5, dirZ * 2.5);
+      mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= BOMB_EXPLOSION_DAMAGE * 0.75);
+      spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
+    }
+
+    for (const [, player] of multi.remotePlayers) {
+      if (player.isDead) continue;
+      const playerBody = new THREE.Vector3(
+        player.position[0],
+        player.position[1] + PLAYER_HIT_HEIGHT * 0.5,
+        player.position[2],
+      );
+      const damage = calculateBombExplosionDamage(playerBody.distanceTo(center));
+      if (damage <= 0) continue;
+
+      const dirX = player.position[0] - center.x;
+      const dirZ = player.position[2] - center.z;
+      multi.sendPlayerAttack(player.id, damage, dirX * 2.5, dirZ * 2.5);
       spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
       spawnHitImpactEffect(player.position[0], player.position[1] + 0.9, player.position[2], dirX, 0.35, dirZ, false);
     }
@@ -378,6 +492,63 @@ export function VehicleWeapons() {
     setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.45 }]);
   }, [applyRocketExplosionDamage, camera, destroyExplosionBlocks]);
 
+  /** 爆弾の爆発処理 */
+  const explodeBomb = useCallback((bomb: BombProjectile, pos: THREE.Vector3) => {
+    destroyBombBlocks(pos);
+    applyBombExplosionDamage(pos);
+    spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
+    playRocketExplosionSound(pos.distanceTo(camera.position));
+    useMultiplayerStore.getState().sendRocketExplode(bomb.syncId, [pos.x, pos.y, pos.z]);
+    setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.65 }]);
+
+    // 乗り物への爆弾ダメージ判定
+    const activeType = useVehicleStore.getState().getActiveVehicle();
+    const vehicleHit = checkProjectileHitVehicle(
+      pos.x, pos.y, pos.z,
+      activeType ?? undefined,
+    );
+    if (vehicleHit) {
+      useVehicleStore.getState().damageVehicle(vehicleHit.type, 40);
+    }
+  }, [applyBombExplosionDamage, camera, destroyBombBlocks]);
+
+  /** 爆弾投下 */
+  const dropBomb = useCallback(() => {
+    const now = performance.now() / 1000;
+    if (now - lastBombDrop.current < BOMB_COOLDOWN) return;
+    lastBombDrop.current = now;
+
+    const airplane = useVehicleStore.getState().airplane;
+    // 飛行機の腹部から爆弾を投下
+    const dropPos = BOMB_DROP_OFFSET.clone().applyEuler(
+      new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll),
+    ).add(new THREE.Vector3(airplane.x, airplane.y, airplane.z));
+
+    // 飛行機の速度を継承（前方への慣性）
+    const forwardDir = new THREE.Vector3(0, 0, -1)
+      .applyEuler(new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll));
+    const vel = forwardDir.multiplyScalar(airplane.speed);
+    vel.y = -2; // 少し下向きの初速
+
+    const syncId = `bomb_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+    setBombs((prev) => [...prev, {
+      id: nextProjectileId++,
+      syncId,
+      pos: dropPos.clone(),
+      prev: dropPos.clone(),
+      vel,
+      age: 0,
+    }]);
+
+    playRocketLaunchSound(dropPos.distanceTo(camera.position) * 0.6);
+    useMultiplayerStore.getState().sendRocketFire(
+      syncId,
+      [dropPos.x, dropPos.y, dropPos.z],
+      [vel.x, vel.y, vel.z],
+    );
+  }, [camera]);
+
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
       const active = useVehicleStore.getState().getActiveVehicle();
@@ -389,13 +560,17 @@ export function VehicleWeapons() {
         e.preventDefault();
         fireTankRocket();
       }
+      if (e.button === 2 && active === 'airplane' && !isEditableTarget(e.target)) {
+        e.preventDefault();
+        dropBomb();
+      }
     };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) isMouseDown.current = false;
     };
     const onContextMenu = (e: MouseEvent) => {
       const active = useVehicleStore.getState().getActiveVehicle();
-      if (active === 'tank') {
+      if (active === 'tank' || active === 'airplane') {
         e.preventDefault();
       }
     };
@@ -407,7 +582,21 @@ export function VehicleWeapons() {
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [fireTankRocket]);
+  }, [fireTankRocket, dropBomb]);
+
+  // Bキーで爆弾投下（飛行機専用）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyB' && !e.repeat) {
+        const active = useVehicleStore.getState().getActiveVehicle();
+        if (active === 'airplane') {
+          dropBomb();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [dropBomb]);
 
   useEffect(() => {
     return onRemoteVehicleGunFire((data) => {
@@ -430,6 +619,10 @@ export function VehicleWeapons() {
 
     if (active === 'tank' && consumeVehicleRocket()) {
       fireTankRocket();
+    }
+
+    if (active === 'airplane' && consumeVehicleBomb()) {
+      dropBomb();
     }
 
     const now = performance.now() / 1000;
@@ -551,6 +744,55 @@ export function VehicleWeapons() {
     setExplosions((prev) => prev
       .map((explosion) => ({ ...explosion, life: explosion.life - delta }))
       .filter((explosion) => explosion.life > 0));
+
+    // === 爆弾の物理更新 ===
+    setBombs((prev) => {
+      const alive: BombProjectile[] = [];
+      for (const bomb of prev) {
+        bomb.age += delta;
+        if (bomb.age > BOMB_MAX_AGE) {
+          explodeBomb(bomb, bomb.pos);
+          continue;
+        }
+
+        bomb.prev.copy(bomb.pos);
+        bomb.vel.y -= BOMB_GRAVITY * delta;
+        const moveDir = bomb.vel.clone().normalize();
+        const moveDist = bomb.vel.length() * delta;
+        const hit = rayMarchProjectile(
+          bomb.pos,
+          moveDir,
+          moveDist,
+          getBlock,
+          mobs,
+          BOMB_HIT_RADIUS,
+          { remotePlayers, playerHitRadius: PLAYER_HIT_RADIUS, playerHitHeight: PLAYER_HIT_HEIGHT },
+        );
+
+        if (hit.type !== 'none') {
+          const explosionPos = hit.type === 'block'
+            ? getVisibleExplosionPosition(hit.hitPos, hit.normal)
+            : hit.hitPos;
+          explodeBomb(bomb, explosionPos);
+          continue;
+        }
+
+        // 乗り物への爆弾ヒット判定
+        const activeType = useVehicleStore.getState().getActiveVehicle();
+        const vehicleHit = checkProjectileHitVehicle(
+          bomb.pos.x, bomb.pos.y, bomb.pos.z,
+          activeType ?? undefined,
+        );
+        if (vehicleHit) {
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, 40);
+          explodeBomb(bomb, bomb.pos);
+          continue;
+        }
+
+        alive.push(bomb);
+      }
+      return alive;
+    });
   });
 
   return (
@@ -568,10 +810,27 @@ export function VehicleWeapons() {
           <pointLight position={rocket.pos} color="#ff9a40" intensity={2.4} distance={10} />
         </group>
       ))}
+      {bombs.map((bomb) => (
+        <group key={bomb.id}>
+          {/* 爆弾本体 */}
+          <mesh position={bomb.pos}>
+            <capsuleGeometry args={[0.22, 0.5, 8, 12]} />
+            <meshStandardMaterial color="#3a3a3a" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {/* 爆弾の尾翼（赤いマーカー） */}
+          <mesh position={[bomb.pos.x, bomb.pos.y + 0.35, bomb.pos.z]}>
+            <boxGeometry args={[0.35, 0.04, 0.35]} />
+            <meshStandardMaterial color="#cc3333" metalness={0.4} roughness={0.6} />
+          </mesh>
+          {/* 落下の軌跡 */}
+          <Tracer start={bomb.prev} end={bomb.pos} color="#666666" radius={0.04} />
+          <pointLight position={bomb.pos} color="#ff4400" intensity={0.8} distance={6} />
+        </group>
+      ))}
       {explosions.map((explosion) => (
         <mesh key={explosion.id} position={explosion.pos}>
-          <sphereGeometry args={[EXPLOSION_RADIUS * (1 - explosion.life / 0.45), 18, 12]} />
-          <meshBasicMaterial color="#ff7b22" transparent opacity={Math.max(0, explosion.life / 0.45) * 0.35} />
+          <sphereGeometry args={[Math.max(EXPLOSION_RADIUS, BOMB_EXPLOSION_RADIUS) * (1 - explosion.life / 0.65), 18, 12]} />
+          <meshBasicMaterial color="#ff7b22" transparent opacity={Math.max(0, explosion.life / 0.65) * 0.35} />
         </mesh>
       ))}
     </group>

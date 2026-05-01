@@ -144,6 +144,7 @@ function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatTy
         <ControlRow keyName="Space" action="機首上げ補助" keyColor="#88ccff" />
         <ControlRow keyName="Shift" action="機首下げ" keyColor="#88ccff" />
         <ControlRow keyName="左クリック" action="ガトリング" keyColor="#ff6644" />
+        <ControlRow keyName="右クリック / B" action="爆弾投下" keyColor="#ff4422" />
         <Divider />
         <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
       </>
@@ -282,6 +283,7 @@ function MobileVehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: 
         <ControlRow keyName="⬆️" action={vehicle === 'airplane' ? '離陸補助' : 'ジャンプボタン'} />
         <ControlRow keyName="🔫" action="ガトリング" keyColor="#ff6644" />
         {vehicle === 'tank' && <ControlRow keyName="💥" action="主砲ロケット" keyColor="#ff9966" />}
+        {vehicle === 'airplane' && <ControlRow keyName="💣" action="爆弾投下" keyColor="#ff4422" />}
       </>
     );
   }

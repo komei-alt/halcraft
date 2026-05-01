@@ -101,7 +101,7 @@ export const VEHICLE_EXPLOSION = {
   /** 乗り物同士の体当たりダメージ（毎フレーム、速度比例） */
   COLLISION_DAMAGE_MULTIPLIER: 0.8,
   /** リスポーンまでの秒数 */
-  RESPAWN_DELAY: 8,
+  RESPAWN_DELAY: 3,
   /** ブロック破壊半径 */
   BLOCK_DESTROY_RADIUS: 3.5,
 } as const;
