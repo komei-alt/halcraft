@@ -17,6 +17,7 @@ import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectile
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
+import { checkProjectileHitVehicle } from './vehicles/VehicleCombat';
 
 const FIRE_KEY = 'KeyR';
 const FIRE_MOUSE_BUTTON = 0;
@@ -716,6 +717,21 @@ export function RocketLauncher() {
             pos: hitResult.type === 'block'
               ? getVisibleExplosionPosition(hitResult.hitPos, hitResult.normal)
               : hitResult.hitPos.clone(),
+            syncId: projectile.syncId,
+            applyGameplay: true,
+            notifyRemote: true,
+          });
+          continue;
+        }
+
+        // ロケットの乗り物ヒット判定
+        const vehicleHit = checkProjectileHitVehicle(
+          projectile.pos.x, projectile.pos.y, projectile.pos.z,
+        );
+        if (vehicleHit) {
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
+          explosionsToSpawn.push({
+            pos: projectile.pos.clone(),
             syncId: projectile.syncId,
             applyGameplay: true,
             notifyRemote: true,

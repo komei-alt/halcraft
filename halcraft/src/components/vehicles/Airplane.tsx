@@ -40,7 +40,7 @@ export function Airplane() {
     }
   });
 
-  if (!airplane.spawned) return null;
+  if (!airplane.spawned || airplane.destroyed) return null;
 
   return (
     <group

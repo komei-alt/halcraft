@@ -47,6 +47,10 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-01',
     items: [
+      { type: 'feature', text: '乗り物を攻撃して壊せるようになった！戦車、ヘリ、飛行機、車にダメージを与えると大爆発するよ' },
+      { type: 'feature', text: '乗り物が壊れると超派手な爆発！乗っている人は死亡、近くの人もダメージを受けるよ' },
+      { type: 'feature', text: '乗り物同士がぶつかるとお互いにダメージ！体当たりでも壊せるよ' },
+      { type: 'improve', text: '乗り物の上にHPバーが出るようになったよ' },
       { type: 'fix', text: '車1の向きと座り方を直して、ちゃんと中に乗れるようにしたよ' },
       { type: 'feature', text: '機関銃で右クリックしてスコープをのぞけるようになったよ' },
       { type: 'feature', text: '新しい車1に4人で乗れるようになったよ' },

@@ -64,3 +64,16 @@ export function spawnBlockBreakEffect(blockId: BlockId, x: number, y: number, z:
 export function registerBlockBreakEffectSpawner(fn: typeof _spawnBlockBreakEffectFn): void {
   _spawnBlockBreakEffectFn = fn;
 }
+
+// ========== VehicleExplosionEffect ==========
+import type { VehicleType } from '../stores/useVehicleStore';
+
+let _spawnVehicleExplosionFn: (type: VehicleType, x: number, y: number, z: number) => void = () => {};
+
+export function spawnVehicleExplosion(type: VehicleType, x: number, y: number, z: number): void {
+  _spawnVehicleExplosionFn(type, x, y, z);
+}
+
+export function registerVehicleExplosionSpawner(fn: typeof _spawnVehicleExplosionFn): void {
+  _spawnVehicleExplosionFn = fn;
+}

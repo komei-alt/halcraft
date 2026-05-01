@@ -29,6 +29,7 @@ import {
 } from '../../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 import { TANK_TURRET_PIVOT } from './vehicleModelConfig';
+import { checkProjectileHitVehicle } from './VehicleCombat';
 
 const BULLET_SPEED = 130;
 const BULLET_MAX_AGE = 0.95;
@@ -478,6 +479,22 @@ export function VehicleWeapons() {
           continue;
         }
 
+        // 乗り物への弾丸ダメージ判定
+        const activeType = useVehicleStore.getState().getActiveVehicle();
+        if (!bullet.isRemote) {
+          const vehicleHit = checkProjectileHitVehicle(
+            bullet.pos.x, bullet.pos.y, bullet.pos.z,
+            activeType ?? undefined,
+          );
+          if (vehicleHit) {
+            useVehicleStore.getState().damageVehicle(vehicleHit.type, GUN_CONSTANTS.DAMAGE);
+            spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
+            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
+            playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
+            continue;
+          }
+        }
+
         alive.push(bullet);
       }
       return alive;
@@ -505,6 +522,20 @@ export function VehicleWeapons() {
           ROCKET_HIT_RADIUS,
           { remotePlayers, playerHitRadius: PLAYER_HIT_RADIUS, playerHitHeight: PLAYER_HIT_HEIGHT },
         );
+
+        // ロケットの乗り物ヒット判定
+        const activeType = useVehicleStore.getState().getActiveVehicle();
+        const vehicleHit = checkProjectileHitVehicle(
+          rocket.pos.x, rocket.pos.y, rocket.pos.z,
+          activeType ?? undefined,
+        );
+        if (vehicleHit) {
+          // 乗り物にロケット直撃
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
+          explodeRocket(rocket, rocket.pos);
+          continue;
+        }
+
         if (hit.type !== 'none') {
           const explosionPos = hit.type === 'block'
             ? getVisibleExplosionPosition(hit.hitPos, hit.normal)

@@ -16,6 +16,7 @@ import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectile
 import { spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playBulletImpactSound, playMachineGunSound } from '../utils/sounds';
 import { cloneSceneWithMaterials } from './vehicles/modelUtils';
+import { checkProjectileHitVehicle } from './vehicles/VehicleCombat';
 
 const MACHINE_GUN_MODEL_PATH = '/models/2026-05-01/machine-gun.glb';
 const BULLET_DAMAGE = 1;
@@ -282,6 +283,16 @@ export function PlayerMachineGun() {
         if (hit.type === 'player' && hit.targetId) {
           useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, BULLET_DAMAGE, moveDir.x * 1.5, moveDir.z * 1.5);
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
+          continue;
+        }
+
+        // 乗り物への弾丸ダメージ
+        const vehicleHit = checkProjectileHitVehicle(bullet.pos.x, bullet.pos.y, bullet.pos.z);
+        if (vehicleHit) {
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, BULLET_DAMAGE);
+          spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
+          spawnDamagePopup(BULLET_DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
+          playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
           continue;
         }
 

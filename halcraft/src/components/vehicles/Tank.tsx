@@ -66,7 +66,7 @@ export function Tank() {
     }
   });
 
-  if (!tank.spawned) return null;
+  if (!tank.spawned || tank.destroyed) return null;
 
   return (
     <group

@@ -993,11 +993,30 @@ io.on('connection', (socket) => {
     const stage = stages.get(player.stageId);
     if (!stage) return;
 
-    const alreadySeated = Object.values(stage.helicopterState.seats).includes(socket.id);
-    if (alreadySeated) return;
-
     const preferred = data?.preferredSeat || null;
     let assignedSeat = null;
+    let currentSeat = null;
+
+    for (const seat of SEAT_PRIORITY) {
+      if (stage.helicopterState.seats[seat] === socket.id) {
+        currentSeat = seat;
+        break;
+      }
+    }
+
+    if (currentSeat !== null) {
+      if (!preferred || preferred === currentSeat) return;
+      if (!SEAT_PRIORITY.includes(preferred)) return;
+      if (stage.helicopterState.seats[preferred] !== null) return;
+
+      stage.helicopterState.seats[currentSeat] = null;
+      stage.helicopterState.seats[preferred] = socket.id;
+      stage.syncLegacyFields();
+      stage.vehicleStates.helicopter = stage.helicopterState;
+      io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
+      io.to(player.stageId).emit('helicopter:sync', { helicopter: stage.helicopterState });
+      return;
+    }
 
     if (preferred && stage.helicopterState.seats[preferred] === null) {
       assignedSeat = preferred;

@@ -72,6 +72,40 @@ export const GUN_CONSTANTS = {
   TRACER_LIFETIME: 0.2,
 } as const;
 
+/** 乗り物のHP定数 */
+export const VEHICLE_HP: Record<VehicleType, number> = {
+  helicopter: 80,
+  tank: 120,
+  airplane: 60,
+  car: 50,
+} as const;
+
+/** 乗り物の当たり判定サイズ（半径 x, 高さ半分 y, 半径 z） */
+export const VEHICLE_HITBOX: Record<VehicleType, { rx: number; ry: number; rz: number }> = {
+  helicopter: { rx: 2.0, ry: 1.5, rz: 3.0 },
+  tank:       { rx: 1.8, ry: 1.2, rz: 2.5 },
+  airplane:   { rx: 3.0, ry: 1.0, rz: 4.5 },
+  car:        { rx: 1.2, ry: 0.8, rz: 2.2 },
+} as const;
+
+/** 乗り物爆発の定数 */
+export const VEHICLE_EXPLOSION = {
+  /** 爆発半径 */
+  RADIUS: 10,
+  /** 搭乗者への即死ダメージ */
+  RIDER_DAMAGE: 999,
+  /** 近くのプレイヤーへの最大ダメージ */
+  PROXIMITY_MAX_DAMAGE: 30,
+  /** 近くのプレイヤーへの最小ダメージ */
+  PROXIMITY_MIN_DAMAGE: 5,
+  /** 乗り物同士の体当たりダメージ（毎フレーム、速度比例） */
+  COLLISION_DAMAGE_MULTIPLIER: 0.8,
+  /** リスポーンまでの秒数 */
+  RESPAWN_DELAY: 8,
+  /** ブロック破壊半径 */
+  BLOCK_DESTROY_RADIUS: 3.5,
+} as const;
+
 /** ヘリコプターの状態 */
 export interface HelicopterState {
   spawned: boolean;
@@ -91,6 +125,10 @@ export interface HelicopterState {
   speed: number;
   engineOn: boolean;
   rotorAngle: number;
+  hp: number;
+  maxHp: number;
+  destroyed: boolean;
+  destroyedAt: number;
 }
 
 /** 単座乗り物の共通状態 */
@@ -111,6 +149,10 @@ export interface SingleSeatVehicleState {
   roll: number;
   speed: number;
   engineOn: boolean;
+  hp: number;
+  maxHp: number;
+  destroyed: boolean;
+  destroyedAt: number;
 }
 
 export interface TankState extends SingleSeatVehicleState {
@@ -142,6 +184,10 @@ export interface CarState {
   speed: number;
   engineOn: boolean;
   wheelSpin: number;
+  hp: number;
+  maxHp: number;
+  destroyed: boolean;
+  destroyedAt: number;
 }
 
 export interface VehiclesSyncPayload {
@@ -252,6 +298,10 @@ function createHelicopterState(x = 0, y = 0, z = 0): HelicopterState {
     speed: 0,
     engineOn: false,
     rotorAngle: 0,
+    hp: VEHICLE_HP.helicopter,
+    maxHp: VEHICLE_HP.helicopter,
+    destroyed: false,
+    destroyedAt: 0,
   };
 }
 
@@ -275,6 +325,10 @@ function createTankState(x = 0, y = 0, z = 0): TankState {
     engineOn: false,
     turretYaw: 0,
     gunSpin: 0,
+    hp: VEHICLE_HP.tank,
+    maxHp: VEHICLE_HP.tank,
+    destroyed: false,
+    destroyedAt: 0,
   };
 }
 
@@ -299,6 +353,10 @@ function createAirplaneState(x = 0, y = 0, z = 0): AirplaneState {
     throttle: 0,
     airborne: false,
     propellerAngle: 0,
+    hp: VEHICLE_HP.airplane,
+    maxHp: VEHICLE_HP.airplane,
+    destroyed: false,
+    destroyedAt: 0,
   };
 }
 
@@ -321,6 +379,10 @@ function createCarState(x = 0, y = 0, z = 0): CarState {
     speed: 0,
     engineOn: false,
     wheelSpin: 0,
+    hp: VEHICLE_HP.car,
+    maxHp: VEHICLE_HP.car,
+    destroyed: false,
+    destroyedAt: 0,
   };
 }
 
@@ -391,6 +453,27 @@ function getSingleSeatForPlayer(
   return playerId !== null && seats.pilot === playerId ? 'pilot' : null;
 }
 
+function resolveSingleSeatForSync(
+  localVehicle: SingleSeatVehicleState,
+  seats: Record<SingleSeatType, string | null>,
+  playerId: string | null,
+): { mySeat: SingleSeatType | null; seats: Record<SingleSeatType, string | null> } {
+  const serverSeat = getSingleSeatForPlayer(seats, playerId);
+  if (serverSeat !== null) return { mySeat: serverSeat, seats };
+
+  const canKeepLocalPilot =
+    localVehicle.mySeat === 'pilot'
+    && (playerId === null || localVehicle.seats.pilot === '__local__')
+    && (playerId === null || seats.pilot === null);
+
+  if (!canKeepLocalPilot) return { mySeat: null, seats };
+
+  return {
+    mySeat: 'pilot',
+    seats: seats.pilot === null ? localVehicle.seats : seats,
+  };
+}
+
 function getCarSeatForPlayer(
   seats: Record<CarSeatType, string | null>,
   playerId: string | null,
@@ -425,6 +508,15 @@ interface VehicleState {
   updateCar: (updates: Partial<CarState>) => void;
   updateVehicle: (type: VehicleType, updates: Partial<HelicopterState> | Partial<TankState> | Partial<AirplaneState> | Partial<CarState>) => void;
   syncVehicles: (vehicles: VehiclesSyncPayload, myId: string | null) => void;
+
+  /** 乗り物にダメージを与える。破壊された場合 true を返す */
+  damageVehicle: (type: VehicleType, amount: number) => boolean;
+  /** 乗り物を破壊する */
+  destroyVehicle: (type: VehicleType) => void;
+  /** 破壊された乗り物をリスポーンさせる */
+  respawnVehicle: (type: VehicleType) => void;
+  /** 乗り物のHPを取得 */
+  getVehicleHp: (type: VehicleType) => { hp: number; maxHp: number; destroyed: boolean };
 
   isInVehicle: () => boolean;
   getMySeat: () => VehicleSeatType | null;
@@ -726,12 +818,13 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
       if (vehicles.tank) {
         const seats = vehicles.tank.seats ?? tank.seats;
-        const mySeat = getSingleSeatForPlayer(seats, myId);
+        const resolved = resolveSingleSeatForSync(tank, seats, myId);
+        const mySeat = resolved.mySeat;
         const keepLocalPilotMotion = tank.mySeat === 'pilot' && mySeat === 'pilot';
         tank = syncSingleLegacy({
           ...tank,
           ...(keepLocalPilotMotion ? {} : vehicles.tank),
-          seats,
+          seats: resolved.seats,
           mySeat,
           spawned: vehicles.tank.spawned ?? tank.spawned,
         });
@@ -739,13 +832,14 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
       if (vehicles.airplane) {
         const seats = vehicles.airplane.seats ?? airplane.seats;
-        const mySeat = getSingleSeatForPlayer(seats, myId);
+        const resolved = resolveSingleSeatForSync(airplane, seats, myId);
+        const mySeat = resolved.mySeat;
         const keepLocalPilotMotion = airplane.mySeat === 'pilot' && mySeat === 'pilot';
         airplane = syncSingleLegacy({
           ...airplane,
           // ローカル操縦中の機体は、古いサーバースナップショットで位置・速度を戻さない。
           ...(keepLocalPilotMotion ? {} : vehicles.airplane),
-          seats,
+          seats: resolved.seats,
           mySeat,
           spawned: vehicles.airplane.spawned ?? airplane.spawned,
         });
@@ -896,5 +990,119 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       || hasSinglePassenger(state.tank)
       || hasSinglePassenger(state.airplane)
       || hasCarPassenger(state.car);
+  },
+
+  damageVehicle: (type, amount) => {
+    const state = get();
+    const vehicle = state[type];
+    if (!vehicle.spawned || vehicle.destroyed) return false;
+    const newHp = Math.max(0, vehicle.hp - amount);
+    const destroyed = newHp <= 0;
+
+    if (type === 'helicopter') {
+      set({ helicopter: { ...state.helicopter, hp: newHp, destroyed, destroyedAt: destroyed ? performance.now() / 1000 : 0 } });
+    } else if (type === 'tank') {
+      set({ tank: { ...state.tank, hp: newHp, destroyed, destroyedAt: destroyed ? performance.now() / 1000 : 0 } });
+    } else if (type === 'airplane') {
+      set({ airplane: { ...state.airplane, hp: newHp, destroyed, destroyedAt: destroyed ? performance.now() / 1000 : 0 } });
+    } else {
+      set({ car: { ...state.car, hp: newHp, destroyed, destroyedAt: destroyed ? performance.now() / 1000 : 0 } });
+    }
+
+    if (destroyed) {
+      get().destroyVehicle(type);
+    }
+    return destroyed;
+  },
+
+  destroyVehicle: (type) => {
+    // 搭乗者を全員降ろす（搭乗者は爆発で死亡するが、それは呼び出し側で処理）
+    const state = get();
+    if (type === 'helicopter') {
+      set({
+        helicopter: {
+          ...state.helicopter,
+          mySeat: null,
+          seats: { ...EMPTY_SEATS },
+          isBoarded: false,
+          pilotId: null,
+          engineOn: false,
+          speed: 0,
+          destroyed: true,
+          destroyedAt: performance.now() / 1000,
+          hp: 0,
+        },
+        activeVehicle: state.activeVehicle === 'helicopter' ? null : state.activeVehicle,
+      });
+    } else if (type === 'tank') {
+      set({
+        tank: {
+          ...state.tank,
+          mySeat: null,
+          seats: { pilot: null },
+          isBoarded: false,
+          pilotId: null,
+          engineOn: false,
+          speed: 0,
+          destroyed: true,
+          destroyedAt: performance.now() / 1000,
+          hp: 0,
+        },
+        activeVehicle: state.activeVehicle === 'tank' ? null : state.activeVehicle,
+      });
+    } else if (type === 'airplane') {
+      set({
+        airplane: {
+          ...state.airplane,
+          mySeat: null,
+          seats: { pilot: null },
+          isBoarded: false,
+          pilotId: null,
+          engineOn: false,
+          speed: 0,
+          destroyed: true,
+          destroyedAt: performance.now() / 1000,
+          hp: 0,
+        },
+        activeVehicle: state.activeVehicle === 'airplane' ? null : state.activeVehicle,
+      });
+    } else {
+      set({
+        car: {
+          ...state.car,
+          mySeat: null,
+          seats: { ...EMPTY_CAR_SEATS },
+          isBoarded: false,
+          pilotId: null,
+          engineOn: false,
+          speed: 0,
+          destroyed: true,
+          destroyedAt: performance.now() / 1000,
+          hp: 0,
+        },
+        activeVehicle: state.activeVehicle === 'car' ? null : state.activeVehicle,
+      });
+    }
+  },
+
+  respawnVehicle: (type) => {
+    const state = get();
+    const vehicle = state[type];
+    if (!vehicle.destroyed) return;
+
+    if (type === 'helicopter') {
+      set({ helicopter: { ...createHelicopterState(vehicle.spawnX, vehicle.spawnY, vehicle.spawnZ), spawned: true } });
+    } else if (type === 'tank') {
+      set({ tank: { ...createTankState(vehicle.spawnX, vehicle.spawnY, vehicle.spawnZ), spawned: true } });
+    } else if (type === 'airplane') {
+      set({ airplane: { ...createAirplaneState(vehicle.spawnX, vehicle.spawnY, vehicle.spawnZ), spawned: true } });
+    } else {
+      set({ car: { ...createCarState(vehicle.spawnX, vehicle.spawnY, vehicle.spawnZ), spawned: true } });
+    }
+  },
+
+  getVehicleHp: (type) => {
+    const vehicle = get()[type];
+    return { hp: vehicle.hp, maxHp: vehicle.maxHp, destroyed: vehicle.destroyed };
   },
 }));

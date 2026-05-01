@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
-import { useMobStore, type MobData } from '../stores/useMobStore';
+import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
@@ -18,6 +18,7 @@ import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playHitSound } from '../utils/sounds';
+import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -68,16 +69,6 @@ interface TargetMob {
   hitY: number;
   distance: number;
 }
-
-const MOB_ATTACK_HITBOX: Record<MobData['type'], { height: number; radius: number }> = {
-  zombie: { height: 1.8, radius: 0.65 },
-  darwin: { height: 3.2, radius: 1.0 },
-  spider: { height: 0.7, radius: 0.75 },
-  chicken: { height: 0.6, radius: 0.45 },
-  prototype: { height: 3.6, radius: 0.95 },
-  iron_golem: { height: 3.6, radius: 1.0 },
-  boss_giant: { height: 4.8, radius: 1.45 },
-};
 
 /** ブロック選択ハイライト用の共有ジオメトリ */
 const highlightGeometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
@@ -233,9 +224,9 @@ export function BlockInteraction() {
       // ニワトリは攻撃対象外（中立パッシブ）。味方モブはフレンドリーファイヤー可能
       if (mob.type === 'chicken') continue;
 
-      const hitbox = MOB_ATTACK_HITBOX[mob.type];
-      const minY = mob.y + 0.05;
-      const maxY = mob.y + hitbox.height;
+      const hitbox = getMobHitbox(mob.type);
+      const minY = getMobHitboxMinY(mob.y, hitbox);
+      const maxY = getMobHitboxMaxY(mob.y, hitbox);
       const centerY = mob.y + hitbox.height * 0.5;
 
       tempToTarget.current.set(mob.x - origin.x, centerY - origin.y, mob.z - origin.z);

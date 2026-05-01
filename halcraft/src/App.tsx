@@ -31,6 +31,9 @@ import { Car } from './components/vehicles/Car';
 // CockpitView は無効化済み — ヘリ胴体自体がガラス化するため不要
 import { MachineGun } from './components/vehicles/MachineGun';
 import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
+import { VehicleCombat } from './components/vehicles/VehicleCombat';
+import { VehicleExplosionEffect } from './components/vehicles/VehicleExplosionEffect';
+import { VehicleHealthBars } from './components/vehicles/VehicleHealthBars';
 import { PlayerMachineGun } from './components/PlayerMachineGun';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
@@ -113,6 +116,9 @@ function GameCanvas() {
         <Car />
         <MachineGun />
         <VehicleWeapons />
+        <VehicleCombat />
+        <VehicleExplosionEffect />
+        <VehicleHealthBars />
         {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
         {/* <CockpitView /> */}
         <RemotePlayers />

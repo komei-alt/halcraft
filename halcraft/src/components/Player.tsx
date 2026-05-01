@@ -71,6 +71,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function isEditableElement(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  const tag = element.tagName;
+  return element.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function isVehicleKeyboardInputActive(activeVehicle: VehicleType | null, baseInputActive: boolean): boolean {
+  if (baseInputActive) return true;
+  if (activeVehicle === null) return false;
+  return document.hasFocus() && !isEditableElement(document.activeElement);
+}
+
 function normalizeAngle(angle: number): number {
   return ((angle + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 }
@@ -270,7 +282,11 @@ export function Player() {
         const vehicleState = useVehicleStore.getState();
         if (vehicleState.helicopter.mySeat !== null && digit >= 1 && digit <= 3) {
           const targetSeat = ALL_SEATS[digit - 1];
-          vehicleState.changeSeat(targetSeat);
+          if (vehicleState.changeSeat(targetSeat)) {
+            sendHelicopterBoard(targetSeat);
+            helicopterCameraActive.current = false;
+          }
+          e.preventDefault();
         } else {
           // 通常: ホットバー選択
           const slot = digit - 1;
@@ -322,7 +338,7 @@ export function Player() {
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('wheel', onWheel);
     };
-  }, [cycleEquippedItem, selectSlot]);
+  }, [cycleEquippedItem, selectSlot, sendHelicopterBoard]);
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {
@@ -358,6 +374,10 @@ export function Player() {
     const vehicleState = useVehicleStore.getState();
     const heli = vehicleState.helicopter;
     const isInVehicle = vehicleState.isInVehicle();
+    const activeVehicle = vehicleState.getActiveVehicle();
+    const isVehicleInputActive = isTouch.current
+      ? true
+      : isVehicleKeyboardInputActive(activeVehicle, isInputActive);
     const jumpRequested = isTouch.current ? mobileActions.jump : keys.current.jump;
     const jumpJustPressed = jumpRequested && !lastJumpDown.current;
     lastJumpDown.current = jumpRequested;
@@ -378,10 +398,8 @@ export function Player() {
     }
 
     // --- 搭乗/降車の処理（Fキー） ---
-    if (interactPressed.current && isInputActive) {
+    if (interactPressed.current && (isInputActive || (isInVehicle && isVehicleInputActive))) {
       interactPressed.current = false;
-
-      const activeVehicle = vehicleState.getActiveVehicle();
 
       if (activeVehicle !== null) {
         const vehicle =
@@ -532,9 +550,9 @@ export function Player() {
           inputTurn = -joystickInput.x;
           inputVertical = mobileActions.jump ? 1 : 0;
         } else {
-          inputForward = isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
-          inputTurn = isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
-          inputVertical = isInputActive
+          inputForward = isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
+          inputTurn = isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
+          inputVertical = isVehicleInputActive
             ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0)
             : 0;
         }
@@ -552,7 +570,7 @@ export function Player() {
           }
         }
 
-        const mouseTurn = !isTouch.current && isInputActive
+        const mouseTurn = !isTouch.current && isVehicleInputActive
           ? clamp(normalizeAngle(euler.current.y - apRotY) / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1)
           : 0;
         const steeringInput = isTouch.current
@@ -560,7 +578,7 @@ export function Player() {
           : clamp(inputTurn + mouseTurn, -1, 1);
 
         // ビジュアル: ピッチとロール。ロール量を旋回入力として使う。
-        const mousePitch = !isTouch.current && isInputActive
+        const mousePitch = !isTouch.current && isVehicleInputActive
           ? clamp(euler.current.x / 0.7, -1, 1)
           : 0;
         const targetPitch = clamp(
@@ -701,10 +719,10 @@ export function Player() {
 
       const inputForward = isTouch.current
         ? -joystickInput.y
-        : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+        : (isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
       const inputTurn = isTouch.current
         ? -joystickInput.x
-        : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+        : (isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
 
       if (inputForward > 0) {
         tankSpeed = Math.min(TANK_CONSTANTS.MAX_SPEED, tankSpeed + TANK_CONSTANTS.ACCELERATION * dt);
@@ -804,13 +822,13 @@ export function Player() {
 
       const inputForward = isTouch.current
         ? -joystickInput.y
-        : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+        : (isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
       const inputTurn = isTouch.current
         ? -joystickInput.x
-        : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+        : (isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
       const inputPitch = isTouch.current
         ? (mobileActions.jump ? 1 : 0)
-        : (isInputActive ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0) : 0);
+        : (isVehicleInputActive ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0) : 0);
 
       if (inputForward > 0) {
         planeSpeed = Math.min(AIRPLANE_CONSTANTS.MAX_SPEED, planeSpeed + AIRPLANE_CONSTANTS.ACCELERATION * dt);
@@ -820,7 +838,7 @@ export function Player() {
         planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 0.35 * dt);
       }
 
-      if (!isTouch.current && isInputActive) {
+      if (!isTouch.current && isVehicleInputActive) {
         airplaneControlYaw.current = normalizeAngle(
           airplaneControlYaw.current + inputTurn * AIRPLANE_KEYBOARD_YAW_RATE * dt,
         );
@@ -971,10 +989,10 @@ export function Player() {
 
         const inputForward = isTouch.current
           ? -joystickInput.y
-          : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+          : (isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
         const inputTurn = isTouch.current
           ? -joystickInput.x
-          : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+          : (isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
 
         if (inputForward > 0) {
           carSpeed = Math.min(CAR_CONSTANTS.MAX_SPEED, carSpeed + CAR_CONSTANTS.ACCELERATION * dt);

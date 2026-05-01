@@ -50,7 +50,7 @@ export function Car() {
     }
   });
 
-  if (!car.spawned) return null;
+  if (!car.spawned || car.destroyed) return null;
 
   return (
     <group

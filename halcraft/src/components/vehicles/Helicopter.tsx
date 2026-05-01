@@ -259,7 +259,7 @@ export function Helicopter() {
     }
   });
 
-  if (!helicopter.spawned) return null;
+  if (!helicopter.spawned || helicopter.destroyed) return null;
 
   return (
     <group

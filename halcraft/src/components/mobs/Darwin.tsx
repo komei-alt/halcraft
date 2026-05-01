@@ -11,9 +11,9 @@ const MODEL_PATH = '/models/2026-04-29/darwin.glb';
 const DARWIN_MODEL: GlbMobModelConfig = {
   path: MODEL_PATH,
   scale: 0.24,
-  modelPosition: [0, 1.75, 0],
+  modelPosition: [0, 1.33, 0],
   modelRotation: [0, Math.PI, 0],
-  hpBarY: 3.7,
+  hpBarY: 3.55,
   hpBarWidth: 1.25,
   damagedTint: new THREE.Color(0xff4444),
   bobAmount: 0.04,

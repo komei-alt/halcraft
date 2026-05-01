@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
+import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from './mobHitboxes';
 
 // ─── 共通型定義 ──────────────────────────────────────────
 
@@ -13,6 +14,7 @@ export type GetBlockFn = (x: number, y: number, z: number) => BlockId;
 /** モブ判定対象の最小データ */
 export interface HitTarget {
   id: string;
+  type?: string;
   x: number;
   y: number;
   z: number;
@@ -90,10 +92,18 @@ export function rayMarchProjectile(
     // ─── モブ衝突判定 ───
     for (const mob of mobs) {
       if (mob.hp <= 0) continue;
-      const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z);
-      const dist = startPos.distanceTo(mobCenter);
+      const hitbox = getMobHitbox(mob.type, mobHitRadius);
+      const minY = getMobHitboxMinY(mob.y, hitbox);
+      const maxY = getMobHitboxMaxY(mob.y, hitbox);
+      const hitY = Math.max(minY, Math.min(maxY, startPos.y));
+      const dx = startPos.x - mob.x;
+      const dy = startPos.y - hitY;
+      const dz = startPos.z - mob.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const radius = Math.max(mobHitRadius, hitbox.radius);
 
-      if (dist < mobHitRadius) {
+      if (dist < radius) {
+        const mobCenter = new THREE.Vector3(mob.x, mob.y + hitbox.height * 0.5, mob.z);
         return {
           type: 'mob',
           hitPos: startPos.clone(),

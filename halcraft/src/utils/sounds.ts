@@ -662,3 +662,117 @@ export function playHelicopterRotor(distance: number): void {
   noise.start(now);
   noise.stop(now + 0.1);
 }
+
+// ============================================
+// 12. 乗り物爆発音（超ド派手）
+// ============================================
+
+export function playVehicleExplosionSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('vehicleExplosion', 200)) return;
+
+  const maxDist = 100;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 1.0 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  // 1. 超低音のメイン爆発（腹に響く重低音）
+  const boom = ctx.createOscillator();
+  boom.type = 'sawtooth';
+  boom.frequency.setValueAtTime(50, now);
+  boom.frequency.exponentialRampToValueAtTime(18, now + 0.8);
+
+  const boomFilter = ctx.createBiquadFilter();
+  boomFilter.type = 'lowpass';
+  boomFilter.frequency.setValueAtTime(150, now);
+  boomFilter.frequency.exponentialRampToValueAtTime(40, now + 0.7);
+
+  const boomGain = ctx.createGain();
+  boomGain.gain.setValueAtTime(volume * 0.9, now);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+  boom.connect(boomFilter);
+  boomFilter.connect(boomGain);
+  boomGain.connect(ctx.destination);
+  boom.start(now);
+  boom.stop(now + 0.9);
+
+  // 2. 初期衝撃波（鋭いクラック）
+  const crack = ctx.createBufferSource();
+  crack.buffer = getNoiseBuffer(ctx);
+
+  const crackFilter = ctx.createBiquadFilter();
+  crackFilter.type = 'highpass';
+  crackFilter.frequency.setValueAtTime(1200, now);
+
+  const crackGain = ctx.createGain();
+  crackGain.gain.setValueAtTime(volume * 0.7, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+  crack.connect(crackFilter);
+  crackFilter.connect(crackGain);
+  crackGain.connect(ctx.destination);
+  crack.start(now);
+  crack.stop(now + 0.15);
+
+  // 3. 金属片が飛び散る音（中音のノイズ、少し遅れて）
+  const shrapnel = ctx.createBufferSource();
+  shrapnel.buffer = getNoiseBuffer(ctx);
+
+  const shrapnelFilter = ctx.createBiquadFilter();
+  shrapnelFilter.type = 'bandpass';
+  shrapnelFilter.frequency.setValueAtTime(2200, now + 0.05);
+  shrapnelFilter.Q.setValueAtTime(1.5, now);
+
+  const shrapnelGain = ctx.createGain();
+  shrapnelGain.gain.setValueAtTime(0.001, now);
+  shrapnelGain.gain.linearRampToValueAtTime(volume * 0.5, now + 0.08);
+  shrapnelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+  shrapnel.connect(shrapnelFilter);
+  shrapnelFilter.connect(shrapnelGain);
+  shrapnelGain.connect(ctx.destination);
+  shrapnel.start(now);
+  shrapnel.stop(now + 0.4);
+
+  // 4. 二次爆発（燃料誘爆、0.2秒遅れ）
+  const secondary = ctx.createOscillator();
+  secondary.type = 'square';
+  secondary.frequency.setValueAtTime(70, now + 0.2);
+  secondary.frequency.exponentialRampToValueAtTime(25, now + 0.65);
+
+  const secFilter = ctx.createBiquadFilter();
+  secFilter.type = 'lowpass';
+  secFilter.frequency.setValueAtTime(200, now + 0.2);
+
+  const secGain = ctx.createGain();
+  secGain.gain.setValueAtTime(0.001, now);
+  secGain.gain.linearRampToValueAtTime(volume * 0.55, now + 0.22);
+  secGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+
+  secondary.connect(secFilter);
+  secFilter.connect(secGain);
+  secGain.connect(ctx.destination);
+  secondary.start(now + 0.18);
+  secondary.stop(now + 0.7);
+
+  // 5. 余韻の轟音（長い残響）
+  const rumble = ctx.createBufferSource();
+  rumble.buffer = getNoiseBuffer(ctx);
+
+  const rumbleFilter = ctx.createBiquadFilter();
+  rumbleFilter.type = 'bandpass';
+  rumbleFilter.frequency.setValueAtTime(80, now);
+  rumbleFilter.Q.setValueAtTime(0.3, now);
+
+  const rumbleGain = ctx.createGain();
+  rumbleGain.gain.setValueAtTime(volume * 0.2, now + 0.1);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+  rumble.connect(rumbleFilter);
+  rumbleFilter.connect(rumbleGain);
+  rumbleGain.connect(ctx.destination);
+  rumble.start(now);
+  rumble.stop(now + 1.2);
+}

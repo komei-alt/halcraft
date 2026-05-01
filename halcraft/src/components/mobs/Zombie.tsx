@@ -11,9 +11,9 @@ const MODEL_PATH = '/models/2026-04-29/zombie.glb';
 const ZOMBIE_MODEL: GlbMobModelConfig = {
   path: MODEL_PATH,
   scale: 2.1,
-  modelPosition: [0, 0.95, 0],
+  modelPosition: [0, 0.14, 0],
   modelRotation: [0, Math.PI, 0],
-  hpBarY: 2.0,
+  hpBarY: 3.65,
   hpBarWidth: 0.7,
   damagedTint: new THREE.Color(0xff4444),
   bobAmount: 0.03,
