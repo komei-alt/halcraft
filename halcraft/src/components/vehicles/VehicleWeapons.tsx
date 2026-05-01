@@ -715,8 +715,15 @@ export function VehicleWeapons() {
           ROCKET_HIT_RADIUS,
           { remotePlayers, playerHitRadius: PLAYER_HIT_RADIUS, playerHitHeight: PLAYER_HIT_HEIGHT },
         );
+        if (hit.type !== 'none') {
+          const explosionPos = hit.type === 'block'
+            ? getVisibleExplosionPosition(hit.hitPos, hit.normal)
+            : hit.hitPos;
+          explodeRocket(rocket, explosionPos);
+          continue;
+        }
 
-        // ロケットの乗り物ヒット判定
+        // ロケットの乗り物ヒット判定（ブロック/モブに当たらなかった場合のみ）
         const activeType = useVehicleStore.getState().getActiveVehicle();
         const vehicleHit = checkProjectileHitVehicle(
           rocket.pos.x, rocket.pos.y, rocket.pos.z,
@@ -729,13 +736,6 @@ export function VehicleWeapons() {
           continue;
         }
 
-        if (hit.type !== 'none') {
-          const explosionPos = hit.type === 'block'
-            ? getVisibleExplosionPosition(hit.hitPos, hit.normal)
-            : hit.hitPos;
-          explodeRocket(rocket, explosionPos);
-          continue;
-        }
         alive.push(rocket);
       }
       return alive;

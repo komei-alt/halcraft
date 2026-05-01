@@ -1194,6 +1194,29 @@ io.on('connection', (socket) => {
     });
   });
 
+  // 乗り物破壊を他プレイヤーにリレー
+  socket.on('vehicle:destroy', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const type = data?.type;
+    if (!['helicopter', 'tank', 'airplane', 'car'].includes(type)) return;
+    socket.to(player.stageId).emit('vehicle:destroyed', {
+      type,
+      pos: data.pos,
+    });
+  });
+
+  // 乗り物リスポーンを他プレイヤーにリレー
+  socket.on('vehicle:respawn', (data) => {
+    const player = connectedPlayers.get(socket.id);
+    if (!player) return;
+    const type = data?.type;
+    if (!['helicopter', 'tank', 'airplane', 'car'].includes(type)) return;
+    socket.to(player.stageId).emit('vehicle:respawned', {
+      type,
+    });
+  });
+
   socket.on('player:died', () => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
