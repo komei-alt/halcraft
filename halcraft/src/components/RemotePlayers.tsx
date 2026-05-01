@@ -57,6 +57,7 @@ function RemotePlayerModel({
     const heli = vehicleState.helicopter;
     const tank = vehicleState.tank;
     const airplane = vehicleState.airplane;
+    const car = vehicleState.car;
     let occupiedSeat: string | null = null;
     if (heli.spawned) {
       for (const [seat, id] of Object.entries(heli.seats)) {
@@ -68,7 +69,8 @@ function RemotePlayerModel({
     }
     const isInTank = tank.spawned && tank.seats.pilot === player.id;
     const isInAirplane = airplane.spawned && airplane.seats.pilot === player.id;
-    const isInVehicle = occupiedSeat !== null || isInTank || isInAirplane;
+    const isInCar = car.spawned && Object.values(car.seats).some((id) => id === player.id);
+    const isInVehicle = occupiedSeat !== null || isInTank || isInAirplane || isInCar;
 
     if (isInVehicle) {
       // 搭乗中: 乗り物コンポーネント側の PassengerAvatar が描画するので非表示

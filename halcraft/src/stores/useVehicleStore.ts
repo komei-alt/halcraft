@@ -1,21 +1,23 @@
-// 乗り物（ヘリコプター / 戦車 / 飛行機）の状態管理ストア
+// 乗り物（ヘリコプター / 戦車 / 飛行機 / 車）の状態管理ストア
 // 既存ヘリAPIを維持しつつ、単座乗り物は共通APIで扱う
 
 import { create } from 'zustand';
 
 /** 乗り物の種類 */
-export type VehicleType = 'helicopter' | 'tank' | 'airplane';
+export type VehicleType = 'helicopter' | 'tank' | 'airplane' | 'car';
 
 /** ヘリコプター座席タイプ */
 export type SeatType = 'pilot' | 'gunner_left' | 'gunner_right';
 export type SingleSeatType = 'pilot';
-export type VehicleSeatType = SeatType | SingleSeatType;
+export type CarSeatType = 'driver' | 'front_passenger' | 'rear_left' | 'rear_right';
+export type VehicleSeatType = SeatType | SingleSeatType | CarSeatType;
 
 /** 座席の優先順（搭乗時に空席を探す順序） */
 export const SEAT_PRIORITY: SeatType[] = ['pilot', 'gunner_left', 'gunner_right'];
 
 /** 全座席リスト */
 export const ALL_SEATS: SeatType[] = ['pilot', 'gunner_left', 'gunner_right'];
+export const CAR_SEAT_PRIORITY: CarSeatType[] = ['driver', 'front_passenger', 'rear_left', 'rear_right'];
 
 /**
  * 座席ごとのオフセット
@@ -44,10 +46,18 @@ export const SEAT_NAMES: Record<SeatType, string> = {
   gunner_right: '右ガナー',
 };
 
+export const CAR_SEAT_NAMES: Record<CarSeatType, string> = {
+  driver: '運転席',
+  front_passenger: '助手席',
+  rear_left: '後部左席',
+  rear_right: '後部右席',
+};
+
 export const VEHICLE_NAMES: Record<VehicleType, string> = {
   helicopter: 'ヘリコプター',
   tank: '戦車',
   airplane: '飛行機',
+  car: '車1',
 };
 
 /** 機関銃のパラメータ */
@@ -114,10 +124,31 @@ export interface AirplaneState extends SingleSeatVehicleState {
   propellerAngle: number;
 }
 
+export interface CarState {
+  spawned: boolean;
+  mySeat: CarSeatType | null;
+  seats: Record<CarSeatType, string | null>;
+  isBoarded: boolean;
+  pilotId: string | null;
+  x: number;
+  y: number;
+  z: number;
+  spawnX: number;
+  spawnY: number;
+  spawnZ: number;
+  rotationY: number;
+  pitch: number;
+  roll: number;
+  speed: number;
+  engineOn: boolean;
+  wheelSpin: number;
+}
+
 export interface VehiclesSyncPayload {
   helicopter?: Partial<HelicopterState> & { seats?: Record<SeatType, string | null> };
   tank?: Partial<TankState> & { seats?: Record<SingleSeatType, string | null> };
   airplane?: Partial<AirplaneState> & { seats?: Record<SingleSeatType, string | null> };
+  car?: Partial<CarState> & { seats?: Record<CarSeatType, string | null> };
 }
 
 /** ヘリコプターの定数 */
@@ -172,6 +203,19 @@ export const AIRPLANE_CONSTANTS = {
   PROPELLER_SPEED: 36,
 } as const;
 
+/** 車1の定数 */
+export const CAR_CONSTANTS = {
+  MAX_SPEED: 16,
+  REVERSE_SPEED: 6,
+  ACCELERATION: 12,
+  DECELERATION: 8,
+  TURN_SPEED: 1.55,
+  BOARD_DISTANCE: 5,
+  BODY_HEIGHT: 0.95,
+  CAMERA_HEIGHT: 2.75,
+  CAMERA_BACK: 5.8,
+} as const;
+
 const EMPTY_SEATS: Record<SeatType, string | null> = {
   pilot: null,
   gunner_left: null,
@@ -180,6 +224,13 @@ const EMPTY_SEATS: Record<SeatType, string | null> = {
 
 const EMPTY_SINGLE_SEAT: Record<SingleSeatType, string | null> = {
   pilot: null,
+};
+
+const EMPTY_CAR_SEATS: Record<CarSeatType, string | null> = {
+  driver: null,
+  front_passenger: null,
+  rear_left: null,
+  rear_right: null,
 };
 
 function createHelicopterState(x = 0, y = 0, z = 0): HelicopterState {
@@ -251,12 +302,38 @@ function createAirplaneState(x = 0, y = 0, z = 0): AirplaneState {
   };
 }
 
+function createCarState(x = 0, y = 0, z = 0): CarState {
+  return {
+    spawned: false,
+    mySeat: null,
+    seats: { ...EMPTY_CAR_SEATS },
+    isBoarded: false,
+    pilotId: null,
+    x,
+    y,
+    z,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
+    rotationY: 0,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    engineOn: false,
+    wheelSpin: 0,
+  };
+}
+
 function hasHelicopterPassenger(helicopter: HelicopterState): boolean {
   return Object.values(helicopter.seats).some((id) => id !== null);
 }
 
 function hasSinglePassenger(vehicle: SingleSeatVehicleState): boolean {
   return vehicle.seats.pilot !== null;
+}
+
+function hasCarPassenger(car: CarState): boolean {
+  return Object.values(car.seats).some((id) => id !== null);
 }
 
 function syncHelicopterLegacy(helicopter: HelicopterState): HelicopterState {
@@ -278,10 +355,21 @@ function syncSingleLegacy<T extends SingleSeatVehicleState>(vehicle: T): T {
   };
 }
 
-function vehicleHasLocalSeat(state: Pick<VehicleState, 'helicopter' | 'tank' | 'airplane'>): VehicleType | null {
+function syncCarLegacy(car: CarState): CarState {
+  const someoneBoarded = hasCarPassenger(car);
+  return {
+    ...car,
+    pilotId: car.seats.driver,
+    isBoarded: car.mySeat !== null,
+    engineOn: someoneBoarded,
+  };
+}
+
+function vehicleHasLocalSeat(state: Pick<VehicleState, 'helicopter' | 'tank' | 'airplane' | 'car'>): VehicleType | null {
   if (state.helicopter.mySeat !== null) return 'helicopter';
   if (state.tank.mySeat !== null) return 'tank';
   if (state.airplane.mySeat !== null) return 'airplane';
+  if (state.car.mySeat !== null) return 'car';
   return null;
 }
 
@@ -303,15 +391,28 @@ function getSingleSeatForPlayer(
   return playerId !== null && seats.pilot === playerId ? 'pilot' : null;
 }
 
+function getCarSeatForPlayer(
+  seats: Record<CarSeatType, string | null>,
+  playerId: string | null,
+): CarSeatType | null {
+  if (playerId === null) return null;
+  for (const [seat, seatPlayerId] of Object.entries(seats)) {
+    if (seatPlayerId === playerId) return seat as CarSeatType;
+  }
+  return null;
+}
+
 interface VehicleState {
   helicopter: HelicopterState;
   tank: TankState;
   airplane: AirplaneState;
+  car: CarState;
   activeVehicle: VehicleType | null;
 
   spawnHelicopter: (x: number, y: number, z: number) => void;
   spawnTank: (x: number, y: number, z: number) => void;
   spawnAirplane: (x: number, y: number, z: number) => void;
+  spawnCar: (x: number, y: number, z: number) => void;
 
   boardHelicopter: (preferredSeat?: SeatType) => SeatType | null;
   dismountHelicopter: () => void;
@@ -321,7 +422,8 @@ interface VehicleState {
   dismountVehicle: (type?: VehicleType) => void;
   updateTank: (updates: Partial<TankState>) => void;
   updateAirplane: (updates: Partial<AirplaneState>) => void;
-  updateVehicle: (type: VehicleType, updates: Partial<HelicopterState> | Partial<TankState> | Partial<AirplaneState>) => void;
+  updateCar: (updates: Partial<CarState>) => void;
+  updateVehicle: (type: VehicleType, updates: Partial<HelicopterState> | Partial<TankState> | Partial<AirplaneState> | Partial<CarState>) => void;
   syncVehicles: (vehicles: VehiclesSyncPayload, myId: string | null) => void;
 
   isInVehicle: () => boolean;
@@ -329,7 +431,9 @@ interface VehicleState {
   getActiveVehicle: () => VehicleType | null;
   getPassengerCount: () => number;
   findAvailableSeat: (preferred?: SeatType) => SeatType | null;
+  findAvailableCarSeat: (preferred?: CarSeatType) => CarSeatType | null;
   changeSeat: (targetSeat: SeatType) => boolean;
+  changeCarSeat: (targetSeat: CarSeatType) => boolean;
   setSeatPlayer: (seat: SeatType, playerId: string | null) => void;
   syncSeats: (seats: Record<SeatType, string | null>) => void;
   hasAnyPassenger: () => boolean;
@@ -339,6 +443,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   helicopter: createHelicopterState(),
   tank: createTankState(),
   airplane: createAirplaneState(),
+  car: createCarState(),
   activeVehicle: null,
 
   spawnHelicopter: (x, y, z) => {
@@ -351,6 +456,10 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
   spawnAirplane: (x, y, z) => {
     set({ airplane: { ...createAirplaneState(x, y, z), spawned: true } });
+  },
+
+  spawnCar: (x, y, z) => {
+    set({ car: { ...createCarState(x, y, z), spawned: true } });
   },
 
   boardHelicopter: (preferredSeat?) => {
@@ -421,6 +530,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
             helicopter: { ...state.helicopter, ...updates, mySeat: updates.mySeat },
             tank: state.tank,
             airplane: state.airplane,
+            car: state.car,
           }))
         : state.activeVehicle,
     }));
@@ -445,17 +555,36 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       return 'pilot';
     }
 
-    if (!state.airplane.spawned || state.airplane.seats.pilot !== null) return null;
+    if (type === 'airplane') {
+      if (!state.airplane.spawned || state.airplane.seats.pilot !== null) return null;
+      set((s) => ({
+        activeVehicle: 'airplane',
+        airplane: syncSingleLegacy({
+          ...s.airplane,
+          mySeat: 'pilot',
+          seats: { pilot: '__local__' },
+          engineOn: true,
+        }),
+      }));
+      return 'pilot';
+    }
+
+    if (!state.car.spawned) return null;
+    const carSeat = state.findAvailableCarSeat();
+    if (carSeat === null) return null;
     set((s) => ({
-      activeVehicle: 'airplane',
-      airplane: syncSingleLegacy({
-        ...s.airplane,
-        mySeat: 'pilot',
-        seats: { pilot: '__local__' },
+      activeVehicle: 'car',
+      car: syncCarLegacy({
+        ...s.car,
+        mySeat: carSeat,
+        seats: {
+          ...s.car.seats,
+          [carSeat]: '__local__',
+        },
         engineOn: true,
       }),
     }));
-    return 'pilot';
+    return carSeat;
   },
 
   dismountVehicle: (type) => {
@@ -487,24 +616,53 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       return;
     }
 
-    set((state) => ({
-      activeVehicle: null,
-      airplane: syncSingleLegacy({
-        ...state.airplane,
+    if (active === 'airplane') {
+      set((state) => ({
+        activeVehicle: null,
+        airplane: syncSingleLegacy({
+          ...state.airplane,
+          mySeat: null,
+          seats: { pilot: null },
+          speed: 0,
+          throttle: 0,
+          airborne: false,
+          x: state.airplane.spawnX,
+          y: state.airplane.spawnY,
+          z: state.airplane.spawnZ,
+          rotationY: -Math.PI / 2,
+          pitch: 0,
+          roll: 0,
+          propellerAngle: 0,
+        }),
+      }));
+      return;
+    }
+
+    set((state) => {
+      const mySeat = state.car.mySeat;
+      const seats = { ...state.car.seats };
+      if (mySeat) seats[mySeat] = null;
+      const shouldReset = mySeat === 'driver' || !Object.values(seats).some((id) => id !== null);
+      const car = syncCarLegacy({
+        ...state.car,
         mySeat: null,
-        seats: { pilot: null },
-        speed: 0,
-        throttle: 0,
-        airborne: false,
-        x: state.airplane.spawnX,
-        y: state.airplane.spawnY,
-        z: state.airplane.spawnZ,
-        rotationY: -Math.PI / 2,
-        pitch: 0,
-        roll: 0,
-        propellerAngle: 0,
-      }),
-    }));
+        seats,
+        speed: mySeat === 'driver' ? 0 : state.car.speed,
+        ...(shouldReset ? {
+          x: state.car.spawnX,
+          y: state.car.spawnY,
+          z: state.car.spawnZ,
+          rotationY: 0,
+          pitch: 0,
+          roll: 0,
+          wheelSpin: 0,
+        } : {}),
+      });
+      return {
+        activeVehicle: vehicleHasLocalSeat({ ...state, car }),
+        car,
+      };
+    });
   },
 
   updateTank: (updates) => {
@@ -525,13 +683,24 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     }));
   },
 
+  updateCar: (updates) => {
+    set((state) => ({
+      car: syncCarLegacy({
+        ...state.car,
+        ...updates,
+      }),
+    }));
+  },
+
   updateVehicle: (type, updates) => {
     if (type === 'helicopter') {
       get().updateHelicopter(updates as Partial<HelicopterState>);
     } else if (type === 'tank') {
       get().updateTank(updates as Partial<TankState>);
-    } else {
+    } else if (type === 'airplane') {
       get().updateAirplane(updates as Partial<AirplaneState>);
+    } else {
+      get().updateCar(updates as Partial<CarState>);
     }
   },
 
@@ -540,6 +709,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       let helicopter = state.helicopter;
       let tank = state.tank;
       let airplane = state.airplane;
+      let car = state.car;
 
       if (vehicles.helicopter) {
         const seats = vehicles.helicopter.seats ?? helicopter.seats;
@@ -581,23 +751,37 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         });
       }
 
+      if (vehicles.car) {
+        const seats = vehicles.car.seats ?? car.seats;
+        const mySeat = getCarSeatForPlayer(seats, myId);
+        const keepLocalDriverMotion = car.mySeat === 'driver' && mySeat === 'driver';
+        car = syncCarLegacy({
+          ...car,
+          ...(keepLocalDriverMotion ? {} : vehicles.car),
+          seats,
+          mySeat,
+          spawned: vehicles.car.spawned ?? car.spawned,
+        });
+      }
+
       return {
         helicopter,
         tank,
         airplane,
-        activeVehicle: vehicleHasLocalSeat({ helicopter, tank, airplane }),
+        car,
+        activeVehicle: vehicleHasLocalSeat({ helicopter, tank, airplane, car }),
       };
     });
   },
 
   isInVehicle: () => {
     const state = get();
-    return state.helicopter.mySeat !== null || state.tank.mySeat !== null || state.airplane.mySeat !== null;
+    return state.helicopter.mySeat !== null || state.tank.mySeat !== null || state.airplane.mySeat !== null || state.car.mySeat !== null;
   },
 
   getMySeat: () => {
     const state = get();
-    return state.helicopter.mySeat ?? state.tank.mySeat ?? state.airplane.mySeat;
+    return state.helicopter.mySeat ?? state.tank.mySeat ?? state.airplane.mySeat ?? state.car.mySeat;
   },
 
   getActiveVehicle: () => {
@@ -610,13 +794,23 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     const heliCount = Object.values(state.helicopter.seats).filter((id) => id !== null).length;
     const tankCount = state.tank.seats.pilot ? 1 : 0;
     const airplaneCount = state.airplane.seats.pilot ? 1 : 0;
-    return heliCount + tankCount + airplaneCount;
+    const carCount = Object.values(state.car.seats).filter((id) => id !== null).length;
+    return heliCount + tankCount + airplaneCount + carCount;
   },
 
   findAvailableSeat: (preferred?) => {
     const seats = get().helicopter.seats;
     if (preferred && seats[preferred] === null) return preferred;
     for (const seat of SEAT_PRIORITY) {
+      if (seats[seat] === null) return seat;
+    }
+    return null;
+  },
+
+  findAvailableCarSeat: (preferred?) => {
+    const seats = get().car.seats;
+    if (preferred && seats[preferred] === null) return preferred;
+    for (const seat of CAR_SEAT_PRIORITY) {
       if (seats[seat] === null) return seat;
     }
     return null;
@@ -638,6 +832,31 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         activeVehicle: 'helicopter',
         helicopter: syncHelicopterLegacy({
           ...s.helicopter,
+          mySeat: targetSeat,
+          seats: newSeats,
+        }),
+      };
+    });
+
+    return true;
+  },
+
+  changeCarSeat: (targetSeat) => {
+    const state = get();
+    const currentSeat = state.car.mySeat;
+    if (currentSeat === null) return false;
+    if (currentSeat === targetSeat) return false;
+    if (state.car.seats[targetSeat] !== null) return false;
+
+    set((s) => {
+      const newSeats = { ...s.car.seats };
+      newSeats[currentSeat] = null;
+      newSeats[targetSeat] = '__local__';
+
+      return {
+        activeVehicle: 'car',
+        car: syncCarLegacy({
+          ...s.car,
           mySeat: targetSeat,
           seats: newSeats,
         }),
@@ -675,6 +894,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     const state = get();
     return hasHelicopterPassenger(state.helicopter)
       || hasSinglePassenger(state.tank)
-      || hasSinglePassenger(state.airplane);
+      || hasSinglePassenger(state.airplane)
+      || hasCarPassenger(state.car);
   },
 }));

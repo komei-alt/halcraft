@@ -178,7 +178,12 @@ const TANK_SPAWN = {
   x: RUNWAY_CENTER.x - 8,
   z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 7,
 };
+const CAR_SPAWN = {
+  x: RUNWAY_CENTER.x - 18,
+  z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 12,
+};
 const SEAT_PRIORITY = ['pilot', 'gunner_left', 'gunner_right'];
+const CAR_SEAT_PRIORITY = ['driver', 'front_passenger', 'rear_left', 'rear_right'];
 
 // モブ定数
 const MOB_GRAVITY = -20;
@@ -287,11 +292,36 @@ function makeDefaultAirplaneState() {
   };
 }
 
+function makeDefaultCarState() {
+  const x = CAR_SPAWN.x;
+  const y = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z) + 0.95;
+  const z = CAR_SPAWN.z;
+  return {
+    spawned: true,
+    seats: { driver: null, front_passenger: null, rear_left: null, rear_right: null },
+    isBoarded: false,
+    pilotId: null,
+    x,
+    y,
+    z,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
+    rotationY: 0,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    engineOn: false,
+    wheelSpin: 0,
+  };
+}
+
 function makeDefaultVehiclesState() {
   return {
     helicopter: makeDefaultHeliState(),
     tank: makeDefaultTankState(),
     airplane: makeDefaultAirplaneState(),
+    car: makeDefaultCarState(),
   };
 }
 
@@ -365,8 +395,31 @@ class Stage {
     }
   }
 
+  resetCarToParking() {
+    this.vehicleStates.car = makeDefaultCarState();
+  }
+
   removePlayerFromVehicle(socketId, type) {
     if (type === 'helicopter') return this.removePlayerFromHelicopter(socketId);
+    if (type === 'car') {
+      const car = this.vehicleStates.car;
+      if (!car) return null;
+      let removedSeat = null;
+      for (const seat of CAR_SEAT_PRIORITY) {
+        if (car.seats[seat] === socketId) {
+          car.seats[seat] = null;
+          removedSeat = seat;
+          break;
+        }
+      }
+      if (removedSeat === null) return null;
+      if (removedSeat === 'driver' || !this.hasAnyPassenger('car')) {
+        this.resetCarToParking();
+      } else {
+        this.syncVehicleLegacy('car');
+      }
+      return removedSeat;
+    }
 
     const vehicle = this.vehicleStates[type];
     if (!vehicle || vehicle.seats.pilot !== socketId) return null;
@@ -376,7 +429,7 @@ class Stage {
 
   removePlayerFromAllVehicles(socketId) {
     const changed = [];
-    for (const type of ['helicopter', 'tank', 'airplane']) {
+    for (const type of ['helicopter', 'tank', 'airplane', 'car']) {
       const removed = this.removePlayerFromVehicle(socketId, type);
       if (removed !== null) changed.push(type);
     }
@@ -389,6 +442,12 @@ class Stage {
     vehicle.pilotId = vehicle.seats.pilot;
     vehicle.isBoarded = vehicle.seats.pilot !== null;
     vehicle.engineOn = vehicle.seats.pilot !== null;
+    if (type === 'car') {
+      vehicle.pilotId = vehicle.seats.driver;
+      vehicle.isBoarded = this.hasAnyPassenger('car');
+      vehicle.engineOn = vehicle.isBoarded;
+      return;
+    }
     if (type === 'helicopter') {
       this.helicopterState = vehicle;
       this.syncLegacyFields();
@@ -997,7 +1056,7 @@ io.on('connection', (socket) => {
     if (!stage) return;
 
     const type = data?.type;
-    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    if (!['helicopter', 'tank', 'airplane', 'car'].includes(type)) return;
     if (stage.removePlayerFromAllVehicles(socket.id).length > 0) {
       io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
     }
@@ -1005,8 +1064,15 @@ io.on('connection', (socket) => {
     if (type === 'helicopter') return;
 
     const vehicle = stage.vehicleStates[type];
-    if (!vehicle || vehicle.seats.pilot !== null) return;
-    vehicle.seats.pilot = socket.id;
+    if (!vehicle) return;
+    if (type === 'car') {
+      const seat = CAR_SEAT_PRIORITY.find((candidate) => vehicle.seats[candidate] === null);
+      if (!seat) return;
+      vehicle.seats[seat] = socket.id;
+    } else {
+      if (vehicle.seats.pilot !== null) return;
+      vehicle.seats.pilot = socket.id;
+    }
     stage.syncVehicleLegacy(type);
     io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
   });
@@ -1018,7 +1084,7 @@ io.on('connection', (socket) => {
     if (!stage) return;
 
     const type = data?.type;
-    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    if (!['helicopter', 'tank', 'airplane', 'car'].includes(type)) return;
     const removedSeat = stage.removePlayerFromVehicle(socket.id, type);
     if (removedSeat === null) return;
     io.to(player.stageId).emit('vehicles:sync', { vehicles: stage.vehicleStates });
@@ -1034,14 +1100,18 @@ io.on('connection', (socket) => {
     if (!stage) return;
 
     const type = data?.type;
-    if (!['helicopter', 'tank', 'airplane'].includes(type)) return;
+    if (!['helicopter', 'tank', 'airplane', 'car'].includes(type)) return;
     const vehicle = stage.vehicleStates[type];
-    if (!vehicle || vehicle.seats.pilot !== socket.id) return;
+    if (!vehicle) return;
+    const isDriver = type === 'car'
+      ? vehicle.seats.driver === socket.id
+      : vehicle.seats.pilot === socket.id;
+    if (!isDriver) return;
 
     const state = data.state || {};
     for (const key of [
       'x', 'y', 'z', 'rotationY', 'pitch', 'roll', 'speed',
-      'rotorAngle', 'turretYaw', 'gunSpin', 'throttle', 'propellerAngle',
+      'rotorAngle', 'turretYaw', 'gunSpin', 'throttle', 'propellerAngle', 'wheelSpin',
     ]) {
       if (typeof state[key] === 'number') vehicle[key] = state[key];
     }

@@ -13,6 +13,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useGameStore } from '../stores/useGameStore';
 import {
   AIRPLANE_CONSTANTS,
+  CAR_CONSTANTS,
   HELICOPTER_CONSTANTS,
   SEAT_OFFSETS,
   TANK_CONSTANTS,
@@ -131,6 +132,8 @@ export function Player() {
   const cockpitOffset = useRef(new THREE.Vector3());
   const tankCameraOffset = useRef(new THREE.Vector3());
   const tankTurretPivot = useRef(new THREE.Vector3());
+  const carCameraOffset = useRef(new THREE.Vector3());
+  const carSeatOffset = useRef(new THREE.Vector3());
   const helicopterOrigin = useRef(new THREE.Vector3());
   const helicopterCameraTarget = useRef(new THREE.Vector3());
   const helicopterCameraPosition = useRef(new THREE.Vector3());
@@ -384,8 +387,9 @@ export function Player() {
         const vehicle =
           activeVehicle === 'helicopter' ? vehicleState.helicopter :
           activeVehicle === 'tank' ? vehicleState.tank :
-          vehicleState.airplane;
-        const dismountOffset = activeVehicle === 'airplane' ? 5 : 3;
+          activeVehicle === 'airplane' ? vehicleState.airplane :
+          vehicleState.car;
+        const dismountOffset = activeVehicle === 'airplane' ? 5 : activeVehicle === 'car' ? 3.6 : 3;
         const cosR = Math.cos(vehicle.rotationY + Math.PI / 2);
         const sinR = Math.sin(vehicle.rotationY + Math.PI / 2);
         const dismountX = vehicle.x + sinR * dismountOffset;
@@ -442,6 +446,15 @@ export function Player() {
           if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'airplane', dist });
         }
 
+        const car = vehicleState.car;
+        if (car.spawned && vehicleState.findAvailableCarSeat() !== null) {
+          const dx = pos.x - car.x;
+          const dy = (pos.y + PLAYER_HEIGHT / 2) - car.y;
+          const dz = pos.z - car.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < CAR_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'car', dist });
+        }
+
         candidates.sort((a, b) => a.dist - b.dist);
         const nearest = candidates[0]?.type;
 
@@ -456,11 +469,11 @@ export function Player() {
             }
             camera.quaternion.setFromEuler(euler.current);
           }
-        } else if (nearest === 'tank' || nearest === 'airplane') {
+        } else if (nearest === 'tank' || nearest === 'airplane' || nearest === 'car') {
           const assignedSeat = vehicleState.boardVehicle(nearest);
           if (assignedSeat) {
             sendVehicleBoard(nearest);
-            const v = nearest === 'tank' ? vehicleState.tank : vehicleState.airplane;
+            const v = nearest === 'tank' ? vehicleState.tank : nearest === 'airplane' ? vehicleState.airplane : vehicleState.car;
             euler.current.y = v.rotationY;
             euler.current.x = nearest === 'airplane' ? -0.04 : -0.08;
             if (nearest === 'airplane') {
@@ -937,6 +950,112 @@ export function Player() {
           propellerAngle: nextPropellerAngle,
         });
         lastSendTime.current = now;
+      }
+
+      return;
+    }
+
+    // ========================================
+    // 車1搭乗中の物理
+    // ========================================
+    const latestCar = useVehicleStore.getState().car;
+    if (latestCar.mySeat !== null) {
+      updateAttackCooldown(dt);
+      consumeKnockback();
+
+      if (latestCar.mySeat === 'driver') {
+        let carSpeed = latestCar.speed;
+        let carRotY = latestCar.rotationY;
+        let carX = latestCar.x;
+        let carZ = latestCar.z;
+
+        const inputForward = isTouch.current
+          ? -joystickInput.y
+          : (isInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0);
+        const inputTurn = isTouch.current
+          ? -joystickInput.x
+          : (isInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
+
+        if (inputForward > 0) {
+          carSpeed = Math.min(CAR_CONSTANTS.MAX_SPEED, carSpeed + CAR_CONSTANTS.ACCELERATION * dt);
+        } else if (inputForward < 0) {
+          carSpeed = Math.max(-CAR_CONSTANTS.REVERSE_SPEED, carSpeed - CAR_CONSTANTS.ACCELERATION * dt);
+        } else if (carSpeed > 0) {
+          carSpeed = Math.max(0, carSpeed - CAR_CONSTANTS.DECELERATION * dt);
+        } else {
+          carSpeed = Math.min(0, carSpeed + CAR_CONSTANTS.DECELERATION * dt);
+        }
+
+        const turnFactor = Math.min(1, (Math.abs(carSpeed) + 1) / 7);
+        const turnDelta = inputTurn * CAR_CONSTANTS.TURN_SPEED * dt * turnFactor * (carSpeed < 0 ? -1 : 1);
+        carRotY += turnDelta;
+        euler.current.y += turnDelta;
+
+        flyForward.current.set(0, 0, -1).applyAxisAngle(Y_AXIS, carRotY);
+        carX += flyForward.current.x * carSpeed * dt;
+        carZ += flyForward.current.z * carSpeed * dt;
+
+        const carY = getTerrainHeight(Math.floor(carX), Math.floor(carZ)) + CAR_CONSTANTS.BODY_HEIGHT;
+        const carRoll = -inputTurn * Math.min(0.08, Math.abs(carSpeed) / CAR_CONSTANTS.MAX_SPEED * 0.08);
+        const nextWheelSpin = latestCar.wheelSpin + carSpeed * dt * 2.4;
+
+        useVehicleStore.getState().updateCar({
+          x: carX,
+          y: carY,
+          z: carZ,
+          rotationY: carRotY,
+          pitch: 0,
+          roll: carRoll,
+          speed: carSpeed,
+          wheelSpin: nextWheelSpin,
+        });
+
+        carCameraOffset.current
+          .set(0, CAR_CONSTANTS.CAMERA_HEIGHT, CAR_CONSTANTS.CAMERA_BACK)
+          .applyAxisAngle(Y_AXIS, carRotY);
+        pos.x = carX + carCameraOffset.current.x;
+        pos.y = carY + carCameraOffset.current.y;
+        pos.z = carZ + carCameraOffset.current.z;
+
+        camera.quaternion.setFromEuler(euler.current);
+        camera.position.set(pos.x, pos.y, pos.z);
+
+        const now = performance.now();
+        if (now - lastSendTime.current > 50) {
+          sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+          sendVehicleMove('car', {
+            x: carX,
+            y: carY,
+            z: carZ,
+            rotationY: carRotY,
+            pitch: 0,
+            roll: carRoll,
+            speed: carSpeed,
+            wheelSpin: nextWheelSpin,
+          });
+          lastSendTime.current = now;
+        }
+      } else {
+        const passengerCar = useVehicleStore.getState().car;
+        const seatOffsets = {
+          front_passenger: { x: 0.55, y: 0.75, z: -0.5 },
+          rear_left: { x: -0.55, y: 0.75, z: 0.55 },
+          rear_right: { x: 0.55, y: 0.75, z: 0.55 },
+        } as const;
+        const seatOff = seatOffsets[latestCar.mySeat];
+        carSeatOffset.current.set(seatOff.x, seatOff.y, seatOff.z).applyAxisAngle(Y_AXIS, passengerCar.rotationY);
+        pos.x = passengerCar.x + carSeatOffset.current.x;
+        pos.y = passengerCar.y + carSeatOffset.current.y;
+        pos.z = passengerCar.z + carSeatOffset.current.z;
+
+        camera.quaternion.setFromEuler(euler.current);
+        camera.position.set(pos.x, pos.y, pos.z);
+
+        const now = performance.now();
+        if (now - lastSendTime.current > 50) {
+          sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+          lastSendTime.current = now;
+        }
       }
 
       return;

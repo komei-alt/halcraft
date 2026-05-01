@@ -27,9 +27,11 @@ import { SoundManager } from './components/SoundManager';
 import { Helicopter } from './components/vehicles/Helicopter';
 import { Tank } from './components/vehicles/Tank';
 import { Airplane } from './components/vehicles/Airplane';
+import { Car } from './components/vehicles/Car';
 // CockpitView は無効化済み — ヘリ胴体自体がガラス化するため不要
 import { MachineGun } from './components/vehicles/MachineGun';
 import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
+import { PlayerMachineGun } from './components/PlayerMachineGun';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
@@ -38,7 +40,7 @@ import { useWorldStore } from './stores/useWorldStore';
 import { useGameStore } from './stores/useGameStore';
 import { useMobStore } from './stores/useMobStore';
 import { BLOCK_IDS } from './types/blocks';
-import { AIRPLANE_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
+import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
 import { getTerrainHeight } from './utils/terrain/heightmap';
 import { Crosshair } from './components/ui/Crosshair';
 import { Hotbar } from './components/ui/Hotbar';
@@ -102,11 +104,13 @@ function GameCanvas() {
         <HitImpactEffect />
         <MobDeathEffect />
         <RocketLauncher />
+        <PlayerMachineGun />
         <DroppedItems />
         <MobManager />
         <Helicopter />
         <Tank />
         <Airplane />
+        <Car />
         <MachineGun />
         <VehicleWeapons />
         {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
@@ -125,9 +129,11 @@ export default function App() {
   const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
   const spawnTank = useVehicleStore((s) => s.spawnTank);
   const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
+  const spawnCar = useVehicleStore((s) => s.spawnCar);
   const helicopterSpawned = useVehicleStore((s) => s.helicopter.spawned);
   const tankSpawned = useVehicleStore((s) => s.tank.spawned);
   const airplaneSpawned = useVehicleStore((s) => s.airplane.spawned);
+  const carSpawned = useVehicleStore((s) => s.car.spawned);
 
   // ゲーム開始時に乗り物を各専用エリアにスポーン
   useEffect(() => {
@@ -145,14 +151,20 @@ export default function App() {
       const terrainY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
       spawnAirplane(AIRPLANE_SPAWN.x, terrainY + 1.8, AIRPLANE_SPAWN.z);
     }
+    if (phase === 'playing' && !carSpawned) {
+      const terrainY = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z);
+      spawnCar(CAR_SPAWN.x, terrainY + 0.95, CAR_SPAWN.z);
+    }
   }, [
     phase,
     helicopterSpawned,
     tankSpawned,
     airplaneSpawned,
+    carSpawned,
     spawnHelicopter,
     spawnTank,
     spawnAirplane,
+    spawnCar,
   ]);
 
   const currentStage = useGameStore((s) => s.currentStage);

@@ -3,7 +3,7 @@
 // モバイルではタップで選択可能
 
 import { useMemo } from 'react';
-import { usePlayerStore } from '../../stores/usePlayerStore';
+import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { BLOCK_DEFS } from '../../types/blocks';
 import { isTouchDevice } from '../../utils/device';
 
@@ -59,16 +59,17 @@ export function Hotbar() {
           backdropFilter: 'blur(6px)',
         }}
       >
-        {[
+        {([
           { id: 'builder', icon: '⛏️', label: '建築' },
           { id: 'rocket_launcher', icon: '🚀', label: 'ロケット' },
-        ].map((item) => {
+          { id: 'machine_gun', icon: '🔫', label: '機関銃' },
+        ] satisfies Array<{ id: EquippedItem; icon: string; label: string }>).map((item) => {
           const isSelected = equippedItem === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => setEquippedItem(item.id as 'builder' | 'rocket_launcher')}
+              onClick={() => setEquippedItem(item.id)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -81,6 +82,8 @@ export function Hotbar() {
                 background: isSelected
                   ? item.id === 'rocket_launcher'
                     ? 'rgba(255, 145, 72, 0.22)'
+                    : item.id === 'machine_gun'
+                      ? 'rgba(255, 210, 90, 0.18)'
                     : 'rgba(180, 220, 255, 0.14)'
                   : 'rgba(255,255,255,0.04)',
                 color: isSelected ? '#fff0d0' : 'rgba(255,255,255,0.65)',
@@ -92,7 +95,7 @@ export function Hotbar() {
             >
               <span>{item.icon}</span>
               <span>{item.label}</span>
-              {!isTouch && item.id === 'rocket_launcher' && (
+              {!isTouch && item.id !== 'builder' && (
                 <span style={{ fontSize: 9, opacity: 0.7 }}>V</span>
               )}
             </button>

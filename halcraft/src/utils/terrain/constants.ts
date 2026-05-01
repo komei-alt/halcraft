@@ -23,6 +23,11 @@ export const TANK_SPAWN = {
   x: RUNWAY_CENTER.x - 8,
   z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 7,
 };
+/** 車1のスポーン地点（滑走路横の駐車スペース） */
+export const CAR_SPAWN = {
+  x: RUNWAY_CENTER.x - 18,
+  z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 12,
+};
 
 /** 村の中心座標（ヘリで飛んでいく先） */
 export const VILLAGE_CENTER = { x: 80, z: 80 };

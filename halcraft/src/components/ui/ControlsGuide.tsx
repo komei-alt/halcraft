@@ -4,8 +4,8 @@
 // Hキーで表示/非表示を切り替え可能
 
 import { useState, useEffect } from 'react';
-import { useVehicleStore, SEAT_NAMES, VEHICLE_NAMES } from '../../stores/useVehicleStore';
-import type { SeatType, VehicleType } from '../../stores/useVehicleStore';
+import { useVehicleStore, CAR_SEAT_NAMES, SEAT_NAMES, VEHICLE_NAMES } from '../../stores/useVehicleStore';
+import type { CarSeatType, SeatType, VehicleType } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { isTouchDevice } from '../../utils/device';
@@ -111,7 +111,7 @@ function WalkingControls() {
 }
 
 /** 乗り物搭乗時の操作ガイド */
-function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' }) {
+function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' | CarSeatType }) {
   if (vehicle === 'tank') {
     return (
       <>
@@ -145,7 +145,29 @@ function VehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatTy
     );
   }
 
-  const seatName = SEAT_NAMES[seat];
+  if (vehicle === 'car') {
+    const carSeatName = CAR_SEAT_NAMES[seat as CarSeatType];
+    const isDriver = seat === 'driver';
+    return (
+      <>
+        <VehicleHeader icon="🚗" label={carSeatName} />
+        <Divider />
+        {isDriver ? (
+          <>
+            <ControlRow keyName="W / S" action="前進 / 後退" keyColor="#50c878" />
+            <ControlRow keyName="A / D" action="ハンドル" keyColor="#50c878" />
+            <ControlRow keyName="マウス" action="視点" keyColor="#ffdd66" />
+          </>
+        ) : (
+          <ControlRow keyName="マウス" action="車内から見回す" keyColor="#ffdd66" />
+        )}
+        <Divider />
+        <ControlRow keyName="F" action="降りる" keyColor="#ff6644" />
+      </>
+    );
+  }
+
+  const seatName = SEAT_NAMES[seat as SeatType];
   const isPilot = seat === 'pilot';
   const isGunner = seat === 'gunner_left' || seat === 'gunner_right';
 
@@ -243,7 +265,7 @@ function MobileWalkingControls() {
 }
 
 /** モバイル乗り物操作ガイド */
-function MobileVehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' }) {
+function MobileVehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: SeatType | 'pilot' | CarSeatType }) {
   if (vehicle === 'tank' || vehicle === 'airplane') {
     return (
       <>
@@ -257,7 +279,21 @@ function MobileVehicleControls({ vehicle, seat }: { vehicle: VehicleType; seat: 
     );
   }
 
-  const seatName = SEAT_NAMES[seat];
+  if (vehicle === 'car') {
+    return (
+      <>
+        <VehicleHeader icon="🚗" label={CAR_SEAT_NAMES[seat as CarSeatType]} />
+        <Divider />
+        {seat === 'driver' ? (
+          <ControlRow keyName="🕹️" action="運転" />
+        ) : (
+          <ControlRow keyName="👀" action="見回す" />
+        )}
+      </>
+    );
+  }
+
+  const seatName = SEAT_NAMES[seat as SeatType];
   const isPilot = seat === 'pilot';
 
   return (
@@ -294,6 +330,7 @@ export function ControlsGuide() {
   const helicopterSeat = useVehicleStore((s) => s.helicopter.mySeat);
   const tankSeat = useVehicleStore((s) => s.tank.mySeat);
   const airplaneSeat = useVehicleStore((s) => s.airplane.mySeat);
+  const carSeat = useVehicleStore((s) => s.car.mySeat);
   const isTouch = isTouchDevice();
   const [visible, setVisible] = useState(() => !isTouch);
 
@@ -318,7 +355,9 @@ export function ControlsGuide() {
       ? tankSeat
       : activeVehicle === 'airplane'
         ? airplaneSeat
-        : null;
+        : activeVehicle === 'car'
+          ? carSeat
+          : null;
   const isInVehicle = activeVehicle !== null && mySeat !== null;
 
   return (

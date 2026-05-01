@@ -48,6 +48,18 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     mobileActions.fireRocket = true;
   }, []);
 
+  const handleMachineGunStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.fireMachineGun = true;
+  }, []);
+
+  const handleMachineGunEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.fireMachineGun = false;
+  }, []);
+
   const handleVehicleGunStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -146,6 +158,8 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
             : 'rgba(120, 180, 255, 0.18)',
           border: equippedItem === 'rocket_launcher'
             ? '2px solid rgba(255, 170, 110, 0.4)'
+            : equippedItem === 'machine_gun'
+              ? '2px solid rgba(255, 220, 120, 0.4)'
             : '2px solid rgba(170, 215, 255, 0.34)',
           display: 'flex',
           alignItems: 'center',
@@ -161,7 +175,7 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           transition: 'background 0.15s, border-color 0.15s',
         }}
       >
-        {equippedItem === 'rocket_launcher' ? '🚀' : '⛏️'}
+        {equippedItem === 'rocket_launcher' ? '🚀' : equippedItem === 'machine_gun' ? '🔫' : '⛏️'}
       </div>
 
       {equippedItem === 'rocket_launcher' ? (
@@ -190,6 +204,35 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           }}
         >
           💥
+        </div>
+      ) : equippedItem === 'machine_gun' ? (
+        <div
+          onTouchStart={handleMachineGunStart}
+          onTouchEnd={handleMachineGunEnd}
+          onTouchCancel={handleMachineGunEnd}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: 8,
+            background: 'rgba(255, 220, 100, 0.2)',
+            border: '2px solid rgba(255, 230, 130, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: 20,
+            color: 'rgba(255, 245, 220, 0.85)',
+            textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          🔫
         </div>
       ) : (
         <div

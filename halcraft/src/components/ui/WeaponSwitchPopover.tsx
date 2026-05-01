@@ -37,10 +37,22 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     controls: [
       '左クリック または R: 発射',
       '爆風: 周囲まとめてダメージ',
-      'V: 建築モードに戻る',
+      'V: 機関銃に切り替え',
     ],
     accent: '#ffc48a',
     glow: 'rgba(255, 145, 72, 0.3)',
+  },
+  machine_gun: {
+    icon: '🔫',
+    title: '機関銃装備',
+    subtitle: '弱めの弾を連射する徒歩用武器です',
+    controls: [
+      '左クリック長押し: 連射',
+      '小ダメージ / 低反動',
+      'V: 建築モードに戻る',
+    ],
+    accent: '#ffe28a',
+    glow: 'rgba(255, 220, 90, 0.28)',
   },
 };
 
@@ -52,7 +64,18 @@ function getMobileContent(item: EquippedItem): PopoverContent {
       controls: [
         'タップ: こわす',
         '長押し: ブロック設置',
-        '右上の⛏️/🚀で切り替え',
+        '右上の装備ボタンで切り替え',
+      ],
+    };
+  }
+
+  if (item === 'rocket_launcher') {
+    return {
+      ...base,
+      controls: [
+        '💥 ボタン: ロケット発射',
+        '爆風: 周囲まとめてダメージ',
+        '右上の装備ボタンで切り替え',
       ],
     };
   }
@@ -60,9 +83,9 @@ function getMobileContent(item: EquippedItem): PopoverContent {
   return {
     ...base,
     controls: [
-      '💥 ボタン: ロケット発射',
-      '爆風: 周囲まとめてダメージ',
-      '右上の⛏️/🚀で切り替え',
+      '🔫 ボタン長押し: 連射',
+      '小ダメージ / 低反動',
+      '右上の装備ボタンで切り替え',
     ],
   };
 }
