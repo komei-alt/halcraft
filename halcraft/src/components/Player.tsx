@@ -50,12 +50,11 @@ const HELICOPTER_BANK_LIMIT = 0.45;
 const HELICOPTER_PILOT_CAMERA_FOLLOW_RATE = 8;
 const HELICOPTER_PILOT_CAMERA_PITCH_BIAS = -0.16;
 const AIRPLANE_BANK_LIMIT = 0.58;
-const AIRPLANE_MOUSE_PITCH_LIMIT = 0.42;
+const AIRPLANE_MOUSE_PITCH_LIMIT = 0.68;
+const AIRPLANE_MOUSE_PITCH_RATE = 1.65;
 const AIRPLANE_MOUSE_YAW_RATE = 1.2;
-const AIRPLANE_KEYBOARD_YAW_RATE = 1.15;
-const AIRPLANE_KEYBOARD_PITCH_RATE = 0.75;
-const AIRPLANE_YAW_FOLLOW_RATE = 2.6;
-const AIRPLANE_PITCH_CLIMB_RATE = 9.5;
+const AIRPLANE_KEYBOARD_PITCH_RATE = 1.05;
+const AIRPLANE_PITCH_CLIMB_RATE = 11.5;
 const AIRPLANE_LOW_SPEED_SINK_RATE = 2.2;
 const AIRPLANE_CAMERA_FOLLOW_RATE = 8;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
@@ -192,7 +191,7 @@ export function Player() {
         airplaneControlYaw.current - e.movementX * MOUSE_SENSITIVITY * AIRPLANE_MOUSE_YAW_RATE,
       );
       airplaneControlPitch.current = clamp(
-        airplaneControlPitch.current - e.movementY * MOUSE_SENSITIVITY,
+        airplaneControlPitch.current - e.movementY * MOUSE_SENSITIVITY * AIRPLANE_MOUSE_PITCH_RATE,
         -AIRPLANE_MOUSE_PITCH_LIMIT,
         AIRPLANE_MOUSE_PITCH_LIMIT,
       );
@@ -839,9 +838,9 @@ export function Player() {
       }
 
       if (!isTouch.current && isVehicleInputActive) {
-        airplaneControlYaw.current = normalizeAngle(
-          airplaneControlYaw.current + inputTurn * AIRPLANE_KEYBOARD_YAW_RATE * dt,
-        );
+        if (Math.abs(inputTurn) > 0.01) {
+          airplaneControlYaw.current = planeRotY;
+        }
         airplaneControlPitch.current = clamp(
           airplaneControlPitch.current + inputPitch * AIRPLANE_KEYBOARD_PITCH_RATE * dt,
           -AIRPLANE_MOUSE_PITCH_LIMIT,
@@ -853,7 +852,9 @@ export function Player() {
       const yawError = normalizeAngle(airplaneControlYaw.current - planeRotY);
       const steeringInput = isTouch.current
         ? inputTurn
-        : clamp(yawError / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1);
+        : Math.abs(inputTurn) > 0.01
+          ? inputTurn
+          : clamp(yawError / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1);
       const pitchDemand = isTouch.current
         ? inputPitch * 0.42
         : airplaneControlPitch.current;
@@ -868,19 +869,14 @@ export function Player() {
       const targetRoll = steeringInput * bankLimit;
       planeRoll = smoothValue(planeRoll, targetRoll, 6.5, dt);
 
-      if (isTouch.current) {
-        const bankTurn = clamp(planeRoll / bankLimit, -1, 1);
-        planeRotY = normalizeAngle(
-          planeRotY + bankTurn * AIRPLANE_CONSTANTS.TURN_SPEED * dt * yawAuthority,
-        );
-      } else {
-        const maxTurnRate = AIRPLANE_CONSTANTS.TURN_SPEED * yawAuthority;
-        const turnRate = clamp(yawError * AIRPLANE_YAW_FOLLOW_RATE, -maxTurnRate, maxTurnRate);
-        planeRotY = normalizeAngle(planeRotY + turnRate * dt);
-      }
+      const bankTurn = clamp(planeRoll / bankLimit, -1, 1);
+      const turnDemand = isTouch.current ? bankTurn : steeringInput;
+      planeRotY = normalizeAngle(
+        planeRotY + turnDemand * AIRPLANE_CONSTANTS.TURN_SPEED * dt * yawAuthority,
+      );
 
       const targetPitch = airborne
-        ? clamp(pitchDemand, -0.38, 0.42)
+        ? clamp(pitchDemand, -0.58, 0.68)
         : 0;
       planePitch = smoothValue(planePitch, targetPitch, 6.5, dt);
 
