@@ -48,7 +48,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     subtitle: '弱めの弾を連射する徒歩用武器です',
     controls: [
       '左クリック長押し: 連射',
-      '小ダメージ / 低反動',
+      '右クリック長押し: スコープ',
       'V: 建築モードに戻る',
     ],
     accent: '#ffe28a',

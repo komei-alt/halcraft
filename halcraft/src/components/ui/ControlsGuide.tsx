@@ -95,10 +95,15 @@ function WalkingControls() {
           <ControlRow keyName="左クリック" action="ブロック破壊 / 攻撃" />
           <ControlRow keyName="右クリック" action="ブロック設置" />
         </>
-      ) : (
+      ) : equippedItem === 'rocket_launcher' ? (
         <>
           <ControlRow keyName="左クリック / R" action="ロケット発射" keyColor="#ff9966" />
           <ControlRow keyName="大ばくはつ" action="広いはんいにダメージ" keyColor="#ff9966" />
+        </>
+      ) : (
+        <>
+          <ControlRow keyName="左クリック長押し" action="機関銃を連射" keyColor="#ffe28a" />
+          <ControlRow keyName="右クリック長押し" action="スコープでねらう" keyColor="#ffe28a" />
         </>
       )}
       <ControlRow keyName="V" action="武器切り替え" keyColor="#ffd56d" />
@@ -256,8 +261,10 @@ function MobileWalkingControls() {
           <ControlRow keyName="タップ" action="ブロック破壊" />
           <ControlRow keyName="長押し" action="ブロック設置" />
         </>
-      ) : (
+      ) : equippedItem === 'rocket_launcher' ? (
         <ControlRow keyName="🚀" action="ロケット発射" />
+      ) : (
+        <ControlRow keyName="🔫" action="機関銃を連射" />
       )}
       <ControlRow keyName="🔁" action="武器切り替え" />
     </>
