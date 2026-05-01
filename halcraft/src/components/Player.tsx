@@ -1038,9 +1038,9 @@ export function Player() {
       } else {
         const passengerCar = useVehicleStore.getState().car;
         const seatOffsets = {
-          front_passenger: { x: 0.55, y: 0.75, z: -0.5 },
-          rear_left: { x: -0.55, y: 0.75, z: 0.55 },
-          rear_right: { x: 0.55, y: 0.75, z: 0.55 },
+          front_passenger: { x: 0.42, y: 1.05, z: -0.58 },
+          rear_left: { x: -0.42, y: 1.05, z: 0.36 },
+          rear_right: { x: 0.42, y: 1.05, z: 0.36 },
         } as const;
         const seatOff = seatOffsets[latestCar.mySeat];
         carSeatOffset.current.set(seatOff.x, seatOff.y, seatOff.z).applyAxisAngle(Y_AXIS, passengerCar.rotationY);

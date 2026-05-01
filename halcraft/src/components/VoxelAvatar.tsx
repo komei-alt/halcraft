@@ -18,6 +18,8 @@ interface VoxelAvatarProps {
   color?: string;
   /** 移動中か（歩行アニメーション用） */
   isMoving: boolean;
+  /** 表示姿勢 */
+  pose?: 'standing' | 'seated';
   /** 死亡状態か */
   isDead?: boolean;
   /** 死亡開始時刻（Date.now()） */
@@ -68,10 +70,12 @@ function cloneWardenScene(scene: THREE.Group): THREE.Group {
 
 function WardenAvatar({
   isMoving,
+  pose,
   isDead,
   deathTime,
 }: {
   isMoving: boolean;
+  pose: 'standing' | 'seated';
   isDead: boolean;
   deathTime: number;
 }) {
@@ -122,8 +126,16 @@ function WardenAvatar({
       return;
     }
 
+    if (pose === 'seated') {
+      groupRef.current.rotation.x = -0.52;
+      groupRef.current.position.y = 0.24;
+      groupRef.current.position.z = -0.12;
+      return;
+    }
+
     groupRef.current.rotation.x = 0;
     groupRef.current.position.y = 0.48 + (isMoving ? Math.sin(performance.now() * 0.008) * 0.025 : 0);
+    groupRef.current.position.z = 0;
   });
 
   return (
@@ -133,7 +145,7 @@ function WardenAvatar({
   );
 }
 
-export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime = 0 }: VoxelAvatarProps) {
+export function VoxelAvatar({ skinId, color, isMoving, pose = 'standing', isDead = false, deathTime = 0 }: VoxelAvatarProps) {
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
   const leftLegRef = useRef<THREE.Mesh>(null);
@@ -294,8 +306,22 @@ export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime
       headRef.current.rotation.set(0, 0, 0);
       bodyRef.current.rotation.set(0, 0, 0);
 
-      // 歩行アニメーション
-      if (isMoving) {
+      if (pose === 'seated') {
+        // 車内では一体のボクセルパーツを座席に収まる姿勢へ固定する
+        bodyRef.current.position.y = 0.92;
+        headRef.current.position.y = 1.5;
+        leftArmRef.current.rotation.x = -0.22;
+        rightArmRef.current.rotation.x = -0.22;
+        leftLegRef.current.position.set(-0.15, 0.58, -0.22);
+        rightLegRef.current.position.set(0.15, 0.58, -0.22);
+        leftLegRef.current.rotation.x = Math.PI / 2.25;
+        rightLegRef.current.rotation.x = Math.PI / 2.25;
+        leftArmRef.current.rotation.z = 0;
+        rightArmRef.current.rotation.z = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (isMoving) {
+        // 歩行アニメーション
         const t = performance.now() * 0.006;
         const swing = Math.sin(t) * 0.6;
 
@@ -323,7 +349,7 @@ export function VoxelAvatar({ skinId, color, isMoving, isDead = false, deathTime
   });
 
   if (skinId === 'warden') {
-    return <WardenAvatar isMoving={isMoving} isDead={isDead} deathTime={deathTime} />;
+    return <WardenAvatar isMoving={isMoving} pose={pose} isDead={isDead} deathTime={deathTime} />;
   }
 
   return (

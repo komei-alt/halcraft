@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-01',
     items: [
+      { type: 'fix', text: '車1の向きと座り方を直して、ちゃんと中に乗れるようにしたよ' },
+      { type: 'feature', text: '機関銃で右クリックしてスコープをのぞけるようになったよ' },
       { type: 'feature', text: '新しい車1に4人で乗れるようになったよ' },
       { type: 'feature', text: '手に持てる機関銃を追加したよ' },
       { type: 'improve', text: 'ニワトリが新しい3Dモデルで出るようになったよ' },

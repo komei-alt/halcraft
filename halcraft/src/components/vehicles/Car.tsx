@@ -21,14 +21,14 @@ import { cloneSceneWithMaterials } from './modelUtils';
 const CAR_MODEL_PATH = '/models/2026-05-01/car-1.glb';
 const CAR_MODEL_SCALE = 0.34;
 const CAR_MODEL_POSITION: [number, number, number] = [0, 0.66, 1.92];
-const CAR_MODEL_YAW = 0;
-const CAR_AVATAR_SCALE = 0.58;
+const CAR_MODEL_YAW = Math.PI;
+const CAR_AVATAR_SCALE = 0.46;
 
 const CAR_AVATAR_POSITIONS: Record<CarSeatType, [number, number, number]> = {
-  driver: [-0.5, 0.93, -0.58],
-  front_passenger: [0.5, 0.93, -0.58],
-  rear_left: [-0.5, 0.93, 0.5],
-  rear_right: [0.5, 0.93, 0.5],
+  driver: [-0.42, 0.68, -0.58],
+  front_passenger: [0.42, 0.68, -0.58],
+  rear_left: [-0.42, 0.68, 0.36],
+  rear_right: [0.42, 0.68, 0.36],
 };
 
 export function Car() {
@@ -121,12 +121,13 @@ function CarPassengerAvatar({ seat }: { seat: CarSeatType }) {
         skinId={skinId}
         color={remotePlayer?.color}
         isMoving={false}
+        pose="seated"
         isDead={remotePlayer?.isDead ?? false}
         deathTime={remotePlayer?.deathTime ?? 0}
       />
-      <Billboard position={[0, 1.5, 0]}>
+      <Billboard position={[0, 1.18, 0]}>
         <Text
-          fontSize={0.16}
+          fontSize={0.12}
           color="#ffffff"
           anchorX="center"
           anchorY="middle"
