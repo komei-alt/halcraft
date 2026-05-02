@@ -10,7 +10,7 @@ import { connectToServer, disconnectFromServer, getSocket } from '../utils/socke
 import { useWorldStore } from './useWorldStore';
 import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
-import { usePlayerStore } from './usePlayerStore';
+import { usePlayerStore, type EquippedItem } from './usePlayerStore';
 import {
   useVehicleStore,
   type SeatType,
@@ -41,6 +41,8 @@ export interface RemotePlayer {
   isDead: boolean;
   /** 死亡開始時刻（アニメーション用、Date.now()） */
   deathTime: number;
+  /** 装備中の武器 */
+  equippedItem: EquippedItem;
 }
 
 interface MultiplayerState {
@@ -149,6 +151,7 @@ interface MultiplayerState {
 }
 
 let lastSentPos: [number, number, number] | null = null;
+let lastSentEquipped: EquippedItem | null = null;
 
 export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   connected: false,
@@ -185,16 +188,19 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     const socket = getSocket();
     if (!socket?.connected) return;
 
-    // 動いていない場合は送信しない
-    if (lastSentPos &&
+    const equippedItem = usePlayerStore.getState().equippedItem;
+
+    // 動いていない場合でも装備が変わったら送信
+    if (lastSentPos && lastSentEquipped === equippedItem &&
       Math.abs(position[0] - lastSentPos[0]) < 0.01 &&
       Math.abs(position[1] - lastSentPos[1]) < 0.01 &&
       Math.abs(position[2] - lastSentPos[2]) < 0.01) {
       return;
     }
 
-    socket.emit('player:move', { position, rotation });
+    socket.emit('player:move', { position, rotation, equippedItem });
     lastSentPos = [...position];
+    lastSentEquipped = equippedItem;
   },
 
   sendBlockBreak: (x, y, z) => {
@@ -386,7 +392,7 @@ function setupSocketListeners(
 
   // プレイヤー一覧受信
   socket.on('players:list', (data: {
-    players: Array<{ id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number] }>;
+    players: Array<{ id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number]; equippedItem?: EquippedItem }>;
     yourId: string;
   }) => {
     const newPlayers = new Map<string, RemotePlayer>();
@@ -401,6 +407,7 @@ function setupSocketListeners(
           micEnabled: false,
           isDead: false,
           deathTime: 0,
+          equippedItem: p.equippedItem || 'builder',
         });
       }
     }
@@ -408,7 +415,7 @@ function setupSocketListeners(
   });
 
   // 新プレイヤー参加
-  socket.on('player:joined', (data: { id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number] }) => {
+  socket.on('player:joined', (data: { id: string; name: string; color: string; skinId?: SkinId; position: [number, number, number]; rotation: [number, number]; equippedItem?: EquippedItem }) => {
     const players = new Map(get().remotePlayers);
     players.set(data.id, {
       ...data,
@@ -419,6 +426,7 @@ function setupSocketListeners(
       micEnabled: false,
       isDead: false,
       deathTime: 0,
+      equippedItem: data.equippedItem || 'builder',
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);
@@ -432,12 +440,15 @@ function setupSocketListeners(
   });
 
   // プレイヤー移動
-  socket.on('player:moved', (data: { id: string; position: [number, number, number]; rotation: [number, number] }) => {
+  socket.on('player:moved', (data: { id: string; position: [number, number, number]; rotation: [number, number]; equippedItem?: EquippedItem }) => {
     const players = get().remotePlayers;
     const player = players.get(data.id);
     if (player) {
       player.targetPosition = data.position;
       player.targetRotation = data.rotation;
+      if (data.equippedItem) {
+        player.equippedItem = data.equippedItem;
+      }
     }
   });
 

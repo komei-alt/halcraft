@@ -3,6 +3,7 @@
 // useMultiplayerStore のリモートプレイヤーを VoxelAvatar で表示
 // 死亡時は倒れる＋パーツ崩壊アニメーション
 // ヘリコプター搭乗中のプレイヤーはヘリ位置に追従して表示
+// 武器装備状態を同期して表示
 // ============================================
 
 import { useRef, useMemo, useState } from 'react';
@@ -10,7 +11,11 @@ import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { VoxelAvatar } from './VoxelAvatar';
+import { RemotePlayerWeapon } from './RemotePlayerWeapon';
 import { isValidSkinId } from '../types/skins';
+import type { EquippedItem } from '../stores/usePlayerStore';
+
+import type * as THREE from 'three';
 
 
 export function RemotePlayers() {
@@ -50,9 +55,18 @@ function RemotePlayerModel({
 
   // 移動中かどうか（歩行アニメーション用）— state でレンダリングに反映
   const [isMoving, setIsMoving] = useState(false);
+  const [equippedItem, setEquippedItem] = useState<EquippedItem>(player.equippedItem);
+
+  // 右腕参照（武器アタッチ用）
+  const rightArmRef = useRef<THREE.Mesh>(null);
 
   useFrame(() => {
     if (!groupRef.current) return;
+
+    // equippedItem 同期
+    if (player.equippedItem !== equippedItem) {
+      setEquippedItem(player.equippedItem);
+    }
 
     // 乗り物搭乗判定（車内描画側に任せる）
     const vehicleState = useVehicleStore.getState();
@@ -111,9 +125,14 @@ function RemotePlayerModel({
         isDead={player.isDead}
         deathTime={player.deathTime}
       />
+      {/* 武器表示（死亡中・乗り物搭乗中は非表示） */}
+      {!player.isDead && (
+        <RemotePlayerWeapon
+          equippedItem={equippedItem}
+          rightArmRef={rightArmRef}
+          isMoving={isMoving}
+        />
+      )}
     </group>
   );
 }
-
-// THREE の型を使うので import
-import type * as THREE from 'three';

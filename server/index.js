@@ -972,6 +972,7 @@ io.on('connection', (socket) => {
       skinId,
       position: [8, 40, 8],
       rotation: [0, 0],
+      equippedItem: 'builder',
       stageId,
     };
 
@@ -1021,10 +1022,12 @@ io.on('connection', (socket) => {
     if (!player) return;
     player.position = data.position;
     player.rotation = data.rotation;
+    if (data.equippedItem) player.equippedItem = data.equippedItem;
     socket.to(player.stageId).emit('player:moved', {
       id: socket.id,
       position: data.position,
       rotation: data.rotation,
+      equippedItem: player.equippedItem,
     });
   });
 
