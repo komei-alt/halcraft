@@ -2,6 +2,7 @@
 // ハルが描いたタイトル画像を背景に使用
 // 名前入力 + ステージ選択 + クリック/タップでゲーム開始
 // デバイスに応じて操作説明を切り替え
+// スマホ縦・横両対応（スクロール可能）
 
 import { useState, useCallback, useEffect } from 'react';
 import { useGameStore, type GameMode } from '../../stores/useGameStore';
@@ -164,26 +165,27 @@ export function StartScreen() {
         inset: 0,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
         zIndex: 200,
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
         padding: 0,
-        overflow: 'hidden',
+        /* モバイルでスクロール可能にする */
+        overflowX: 'hidden',
+        overflowY: 'auto',
       }}
     >
-      {/* ハルが描いたタイトル画像（背景全面） */}
+      {/* ハルが描いたタイトル画像（背景全面・スクロールに追従しない） */}
       <img
         src="/textures/title.jpg"
         alt="ハルクラ タイトル"
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
           width: '100%',
           height: '100%',
           objectFit: 'cover',
           objectPosition: 'center',
           zIndex: 0,
+          pointerEvents: 'none',
         }}
         draggable={false}
       />
@@ -191,12 +193,12 @@ export function StartScreen() {
       {/* 下部グラデーション（UIを読みやすくする） */}
       <div
         style={{
-          position: 'absolute',
+          position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
-          height: '60%',
-          background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)',
+          height: '70%',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 40%, transparent 100%)',
           zIndex: 1,
           pointerEvents: 'none',
         }}
@@ -206,7 +208,7 @@ export function StartScreen() {
       {!isTouch && (
         <div
           style={{
-            position: 'absolute',
+            position: 'fixed',
             top: 0,
             left: 0,
             bottom: 0,
@@ -221,21 +223,38 @@ export function StartScreen() {
       {/* アップデート履歴パネル（デスクトップのみ） */}
       {!isTouch && <UpdateLog />}
 
-      {/* UI コンテンツ（下寄せ） */}
+      {/* スペーサー：コンテンツが少ない場合に下寄せする */}
+      <div style={{ flexGrow: 1, minHeight: isTouch ? 80 : 120 }} />
+
+      {/* UI コンテンツ */}
       <div
+        id="start-screen-content"
         style={{
           position: 'relative',
           zIndex: 2,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          paddingBottom: isTouch ? 20 : 40,
+          paddingBottom: isTouch ? 24 : 40,
+          paddingLeft: isTouch ? 12 : 0,
+          paddingRight: isTouch ? 12 : 0,
           gap: 0,
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ステージ選択UI */}
-        <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 600 }}>
+        <div
+          id="start-screen-stages"
+          style={{
+            marginBottom: isTouch ? 12 : 16,
+            display: 'flex',
+            flexDirection: 'row',
+            gap: isTouch ? 8 : 12,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            maxWidth: isTouch ? 340 : 600,
+          }}
+        >
           {STAGES.map((stage) => {
             const isSelected = selectedStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
@@ -244,26 +263,32 @@ export function StartScreen() {
                 key={stage.id}
                 onClick={() => setSelectedStageId(stage.id)}
                 style={{
-                  width: 140,
-                  padding: '8px 12px',
+                  width: isTouch ? 100 : 140,
+                  padding: isTouch ? '6px 8px' : '8px 12px',
                   background: isSelected ? 'rgba(50, 180, 50, 0.4)' : 'rgba(0,0,0,0.5)',
                   backdropFilter: 'blur(8px)',
                   border: '2px solid',
                   borderColor: isSelected ? 'rgba(100, 220, 100, 0.8)' : 'rgba(255,255,255,0.2)',
-                  borderRadius: 12,
+                  borderRadius: isTouch ? 10 : 12,
                   color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 4,
+                  gap: 3,
                   boxShadow: isSelected ? '0 0 15px rgba(100,220,100,0.4)' : 'none',
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 'bold' }}>{stage.name}</div>
-                <div style={{ fontSize: 10, opacity: 0.8 }}>ミッション:<br/>{stage.mission.title}</div>
-                <div style={{ fontSize: 11, marginTop: 4, color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)' }}>
-                  {players > 0 ? `🟢 ${players}人がプレイ中` : '○ 誰もいない'}
+                <div style={{ fontSize: isTouch ? 11 : 13, fontWeight: 'bold' }}>{stage.name}</div>
+                <div style={{ fontSize: isTouch ? 9 : 10, opacity: 0.8, lineHeight: 1.3 }}>
+                  ミッション:<br/>{stage.mission.title}
+                </div>
+                <div style={{
+                  fontSize: isTouch ? 9 : 11,
+                  marginTop: 2,
+                  color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)',
+                }}>
+                  {players > 0 ? `🟢 ${players}人` : '○ 0人'}
                 </div>
               </div>
             );
@@ -273,10 +298,10 @@ export function StartScreen() {
         {/* ゲームモード選択UI */}
         <div
           style={{
-            marginBottom: 16,
+            marginBottom: isTouch ? 10 : 16,
             display: 'flex',
             flexDirection: 'row',
-            gap: 10,
+            gap: isTouch ? 8 : 10,
             flexWrap: 'wrap',
             justifyContent: 'center',
             maxWidth: 460,
@@ -291,8 +316,8 @@ export function StartScreen() {
                 type="button"
                 onClick={() => setSelectedGameMode(mode.id)}
                 style={{
-                  width: isTouch ? 170 : 200,
-                  padding: isTouch ? '9px 12px' : '10px 14px',
+                  width: isTouch ? 150 : 200,
+                  padding: isTouch ? '7px 10px' : '10px 14px',
                   background: isSelected
                     ? isCreative
                       ? 'rgba(80, 170, 255, 0.36)'
@@ -312,7 +337,7 @@ export function StartScreen() {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'flex-start',
-                  gap: 4,
+                  gap: 3,
                   boxShadow: isSelected
                     ? isCreative
                       ? '0 0 16px rgba(100,190,255,0.34)'
@@ -322,8 +347,8 @@ export function StartScreen() {
                   textAlign: 'left',
                 }}
               >
-                <span style={{ fontSize: isTouch ? 14 : 15, fontWeight: 800 }}>{mode.name}</span>
-                <span style={{ fontSize: 11, opacity: 0.82 }}>{mode.caption}</span>
+                <span style={{ fontSize: isTouch ? 13 : 15, fontWeight: 800 }}>{mode.name}</span>
+                <span style={{ fontSize: isTouch ? 10 : 11, opacity: 0.82 }}>{mode.caption}</span>
               </button>
             );
           })}
@@ -335,13 +360,13 @@ export function StartScreen() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
           }}
         >
           <label
             style={{
               color: 'rgba(255,255,255,0.8)',
-              fontSize: isTouch ? 13 : 15,
+              fontSize: isTouch ? 12 : 15,
               letterSpacing: 2,
               textShadow: '0 1px 4px rgba(0,0,0,0.8)',
             }}
@@ -359,9 +384,9 @@ export function StartScreen() {
             autoComplete="off"
             autoFocus={!isTouch}
             style={{
-              width: isTouch ? 200 : 240,
-              padding: '12px 16px',
-              fontSize: isTouch ? 18 : 22,
+              width: isTouch ? 180 : 240,
+              padding: isTouch ? '10px 14px' : '12px 16px',
+              fontSize: isTouch ? 16 : 22,
               fontWeight: 700,
               textAlign: 'center',
               background: 'rgba(0,0,0,0.5)',
@@ -385,7 +410,7 @@ export function StartScreen() {
           <span
             style={{
               color: 'rgba(255,255,255,0.4)',
-              fontSize: 11,
+              fontSize: 10,
               textShadow: '0 1px 2px rgba(0,0,0,0.6)',
             }}
           >
@@ -394,9 +419,7 @@ export function StartScreen() {
         </div>
 
         {/* スキン選択 */}
-        <div
-          style={{ marginTop: 12 }}
-        >
+        <div style={{ marginTop: isTouch ? 8 : 12 }}>
           <SkinSelector compact />
         </div>
 
@@ -404,14 +427,14 @@ export function StartScreen() {
         {serverFull && (
           <div
             style={{
-              marginTop: 12,
-              padding: '8px 20px',
+              marginTop: 10,
+              padding: '6px 16px',
               background: 'rgba(231, 76, 60, 0.3)',
               backdropFilter: 'blur(4px)',
               border: '1px solid rgba(231, 76, 60, 0.5)',
               borderRadius: 6,
               color: '#ff6b6b',
-              fontSize: 14,
+              fontSize: isTouch ? 12 : 14,
               textShadow: '0 1px 2px rgba(0,0,0,0.5)',
             }}
           >
@@ -423,8 +446,8 @@ export function StartScreen() {
         <div
           onClick={handleStart}
           style={{
-            marginTop: 20,
-            padding: isTouch ? '14px 36px' : '16px 48px',
+            marginTop: isTouch ? 14 : 20,
+            padding: isTouch ? '12px 32px' : '16px 48px',
             background: isValidName
               ? 'rgba(50, 180, 50, 0.35)'
               : 'rgba(255,255,255,0.05)',
@@ -435,7 +458,7 @@ export function StartScreen() {
               : 'rgba(255,255,255,0.1)',
             borderRadius: 10,
             color: isValidName ? '#fff' : 'rgba(255,255,255,0.3)',
-            fontSize: isTouch ? 16 : 20,
+            fontSize: isTouch ? 15 : 20,
             fontWeight: 700,
             letterSpacing: 3,
             animation: isValidName ? 'pulse 2s ease-in-out infinite' : 'none',
@@ -451,13 +474,13 @@ export function StartScreen() {
         {/* 操作説明 */}
         <div
           style={{
-            marginTop: 20,
+            marginTop: isTouch ? 12 : 20,
             display: 'flex',
             flexDirection: isTouch ? 'column' : 'row',
-            gap: isTouch ? 6 : 20,
+            gap: isTouch ? 4 : 20,
             alignItems: 'center',
             color: 'rgba(255,255,255,0.5)',
-            fontSize: isTouch ? 11 : 12,
+            fontSize: isTouch ? 10 : 12,
             textShadow: '0 1px 3px rgba(0,0,0,0.8)',
           }}
         >
@@ -483,7 +506,12 @@ export function StartScreen() {
         </div>
 
         {/* iOS Safari用：ホーム画面に追加の案内バナー */}
-        <InstallBanner />
+        <div style={{ marginTop: isTouch ? 12 : 16, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <InstallBanner />
+        </div>
+
+        {/* 下端の余白（Safe Area対応） */}
+        <div style={{ height: 'env(safe-area-inset-bottom, 16px)', minHeight: 16 }} />
       </div>
     </div>
   );

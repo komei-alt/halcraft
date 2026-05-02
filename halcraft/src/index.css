@@ -129,6 +129,12 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* === スタート画面のモバイルスクロール許可 === */
+#start-screen {
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* === モバイルレスポンシブ === */
 @media (max-width: 768px) {
   /* ヘルスバーをモバイル向けに位置調整 */
@@ -146,5 +152,34 @@ body {
   #time-display {
     top: max(12px, env(safe-area-inset-top)) !important;
     right: max(16px, env(safe-area-inset-right)) !important;
+  }
+}
+
+/* === スタート画面：ランドスケープ対応 === */
+@media (max-height: 500px) and (orientation: landscape) {
+  #start-screen-content {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 12px 24px !important;
+  }
+
+  #start-screen-stages {
+    max-width: none !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x !important;
+  }
+
+  #start-screen-stages > div {
+    min-width: 110px !important;
+    width: 110px !important;
+    flex-shrink: 0 !important;
   }
 }

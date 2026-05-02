@@ -37,12 +37,9 @@ export function InstallBanner() {
     <div
       id="install-banner"
       style={{
-        position: 'absolute',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        position: 'relative',
         maxWidth: 340,
-        width: 'calc(100% - 40px)',
+        width: '100%',
         padding: '14px 16px',
         background: 'rgba(66, 165, 245, 0.15)',
         backdropFilter: 'blur(12px)',
