@@ -9,9 +9,9 @@ type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
 export type GameMode = 'survival' | 'creative';
 
 /** 昼夜サイクルの定数 */
-// 基本サイクル: リアル5分 = ゲーム内1日 (300秒)
-// 旧設定は600秒だったが、体感2倍速にするため300秒に変更
-const BASE_DAY_DURATION_SECONDS = 300;
+// 基本サイクル: リアル20分 = ゲーム内1日 (1200秒)
+// 旧設定は600秒だったが、体感2倍ゆっくりにするため1200秒に変更
+const BASE_DAY_DURATION_SECONDS = 1200;
 
 /**
  * 時間帯別の速度係数
