@@ -4,7 +4,7 @@
 // デバイスに応じて操作説明を切り替え
 // スマホ縦・横両対応（スクロール可能）
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useGameStore, type GameMode } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
@@ -83,6 +83,23 @@ export function StartScreen() {
 
   const isTouch = isTouchDevice();
   const isValidName = name.trim().length >= 1 && name.trim().length <= 8;
+
+  // ビューポートサイズを追跡（UpdateLog 表示判定＋レイアウト切り替え用）
+  const [viewportSize, setViewportSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const onResize = () => setViewportSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // UpdateLog を表示するか: タッチデバイスでない＆十分な画面幅＆十分な画面高さ
+  const showUpdateLog = useMemo(
+    () => !isTouch && viewportSize.w >= 900 && viewportSize.h >= 500,
+    [isTouch, viewportSize.w, viewportSize.h],
+  );
+
+  // 横画面かどうか（高さが極端に低い）
+  const isLandscapeMobile = viewportSize.h < 500 && viewportSize.w > viewportSize.h;
 
   // 定期的にステージのプレイヤー数を取得
   useEffect(() => {
@@ -205,7 +222,7 @@ export function StartScreen() {
       />
 
       {/* 左側グラデーション（アップデートログの可読性向上） */}
-      {!isTouch && (
+      {showUpdateLog && (
         <div
           style={{
             position: 'fixed',
@@ -220,11 +237,11 @@ export function StartScreen() {
         />
       )}
 
-      {/* アップデート履歴パネル（デスクトップのみ） */}
-      {!isTouch && <UpdateLog />}
+      {/* アップデート履歴パネル（十分な画面サイズの場合のみ表示） */}
+      {showUpdateLog && <UpdateLog />}
 
       {/* スペーサー：コンテンツが少ない場合に下寄せする */}
-      <div style={{ flexGrow: 1, minHeight: isTouch ? 80 : 120 }} />
+      <div style={{ flexGrow: 1, minHeight: isLandscapeMobile ? 20 : (isTouch ? 80 : 120) }} />
 
       {/* UI コンテンツ */}
       <div
