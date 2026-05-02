@@ -5,19 +5,22 @@
 // ============================================
 
 import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { EquippedItem } from '../stores/usePlayerStore';
 import { cloneSceneWithMaterials } from './vehicles/modelUtils';
 
 const MACHINE_GUN_MODEL_PATH = '/models/2026-05-01/machine-gun.glb';
+const MAX_REMOTE_AIM_PITCH = Math.PI / 3;
+const REMOTE_WEAPON_ANCHOR: [number, number, number] = [0.38, 0.92, -0.18];
 
 interface RemotePlayerWeaponProps {
   equippedItem: EquippedItem;
-  /** 右腕のメッシュ参照（武器をアタッチするため） */
-  rightArmRef: React.RefObject<THREE.Mesh | null>;
   /** 移動中かどうか（腕振りと同期） */
   isMoving: boolean;
+  /** プレイヤー視点の上下角度 */
+  viewPitch: number;
 }
 
 /**
@@ -26,25 +29,29 @@ interface RemotePlayerWeaponProps {
  */
 function PickaxeModel() {
   return (
-    <group position={[0.0, -0.35, -0.2]} rotation={[0.5, 0, 0.2]}>
-      {/* 柄（木の棒） */}
-      <mesh position={[0, -0.1, 0]} rotation={[0, 0, -0.1]}>
-        <boxGeometry args={[0.06, 0.48, 0.06]} />
+    <group position={[0.11, -0.34, -0.02]} rotation={[0.42, 0.16, -0.82]}>
+      {/* 柄（木の棒）: 原点付近が握り位置 */}
+      <mesh position={[0, -0.16, 0]}>
+        <boxGeometry args={[0.07, 0.82, 0.07]} />
         <meshStandardMaterial color="#8B6914" roughness={0.85} />
       </mesh>
+      <mesh position={[0, 0.04, 0]}>
+        <boxGeometry args={[0.095, 0.18, 0.095]} />
+        <meshStandardMaterial color="#6f4b18" roughness={0.88} />
+      </mesh>
       {/* ピッケルヘッド（石の刃） */}
-      <mesh position={[0, 0.14, 0]}>
-        <boxGeometry args={[0.3, 0.08, 0.06]} />
+      <mesh position={[0, 0.31, 0]}>
+        <boxGeometry args={[0.46, 0.09, 0.08]} />
         <meshStandardMaterial color="#777777" roughness={0.7} metalness={0.15} />
       </mesh>
       {/* ピッケルの先端（左） */}
-      <mesh position={[-0.18, 0.17, 0]}>
-        <boxGeometry args={[0.08, 0.06, 0.05]} />
+      <mesh position={[-0.29, 0.29, 0]}>
+        <boxGeometry args={[0.11, 0.07, 0.065]} />
         <meshStandardMaterial color="#666666" roughness={0.7} metalness={0.15} />
       </mesh>
       {/* ピッケルの先端（右） */}
-      <mesh position={[0.18, 0.17, 0]}>
-        <boxGeometry args={[0.08, 0.06, 0.05]} />
+      <mesh position={[0.29, 0.29, 0]}>
+        <boxGeometry args={[0.11, 0.07, 0.065]} />
         <meshStandardMaterial color="#666666" roughness={0.7} metalness={0.15} />
       </mesh>
     </group>
@@ -57,7 +64,7 @@ function PickaxeModel() {
  */
 function RocketLauncherModel() {
   return (
-    <group position={[0.05, -0.25, -0.15]} rotation={[0.3, 0, 0.1]} scale={0.55}>
+    <group position={[0, 0.03, -0.16]} rotation={[0.02, -0.04, -0.05]} scale={0.64}>
       {/* メインチューブ */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.1, 0.12, 0.95, 12]} />
@@ -78,6 +85,21 @@ function RocketLauncherModel() {
         <boxGeometry args={[0.18, 0.06, 0.7]} />
         <meshStandardMaterial color="#1f1f1f" roughness={0.48} metalness={0.52} />
       </mesh>
+      {/* 肩当て */}
+      <mesh position={[0, -0.01, 0.5]} rotation={[0.05, 0, 0]}>
+        <boxGeometry args={[0.22, 0.2, 0.12]} />
+        <meshStandardMaterial color="#3b302b" roughness={0.84} metalness={0.12} />
+      </mesh>
+      {/* トリガーグリップ */}
+      <mesh position={[-0.02, -0.19, -0.18]} rotation={[-0.44, 0, 0]}>
+        <boxGeometry args={[0.09, 0.24, 0.1]} />
+        <meshStandardMaterial color="#2c2420" roughness={0.82} metalness={0.08} />
+      </mesh>
+      {/* 前方グリップ */}
+      <mesh position={[0, -0.17, -0.43]} rotation={[-0.2, 0, 0]}>
+        <boxGeometry args={[0.075, 0.2, 0.1]} />
+        <meshStandardMaterial color="#352a24" roughness={0.82} metalness={0.1} />
+      </mesh>
     </group>
   );
 }
@@ -90,7 +112,7 @@ function MachineGunModel() {
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
 
   return (
-    <group position={[0.02, -0.28, -0.22]} rotation={[0.3, Math.PI, 0.05]} scale={0.08}>
+    <group position={[-0.02, -0.04, -0.26]} rotation={[0.02, Math.PI - 0.06, -0.03]} scale={0.095}>
       <primitive object={model} />
     </group>
   );
@@ -100,13 +122,18 @@ function MachineGunModel() {
  * リモートプレイヤーの右手に武器を配置するコンポーネント
  * VoxelAvatar の右腕（position=[0.42, 0.85, 0]）にアタッチされる
  */
-export function RemotePlayerWeapon({ equippedItem }: RemotePlayerWeaponProps) {
+export function RemotePlayerWeapon({ equippedItem, isMoving, viewPitch }: RemotePlayerWeaponProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const clampedPitch = THREE.MathUtils.clamp(viewPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
 
-  // 右腕の位置（VoxelAvatar の origPositions.rightArm = [0.42, 0.85, 0]）に合わせる
-  // 腕の下端あたり（手の位置）にオフセット
+  useFrame(() => {
+    if (!groupRef.current) return;
+    const bob = isMoving ? Math.sin(performance.now() * 0.008) * 0.025 : 0;
+    groupRef.current.position.y = REMOTE_WEAPON_ANCHOR[1] + bob;
+  });
+
   return (
-    <group ref={groupRef} position={[0.42, 0.52, 0]}>
+    <group ref={groupRef} position={REMOTE_WEAPON_ANCHOR} rotation={[clampedPitch, 0, 0]}>
       {equippedItem === 'builder' && <PickaxeModel />}
       {equippedItem === 'rocket_launcher' && <RocketLauncherModel />}
       {equippedItem === 'machine_gun' && <MachineGunModel />}

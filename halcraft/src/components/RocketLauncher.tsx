@@ -53,10 +53,12 @@ const TRAIL_PUFF_LIFETIME = 0.85;
 const MAX_TRAIL_PUFFS = 80;
 
 /** 武器のローカル配置 */
-const SHOULDER_OFFSET = new THREE.Vector3(0.44, -0.34, -0.62);
+const SHOULDER_OFFSET = new THREE.Vector3(0.34, -0.28, -0.5);
 const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, -1.56);
 const BACKBLAST_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, 0.16);
 const MODEL_FORWARD = new THREE.Vector3(0, 0, -1);
+const FIRST_PERSON_SKIN_COLOR = '#f0b686';
+const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 
 interface RocketProjectile {
   id: number;
@@ -318,7 +320,7 @@ export function RocketLauncher() {
   const aimPoint = useRef(new THREE.Vector3());
   const playerCenter = useRef(new THREE.Vector3());
   const localTiltQuat = useMemo(() => {
-    const euler = new THREE.Euler(-0.16, -0.22, -0.1);
+    const euler = new THREE.Euler(-0.08, -0.1, -0.04);
     return new THREE.Quaternion().setFromEuler(euler);
   }, []);
 
@@ -869,6 +871,26 @@ export function RocketLauncher() {
             <meshStandardMaterial color="#3e342f" roughness={0.84} metalness={0.12} />
           </mesh>
 
+          {/* 右腕: トリガーグリップを握る */}
+          <mesh position={[0.34, -0.42, -0.2]} rotation={[-0.78, 0.08, -0.22]}>
+            <boxGeometry args={[0.15, 0.48, 0.15]} />
+            <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+          </mesh>
+          <mesh position={[0.15, -0.19, -0.48]} rotation={[-0.14, 0.02, -0.08]}>
+            <boxGeometry args={[0.18, 0.16, 0.16]} />
+            <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+          </mesh>
+
+          {/* 左腕: 前方グリップを支えて肩撃ち姿勢にする */}
+          <mesh position={[-0.12, -0.43, -0.72]} rotation={[-0.92, -0.16, 0.3]}>
+            <boxGeometry args={[0.14, 0.52, 0.14]} />
+            <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+          </mesh>
+          <mesh position={[0.17, -0.14, -0.98]} rotation={[-0.08, 0.08, 0.04]}>
+            <boxGeometry args={[0.17, 0.15, 0.16]} />
+            <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+          </mesh>
+
           {/* サイドレール */}
           <mesh position={[0.18, 0.12, -0.72]}>
             <boxGeometry args={[0.1, 0.06, 0.9]} />
@@ -897,6 +919,16 @@ export function RocketLauncher() {
           <mesh position={[0.03, 0.14, -0.12]} rotation={[0, 0.2, 0]}>
             <boxGeometry args={[0.22, 0.04, 0.08]} />
             <meshStandardMaterial color="#bb6f2d" roughness={0.45} metalness={0.25} emissive="#8a4312" emissiveIntensity={0.35} />
+          </mesh>
+
+          {/* 簡易照準器 */}
+          <mesh position={[0.18, 0.23, -0.68]}>
+            <boxGeometry args={[0.08, 0.08, 0.38]} />
+            <meshStandardMaterial color="#17191a" roughness={0.5} metalness={0.55} />
+          </mesh>
+          <mesh position={[0.18, 0.28, -0.96]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.055, 0.055, 0.035, 12]} />
+            <meshStandardMaterial color="#202426" roughness={0.45} metalness={0.55} />
           </mesh>
 
           {/* 砲口フラッシュ */}

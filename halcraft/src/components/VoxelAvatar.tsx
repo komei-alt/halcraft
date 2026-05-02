@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
+import type { EquippedItem } from '../stores/usePlayerStore';
 
 interface VoxelAvatarProps {
   /** スキンID（優先） */
@@ -20,6 +21,10 @@ interface VoxelAvatarProps {
   isMoving: boolean;
   /** 表示姿勢 */
   pose?: 'standing' | 'seated';
+  /** 手持ち装備に合わせた腕の構え */
+  equippedItem?: EquippedItem;
+  /** 視点の上下角度（リモートプレイヤーの武器構え同期用） */
+  aimPitch?: number;
   /** 死亡状態か */
   isDead?: boolean;
   /** 死亡開始時刻（Date.now()） */
@@ -29,6 +34,7 @@ interface VoxelAvatarProps {
 /** 死亡アニメーションの総時間（秒） */
 const DEATH_ANIM_DURATION = 1.2;
 const WARDEN_MODEL_PATH = '/models/2026-04-29/warden.glb';
+const MAX_REMOTE_AIM_PITCH = Math.PI / 3;
 
 /** 各パーツの崩壊パラメータ */
 interface PartPhysics {
@@ -145,7 +151,16 @@ function WardenAvatar({
   );
 }
 
-export function VoxelAvatar({ skinId, color, isMoving, pose = 'standing', isDead = false, deathTime = 0 }: VoxelAvatarProps) {
+export function VoxelAvatar({
+  skinId,
+  color,
+  isMoving,
+  pose = 'standing',
+  equippedItem = 'builder',
+  aimPitch = 0,
+  isDead = false,
+  deathTime = 0,
+}: VoxelAvatarProps) {
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
   const leftLegRef = useRef<THREE.Mesh>(null);
@@ -318,6 +333,27 @@ export function VoxelAvatar({ skinId, color, isMoving, pose = 'standing', isDead
         rightLegRef.current.rotation.x = Math.PI / 2.25;
         leftArmRef.current.rotation.z = 0;
         rightArmRef.current.rotation.z = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'rocket_launcher' || equippedItem === 'machine_gun') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        const brace = equippedItem === 'rocket_launcher' ? 0.98 : 1.12;
+        rightArmRef.current.rotation.x = brace + pitch * 0.45;
+        leftArmRef.current.rotation.x = brace + pitch * 0.55;
+        rightArmRef.current.rotation.z = -0.16;
+        leftArmRef.current.rotation.z = 0.28;
+        leftLegRef.current.rotation.x = 0;
+        rightLegRef.current.rotation.x = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'builder') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        rightArmRef.current.rotation.x = 0.48 + pitch * 0.28;
+        rightArmRef.current.rotation.z = -0.22;
+        leftArmRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.35 : 0;
+        leftArmRef.current.rotation.z = 0;
+        leftLegRef.current.rotation.x = isMoving ? -Math.sin(performance.now() * 0.006) * 0.45 : 0;
+        rightLegRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.45 : 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (isMoving) {

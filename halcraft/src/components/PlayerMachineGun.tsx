@@ -28,14 +28,16 @@ const BULLET_RANGE = 34;
 const MOB_HIT_RADIUS = 0.85;
 const PLAYER_HIT_RADIUS = 0.48;
 const PLAYER_HIT_HEIGHT = 1.7;
-const HIP_MODEL_OFFSET = new THREE.Vector3(0.48, -0.6, -0.86);
-const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.08, -0.42, -0.74);
-const MUZZLE_LOCAL = new THREE.Vector3(0, -0.32, -1.2);
-const MODEL_ROTATION = new THREE.Euler(0.08, Math.PI, 0.02, 'YXZ');
+const HIP_MODEL_OFFSET = new THREE.Vector3(0.35, -0.48, -0.72);
+const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.06, -0.34, -0.66);
+const MUZZLE_LOCAL = new THREE.Vector3(0, -0.25, -1.18);
+const MODEL_ROTATION = new THREE.Euler(0.02, Math.PI - 0.02, -0.03, 'YXZ');
 const HIP_SPREAD = 0.026;
 const SCOPED_SPREAD = 0.008;
 const SCOPED_FOV = 42;
 const FOV_LERP_RATE = 14;
+const FIRST_PERSON_SKIN_COLOR = '#f0b686';
+const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 
 interface BulletProjectile {
   id: number;
@@ -312,6 +314,24 @@ export function PlayerMachineGun() {
           position={[0, -0.02, 0]}
           rotation={[0, 0, 0]}
         />
+        {/* 右腕とグリップ: トリガー側を手で握っているように見せる */}
+        <mesh position={[0.26, -0.48, -0.12]} rotation={[-0.86, 0.12, -0.26]}>
+          <boxGeometry args={[0.15, 0.48, 0.15]} />
+          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+        </mesh>
+        <mesh position={[0.13, -0.27, -0.38]} rotation={[-0.12, 0.08, -0.08]}>
+          <boxGeometry args={[0.18, 0.16, 0.16]} />
+          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+        </mesh>
+        {/* 左手を前方グリップに置いて、銃をしっかり支える */}
+        <mesh position={[-0.18, -0.5, -0.48]} rotation={[-0.9, -0.1, 0.28]}>
+          <boxGeometry args={[0.14, 0.5, 0.14]} />
+          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+        </mesh>
+        <mesh position={[-0.04, -0.25, -0.77]} rotation={[-0.08, -0.16, 0.08]}>
+          <boxGeometry args={[0.17, 0.15, 0.16]} />
+          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+        </mesh>
         <mesh
           ref={flashCoreRef}
           position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.06]}

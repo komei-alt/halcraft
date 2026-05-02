@@ -151,7 +151,12 @@ interface MultiplayerState {
 }
 
 let lastSentPos: [number, number, number] | null = null;
+let lastSentRot: [number, number] | null = null;
 let lastSentEquipped: EquippedItem | null = null;
+
+function angleDistance(a: number, b: number): number {
+  return Math.abs(((a - b + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
+}
 
 export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   connected: false,
@@ -173,6 +178,8 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
 
   leave: () => {
     lastSentPos = null;
+    lastSentRot = null;
+    lastSentEquipped = null;
     disconnectFromServer();
     useGameStore.getState().setMultiplayer(false);
     set({
@@ -189,17 +196,22 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     if (!socket?.connected) return;
 
     const equippedItem = usePlayerStore.getState().equippedItem;
+    const positionUnchanged = lastSentPos !== null
+      && Math.abs(position[0] - lastSentPos[0]) < 0.01
+      && Math.abs(position[1] - lastSentPos[1]) < 0.01
+      && Math.abs(position[2] - lastSentPos[2]) < 0.01;
+    const rotationUnchanged = lastSentRot !== null
+      && angleDistance(rotation[0], lastSentRot[0]) < 0.01
+      && Math.abs(rotation[1] - lastSentRot[1]) < 0.01;
 
-    // 動いていない場合でも装備が変わったら送信
-    if (lastSentPos && lastSentEquipped === equippedItem &&
-      Math.abs(position[0] - lastSentPos[0]) < 0.01 &&
-      Math.abs(position[1] - lastSentPos[1]) < 0.01 &&
-      Math.abs(position[2] - lastSentPos[2]) < 0.01) {
+    // 動いていない場合でも、視点角度か装備が変わったら相手の構えに反映する
+    if (lastSentPos && lastSentEquipped === equippedItem && positionUnchanged && rotationUnchanged) {
       return;
     }
 
     socket.emit('player:move', { position, rotation, equippedItem });
     lastSentPos = [...position];
+    lastSentRot = [...rotation];
     lastSentEquipped = equippedItem;
   },
 

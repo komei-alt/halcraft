@@ -57,9 +57,6 @@ function RemotePlayerModel({
   const [isMoving, setIsMoving] = useState(false);
   const [equippedItem, setEquippedItem] = useState<EquippedItem>(player.equippedItem);
 
-  // 右腕参照（武器アタッチ用）
-  const rightArmRef = useRef<THREE.Mesh>(null);
-
   useFrame(() => {
     if (!groupRef.current) return;
 
@@ -122,6 +119,8 @@ function RemotePlayerModel({
         skinId={player.skinId && isValidSkinId(player.skinId) ? player.skinId : undefined}
         color={player.color}
         isMoving={isMoving}
+        equippedItem={equippedItem}
+        aimPitch={player.rotation[1]}
         isDead={player.isDead}
         deathTime={player.deathTime}
       />
@@ -129,8 +128,8 @@ function RemotePlayerModel({
       {!player.isDead && (
         <RemotePlayerWeapon
           equippedItem={equippedItem}
-          rightArmRef={rightArmRef}
           isMoving={isMoving}
+          viewPitch={player.rotation[1]}
         />
       )}
     </group>
