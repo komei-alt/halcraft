@@ -374,6 +374,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       mobs: state.mobs.filter((m) => {
         // 味方モブは自動削除しない（再スポーンで対応）
         if (m.isAlly) return true;
+        // ボスは距離で自動削除しない
+        if (m.type === 'boss_giant') return true;
         const dx = m.x - playerX;
         const dz = m.z - playerZ;
         return Math.sqrt(dx * dx + dz * dz) < DESPAWN_DISTANCE;

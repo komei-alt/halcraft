@@ -45,6 +45,13 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-02',
+    items: [
+      { type: 'fix', text: 'ほかの人が乗っている乗り物がカクカクしないで滑らかに動くようになったよ' },
+      { type: 'fix', text: '巨大ボスの巣ステージでボスがちゃんと出てくるようになったよ！' },
+    ],
+  },
+  {
     date: '2026-05-01',
     items: [
       { type: 'fix', text: '飛行機が右にも曲がれるようになって、マウスで上昇と降下を調整しやすくなったよ' },

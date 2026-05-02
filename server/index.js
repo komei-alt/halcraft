@@ -205,6 +205,14 @@ const DESPAWN_DISTANCE = 60;
 const SPAWN_INTERVAL = 2.5;
 const DARWIN_SPAWN_INTERVAL = 18;
 
+// ボス定数
+const BOSS_GIANT_HP = 500;
+const BOSS_SPEED = 2.0;
+const BOSS_ATTACK_RANGE = 3.5;
+const BOSS_ATTACK_DAMAGE = 8;
+const BOSS_ATTACK_COOLDOWN = 1.5;
+const BOSS_HEIGHT = 6.0;
+
 const PROTOTYPE_SPEED = 3.0;
 const PROTOTYPE_FOLLOW_MIN = 4;
 const PROTOTYPE_FOLLOW_MAX = 15;
@@ -469,7 +477,10 @@ class Stage {
   }
 
   spawnMob(type, x, y, z) {
-    const hp = type === 'prototype' ? PROTOTYPE_HP : type === 'darwin' ? DARWIN_HP : ZOMBIE_HP;
+    const hp = type === 'boss_giant' ? BOSS_GIANT_HP
+      : type === 'prototype' ? PROTOTYPE_HP
+      : type === 'darwin' ? DARWIN_HP
+      : ZOMBIE_HP;
     const mob = {
       id: `${this.id}_mob_${this.nextMobId++}`,
       type, x, y, z, hp, maxHp: hp,
@@ -564,8 +575,24 @@ class Stage {
       this.spawnMob('prototype', sx, sy, sz);
     }
 
+    // ── ボスステージ(world-5)でボスをスポーン ──
+    if (this.id === 'world-5') {
+      const hasBoss = this.mobs.some((m) => m.type === 'boss_giant');
+      if (!hasBoss && validPlayers > 0) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 20;
+        const sx = avgX + Math.cos(angle) * distance;
+        const sz = avgZ + Math.sin(angle) * distance;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 2;
+        this.spawnMob('boss_giant', sx, sy, sz);
+        console.log(`[Boss] ステージ ${this.id} に巨大ボスをスポーン (${sx.toFixed(1)}, ${sy.toFixed(1)}, ${sz.toFixed(1)})`);
+      }
+    }
+
     this.mobs = this.mobs.filter((m) => {
       if (m.isAlly) return true;
+      // ボスは距離で自動削除しない
+      if (m.type === 'boss_giant') return true;
       const { dist } = this.getClosestPlayer(m.x, m.z);
       return dist < DESPAWN_DISTANCE;
     });
@@ -665,6 +692,64 @@ class Stage {
           m.vy = 0;
         }
 
+        if (m.hp <= 0) continue;
+        updatedMobs.push(m);
+        continue;
+      }
+
+      // ─── 巨大ボス（プレイヤー追跡 + 近接攻撃） ───
+      if (m.type === 'boss_giant') {
+        const { player: bossTarget, dist: bossDist } = this.getClosestPlayer(m.x, m.z);
+        if (!bossTarget) { updatedMobs.push(m); continue; }
+
+        const bpx = bossTarget.position[0];
+        const bpz = bossTarget.position[2];
+        const bdx = bpx - m.x;
+        const bdz = bpz - m.z;
+
+        if (bossDist > BOSS_ATTACK_RANGE * 0.5) {
+          m.rotation = Math.atan2(bdx, bdz);
+          if (m.hitTimer <= 0) {
+            const nx = bdx / bossDist;
+            const nz = bdz / bossDist;
+            m.vx = nx * BOSS_SPEED;
+            m.vz = nz * BOSS_SPEED;
+          }
+        } else {
+          m.vx = 0; m.vz = 0;
+          if (bossDist > 0.1) m.rotation = Math.atan2(bdx, bdz);
+        }
+
+        m.vy += MOB_GRAVITY * dt;
+        if (m.vy < -30) m.vy = -30;
+        m.y += m.vy * dt;
+        const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 1;
+        if (m.y <= groundY) {
+          m.y = groundY;
+          m.vy = 0;
+        }
+        m.x += m.vx * dt;
+        m.z += m.vz * dt;
+
+        if (m.hitTimer > 0) {
+          m.vx *= 0.95; // ボスはノックバック耐性が高い
+          m.vz *= 0.95;
+        }
+
+        // 近接攻撃
+        const bossAttackCd = this.attackCooldowns.get(`boss_${m.id}`) || 0;
+        const bpy = bossTarget.position[1] - 1.6;
+        const byClose = Math.abs(m.y - bpy) < BOSS_HEIGHT + 0.5;
+        if (bossDist < BOSS_ATTACK_RANGE && byClose && bossAttackCd <= 0) {
+          const prevDmg = playerDamages.get(bossTarget.id) || 0;
+          playerDamages.set(bossTarget.id, prevDmg + BOSS_ATTACK_DAMAGE);
+          this.attackCooldowns.set(`boss_${m.id}`, BOSS_ATTACK_COOLDOWN);
+        }
+        if (bossAttackCd > 0) {
+          this.attackCooldowns.set(`boss_${m.id}`, bossAttackCd - dt);
+        }
+
+        if (m.y < -20) continue;
         if (m.hp <= 0) continue;
         updatedMobs.push(m);
         continue;

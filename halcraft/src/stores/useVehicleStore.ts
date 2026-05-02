@@ -485,6 +485,41 @@ function getCarSeatForPlayer(
   return null;
 }
 
+/** 乗り物ごとの補間目標値（ストア外で管理してZustandの再レンダリングを回避） */
+interface VehicleInterpolationTarget {
+  x: number; y: number; z: number;
+  rotationY: number; pitch: number; roll: number;
+  speed: number;
+  // 飛行機固有
+  propellerAngle?: number;
+  throttle?: number;
+  airborne?: boolean;
+  // ヘリ固有
+  rotorAngle?: number;
+  // 戦車固有
+  turretYaw?: number;
+  gunSpin?: number;
+  // 車固有
+  wheelSpin?: number;
+}
+
+/** 補間目標値（ストア外管理 — 毎フレーム補間で使用） */
+const vehicleTargets: Record<VehicleType, VehicleInterpolationTarget | null> = {
+  helicopter: null,
+  tank: null,
+  airplane: null,
+  car: null,
+};
+
+/** 角度の最短回転で補間する */
+function lerpAngle(current: number, target: number, t: number): number {
+  let diff = target - current;
+  // -PI ~ PI に正規化
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return current + diff * t;
+}
+
 interface VehicleState {
   helicopter: HelicopterState;
   tank: TankState;
@@ -508,6 +543,9 @@ interface VehicleState {
   updateCar: (updates: Partial<CarState>) => void;
   updateVehicle: (type: VehicleType, updates: Partial<HelicopterState> | Partial<TankState> | Partial<AirplaneState> | Partial<CarState>) => void;
   syncVehicles: (vehicles: VehiclesSyncPayload, myId: string | null) => void;
+
+  /** 自分が操縦していない乗り物の補間を毎フレーム実行 */
+  interpolateVehicles: (dt: number) => void;
 
   /** 乗り物にダメージを与える。破壊された場合 true を返す */
   damageVehicle: (type: VehicleType, amount: number) => boolean;
@@ -807,13 +845,35 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         const seats = vehicles.helicopter.seats ?? helicopter.seats;
         const mySeat = getHelicopterSeatForPlayer(seats, myId);
         const keepLocalPilotMotion = helicopter.mySeat === 'pilot' && mySeat === 'pilot';
-        helicopter = syncHelicopterLegacy({
-          ...helicopter,
-          ...(keepLocalPilotMotion ? {} : vehicles.helicopter),
-          seats,
-          mySeat,
-          spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
-        });
+        if (keepLocalPilotMotion) {
+          // ローカル操縦中: 座席情報のみ同期、位置はローカル
+          helicopter = syncHelicopterLegacy({
+            ...helicopter,
+            seats,
+            mySeat,
+            spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
+          });
+          vehicleTargets.helicopter = null;
+        } else {
+          // リモート乗り物: 座席と spawned は即座に反映し、位置は目標値に設定
+          const v = vehicles.helicopter;
+          vehicleTargets.helicopter = {
+            x: v.x ?? helicopter.x,
+            y: v.y ?? helicopter.y,
+            z: v.z ?? helicopter.z,
+            rotationY: v.rotationY ?? helicopter.rotationY,
+            pitch: v.pitch ?? helicopter.pitch,
+            roll: v.roll ?? helicopter.roll,
+            speed: v.speed ?? helicopter.speed,
+            rotorAngle: v.rotorAngle ?? helicopter.rotorAngle,
+          };
+          helicopter = syncHelicopterLegacy({
+            ...helicopter,
+            seats,
+            mySeat,
+            spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
+          });
+        }
       }
 
       if (vehicles.tank) {
@@ -821,13 +881,34 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         const resolved = resolveSingleSeatForSync(tank, seats, myId);
         const mySeat = resolved.mySeat;
         const keepLocalPilotMotion = tank.mySeat === 'pilot' && mySeat === 'pilot';
-        tank = syncSingleLegacy({
-          ...tank,
-          ...(keepLocalPilotMotion ? {} : vehicles.tank),
-          seats: resolved.seats,
-          mySeat,
-          spawned: vehicles.tank.spawned ?? tank.spawned,
-        });
+        if (keepLocalPilotMotion) {
+          tank = syncSingleLegacy({
+            ...tank,
+            seats: resolved.seats,
+            mySeat,
+            spawned: vehicles.tank.spawned ?? tank.spawned,
+          });
+          vehicleTargets.tank = null;
+        } else {
+          const v = vehicles.tank;
+          vehicleTargets.tank = {
+            x: v.x ?? tank.x,
+            y: v.y ?? tank.y,
+            z: v.z ?? tank.z,
+            rotationY: v.rotationY ?? tank.rotationY,
+            pitch: v.pitch ?? tank.pitch,
+            roll: v.roll ?? tank.roll,
+            speed: v.speed ?? tank.speed,
+            turretYaw: (v as Partial<TankState>).turretYaw ?? (tank as TankState).turretYaw,
+            gunSpin: (v as Partial<TankState>).gunSpin ?? (tank as TankState).gunSpin,
+          };
+          tank = syncSingleLegacy({
+            ...tank,
+            seats: resolved.seats,
+            mySeat,
+            spawned: vehicles.tank.spawned ?? tank.spawned,
+          });
+        }
       }
 
       if (vehicles.airplane) {
@@ -835,27 +916,68 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         const resolved = resolveSingleSeatForSync(airplane, seats, myId);
         const mySeat = resolved.mySeat;
         const keepLocalPilotMotion = airplane.mySeat === 'pilot' && mySeat === 'pilot';
-        airplane = syncSingleLegacy({
-          ...airplane,
-          // ローカル操縦中の機体は、古いサーバースナップショットで位置・速度を戻さない。
-          ...(keepLocalPilotMotion ? {} : vehicles.airplane),
-          seats: resolved.seats,
-          mySeat,
-          spawned: vehicles.airplane.spawned ?? airplane.spawned,
-        });
+        if (keepLocalPilotMotion) {
+          airplane = syncSingleLegacy({
+            ...airplane,
+            seats: resolved.seats,
+            mySeat,
+            spawned: vehicles.airplane.spawned ?? airplane.spawned,
+          });
+          vehicleTargets.airplane = null;
+        } else {
+          const v = vehicles.airplane;
+          vehicleTargets.airplane = {
+            x: v.x ?? airplane.x,
+            y: v.y ?? airplane.y,
+            z: v.z ?? airplane.z,
+            rotationY: v.rotationY ?? airplane.rotationY,
+            pitch: v.pitch ?? airplane.pitch,
+            roll: v.roll ?? airplane.roll,
+            speed: v.speed ?? airplane.speed,
+            propellerAngle: (v as Partial<AirplaneState>).propellerAngle ?? (airplane as AirplaneState).propellerAngle,
+            throttle: (v as Partial<AirplaneState>).throttle ?? (airplane as AirplaneState).throttle,
+            airborne: (v as Partial<AirplaneState>).airborne ?? (airplane as AirplaneState).airborne,
+          };
+          airplane = syncSingleLegacy({
+            ...airplane,
+            seats: resolved.seats,
+            mySeat,
+            spawned: vehicles.airplane.spawned ?? airplane.spawned,
+          });
+        }
       }
 
       if (vehicles.car) {
         const seats = vehicles.car.seats ?? car.seats;
         const mySeat = getCarSeatForPlayer(seats, myId);
         const keepLocalDriverMotion = car.mySeat === 'driver' && mySeat === 'driver';
-        car = syncCarLegacy({
-          ...car,
-          ...(keepLocalDriverMotion ? {} : vehicles.car),
-          seats,
-          mySeat,
-          spawned: vehicles.car.spawned ?? car.spawned,
-        });
+        if (keepLocalDriverMotion) {
+          car = syncCarLegacy({
+            ...car,
+            seats,
+            mySeat,
+            spawned: vehicles.car.spawned ?? car.spawned,
+          });
+          vehicleTargets.car = null;
+        } else {
+          const v = vehicles.car;
+          vehicleTargets.car = {
+            x: v.x ?? car.x,
+            y: v.y ?? car.y,
+            z: v.z ?? car.z,
+            rotationY: v.rotationY ?? car.rotationY,
+            pitch: v.pitch ?? car.pitch,
+            roll: v.roll ?? car.roll,
+            speed: v.speed ?? car.speed,
+            wheelSpin: (v as Partial<CarState>).wheelSpin ?? (car as CarState).wheelSpin,
+          };
+          car = syncCarLegacy({
+            ...car,
+            seats,
+            mySeat,
+            spawned: vehicles.car.spawned ?? car.spawned,
+          });
+        }
       }
 
       return {
@@ -866,6 +988,115 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         activeVehicle: vehicleHasLocalSeat({ helicopter, tank, airplane, car }),
       };
     });
+  },
+
+  interpolateVehicles: (dt) => {
+    const state = get();
+    // 補間速度: 値が大きいほど目標値に速く追従する
+    const t = Math.min(1, dt * 15);
+    let changed = false;
+    const updates: Partial<Pick<VehicleState, 'helicopter' | 'tank' | 'airplane' | 'car'>> = {};
+
+    // ヘリコプター補間
+    const heliTarget = vehicleTargets.helicopter;
+    if (heliTarget && state.helicopter.spawned && state.helicopter.mySeat !== 'pilot') {
+      const h = state.helicopter;
+      const dx = heliTarget.x - h.x;
+      const dy = heliTarget.y - h.y;
+      const dz = heliTarget.z - h.z;
+      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(dz) > 0.01 ||
+          Math.abs(heliTarget.rotationY - h.rotationY) > 0.01) {
+        updates.helicopter = syncHelicopterLegacy({
+          ...h,
+          x: h.x + dx * t,
+          y: h.y + dy * t,
+          z: h.z + dz * t,
+          rotationY: lerpAngle(h.rotationY, heliTarget.rotationY, t),
+          pitch: h.pitch + (heliTarget.pitch - h.pitch) * t,
+          roll: h.roll + (heliTarget.roll - h.roll) * t,
+          speed: h.speed + (heliTarget.speed - h.speed) * t,
+          rotorAngle: heliTarget.rotorAngle ?? h.rotorAngle,
+        });
+        changed = true;
+      }
+    }
+
+    // 戦車補間
+    const tankTarget = vehicleTargets.tank;
+    if (tankTarget && state.tank.spawned && state.tank.mySeat !== 'pilot') {
+      const v = state.tank;
+      const dx = tankTarget.x - v.x;
+      const dz = tankTarget.z - v.z;
+      if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01 ||
+          Math.abs(tankTarget.rotationY - v.rotationY) > 0.01) {
+        updates.tank = syncSingleLegacy({
+          ...v,
+          x: v.x + dx * t,
+          y: v.y + (tankTarget.y - v.y) * t,
+          z: v.z + dz * t,
+          rotationY: lerpAngle(v.rotationY, tankTarget.rotationY, t),
+          pitch: v.pitch + (tankTarget.pitch - v.pitch) * t,
+          roll: v.roll + (tankTarget.roll - v.roll) * t,
+          speed: v.speed + (tankTarget.speed - v.speed) * t,
+          turretYaw: lerpAngle(v.turretYaw, tankTarget.turretYaw ?? v.turretYaw, t),
+          gunSpin: tankTarget.gunSpin ?? v.gunSpin,
+        });
+        changed = true;
+      }
+    }
+
+    // 飛行機補間
+    const airTarget = vehicleTargets.airplane;
+    if (airTarget && state.airplane.spawned && state.airplane.mySeat !== 'pilot') {
+      const v = state.airplane;
+      const dx = airTarget.x - v.x;
+      const dy = airTarget.y - v.y;
+      const dz = airTarget.z - v.z;
+      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(dz) > 0.01 ||
+          Math.abs(airTarget.rotationY - v.rotationY) > 0.01) {
+        updates.airplane = syncSingleLegacy({
+          ...v,
+          x: v.x + dx * t,
+          y: v.y + dy * t,
+          z: v.z + dz * t,
+          rotationY: lerpAngle(v.rotationY, airTarget.rotationY, t),
+          pitch: v.pitch + (airTarget.pitch - v.pitch) * t,
+          roll: v.roll + (airTarget.roll - v.roll) * t,
+          speed: v.speed + (airTarget.speed - v.speed) * t,
+          propellerAngle: airTarget.propellerAngle ?? v.propellerAngle,
+          throttle: v.throttle + ((airTarget.throttle ?? v.throttle) - v.throttle) * t,
+          airborne: airTarget.airborne ?? v.airborne,
+        });
+        changed = true;
+      }
+    }
+
+    // 車補間
+    const carTarget = vehicleTargets.car;
+    if (carTarget && state.car.spawned && state.car.mySeat !== 'driver') {
+      const v = state.car;
+      const dx = carTarget.x - v.x;
+      const dz = carTarget.z - v.z;
+      if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01 ||
+          Math.abs(carTarget.rotationY - v.rotationY) > 0.01) {
+        updates.car = syncCarLegacy({
+          ...v,
+          x: v.x + dx * t,
+          y: v.y + (carTarget.y - v.y) * t,
+          z: v.z + dz * t,
+          rotationY: lerpAngle(v.rotationY, carTarget.rotationY, t),
+          pitch: v.pitch + (carTarget.pitch - v.pitch) * t,
+          roll: v.roll + (carTarget.roll - v.roll) * t,
+          speed: v.speed + (carTarget.speed - v.speed) * t,
+          wheelSpin: carTarget.wheelSpin ?? v.wheelSpin,
+        });
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      set(updates);
+    }
   },
 
   isInVehicle: () => {

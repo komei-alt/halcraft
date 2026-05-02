@@ -16,10 +16,12 @@ import { isValidSkinId } from '../types/skins';
 export function RemotePlayers() {
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
   const interpolateRemotePlayers = useMultiplayerStore((s) => s.interpolateRemotePlayers);
+  const interpolateVehicles = useVehicleStore((s) => s.interpolateVehicles);
 
-  // 毎フレーム補間を実行
+  // 毎フレーム補間を実行（リモートプレイヤー + 乗り物）
   useFrame((_, delta) => {
     interpolateRemotePlayers(delta);
+    interpolateVehicles(delta);
   });
 
   // Map を配列に変換
