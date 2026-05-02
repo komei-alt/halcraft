@@ -9,8 +9,44 @@ type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
 export type GameMode = 'survival' | 'creative';
 
 /** 昼夜サイクルの定数 */
-// リアル10分 = ゲーム内1日 (600秒 = 1日サイクル)
-const DAY_DURATION_SECONDS = 600;
+// 基本サイクル: リアル5分 = ゲーム内1日 (300秒)
+// 旧設定は600秒だったが、体感2倍速にするため300秒に変更
+const BASE_DAY_DURATION_SECONDS = 300;
+
+/**
+ * 時間帯別の速度係数
+ * 値が大きいほどその時間帯を速く通過する（体感で短く感じる）
+ * 値が小さいほどゆっくり進む（その時間帯を長く味わえる）
+ *
+ * gameTime の区間:
+ *   0.00 ~ 0.10  朝 (6:00-8:24)   → ゆっくり: 朝焼けの雰囲気を楽しむ
+ *   0.10 ~ 0.40  昼 (8:24-15:36)  → やや速い: 素材集めなどのテンポを上げる
+ *   0.40 ~ 0.55  夕方 (15:36-19:12) → ゆっくり: 夕暮れの美しさを味わう
+ *   0.55 ~ 1.00  夜 (19:12-6:00)  → 速い: 夜の緊張感を保ちつつテンポよく
+ */
+interface TimeZoneSpeed {
+  start: number;
+  end: number;
+  speed: number;
+}
+
+const TIME_ZONE_SPEEDS: TimeZoneSpeed[] = [
+  { start: 0.00, end: 0.10, speed: 0.6 },  // 朝: ゆっくり（朝焼けを楽しむ）
+  { start: 0.10, end: 0.40, speed: 1.2 },  // 昼: やや速い（テンポアップ）
+  { start: 0.40, end: 0.55, speed: 0.5 },  // 夕方: ゆっくり（夕焼けを味わう）
+  { start: 0.55, end: 1.00, speed: 1.6 },  // 夜: 速い（緊張感を保ちつつ短く）
+];
+
+/** 現在の gameTime に対する速度係数を返す */
+function getTimeSpeedMultiplier(gameTime: number): number {
+  for (const zone of TIME_ZONE_SPEEDS) {
+    if (gameTime >= zone.start && gameTime < zone.end) {
+      return zone.speed;
+    }
+  }
+  // フォールバック（通常到達しない）
+  return 1.0;
+}
 
 interface GameState {
   /** 現在のゲームフェーズ */
@@ -207,8 +243,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     // マルチプレイ中はサーバーからの同期に任せる
     if (get().isMultiplayer) return;
 
-    const timeIncrement = deltaSeconds / DAY_DURATION_SECONDS;
-    let newTime = get().gameTime + timeIncrement;
+    const currentTime = get().gameTime;
+
+    // 時間帯に応じた速度係数を取得
+    const speedMultiplier = getTimeSpeedMultiplier(currentTime);
+
+    // 基本の時間増分 × 時間帯別速度係数
+    const timeIncrement = (deltaSeconds / BASE_DAY_DURATION_SECONDS) * speedMultiplier;
+    let newTime = currentTime + timeIncrement;
     let newDayCount = get().dayCount;
 
     if (newTime >= 1.0) {
