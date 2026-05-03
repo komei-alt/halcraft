@@ -575,8 +575,8 @@ class Stage {
       this.spawnMob('prototype', sx, sy, sz);
     }
 
-    // ── ボスステージ(world-5)でボスをスポーン ──
-    if (this.id === 'world-5') {
+    // ── 戦争カテゴリのステージでボスをスポーン ──
+    if (this.id.startsWith('war-')) {
       const hasBoss = this.mobs.some((m) => m.type === 'boss_giant');
       if (!hasBoss && validPlayers > 0) {
         const angle = Math.random() * Math.PI * 2;
@@ -834,7 +834,10 @@ class Stage {
 }
 
 const stages = new Map();
-['world-1', 'world-2', 'world-3', 'world-4', 'world-5'].forEach(id => stages.set(id, new Stage(id)));
+[
+  'build-forest', 'build-tropical', 'build-snow', 'build-desert',
+  'war-forest', 'war-tropical', 'war-snow', 'war-desert',
+].forEach(id => stages.set(id, new Stage(id)));
 
 let tickCounter = 0;
 setInterval(() => {
@@ -957,7 +960,7 @@ io.on('connection', (socket) => {
     const name = rawName.slice(0, 8) || 'ゲスト';
     const skinId = typeof data.skinId === 'string' ? data.skinId.slice(0, 32) : undefined;
     const colorIndex = Math.floor(Math.random() * SKIN_COLORS.length);
-    const stageId = data.stageId || 'world-1';
+    const stageId = data.stageId || 'build-forest';
 
     const stage = stages.get(stageId);
     if (!stage) {
