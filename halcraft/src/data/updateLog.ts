@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-03',
     items: [
+      { type: 'feature', text: 'ESCキーでポーズ画面が出るようになったよ！再開やタイトルに戻れるよ' },
       { type: 'feature', text: '建築と戦争の2カテゴリでステージが選べるようになったよ！' },
       { type: 'feature', text: '森・南国・雪原・砂漠の4つのバイオームで遊べるようになった！' },
       { type: 'improve', text: 'マップが2倍に広くなったよ！もっと遠くまで冒険できる！' },

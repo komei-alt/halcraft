@@ -95,6 +95,23 @@ body {
   100% { opacity: 0; }
 }
 
+/* ポーズ画面アニメーション */
+@keyframes pauseFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pauseSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* HP回復中のハートパルス */
 @keyframes heartPulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }

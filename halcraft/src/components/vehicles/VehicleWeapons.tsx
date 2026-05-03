@@ -20,6 +20,7 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
+import { airplaneRealtime } from '../Player';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
   playBombFallingSound,
@@ -154,11 +155,12 @@ function getTankTurretWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
 }
 
 function getAirplaneWorldPoint(localPoint: THREE.Vector3): THREE.Vector3 {
-  const airplane = useVehicleStore.getState().airplane;
+  // リアルタイム位置があればそれを使う（1フレーム遅延を解消）
+  const src = airplaneRealtime.valid ? airplaneRealtime : useVehicleStore.getState().airplane;
   return localPoint.clone().applyEuler(
-    new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll),
+    new THREE.Euler(src.pitch, src.rotationY, src.roll),
   ).add(
-    new THREE.Vector3(airplane.x, airplane.y, airplane.z),
+    new THREE.Vector3(src.x, src.y, src.z),
   );
 }
 
@@ -523,16 +525,17 @@ export function VehicleWeapons() {
     if (now - lastBombDrop.current < BOMB_COOLDOWN) return;
     lastBombDrop.current = now;
 
-    const airplane = useVehicleStore.getState().airplane;
-    const euler = new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll);
-    const origin = new THREE.Vector3(airplane.x, airplane.y, airplane.z);
+    // リアルタイム位置を優先使用（ストアは1フレーム遅延する）
+    const ap = airplaneRealtime.valid ? airplaneRealtime : useVehicleStore.getState().airplane;
+    const euler = new THREE.Euler(ap.pitch, ap.rotationY, ap.roll);
+    const origin = new THREE.Vector3(ap.x, ap.y, ap.z);
 
     // 飛行機の速度を継承（前方への慣性）
     const forwardDir = new THREE.Vector3(0, 0, -1).applyEuler(euler);
 
     // --- 1発目: 左側から投下 ---
     const dropPosL = BOMB_DROP_OFFSET_LEFT.clone().applyEuler(euler).add(origin);
-    const velL = forwardDir.clone().multiplyScalar(airplane.speed);
+    const velL = forwardDir.clone().multiplyScalar(ap.speed);
     velL.y = -2;
     const syncIdL = `bomb_${Date.now()}_L_${Math.floor(Math.random() * 100000)}`;
 
@@ -555,13 +558,13 @@ export function VehicleWeapons() {
     // --- 2発目: 右側から 0.1s 遅延で投下 ---
     if (pendingBombTimer.current) clearTimeout(pendingBombTimer.current);
     pendingBombTimer.current = setTimeout(() => {
-      const airplane2 = useVehicleStore.getState().airplane;
-      const euler2 = new THREE.Euler(airplane2.pitch, airplane2.rotationY, airplane2.roll);
-      const origin2 = new THREE.Vector3(airplane2.x, airplane2.y, airplane2.z);
+      const ap2 = airplaneRealtime.valid ? airplaneRealtime : useVehicleStore.getState().airplane;
+      const euler2 = new THREE.Euler(ap2.pitch, ap2.rotationY, ap2.roll);
+      const origin2 = new THREE.Vector3(ap2.x, ap2.y, ap2.z);
       const fwd2 = new THREE.Vector3(0, 0, -1).applyEuler(euler2);
 
       const dropPosR = BOMB_DROP_OFFSET_RIGHT.clone().applyEuler(euler2).add(origin2);
-      const velR = fwd2.clone().multiplyScalar(airplane2.speed);
+      const velR = fwd2.clone().multiplyScalar(ap2.speed);
       velR.y = -2;
       const syncIdR = `bomb_${Date.now()}_R_${Math.floor(Math.random() * 100000)}`;
 

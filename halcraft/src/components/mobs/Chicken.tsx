@@ -8,7 +8,7 @@ import { GlbMob, type GlbMobModelConfig } from './GlbMob';
 const CHICKEN_MODEL: GlbMobModelConfig = {
   path: '/models/2026-05-01/chicken.glb',
   scale: 0.32,
-  modelPosition: [0, 0.03, -0.18],
+  modelPosition: [0, 0.22, -0.18],
   modelRotation: [0, Math.PI, 0],
   hpBarY: 1.02,
   hpBarWidth: 0.46,

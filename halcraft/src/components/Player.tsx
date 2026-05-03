@@ -55,8 +55,22 @@ const AIRPLANE_MOUSE_PITCH_RATE = 1.65;
 const AIRPLANE_MOUSE_YAW_RATE = 1.2;
 const AIRPLANE_KEYBOARD_PITCH_RATE = 1.05;
 const AIRPLANE_PITCH_CLIMB_RATE = 11.5;
-const AIRPLANE_LOW_SPEED_SINK_RATE = 2.2;
 const AIRPLANE_CAMERA_FOLLOW_RATE = 8;
+/** ピッチの自動復帰レート（入力なし時に水平に戻す） */
+const AIRPLANE_PITCH_AUTO_TRIM_RATE = 2.8;
+
+/**
+ * 最新の飛行機ワールド状態（ストア更新前の値を VehicleWeapons が参照可能）
+ * Player.tsx の useFrame で物理計算直後に書き込み、
+ * VehicleWeapons の getAirplaneWorldPoint がここを読むことで
+ * 1フレーム遅延による弾道ズレを解消する。
+ */
+export const airplaneRealtime = {
+  x: 0, y: 0, z: 0,
+  pitch: 0, rotationY: 0, roll: 0,
+  speed: 0,
+  valid: false,
+};
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -423,6 +437,7 @@ export function Player() {
           if (activeVehicle === 'airplane') {
             airplaneControlActive.current = false;
             airplaneCameraActive.current = false;
+            airplaneRealtime.valid = false;
           }
         }
 
@@ -834,18 +849,30 @@ export function Player() {
       } else if (inputForward < 0) {
         planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 1.4 * dt);
       } else {
-        planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * 0.35 * dt);
+        // 空中ではほとんど減速しない（プロペラが回り続ける想定）
+        const idleDecel = airborne ? 0.12 : 0.35;
+        planeSpeed = Math.max(0, planeSpeed - AIRPLANE_CONSTANTS.DECELERATION * idleDecel * dt);
       }
 
       if (!isTouch.current && isVehicleInputActive) {
         if (Math.abs(inputTurn) > 0.01) {
           airplaneControlYaw.current = planeRotY;
         }
-        airplaneControlPitch.current = clamp(
-          airplaneControlPitch.current + inputPitch * AIRPLANE_KEYBOARD_PITCH_RATE * dt,
-          -AIRPLANE_MOUSE_PITCH_LIMIT,
-          AIRPLANE_MOUSE_PITCH_LIMIT,
-        );
+        if (Math.abs(inputPitch) > 0.01) {
+          airplaneControlPitch.current = clamp(
+            airplaneControlPitch.current + inputPitch * AIRPLANE_KEYBOARD_PITCH_RATE * dt,
+            -AIRPLANE_MOUSE_PITCH_LIMIT,
+            AIRPLANE_MOUSE_PITCH_LIMIT,
+          );
+        } else {
+          // ピッチ入力なし: 自動的にゼロへ復帰（auto-trim）
+          airplaneControlPitch.current = smoothValue(
+            airplaneControlPitch.current,
+            0,
+            AIRPLANE_PITCH_AUTO_TRIM_RATE,
+            dt,
+          );
+        }
       }
 
       const yawAuthority = clamp(planeSpeed / 12, 0.18, 1);
@@ -855,9 +882,17 @@ export function Player() {
         : Math.abs(inputTurn) > 0.01
           ? inputTurn
           : clamp(yawError / AIRCRAFT_MOUSE_YAW_RANGE, -1, 1);
-      const pitchDemand = isTouch.current
-        ? inputPitch * 0.42
-        : airplaneControlPitch.current;
+      // ピッチ入力がなければ auto-trim で pitch 要求をゼロ方向に戻す
+      let pitchDemand: number;
+      if (isTouch.current) {
+        pitchDemand = inputPitch * 0.42;
+      } else {
+        pitchDemand = airplaneControlPitch.current;
+        // マウスもキーボードも操作なし → 自然に水平へ
+        if (Math.abs(inputPitch) < 0.01) {
+          pitchDemand = smoothValue(pitchDemand, 0, AIRPLANE_PITCH_AUTO_TRIM_RATE, dt);
+        }
+      }
 
       const groundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && pitchDemand > 0.07) {
@@ -886,17 +921,26 @@ export function Player() {
 
       const nextGroundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (airborne) {
+        // 速度による操縦性（0=失速, 1=十分な速度）
         const controllableSpeedRange = Math.max(0.001, AIRPLANE_CONSTANTS.TAKEOFF_SPEED - AIRPLANE_CONSTANTS.STALL_SPEED);
         const controlAuthority = clamp(
           (planeSpeed - AIRPLANE_CONSTANTS.STALL_SPEED) / controllableSpeedRange,
           0,
           1,
         );
-        const stallSink = Math.pow(1 - controlAuthority, 2) * AIRPLANE_CONSTANTS.GRAVITY;
-        const landingSink = (1 - controlAuthority) * AIRPLANE_LOW_SPEED_SINK_RATE;
-        const pitchVerticalSpeed = planePitch * AIRPLANE_PITCH_CLIMB_RATE * (0.25 + controlAuthority * 0.75);
-        const verticalSpeed = pitchVerticalSpeed - stallSink - landingSink;
+
+        // --- 重力と揚力のバランス ---
+        // 揚力: 十分な速度ならば重力を完全に打ち消す。低速では揚力不足で沈む
+        const gravityPull = AIRPLANE_CONSTANTS.GRAVITY;
+        const liftForce = controlAuthority * gravityPull;  // 速度があれば重力と釣り合う
+        const netGravity = gravityPull - liftForce;        // 差分のみ落下に作用
+
+        // ピッチによる上昇/降下: 操縦性に比例
+        const pitchVerticalSpeed = planePitch * AIRPLANE_PITCH_CLIMB_RATE * (0.3 + controlAuthority * 0.7);
+
+        const verticalSpeed = pitchVerticalSpeed - netGravity;
         planeY += verticalSpeed * dt;
+
         if (planeY <= nextGroundY + 0.15) {
           planeY = nextGroundY;
           airborne = planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.8 && pitchDemand > 0.07;
@@ -908,6 +952,17 @@ export function Player() {
 
       const nextPropellerAngle = latestAirplane.propellerAngle + AIRPLANE_CONSTANTS.PROPELLER_SPEED * dt;
       const throttle = planeSpeed / AIRPLANE_CONSTANTS.MAX_SPEED;
+
+      // リアルタイム位置を即座に共有（VehicleWeapons の弾道計算用、1フレーム遅延を解消）
+      airplaneRealtime.x = planeX;
+      airplaneRealtime.y = planeY;
+      airplaneRealtime.z = planeZ;
+      airplaneRealtime.pitch = planePitch;
+      airplaneRealtime.rotationY = planeRotY;
+      airplaneRealtime.roll = planeRoll;
+      airplaneRealtime.speed = planeSpeed;
+      airplaneRealtime.valid = true;
+
       useVehicleStore.getState().updateAirplane({
         x: planeX,
         y: planeY,

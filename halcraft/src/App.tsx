@@ -50,6 +50,7 @@ import { AttackIndicator } from './components/ui/AttackIndicator';
 import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
+import { PauseScreen } from './components/ui/PauseScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
@@ -240,6 +241,8 @@ export default function App() {
           {isTouch && (
             <MobileControls onOpenCrafting={handleOpenCrafting} />
           )}
+          {/* ポーズ画面 */}
+          <PauseScreen />
           {/* スキン変更オーバーレイ */}
           {skinSelectorOpen && (
             <SkinSelector overlay onClose={handleCloseSkinSelector} />
