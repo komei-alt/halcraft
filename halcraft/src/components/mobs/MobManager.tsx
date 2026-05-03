@@ -59,7 +59,6 @@ export function MobManager() {
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const updateRegen = usePlayerStore((s) => s.updateRegen);
-  const damageCore = useGameStore((s) => s.damageCore);
   const consumeDeathEvents = useMobStore((s) => s.consumeDeathEvents);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
 
@@ -183,7 +182,7 @@ export function MobManager() {
       checkCollision: checkCollisionFn,
       animTime: animTimeRef.current,
       allMobs: currentMobs,
-      corePosition: gameState.corePosition,
+      corePosition: null,
       getBlock,
     };
 
@@ -256,15 +255,10 @@ export function MobManager() {
         zombieAttacks.push({ mob: m, attack });
       }
       if (blockAttack) {
+        // 障害物ブロックを破壊する
         const blockId = getBlock(blockAttack.x, blockAttack.y, blockAttack.z);
-        if (blockId === BLOCK_IDS.CORE) {
-          damageCore(blockAttack.damage);
-          playHurtSound(); // TODO: コア用のダメージ音に変更
-        } else {
-          // コア以外の障害物ブロックは破壊する
-          if (breakBlock(blockAttack.x, blockAttack.y, blockAttack.z)) {
-            spawnBlockBreakEffect(blockId, blockAttack.x, blockAttack.y, blockAttack.z);
-          }
+        if (breakBlock(blockAttack.x, blockAttack.y, blockAttack.z)) {
+          spawnBlockBreakEffect(blockId, blockAttack.x, blockAttack.y, blockAttack.z);
         }
       }
       if (alive) updatedMobs.push(m);

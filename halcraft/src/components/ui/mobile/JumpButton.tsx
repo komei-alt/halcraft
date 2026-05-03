@@ -9,9 +9,9 @@ const BUTTON_SIZE = 64;
 const BUTTON_GAP = 12;
 
 export function JumpButton() {
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const showDescend = gameMode === 'creative' && creativeFlying;
+  const showDescend = isBuildMode && creativeFlying;
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();

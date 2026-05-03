@@ -105,7 +105,7 @@ export function BlockInteraction() {
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -386,7 +386,7 @@ export function BlockInteraction() {
             if (breakBlock(t.x, t.y, t.z)) {
               // パーティクルエフェクト + ドロップアイテム
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-              if (gameMode === 'survival') {
+              if (!isBuildMode) {
                 dropItem(blockId, t.x, t.y, t.z);
               }
               sendBlockBreak(t.x, t.y, t.z);
@@ -404,12 +404,6 @@ export function BlockInteraction() {
             const selectedBlock = getSelectedBlock();
             setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
             sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-            
-            // ブロック設置ミッション判定
-            const gameStore = useGameStore.getState();
-            if (gameStore.currentStage?.mission.type === 'place_block' && !gameStore.missionCleared) {
-              gameStore.addMissionProgress(1);
-            }
 
             // SPAWNERブロック設置時:アイアンゴーレムをスポーン
             if (selectedBlock === BLOCK_IDS.SPAWNER) {
@@ -443,7 +437,7 @@ export function BlockInteraction() {
         if (breakBlock(t.x, t.y, t.z)) {
           // パーティクルエフェクト + ドロップアイテム
           spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-          if (gameMode === 'survival') {
+          if (!isBuildMode) {
             dropItem(blockId, t.x, t.y, t.z);
           }
           sendBlockBreak(t.x, t.y, t.z);
@@ -458,19 +452,13 @@ export function BlockInteraction() {
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-      
-      // ブロック設置ミッション判定
-      const gameStore = useGameStore.getState();
-      if (gameStore.currentStage?.mission.type === 'place_block' && !gameStore.missionCleared) {
-        gameStore.addMissionProgress(1);
-      }
 
       // SPAWNERブロック設置時:アイアンゴーレムをスポーン
       if (selectedBlock === BLOCK_IDS.SPAWNER) {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, gameMode]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode]);
 
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録

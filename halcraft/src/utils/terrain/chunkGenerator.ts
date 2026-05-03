@@ -1,5 +1,6 @@
 // チャンク生成メイン関数
 // 基本地形＋構造物配置のオーケストレータ
+// バイオーム設定に基づいてブロック種を変更
 
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../../types/blocks';
 import { getTerrainHeight } from './heightmap';
@@ -8,15 +9,22 @@ import { placePlayerHouse } from './structures/house';
 import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
+import { getCurrentBiome } from './biomeConfig';
 import type { ChunkData } from './types';
 
 /**
  * チャンク座標 (cx, cz) のチャンクデータを生成する
- * 地表は草ブロック、その下3層は土、それより下は岩盤
+ * バイオーム設定に基づいて地表・地中ブロックを選択
  * 地形生成後に木を自動配置する
  */
 export function generateChunk(cx: number, cz: number): ChunkData {
   const chunk: ChunkData = [];
+  const biome = getCurrentBiome();
+
+  // バイオームのブロック種を取得
+  const surfaceBlock: BlockId = biome.surfaceBlock;
+  const subSurfaceBlock: BlockId = biome.subSurfaceBlock;
+  const deepBlock: BlockId = biome.deepBlock;
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     chunk[lx] = [];
@@ -33,14 +41,14 @@ export function generateChunk(cx: number, cz: number): ChunkData {
           // 最下層は必ず岩盤
           blockId = BLOCK_IDS.BEDROCK;
         } else if (ly < surfaceY - 3) {
-          // 地中深くは岩盤
-          blockId = BLOCK_IDS.BEDROCK;
+          // 地中深くは深層ブロック
+          blockId = deepBlock;
         } else if (ly < surfaceY) {
-          // 地表の数ブロック下は土
-          blockId = BLOCK_IDS.DIRT;
+          // 地表の数ブロック下は地中ブロック
+          blockId = subSurfaceBlock;
         } else if (ly === surfaceY) {
-          // 地表面は草付き土
-          blockId = BLOCK_IDS.GRASS;
+          // 地表面はバイオームの地表ブロック
+          blockId = surfaceBlock;
         }
         // ly > surfaceY は AIR
 

@@ -39,7 +39,6 @@ import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
-import { useWorldStore } from './stores/useWorldStore';
 import { useGameStore } from './stores/useGameStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
 import { getTerrainHeight } from './utils/terrain/heightmap';

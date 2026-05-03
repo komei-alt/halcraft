@@ -1,31 +1,54 @@
 // 環境コンポーネント
 // 昼夜サイクルに基づく空の色、太陽光、霧を管理
+// バイオーム設定から環境色を取得
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
-
-/** 昼の色定義 */
-const DAY_SKY = new THREE.Color(0x87ceeb);
-const DAY_FOG = new THREE.Color(0x87ceeb);
-const DAY_SUN_COLOR = new THREE.Color(0xfff5e0);
-
-/** 夜の色定義（月明かりのある暗さ） */
-const NIGHT_SKY = new THREE.Color(0x141430);
-const NIGHT_FOG = new THREE.Color(0x141430);
-const NIGHT_SUN_COLOR = new THREE.Color(0x4466aa);
-
-/** 夕焼けの色 */
-const SUNSET_SKY = new THREE.Color(0xff7733);
-const SUNSET_FOG = new THREE.Color(0xff6622);
-const SUNSET_SUN_COLOR = new THREE.Color(0xff6622);
+import { BIOME_CONFIGS } from '../types/biomes';
 
 /** 再利用用オブジェクト（GCプレッシャー削減） */
 const _skyColor = new THREE.Color();
 const _fogColor = new THREE.Color();
 const _sunColor = new THREE.Color();
 const _sunPosition = new THREE.Vector3();
+
+/** バイオーム色キャッシュ用 */
+const _daySky = new THREE.Color();
+const _dayFog = new THREE.Color();
+const _daySun = new THREE.Color();
+const _nightSky = new THREE.Color();
+const _nightFog = new THREE.Color();
+const _nightSun = new THREE.Color();
+const _sunsetSky = new THREE.Color();
+const _sunsetFog = new THREE.Color();
+const _sunsetSun = new THREE.Color();
+
+/** 現在のバイオーム色をキャッシュ */
+let cachedBiomeId: string | null = null;
+let cachedFogNear = 100;
+let cachedFogFar = 250;
+
+function updateBiomeColors(biomeId: string): void {
+  if (biomeId === cachedBiomeId) return;
+  cachedBiomeId = biomeId;
+
+  const biome = BIOME_CONFIGS[biomeId as keyof typeof BIOME_CONFIGS];
+  if (!biome) return;
+
+  _daySky.setHex(biome.daySkyColor);
+  _dayFog.setHex(biome.dayFogColor);
+  _daySun.setHex(biome.daySunColor);
+  _nightSky.setHex(biome.nightSkyColor);
+  _nightFog.setHex(biome.nightFogColor);
+  _nightSun.setHex(biome.nightSunColor);
+  _sunsetSky.setHex(biome.sunsetSkyColor);
+  _sunsetFog.setHex(biome.sunsetFogColor);
+  _sunsetSun.setHex(biome.sunsetSunColor);
+  cachedFogNear = biome.fogNear;
+  cachedFogFar = biome.fogFar;
+}
 
 export function Environment() {
   const { scene } = useThree();
@@ -49,7 +72,18 @@ export function Environment() {
     // ゲーム時間を進める
     advanceTime(delta);
 
-    const gameTime = useGameStore.getState().gameTime;
+    const gameState = useGameStore.getState();
+    const gameTime = gameState.gameTime;
+
+    // バイオーム色を更新
+    const biomeId = gameState.currentBiome?.id ?? 'forest';
+    updateBiomeColors(biomeId);
+
+    // 霧距離をバイオームに合わせる
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.near = cachedFogNear;
+      scene.fog.far = cachedFogFar;
+    }
 
     // 時間帯に応じた環境を計算（再利用オブジェクトで0アロケーション）
     let sunIntensity: number;
@@ -57,44 +91,44 @@ export function Environment() {
 
     if (gameTime < 0.05) {
       const t = gameTime / 0.05;
-      _skyColor.copy(NIGHT_SKY).lerp(SUNSET_SKY, t);
-      _fogColor.copy(NIGHT_FOG).lerp(SUNSET_FOG, t);
+      _skyColor.copy(_nightSky).lerp(_sunsetSky, t);
+      _fogColor.copy(_nightFog).lerp(_sunsetFog, t);
       sunIntensity = 0.3 + t * 0.8;
       ambientIntensity = 0.15 + t * 0.3;
-      _sunColor.copy(NIGHT_SUN_COLOR).lerp(DAY_SUN_COLOR, t);
+      _sunColor.copy(_nightSun).lerp(_daySun, t);
     } else if (gameTime < 0.1) {
       const t = (gameTime - 0.05) / 0.05;
-      _skyColor.copy(SUNSET_SKY).lerp(DAY_SKY, t);
-      _fogColor.copy(SUNSET_FOG).lerp(DAY_FOG, t);
+      _skyColor.copy(_sunsetSky).lerp(_daySky, t);
+      _fogColor.copy(_sunsetFog).lerp(_dayFog, t);
       sunIntensity = 1.1 + t * 0.7;
       ambientIntensity = 0.45 + t * 0.15;
-      _sunColor.copy(DAY_SUN_COLOR);
+      _sunColor.copy(_daySun);
     } else if (gameTime < 0.4) {
-      _skyColor.copy(DAY_SKY);
-      _fogColor.copy(DAY_FOG);
+      _skyColor.copy(_daySky);
+      _fogColor.copy(_dayFog);
       sunIntensity = 1.8;
       ambientIntensity = 0.6;
-      _sunColor.copy(DAY_SUN_COLOR);
+      _sunColor.copy(_daySun);
     } else if (gameTime < 0.5) {
       const t = (gameTime - 0.4) / 0.1;
-      _skyColor.copy(DAY_SKY).lerp(SUNSET_SKY, t);
-      _fogColor.copy(DAY_FOG).lerp(SUNSET_FOG, t);
+      _skyColor.copy(_daySky).lerp(_sunsetSky, t);
+      _fogColor.copy(_dayFog).lerp(_sunsetFog, t);
       sunIntensity = 1.8 - t * 1.2;
       ambientIntensity = 0.6 - t * 0.35;
-      _sunColor.copy(DAY_SUN_COLOR).lerp(SUNSET_SUN_COLOR, t);
+      _sunColor.copy(_daySun).lerp(_sunsetSun, t);
     } else if (gameTime < 0.55) {
       const t = (gameTime - 0.5) / 0.05;
-      _skyColor.copy(SUNSET_SKY).lerp(NIGHT_SKY, t);
-      _fogColor.copy(SUNSET_FOG).lerp(NIGHT_FOG, t);
+      _skyColor.copy(_sunsetSky).lerp(_nightSky, t);
+      _fogColor.copy(_sunsetFog).lerp(_nightFog, t);
       sunIntensity = 0.6 - t * 0.25;
       ambientIntensity = 0.25 - t * 0.03;
-      _sunColor.copy(SUNSET_SUN_COLOR).lerp(NIGHT_SUN_COLOR, t);
+      _sunColor.copy(_sunsetSun).lerp(_nightSun, t);
     } else {
-      _skyColor.copy(NIGHT_SKY);
-      _fogColor.copy(NIGHT_FOG);
+      _skyColor.copy(_nightSky);
+      _fogColor.copy(_nightFog);
       sunIntensity = 0.35;
       ambientIntensity = 0.22;
-      _sunColor.copy(NIGHT_SUN_COLOR);
+      _sunColor.copy(_nightSun);
     }
 
     // 太陽の位置を時間に連動（円弧を描く）

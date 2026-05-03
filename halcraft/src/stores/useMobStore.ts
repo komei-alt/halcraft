@@ -2,7 +2,6 @@
 // ゾンビ・クモ（敵）、プロトタイプ・アイアンゴーレム（味方）、ニワトリ（中立）を管理
 
 import { create } from 'zustand';
-import { useGameStore } from './useGameStore';
 
 /** モブの種類 */
 export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
@@ -194,21 +193,6 @@ export const useMobStore = create<MobState>((set, get) => ({
           if (newHp <= 0) {
             // 死亡イベントを記録
             newDeathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
-            
-            // ゾンビ討伐ミッション判定
-            if (m.type === 'zombie') {
-              const gameStore = useGameStore.getState();
-              if (gameStore.currentStage?.mission.type === 'defeat_zombie' && !gameStore.missionCleared) {
-                gameStore.addMissionProgress(1);
-              }
-            } else if (m.type === 'boss_giant') {
-              // ボス討伐ミッション判定
-              const gameStore = useGameStore.getState();
-              if (gameStore.currentStage?.mission.type === 'defeat_boss' && !gameStore.missionCleared) {
-                gameStore.addMissionProgress(1);
-              }
-            }
-
             return null;
           }
           // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）

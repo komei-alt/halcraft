@@ -208,7 +208,6 @@ const VISIBLE_DISTANCE = 5;
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
-  const chunks = useWorldStore((s) => s.chunks);
   const { camera } = useThree();
 
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）

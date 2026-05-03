@@ -69,9 +69,8 @@ function Divider() {
 /** 歩行時の操作ガイド */
 function WalkingControls() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const isCreative = gameMode === 'creative';
 
   return (
     <>
@@ -86,7 +85,7 @@ function WalkingControls() {
       ) : (
         <>
           <ControlRow keyName="Space" action="ジャンプ" />
-          {isCreative && <ControlRow keyName="Space×2" action="飛行オン" keyColor="#88ccff" />}
+          {isBuildMode && <ControlRow keyName="Space×2" action="飛行オン" keyColor="#88ccff" />}
         </>
       )}
       <Divider />
@@ -237,9 +236,8 @@ function VehicleHeader({ icon, label }: { icon: string; label: string }) {
 /** モバイル歩行操作ガイド */
 function MobileWalkingControls() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const isCreative = gameMode === 'creative';
 
   return (
     <>
@@ -254,7 +252,7 @@ function MobileWalkingControls() {
       ) : (
         <>
           <ControlRow keyName="▲" action="ジャンプ" />
-          {isCreative && <ControlRow keyName="▲×2" action="飛行オン" keyColor="#88ccff" />}
+          {isBuildMode && <ControlRow keyName="▲×2" action="飛行オン" keyColor="#88ccff" />}
         </>
       )}
       {equippedItem === 'builder' ? (

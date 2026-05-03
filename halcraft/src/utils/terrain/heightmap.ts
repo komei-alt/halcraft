@@ -1,13 +1,20 @@
 // 高さマップユーティリティ
 // FBMノイズから地形高さを算出・キャッシュ
+// バイオーム設定に基づいて高さパラメータを変更
 
 import { fbm } from './noise';
 import { WORLD_HEIGHT } from '../../types/blocks';
 import { RUNWAY_CENTER, RUNWAY_LENGTH, RUNWAY_WIDTH } from './constants';
+import { getCurrentBiome } from './biomeConfig';
 
 /** 地形高さキャッシュ（同じ座標の再計算を避ける） */
 const heightCache = new Map<number, number>();
 const HEIGHT_CACHE_KEY = (x: number, z: number) => x * 65537 + z;
+
+/** バイオーム切替時にキャッシュをクリア */
+export function clearHeightCache(): void {
+  heightCache.clear();
+}
 
 /**
  * ワールド座標 (x, z) から地形の高さ(Y)を計算する
@@ -33,11 +40,13 @@ export function getTerrainHeight(worldX: number, worldZ: number): number {
 }
 
 function calculateRawTerrainHeight(worldX: number, worldZ: number): number {
-  // 大まかな地形（丘や谷）
-  const baseHeight = fbm(worldX * 0.01, worldZ * 0.01, 4, 2.0, 0.5);
-  // 細かい凹凸
-  const detail = fbm(worldX * 0.05, worldZ * 0.05, 2, 2.0, 0.4);
+  const biome = getCurrentBiome();
 
-  // 基準の高さ（海抜）を 20 として、上下に 12 ブロック程度の高低差
-  return 20 + Math.floor(baseHeight * 10 + detail * 3);
+  // 大まかな地形（丘や谷）— バイオームのノイズ周波数で調整
+  const baseHeight = fbm(worldX * biome.noiseFrequency, worldZ * biome.noiseFrequency, 4, 2.0, 0.5);
+  // 細かい凹凸 — バイオームのディテール周波数で調整
+  const detail = fbm(worldX * biome.detailFrequency, worldZ * biome.detailFrequency, 2, 2.0, 0.4);
+
+  // バイオームの基準高さと振幅で計算
+  return biome.baseHeight + Math.floor(baseHeight * biome.heightVariation + detail * biome.detailVariation);
 }

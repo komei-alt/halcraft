@@ -38,13 +38,13 @@ export function TimeDisplay() {
   const gameTime = useGameStore((s) => s.gameTime);
   const dayCount = useGameStore((s) => s.dayCount);
   const isNight = useGameStore((s) => s.isNight);
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
   const isTouch = isTouchDevice();
-  const modeLabel = gameMode === 'creative'
-    ? creativeFlying ? 'Creative / 飛行中' : 'Creative'
-    : 'Survival';
-  const modeColor = gameMode === 'creative' ? '#9bdcff' : '#b9f28f';
+  const modeLabel = isBuildMode
+    ? creativeFlying ? '🏗️ 建築 / 飛行中' : '🏗️ 建築'
+    : '⚔️ 戦争';
+  const modeColor = isBuildMode ? '#9bdcff' : '#b9f28f';
 
   return (
     <div

@@ -99,10 +99,10 @@ function Heart({ filled, half, regenerating, index }: {
 export function HealthBar() {
   const hp = usePlayerStore((s) => s.hp);
   const maxHp = usePlayerStore((s) => s.maxHp);
-  const gameMode = useGameStore((s) => s.gameMode);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
   const isRegenerating = useIsRegenerating();
 
-  if (gameMode === 'creative') return null;
+  if (isBuildMode) return null;
 
   // ハートの数（1ハート = 2HP、マイクラ方式）
   const totalHearts = Math.ceil(maxHp / 2);

@@ -6,6 +6,9 @@ import { create } from 'zustand';
 import { usePlayerStore } from './usePlayerStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
+import { setCurrentBiome } from '../utils/terrain/biomeConfig';
+import { resetNoiseForBiome } from '../utils/terrain/noise';
+import { clearHeightCache } from '../utils/terrain/heightmap';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
 
@@ -138,6 +141,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const stage = STAGES.find(s => s.id === stageId) || null;
     const biome = stage ? BIOME_CONFIGS[stage.biome] : null;
     const category = stage?.category ?? null;
+
+    // バイオーム設定を地形生成モジュールに適用
+    if (biome) {
+      setCurrentBiome(biome);
+      resetNoiseForBiome();
+      clearHeightCache();
+    }
+
     set({
       currentStageId: stageId,
       currentStage: stage,
