@@ -53,6 +53,9 @@ export const CART_BOARD_DISTANCE = 3;
 /** 停止閾値 — この速度以下で完全停止 */
 export const STOP_THRESHOLD = 0.05;
 
+/** プレイヤーが押し出して発進するときの初速 */
+export const COASTER_START_PUSH_SPEED = 10;
+
 // ═══════════════════════════════════════════════════════
 // ヘルパー
 // ═══════════════════════════════════════════════════════
@@ -178,6 +181,21 @@ export interface LoopSegment {
   axis: THREE.Vector3;
 }
 
+export interface CoasterTrackProfile {
+  railCount: number;
+  trackLength: number;
+  minHeight: number;
+  maxHeight: number;
+  totalDrop: number;
+  totalAscent: number;
+  totalDescent: number;
+  chainLiftCount: number;
+  boosterCount: number;
+  loopCount: number;
+  loopRequiredSpeed: number;
+  designScore: number;
+}
+
 export function buildTrackSpline(
   path: Array<{ x: number; y: number; z: number; blockId: BlockId }>,
 ): { spline: THREE.CatmullRomCurve3; loops: LoopSegment[]; isLoop: boolean } | null {
@@ -242,8 +260,71 @@ export function buildTrackSpline(
   }
 
   if (points.length < 2) return null;
-  const spline = new THREE.CatmullRomCurve3(points, isLoop, 'catmullrom', 0.5);
+  const spline = new THREE.CatmullRomCurve3(points, isLoop, 'centripetal', 0.5);
   return { spline, loops, isLoop };
+}
+
+export function analyzeTrackProfile(
+  path: Array<{ x: number; y: number; z: number; blockId: BlockId }>,
+  spline: THREE.CatmullRomCurve3,
+  loops: LoopSegment[],
+): CoasterTrackProfile {
+  let minHeight = Number.POSITIVE_INFINITY;
+  let maxHeight = Number.NEGATIVE_INFINITY;
+  let totalAscent = 0;
+  let totalDescent = 0;
+  let chainLiftCount = 0;
+  let boosterCount = 0;
+
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i];
+    const height = p.y + 0.5;
+    minHeight = Math.min(minHeight, height);
+    maxHeight = Math.max(maxHeight, height);
+
+    if (i > 0) {
+      const delta = p.y - path[i - 1].y;
+      if (delta > 0) totalAscent += delta;
+      if (delta < 0) totalDescent += Math.abs(delta);
+    }
+
+    if (p.blockId === BLOCK_IDS.RAIL_CHAIN) chainLiftCount++;
+    if (p.blockId === BLOCK_IDS.RAIL_BOOSTER) boosterCount++;
+  }
+
+  if (!Number.isFinite(minHeight)) minHeight = 0;
+  if (!Number.isFinite(maxHeight)) maxHeight = 0;
+
+  const totalDrop = Math.max(0, maxHeight - minHeight);
+  const loopRequiredSpeed = loops.reduce(
+    (maxSpeed, loop) => Math.max(maxSpeed, Math.sqrt(COASTER_GRAVITY * Math.max(1, loop.radius)) * 1.15),
+    0,
+  );
+  const liftBonus = Math.min(18, chainLiftCount * 1.4);
+  const boosterBonus = Math.min(16, boosterCount * 4);
+  const dropBonus = Math.min(24, totalDrop * 3.2);
+  const loopBonus = Math.min(22, loops.length * 11);
+  const flowPenalty = totalAscent > totalDescent + chainLiftCount * 0.6 ? 10 : 0;
+  const designScore = Math.round(THREE.MathUtils.clamp(
+    32 + liftBonus + boosterBonus + dropBonus + loopBonus - flowPenalty,
+    0,
+    100,
+  ));
+
+  return {
+    railCount: path.length,
+    trackLength: spline.getLength(),
+    minHeight,
+    maxHeight,
+    totalDrop,
+    totalAscent,
+    totalDescent,
+    chainLiftCount,
+    boosterCount,
+    loopCount: loops.length,
+    loopRequiredSpeed,
+    designScore,
+  };
 }
 
 function detectLoopColumns(
@@ -303,6 +384,7 @@ export interface CoasterRunState {
 
 /** 再利用ベクトル（GC防止） */
 const _tangent = new THREE.Vector3();
+const _tangentAhead = new THREE.Vector3();
 const _pos = new THREE.Vector3();
 
 /**
@@ -334,6 +416,9 @@ export function updateCoasterPhysics(
   kineticEnergy: number;
   potentialEnergy: number;
   gForce: number;
+  loopSafety: number;
+  slopeGrade: number;
+  curvature: number;
 } {
   const arcLength = spline.getLength();
   if (arcLength < 0.1) {
@@ -343,10 +428,12 @@ export function updateCoasterPhysics(
       tangent: new THREE.Vector3(0, 0, 1), slopeAngle: 0,
       onChainLift: false, chainRatchetTimer: 0,
       kineticEnergy: 0, potentialEnergy: 0, gForce: 1,
+      loopSafety: 1, slopeGrade: 0, curvature: 0,
     };
   }
 
-  let { progress, speed, braking, chainRatchetTimer } = state;
+  let { progress, speed, chainRatchetTimer } = state;
+  const { braking } = state;
 
   // ─── 現在位置の勾配を取得 ────────────────────────
   const clampedP = Math.max(0, Math.min(1, progress));
@@ -449,6 +536,11 @@ export function updateCoasterPhysics(
   const finalP = Math.max(0, Math.min(1, progress));
   spline.getPointAt(finalP, _pos);
   spline.getTangentAt(finalP, _tangent);
+  const lookAhead = Math.min(1, finalP + Math.max(0.002, 1.2 / arcLength));
+  spline.getTangentAt(lookAhead, _tangentAhead);
+  const tangentAngle = _tangent.angleTo(_tangentAhead);
+  const sampleDistance = Math.max(0.2, (lookAhead - finalP) * arcLength);
+  const curvature = tangentAngle / sampleDistance;
 
   // 運動エネルギー: KE = ½mv² (m=1として正規化)
   const kineticEnergy = 0.5 * speed * speed;
@@ -456,11 +548,15 @@ export function updateCoasterPhysics(
   // 位置エネルギー: PE = mgh (m=1, h=現在の高さ)
   const potentialEnergy = COASTER_GRAVITY * _pos.y;
 
-  // G力の推定（法線加速度 + 重力）
-  // 通常走行時は ~1G、ループ頂点では遠心力により変化
-  const centripetal = speed * speed; // 曲率半径の逆数 × v² ≈ v²（簡略化）
-  const normalAccel = centripetal * Math.abs(_tangent.y); // 法線方向加速度の近似
-  const gForce = 1 + normalAccel / COASTER_GRAVITY;
+  // G力の推定（曲率に基づく向心加速度 + 重力）
+  // 曲がりが強く速度が高いほど体感Gが上がる。
+  const centripetal = speed * speed * curvature;
+  const verticalLoad = Math.max(0.15, 1 + Math.sin(Math.abs(slopeAngle)) * 0.25);
+  const gForce = THREE.MathUtils.clamp(verticalLoad + centripetal / COASTER_GRAVITY, 0.2, 5.5);
+  const loopSafety = currentBlockId === BLOCK_IDS.RAIL_LOOP
+    ? Math.abs(speed) / LOOP_MIN_SPEED
+    : 1;
+  const slopeGrade = Math.tan(Math.asin(THREE.MathUtils.clamp(_tangent.y, -0.95, 0.95))) * 100;
 
   return {
     progress,
@@ -473,6 +569,9 @@ export function updateCoasterPhysics(
     kineticEnergy,
     potentialEnergy,
     gForce,
+    loopSafety,
+    slopeGrade,
+    curvature,
   };
 }
 
@@ -554,4 +653,3 @@ export function detectRailOrientation(
   if (hasE || hasW) return 'ew';
   return 'ns';
 }
-

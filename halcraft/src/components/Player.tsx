@@ -24,7 +24,7 @@ import {
 import { checkAABBCollision, isBlockSolid } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
 import { useCoasterStore } from '../stores/useCoasterStore';
-import { isRailBlock, CART_BOARD_DISTANCE } from '../utils/coasterPhysics';
+import { isRailBlock, CART_BOARD_DISTANCE, COASTER_START_PUSH_SPEED } from '../utils/coasterPhysics';
 import {
   joystickInput,
   touchLook,
@@ -33,6 +33,7 @@ import {
 } from '../utils/touchInput';
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
+import { airplaneRealtime } from '../utils/airplaneRealtime';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
 
 // 定数
@@ -61,18 +62,6 @@ const AIRPLANE_CAMERA_FOLLOW_RATE = 8;
 /** ピッチの自動復帰レート（入力なし時に水平に戻す） */
 const AIRPLANE_PITCH_AUTO_TRIM_RATE = 2.8;
 
-/**
- * 最新の飛行機ワールド状態（ストア更新前の値を VehicleWeapons が参照可能）
- * Player.tsx の useFrame で物理計算直後に書き込み、
- * VehicleWeapons の getAirplaneWorldPoint がここを読むことで
- * 1フレーム遅延による弾道ズレを解消する。
- */
-export const airplaneRealtime = {
-  x: 0, y: 0, z: 0,
-  pitch: 0, rotationY: 0, roll: 0,
-  speed: 0,
-  valid: false,
-};
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -584,7 +573,7 @@ export function Player() {
       const coasterStore = useCoasterStore.getState();
       if (isTouch.current ? mobileActions.jump : keys.current.jump) {
         if (Math.abs(coasterStore.speed) < 0.5) {
-          coasterStore.launch(8);
+          coasterStore.launch(COASTER_START_PUSH_SPEED);
         } else {
           coasterStore.setBraking(true);
         }

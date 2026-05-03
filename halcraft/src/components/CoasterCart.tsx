@@ -5,8 +5,9 @@
 import { useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useCoasterStore } from '../stores/useCoasterStore';
+import { coasterRuntime, useCoasterStore } from '../stores/useCoasterStore';
 import { useGameStore } from '../stores/useGameStore';
+import { COASTER_MAX_SPEED } from '../utils/coasterPhysics';
 
 /** カートの色 */
 const CART_BODY_COLOR = 0xdd3333;  // 赤いカート
@@ -80,6 +81,7 @@ const _cartQuat = new THREE.Quaternion();
 const _cartEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _cameraTarget = new THREE.Vector3();
 const _cameraLookAt = new THREE.Vector3();
+const _cameraForward = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 
 /** スムーズカメラの現在位置（ストア外で管理） */
@@ -90,7 +92,10 @@ const smoothCamera = {
 
 export function CoasterCart() {
   const meshRef = useRef<THREE.Group>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
   const { camera } = useThree();
+  const baseFov = useRef<number | null>(null);
+  const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
 
   const cartGeo = useMemo(() => createCartGeometry(), []);
 
@@ -116,6 +121,7 @@ export function CoasterCart() {
 
     // ★ updatePhysics後の最新状態を再取得（stateは古い参照）
     const latest = useCoasterStore.getState();
+    const speedFactor = Math.min(1, Math.abs(latest.speed) / COASTER_MAX_SPEED);
 
     // カートの位置・回転を更新
     const group = meshRef.current;
@@ -125,15 +131,22 @@ export function CoasterCart() {
       _cartQuat.setFromEuler(_cartEuler);
       group.quaternion.copy(_cartQuat);
     }
+    if (lightRef.current) {
+      lightRef.current.intensity = 0.4 + speedFactor * 1.8 + (latest.onChainLift ? 0.8 : 0);
+      lightRef.current.distance = 4 + speedFactor * 5;
+    }
 
     // 搭乗中のカメラ追従（三人称）
     if (latest.isBoarded) {
-      const CAMERA_HEIGHT = 3.5;
-      const CAMERA_BACK = 6;
-      const FOLLOW_RATE = 6;
+      const CAMERA_HEIGHT = 3.15 + speedFactor * 0.85;
+      const CAMERA_BACK = 5.4 + speedFactor * 1.8;
+      const FOLLOW_RATE = 6.5 + speedFactor * 2.5;
+      const shake = speedFactor > 0.25
+        ? Math.sin(performance.now() * 0.036) * speedFactor * 0.055
+        : 0;
 
       // カメラ位置: カートの後方上方
-      _cameraTarget.set(0, CAMERA_HEIGHT, CAMERA_BACK);
+      _cameraTarget.set(shake, CAMERA_HEIGHT + Math.abs(shake) * 0.6, CAMERA_BACK);
       _cameraTarget.applyAxisAngle(_yAxis, latest.cartYaw);
       _cameraTarget.x += latest.cartX;
       _cameraTarget.y += latest.cartY;
@@ -147,8 +160,27 @@ export function CoasterCart() {
       }
 
       camera.position.copy(smoothCamera.position);
-      _cameraLookAt.set(latest.cartX, latest.cartY + 0.8, latest.cartZ);
+      _cameraForward.copy(coasterRuntime.tangent).multiplyScalar(2.0 + speedFactor * 3.5);
+      _cameraLookAt.set(
+        latest.cartX + _cameraForward.x,
+        latest.cartY + 0.75 + _cameraForward.y * 0.5,
+        latest.cartZ + _cameraForward.z,
+      );
       camera.lookAt(_cameraLookAt);
+
+      if (camera instanceof THREE.PerspectiveCamera) {
+        perspectiveCameraRef.current = camera;
+        const perspectiveCamera = perspectiveCameraRef.current;
+        if (baseFov.current === null) baseFov.current = perspectiveCamera.fov;
+        const targetFov = baseFov.current + speedFactor * 9;
+        perspectiveCamera.fov = perspectiveCamera.fov + (targetFov - perspectiveCamera.fov) * (1 - Math.exp(-4 * dt));
+        perspectiveCamera.updateProjectionMatrix();
+      }
+    } else if (camera instanceof THREE.PerspectiveCamera && baseFov.current !== null) {
+      perspectiveCameraRef.current = camera;
+      const perspectiveCamera = perspectiveCameraRef.current;
+      perspectiveCamera.fov = perspectiveCamera.fov + (baseFov.current - perspectiveCamera.fov) * (1 - Math.exp(-5 * dt));
+      perspectiveCamera.updateProjectionMatrix();
     }
   });
 
@@ -168,6 +200,15 @@ export function CoasterCart() {
         <planeGeometry args={[0.9, 1.3]} />
         <meshBasicMaterial color={0x000000} transparent opacity={0.15} />
       </mesh>
+      <pointLight
+        ref={lightRef}
+        position={[0, 0.65, -0.45]}
+        color={0xffcc66}
+        intensity={0.6}
+        distance={5}
+        decay={2}
+        castShadow={false}
+      />
     </group>
   );
 }

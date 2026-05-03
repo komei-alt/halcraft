@@ -20,6 +20,10 @@ const RAIL_COLORS: Record<number, number> = {
 
 const TIE_COLOR = 0x6b4226;
 const RAIL_COLOR_HEX = 0x888888;
+const SUPPORT_COLOR = 0x4b5563;
+const BOOSTER_ARROW_COLOR = 0xffd34d;
+const CHAIN_LINK_COLOR = 0x2f3138;
+const LOOP_MARK_COLOR = 0xc7a5ff;
 
 // ═══════════════════════════════════════════════════════
 // ジオメトリ構築ヘルパー
@@ -53,6 +57,38 @@ function addBox(
       colors.push(color.r, color.g, color.b);
     }
   }
+}
+
+function addTransformedBox(
+  positions: number[],
+  colors: number[],
+  transform: THREE.Matrix4,
+  cx: number, cy: number, cz: number,
+  sx: number, sy: number, sz: number,
+  color: THREE.Color,
+): void {
+  const localPositions: number[] = [];
+  const localColors: number[] = [];
+  addBox(localPositions, localColors, cx, cy, cz, sx, sy, sz, color);
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < localPositions.length; i += 3) {
+    tmp.set(localPositions[i], localPositions[i + 1], localPositions[i + 2]);
+    tmp.applyMatrix4(transform);
+    positions.push(tmp.x, tmp.y, tmp.z);
+    colors.push(color.r, color.g, color.b);
+  }
+}
+
+function findSupportBaseY(
+  getBlock: (x: number, y: number, z: number) => number,
+  x: number,
+  y: number,
+  z: number,
+): number {
+  for (let by = y - 1; by >= 0; by--) {
+    if (getBlock(x, by, z) !== BLOCK_IDS.AIR) return by + 1;
+  }
+  return 0;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -272,6 +308,34 @@ export function RailRenderer() {
           allColors.push(baseGeo.colors[si], baseGeo.colors[si + 1], baseGeo.colors[si + 2]);
         }
       }
+
+      // 物理コースらしさを出すため、浮いたレールには簡易支柱を自動描画する。
+      const supportBaseY = findSupportBaseY(getBlock, rail.x, rail.y, rail.z);
+      const supportHeight = rail.y - supportBaseY;
+      if (supportHeight > 1.1) {
+        const supportColor = new THREE.Color(SUPPORT_COLOR);
+        const centerY = supportBaseY + supportHeight / 2;
+        addBox(allPositions, allColors, rail.x + 0.28, centerY, rail.z + 0.28, 0.07, supportHeight, 0.07, supportColor);
+        addBox(allPositions, allColors, rail.x + 0.72, centerY, rail.z + 0.72, 0.07, supportHeight, 0.07, supportColor);
+        addBox(allPositions, allColors, rail.x + 0.5, supportBaseY + supportHeight * 0.52, rail.z + 0.5, 0.62, 0.05, 0.05, supportColor);
+      }
+
+      if (rail.blockId === BLOCK_IDS.RAIL_BOOSTER) {
+        const arrowColor = new THREE.Color(BOOSTER_ARROW_COLOR);
+        addTransformedBox(allPositions, allColors, mat, 0, 0.13, -0.24, 0.5, 0.035, 0.08, arrowColor);
+        addTransformedBox(allPositions, allColors, mat, 0, 0.13, 0.0, 0.5, 0.035, 0.08, arrowColor);
+        addTransformedBox(allPositions, allColors, mat, 0, 0.13, 0.24, 0.5, 0.035, 0.08, arrowColor);
+      } else if (rail.blockId === BLOCK_IDS.RAIL_CHAIN) {
+        const chainColor = new THREE.Color(CHAIN_LINK_COLOR);
+        for (let link = -2; link <= 2; link++) {
+          addTransformedBox(allPositions, allColors, mat, 0, 0.12, link * 0.18, 0.18, 0.04, 0.08, chainColor);
+          addTransformedBox(allPositions, allColors, mat, 0, 0.15, link * 0.18 + 0.09, 0.08, 0.04, 0.16, chainColor);
+        }
+      } else if (rail.blockId === BLOCK_IDS.RAIL_LOOP) {
+        const loopColor = new THREE.Color(LOOP_MARK_COLOR);
+        addTransformedBox(allPositions, allColors, mat, -0.42, 0.18, 0, 0.05, 0.26, 0.9, loopColor);
+        addTransformedBox(allPositions, allColors, mat, 0.42, 0.18, 0, 0.05, 0.26, 0.9, loopColor);
+      }
     }
 
     const geo = new THREE.BufferGeometry();
@@ -300,6 +364,7 @@ export function RailRenderer() {
         vertexColors
         roughness={0.6}
         metalness={0.4}
+        emissive={0x2a1b08}
       />
     </mesh>
   );

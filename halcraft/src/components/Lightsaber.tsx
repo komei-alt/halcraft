@@ -18,7 +18,9 @@ import {
   playLightsaberIgnite,
   playLightsaberSwing,
   playLightsaberHit,
-  playLightsaberHum,
+  setLightsaberHumIntensity,
+  startLightsaberHumLoop,
+  stopLightsaberHumLoop,
 } from '../utils/lightsaberSounds';
 
 // ============================================
@@ -47,13 +49,18 @@ const PLAYER_HIT_HEIGHT = 1.7;
 
 /** コンボリセットまでの猶予（秒） */
 const COMBO_RESET_TIME = 0.8;
-/** アイドルハム再生間隔（秒） */
-const HUM_INTERVAL = 0.9;
 
 /** FPS表示オフセット */
-const IDLE_OFFSET = new THREE.Vector3(0.4, -0.45, -0.6);
+const IDLE_OFFSET = new THREE.Vector3(0.46, -0.48, -0.68);
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
+const BLADE_LENGTH = 1.55;
+const BLADE_CENTER = BLADE_LENGTH / 2;
+const TRAIL_SEGMENT_COUNT = 10;
+const TRAIL_LIFETIME = 0.22;
+const TRAIL_SAMPLE_INTERVAL = 0.012;
+const BLADE_BASE_LOCAL = new THREE.Vector3(0, 0.02, 0);
+const BLADE_TIP_LOCAL = new THREE.Vector3(0, BLADE_LENGTH + 0.04, 0);
 
 // ============================================
 // コンボ定義
@@ -66,59 +73,80 @@ interface ComboStep {
   damageMultiplier: number;
   /** 開始回転（Euler） */
   startEuler: [number, number, number];
+  /** 中間回転（Euler） */
+  midEuler: [number, number, number];
   /** 終了回転（Euler） */
   endEuler: [number, number, number];
   /** 開始位置オフセット（カメラ相対） */
   startOffset: [number, number, number];
+  /** 中間位置オフセット（カメラ相対） */
+  midOffset: [number, number, number];
   /** 終了位置オフセット（カメラ相対） */
   endOffset: [number, number, number];
+  /** ダメージ判定を置くスイング進行度 */
+  hitWindow: [number, number];
 }
 
 const COMBO_STEPS: ComboStep[] = [
   {
-    // Step 1: 右横斬り（右→左）
-    duration: 0.25,
+    // Step 1: 右肩から左下へ大きく払う
+    duration: 0.36,
     damageMultiplier: 1.0,
-    startEuler: [0.3, -0.5, -0.8],
-    endEuler: [0.1, 1.0, 0.3],
-    startOffset: [0.55, -0.3, -0.5],
-    endOffset: [-0.15, -0.35, -0.65],
+    startEuler: [0.75, -1.25, -1.25],
+    midEuler: [0.05, 0.05, -0.25],
+    endEuler: [-0.18, 1.35, 0.72],
+    startOffset: [0.78, -0.08, -0.34],
+    midOffset: [0.08, -0.24, -1.02],
+    endOffset: [-0.58, -0.42, -0.74],
+    hitWindow: [0.34, 0.62],
   },
   {
-    // Step 2: 左横斬り（左→右）
-    duration: 0.22,
+    // Step 2: 左から右へ切り返す
+    duration: 0.34,
     damageMultiplier: 1.1,
-    startEuler: [0.1, 1.0, 0.3],
-    endEuler: [0.2, -0.6, -0.5],
-    startOffset: [-0.15, -0.35, -0.65],
-    endOffset: [0.5, -0.4, -0.55],
+    startEuler: [0.04, 1.28, 0.78],
+    midEuler: [0.22, -0.05, 0.1],
+    endEuler: [0.36, -1.15, -0.92],
+    startOffset: [-0.56, -0.38, -0.72],
+    midOffset: [0.0, -0.22, -1.02],
+    endOffset: [0.72, -0.36, -0.64],
+    hitWindow: [0.32, 0.6],
   },
   {
-    // Step 3: 斬り上げ（右下→左上）
-    duration: 0.24,
+    // Step 3: 低い位置から上へ斬り上げる
+    duration: 0.38,
     damageMultiplier: 1.2,
-    startEuler: [0.6, -0.3, -1.0],
-    endEuler: [-0.7, 0.4, 0.5],
-    startOffset: [0.45, -0.6, -0.5],
-    endOffset: [-0.1, 0.1, -0.7],
+    startEuler: [1.05, -0.72, -1.42],
+    midEuler: [-0.18, -0.1, -0.45],
+    endEuler: [-0.92, 0.58, 0.72],
+    startOffset: [0.68, -0.72, -0.42],
+    midOffset: [0.24, -0.34, -0.98],
+    endOffset: [-0.18, 0.18, -0.82],
+    hitWindow: [0.3, 0.58],
   },
   {
-    // Step 4: 突き（前方突き出し）
-    duration: 0.2,
+    // Step 4: 大きく引いてから突く
+    duration: 0.3,
     damageMultiplier: 1.3,
-    startEuler: [-0.2, 0.0, 0.0],
-    endEuler: [-0.1, 0.0, 0.0],
-    startOffset: [0.3, -0.4, -0.5],
-    endOffset: [0.2, -0.35, -1.1],
+    startEuler: [0.18, -0.35, -0.45],
+    midEuler: [-0.08, -0.04, -0.1],
+    endEuler: [-0.2, 0.02, 0.08],
+    startOffset: [0.62, -0.42, -0.22],
+    midOffset: [0.34, -0.34, -0.88],
+    endOffset: [0.06, -0.24, -1.42],
+    hitWindow: [0.42, 0.72],
   },
   {
-    // Step 5: 大振り回転斬り
-    duration: 0.35,
+    // Step 5: フィニッシュの大回転斬り
+    duration: 0.56,
     damageMultiplier: 1.8,
-    startEuler: [0.2, -0.5, -0.3],
-    endEuler: [0.2, 5.8, -0.3],
-    startOffset: [0.45, -0.3, -0.55],
-    endOffset: [0.45, -0.3, -0.55],
+    startEuler: [0.38, -1.18, -0.7],
+    midEuler: [0.12, 2.55, 0.34],
+    endEuler: [0.34, 6.45, -0.55],
+    startOffset: [0.66, -0.2, -0.62],
+    midOffset: [-0.18, -0.18, -1.04],
+    endOffset: [0.62, -0.28, -0.68],
+    hitWindow: [0.24, 0.78],
   },
 ];
 
@@ -128,6 +156,35 @@ const COMBO_STEPS: ComboStep[] = [
 
 function easeOutQuad(t: number): number {
   return 1 - (1 - t) * (1 - t);
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
+}
+
+function interpolateArc(
+  start: [number, number, number],
+  mid: [number, number, number],
+  end: [number, number, number],
+  t: number,
+): [number, number, number] {
+  const clamped = THREE.MathUtils.clamp(t, 0, 1);
+  const left = clamped < 0.5;
+  const localT = left ? clamped * 2 : (clamped - 0.5) * 2;
+  const a = left ? start : mid;
+  const b = left ? mid : end;
+  const e = easeInOutCubic(localT);
+  return [
+    a[0] + (b[0] - a[0]) * e,
+    a[1] + (b[1] - a[1]) * e,
+    a[2] + (b[2] - a[2]) * e,
+  ];
+}
+
+interface BladeTrailSample {
+  base: THREE.Vector3;
+  tip: THREE.Vector3;
+  age: number;
 }
 
 // ============================================
@@ -157,11 +214,20 @@ export function Lightsaber() {
   const weaponRef = useRef<THREE.Group>(null);
   const bladeGroupRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
+  const trailGeometries = useRef<Array<THREE.BufferGeometry<THREE.NormalOrGLBufferAttributes> | null>>([]);
+  const trailMaterials = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
+  const trailSamples = useRef<BladeTrailSample[]>([]);
+  const trailSampleTimer = useRef(0);
+  const bladeActivation = useRef(0);
   const offsetWorld = useRef(new THREE.Vector3());
   const attackDir = useRef(new THREE.Vector3());
   const tempOrigin = useRef(new THREE.Vector3());
   const tempToTarget = useRef(new THREE.Vector3());
   const tempClosest = useRef(new THREE.Vector3());
+  const tempTrailBase = useRef(new THREE.Vector3());
+  const tempTrailTip = useRef(new THREE.Vector3());
+  const localQuat = useRef(new THREE.Quaternion());
+  const localEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
   // コンボ状態
   const comboIndex = useRef(0);
@@ -170,7 +236,6 @@ export function Lightsaber() {
   const lastComboTime = useRef(0);
   const hasHitThisSwing = useRef(false);
   const lightBoost = useRef(0);
-  const humTimer = useRef(0);
   const wasEquipped = useRef(false);
 
   // ダメージ適用
@@ -311,6 +376,8 @@ export function Lightsaber() {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [startSwing]);
 
+  useEffect(() => () => stopLightsaberHumLoop(), []);
+
   // メインフレームループ
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
@@ -322,7 +389,9 @@ export function Lightsaber() {
     // 装備切替検出 → イグニッション音
     if (visible && !wasEquipped.current) {
       playLightsaberIgnite();
-      humTimer.current = 0;
+      startLightsaberHumLoop();
+    } else if (!visible && wasEquipped.current) {
+      stopLightsaberHumLoop();
     }
     wasEquipped.current = visible;
 
@@ -331,12 +400,23 @@ export function Lightsaber() {
       isSwinging.current = false;
       swingProgress.current = 0;
       comboIndex.current = 0;
+      bladeActivation.current = 0;
+      trailSamples.current = [];
+      for (const material of trailMaterials.current) {
+        if (material) material.opacity = 0;
+      }
     }
 
     // ウェポングループの表示/位置制御
     if (weaponRef.current) {
       weaponRef.current.visible = visible;
       if (!visible) return;
+
+      bladeActivation.current = Math.min(1, bladeActivation.current + dt * 7.5);
+      if (bladeGroupRef.current) {
+        const bladeScale = easeOutQuad(bladeActivation.current);
+        bladeGroupRef.current.scale.set(1, bladeScale, 1);
+      }
 
       // スイングアニメーション処理
       if (isSwinging.current) {
@@ -357,37 +437,37 @@ export function Lightsaber() {
           // 次のコンボへ
           comboIndex.current = (comboIndex.current + 1) % COMBO_STEPS.length;
           lastComboTime.current = performance.now() / 1000;
-        } else if (swingProgress.current > 0.3 && swingProgress.current < 0.6 && !hasHitThisSwing.current) {
+        } else if (
+          swingProgress.current > step.hitWindow[0]
+          && swingProgress.current < step.hitWindow[1]
+          && !hasHitThisSwing.current
+        ) {
           // スイング中間でダメージ判定
           applyDamage(comboIndex.current);
         }
 
         // スイング中のポジション・回転を補間
-        const t = easeOutQuad(swingProgress.current);
+        const t = easeInOutCubic(swingProgress.current);
         const s = COMBO_STEPS[comboIndex.current];
 
-        const lx = s.startOffset[0] + (s.endOffset[0] - s.startOffset[0]) * t;
-        const ly = s.startOffset[1] + (s.endOffset[1] - s.startOffset[1]) * t;
-        const lz = s.startOffset[2] + (s.endOffset[2] - s.startOffset[2]) * t;
+        const [lx, ly, lz] = interpolateArc(s.startOffset, s.midOffset, s.endOffset, t);
 
         offsetWorld.current.set(lx, ly, lz).applyQuaternion(camera.quaternion);
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
 
-        const rx = s.startEuler[0] + (s.endEuler[0] - s.startEuler[0]) * t;
-        const ry = s.startEuler[1] + (s.endEuler[1] - s.startEuler[1]) * t;
-        const rz = s.startEuler[2] + (s.endEuler[2] - s.startEuler[2]) * t;
+        const [rx, ry, rz] = interpolateArc(s.startEuler, s.midEuler, s.endEuler, t);
 
-        const localQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ'));
-        weaponRef.current.quaternion.copy(camera.quaternion).multiply(localQuat);
+        localEuler.current.set(rx, ry, rz, 'YXZ');
+        localQuat.current.setFromEuler(localEuler.current);
+        weaponRef.current.quaternion.copy(camera.quaternion).multiply(localQuat.current);
       } else {
         // アイドルポジション — 右下に構える
         offsetWorld.current.copy(IDLE_OFFSET).applyQuaternion(camera.quaternion);
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
 
-        const idleTilt = new THREE.Quaternion().setFromEuler(
-          new THREE.Euler(0.3, -0.2, -0.7, 'YXZ'),
-        );
-        weaponRef.current.quaternion.copy(camera.quaternion).multiply(idleTilt);
+        localEuler.current.set(0.36, -0.26, -0.82, 'YXZ');
+        localQuat.current.setFromEuler(localEuler.current);
+        weaponRef.current.quaternion.copy(camera.quaternion).multiply(localQuat.current);
       }
     }
 
@@ -396,34 +476,103 @@ export function Lightsaber() {
       startSwing();
     }
 
+    // 刃の残像。スイング中は刃の根元と先端を世界座標で記録し、面でつなぐ。
+    for (const sample of trailSamples.current) {
+      sample.age += dt;
+    }
+    trailSamples.current = trailSamples.current.filter((sample) => sample.age < TRAIL_LIFETIME);
+
+    const trailActive = visible && (isSwinging.current || lightBoost.current > 0.15);
+    trailSampleTimer.current += dt;
+    if (trailActive && bladeGroupRef.current && trailSampleTimer.current >= TRAIL_SAMPLE_INTERVAL) {
+      trailSampleTimer.current = 0;
+      bladeGroupRef.current.updateWorldMatrix(true, false);
+      tempTrailBase.current.copy(BLADE_BASE_LOCAL);
+      tempTrailTip.current.copy(BLADE_TIP_LOCAL);
+      bladeGroupRef.current.localToWorld(tempTrailBase.current);
+      bladeGroupRef.current.localToWorld(tempTrailTip.current);
+      trailSamples.current.unshift({
+        base: tempTrailBase.current.clone(),
+        tip: tempTrailTip.current.clone(),
+        age: 0,
+      });
+      if (trailSamples.current.length > TRAIL_SEGMENT_COUNT + 1) {
+        trailSamples.current.length = TRAIL_SEGMENT_COUNT + 1;
+      }
+    }
+
+    for (let i = 0; i < TRAIL_SEGMENT_COUNT; i++) {
+      const geo = trailGeometries.current[i];
+      const material = trailMaterials.current[i];
+      const newer = trailSamples.current[i];
+      const older = trailSamples.current[i + 1];
+      if (!geo || !material || !newer || !older) {
+        if (material) material.opacity = 0;
+        continue;
+      }
+
+      const attr = geo.getAttribute('position') as THREE.BufferAttribute;
+      const points = [older.base, older.tip, newer.tip, older.base, newer.tip, newer.base];
+      for (let p = 0; p < points.length; p++) {
+        attr.setXYZ(p, points[p].x, points[p].y, points[p].z);
+      }
+      attr.needsUpdate = true;
+      geo.computeBoundingSphere();
+
+      const ageFade = 1 - newer.age / TRAIL_LIFETIME;
+      const orderFade = 1 - i / TRAIL_SEGMENT_COUNT;
+      material.opacity = Math.max(0, ageFade * orderFade * 0.42);
+    }
+
     // PointLight 動的制御
     lightBoost.current = Math.max(0, lightBoost.current - dt * 8);
     if (lightRef.current && visible) {
       const baseIntensity = 3;
-      const swingBoost = isSwinging.current ? 2 : 0;
+      const swingBoost = isSwinging.current ? 4 : 0;
       const hitFlash = lightBoost.current * 5;
       // アイドルフリッカー
       const flicker = Math.sin(performance.now() * 0.003) * 0.3
         + Math.sin(performance.now() * 0.007) * 0.15;
       lightRef.current.intensity = baseIntensity + swingBoost + hitFlash + flicker;
-      lightRef.current.distance = isSwinging.current ? 12 : 8;
+      lightRef.current.distance = isSwinging.current ? 15 : 9;
       lightRef.current.color.copy(bladeColorObj);
     } else if (lightRef.current) {
       lightRef.current.intensity = 0;
     }
 
-    // アイドルハム音
-    if (visible && !isSwinging.current) {
-      humTimer.current += dt;
-      if (humTimer.current >= HUM_INTERVAL) {
-        humTimer.current = 0;
-        playLightsaberHum();
-      }
+    if (visible) {
+      setLightsaberHumIntensity((isSwinging.current ? 0.82 : 0.22) + lightBoost.current * 0.45);
     }
   });
 
   return (
     <group>
+      {Array.from({ length: TRAIL_SEGMENT_COUNT }, (_, index) => (
+        <mesh key={`lightsaber-trail-${index}`} frustumCulled={false}>
+          <bufferGeometry
+            ref={(geo) => {
+              trailGeometries.current[index] = geo;
+            }}
+          >
+            <bufferAttribute
+              attach="attributes-position"
+              args={[new Float32Array(18), 3]}
+            />
+          </bufferGeometry>
+          <meshBasicMaterial
+            ref={(material) => {
+              trailMaterials.current[index] = material;
+            }}
+            color={bladeColorObj}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
       <group ref={weaponRef} visible={false}>
         {/* ヒルト（柄） */}
         <mesh position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -454,35 +603,35 @@ export function Lightsaber() {
         {/* 刃グループ */}
         <group ref={bladeGroupRef}>
           {/* 内芯（白〜薄い色、明るく光る） */}
-          <mesh position={[0, 0.6, 0]}>
-            <cylinderGeometry args={[0.025, 0.02, 1.2, 8]} />
+          <mesh position={[0, BLADE_CENTER, 0]}>
+            <cylinderGeometry args={[0.025, 0.02, BLADE_LENGTH, 8]} />
             <meshBasicMaterial color={coreColor} toneMapped={false} />
           </mesh>
           {/* 先端キャップ（内芯） */}
-          <mesh position={[0, 1.2, 0]}>
+          <mesh position={[0, BLADE_LENGTH, 0]}>
             <sphereGeometry args={[0.025, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
             <meshBasicMaterial color={coreColor} toneMapped={false} />
           </mesh>
 
           {/* 外グロー（半透明、AdditiveBlending） */}
-          <mesh position={[0, 0.6, 0]}>
-            <cylinderGeometry args={[0.06, 0.05, 1.2, 8]} />
+          <mesh position={[0, BLADE_CENTER, 0]}>
+            <cylinderGeometry args={[0.07, 0.055, BLADE_LENGTH, 8]} />
             <meshBasicMaterial
               color={bladeColorObj}
               transparent
-              opacity={0.35}
+              opacity={0.42}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
             />
           </mesh>
           {/* 先端キャップ（グロー） */}
-          <mesh position={[0, 1.2, 0]}>
-            <sphereGeometry args={[0.06, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <mesh position={[0, BLADE_LENGTH, 0]}>
+            <sphereGeometry args={[0.07, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
             <meshBasicMaterial
               color={bladeColorObj}
               transparent
-              opacity={0.3}
+              opacity={0.34}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
@@ -490,12 +639,12 @@ export function Lightsaber() {
           </mesh>
 
           {/* 大きな外側グロー（雰囲気用） */}
-          <mesh position={[0, 0.6, 0]}>
-            <cylinderGeometry args={[0.12, 0.1, 1.2, 8]} />
+          <mesh position={[0, BLADE_CENTER, 0]}>
+            <cylinderGeometry args={[0.16, 0.12, BLADE_LENGTH, 8]} />
             <meshBasicMaterial
               color={bladeColorObj}
               transparent
-              opacity={0.08}
+              opacity={0.11}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
@@ -505,7 +654,7 @@ export function Lightsaber() {
           {/* PointLight — 刃の中央付近 */}
           <pointLight
             ref={lightRef}
-            position={[0, 0.6, 0]}
+            position={[0, BLADE_CENTER, 0]}
             color={bladeColor}
             intensity={3}
             distance={8}
@@ -523,6 +672,15 @@ export function Lightsaber() {
         <mesh position={[0.05, -0.18, -0.02]} rotation={[0.1, 0.0, -0.05]}>
           <boxGeometry args={[0.16, 0.14, 0.14]} />
           <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+        </mesh>
+        {/* 左手（両手持ちの支え） */}
+        <mesh position={[-0.1, -0.3, 0.02]} rotation={[0.22, 0.1, 0.18]}>
+          <boxGeometry args={[0.13, 0.12, 0.13]} />
+          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+        </mesh>
+        <mesh position={[-0.22, -0.46, 0.08]} rotation={[0.08, 0.0, 0.42]}>
+          <boxGeometry args={[0.13, 0.36, 0.13]} />
+          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
         </mesh>
       </group>
     </group>

@@ -20,7 +20,7 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
-import { airplaneRealtime } from '../Player';
+import { airplaneRealtime } from '../../utils/airplaneRealtime';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
   playBombFallingSound,

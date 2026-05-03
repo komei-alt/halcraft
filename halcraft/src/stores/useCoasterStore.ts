@@ -6,10 +6,12 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 import { type BlockId } from '../types/blocks';
 import {
+  analyzeTrackProfile,
   buildTrackPath,
   buildTrackSpline,
   isRailBlock,
   updateCoasterPhysics,
+  type CoasterTrackProfile,
   type LoopSegment,
   COASTER_MAX_SPEED,
 } from '../utils/coasterPhysics';
@@ -27,6 +29,7 @@ export const coasterRuntime = {
   valid: false,
   /** チェーンリフトのラチェットタイマー */
   chainRatchetTimer: 0,
+  profile: null as CoasterTrackProfile | null,
 };
 
 // ─── ストア型定義 ──────────────────────────────
@@ -53,6 +56,22 @@ export interface CoasterState {
   potentialEnergy: number;
   /** 体感G力 */
   gForce: number;
+  /** ループ通過速度の余裕（1.0以上で安全圏） */
+  loopSafety: number;
+  /** 現在勾配（%） */
+  slopeGrade: number;
+  /** コース全長 */
+  trackLength: number;
+  /** 最大落差 */
+  trackDrop: number;
+  /** コース設計スコア */
+  trackScore: number;
+  /** ループ数 */
+  trackLoops: number;
+  /** ブースターレール数 */
+  trackBoosters: number;
+  /** チェーンリフト数 */
+  trackChains: number;
 
   // アクション
   spawnCart: (getBlock: GetBlockFn, railX: number, railY: number, railZ: number) => boolean;
@@ -77,6 +96,14 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
   kineticEnergy: 0,
   potentialEnergy: 0,
   gForce: 1,
+  loopSafety: 1,
+  slopeGrade: 0,
+  trackLength: 0,
+  trackDrop: 0,
+  trackScore: 0,
+  trackLoops: 0,
+  trackBoosters: 0,
+  trackChains: 0,
 
   spawnCart: (getBlock, railX, railY, railZ) => {
     if (!isRailBlock(getBlock(railX, railY, railZ))) return false;
@@ -86,6 +113,7 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
 
     const result = buildTrackSpline(path);
     if (!result) return false;
+    const profile = analyzeTrackProfile(path, result.spline, result.loops);
 
     coasterRuntime.spline = result.spline;
     coasterRuntime.trackPath = path;
@@ -93,6 +121,7 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     coasterRuntime.isLoop = result.isLoop;
     coasterRuntime.valid = true;
     coasterRuntime.chainRatchetTimer = 0;
+    coasterRuntime.profile = profile;
 
     const startPoint = result.spline.getPointAt(0);
     coasterRuntime.position.copy(startPoint);
@@ -114,6 +143,14 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       kineticEnergy: 0,
       potentialEnergy: 0,
       gForce: 1,
+      loopSafety: 1,
+      slopeGrade: 0,
+      trackLength: profile.trackLength,
+      trackDrop: profile.totalDrop,
+      trackScore: profile.designScore,
+      trackLoops: profile.loopCount,
+      trackBoosters: profile.boosterCount,
+      trackChains: profile.chainLiftCount,
       spawnRailX: railX,
       spawnRailY: railY,
       spawnRailZ: railZ,
@@ -128,6 +165,7 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     coasterRuntime.isLoop = false;
     coasterRuntime.valid = false;
     coasterRuntime.chainRatchetTimer = 0;
+    coasterRuntime.profile = null;
     set({
       cartSpawned: false,
       isBoarded: false,
@@ -137,6 +175,14 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       kineticEnergy: 0,
       potentialEnergy: 0,
       gForce: 1,
+      loopSafety: 1,
+      slopeGrade: 0,
+      trackLength: 0,
+      trackDrop: 0,
+      trackScore: 0,
+      trackLoops: 0,
+      trackBoosters: 0,
+      trackChains: 0,
     });
   },
 
@@ -189,10 +235,11 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     const yaw = Math.atan2(result.tangent.x, result.tangent.z);
     // Pitch
     const pitch = -result.slopeAngle;
-    // Roll: カーブの旋回に応じた傾き
+    // Roll: カーブの旋回に応じた傾き。前フレームのYaw差から旋回量を読む。
     const speedFactor = Math.min(1, Math.abs(result.speed) / COASTER_MAX_SPEED);
-    const lateralAccel = result.tangent.x * Math.cos(yaw) - result.tangent.z * Math.sin(yaw);
-    const roll = -lateralAccel * speedFactor * 0.6;
+    const yawDelta = Math.atan2(Math.sin(yaw - state.cartYaw), Math.cos(yaw - state.cartYaw));
+    const turnRate = yawDelta / Math.max(dt, 0.016);
+    const roll = THREE.MathUtils.clamp(-turnRate * speedFactor * 0.14, -0.58, 0.58);
 
     set({
       cartX: result.position.x,
@@ -207,6 +254,8 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       kineticEnergy: result.kineticEnergy,
       potentialEnergy: result.potentialEnergy,
       gForce: result.gForce,
+      loopSafety: result.loopSafety,
+      slopeGrade: result.slopeGrade,
     });
   },
 }));
