@@ -1,4 +1,4 @@
-// ジェットコースター車体コンポーネント
+// ジェットコースター車体コンポーネント v2
 // レール上を走行するボクセルスタイルのカート
 // 搭乗検出・物理更新・カメラ追従を担当
 
@@ -58,7 +58,6 @@ function addColoredBox(
   color: THREE.Color,
 ): void {
   const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-  // 6面の法線と頂点
   const faces: Array<{ n: [number, number, number]; verts: number[] }> = [
     { n: [0, 0, 1], verts: [cx - hx, cy - hy, cz + hz, cx + hx, cy - hy, cz + hz, cx + hx, cy + hy, cz + hz, cx - hx, cy - hy, cz + hz, cx + hx, cy + hy, cz + hz, cx - hx, cy + hy, cz + hz] },
     { n: [0, 0, -1], verts: [cx + hx, cy - hy, cz - hz, cx - hx, cy - hy, cz - hz, cx - hx, cy + hy, cz - hz, cx + hx, cy - hy, cz - hz, cx - hx, cy + hy, cz - hz, cx + hx, cy + hy, cz - hz] },
@@ -96,6 +95,7 @@ export function CoasterCart() {
   const cartGeo = useMemo(() => createCartGeometry(), []);
 
   const cartSpawned = useCoasterStore((s) => s.cartSpawned);
+  const wasBoarded = useRef(false);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
@@ -103,30 +103,41 @@ export function CoasterCart() {
     const gamePhase = useGameStore.getState().phase;
     if (!state.cartSpawned || gamePhase !== 'playing') return;
 
+    // 搭乗状態の変化を検出 → カメラ初期化
+    if (state.isBoarded && !wasBoarded.current) {
+      smoothCamera.initialized = false; // 搭乗開始時にカメラをリセット
+    }
+    wasBoarded.current = state.isBoarded;
+
     // 搭乗中のみ物理更新
     if (state.isBoarded) {
       state.updatePhysics(dt);
     }
 
+    // ★ updatePhysics後の最新状態を再取得（stateは古い参照）
+    const latest = useCoasterStore.getState();
+
     // カートの位置・回転を更新
     const group = meshRef.current;
     if (group) {
-      group.position.set(state.cartX, state.cartY, state.cartZ);
-      _cartEuler.set(state.cartPitch, state.cartYaw, state.cartRoll, 'YXZ');
+      group.position.set(latest.cartX, latest.cartY, latest.cartZ);
+      _cartEuler.set(latest.cartPitch, latest.cartYaw, latest.cartRoll, 'YXZ');
       _cartQuat.setFromEuler(_cartEuler);
       group.quaternion.copy(_cartQuat);
     }
 
     // 搭乗中のカメラ追従（三人称）
-    if (state.isBoarded) {
+    if (latest.isBoarded) {
       const CAMERA_HEIGHT = 3.5;
       const CAMERA_BACK = 6;
       const FOLLOW_RATE = 6;
 
       // カメラ位置: カートの後方上方
       _cameraTarget.set(0, CAMERA_HEIGHT, CAMERA_BACK);
-      _cameraTarget.applyAxisAngle(_yAxis, state.cartYaw);
-      _cameraTarget.add(new THREE.Vector3(state.cartX, state.cartY, state.cartZ));
+      _cameraTarget.applyAxisAngle(_yAxis, latest.cartYaw);
+      _cameraTarget.x += latest.cartX;
+      _cameraTarget.y += latest.cartY;
+      _cameraTarget.z += latest.cartZ;
 
       if (!smoothCamera.initialized) {
         smoothCamera.position.copy(_cameraTarget);
@@ -136,7 +147,7 @@ export function CoasterCart() {
       }
 
       camera.position.copy(smoothCamera.position);
-      _cameraLookAt.set(state.cartX, state.cartY + 0.8, state.cartZ);
+      _cameraLookAt.set(latest.cartX, latest.cartY + 0.8, latest.cartZ);
       camera.lookAt(_cameraLookAt);
     }
   });
