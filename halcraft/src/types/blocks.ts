@@ -34,6 +34,7 @@ export const BLOCK_IDS = {
   RAIL_SLOPE: 26,
   RAIL_BOOSTER: 27,
   RAIL_LOOP: 28,
+  RAIL_CHAIN: 29,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -382,6 +383,21 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     nonStandard: true,
     noCollision: true,
   },
+  [BLOCK_IDS.RAIL_CHAIN]: {
+    id: BLOCK_IDS.RAIL_CHAIN,
+    name: 'チェーンリフト',
+    texture: 'rail_chain.svg',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xcc8800),
+    emissiveIntensity: 0.6,
+    lightColor: new THREE.Color(0xddaa22),
+    lightIntensity: 0.8,
+    lightDistance: 5,
+    nonStandard: true,
+    noCollision: true,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -401,6 +417,7 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.RAIL_SLOPE,
   BLOCK_IDS.RAIL_BOOSTER,
   BLOCK_IDS.RAIL_LOOP,
+  BLOCK_IDS.RAIL_CHAIN,
 ];
 
 /** チャンクサイズ定数 */

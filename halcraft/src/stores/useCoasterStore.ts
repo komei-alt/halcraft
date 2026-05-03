@@ -1,5 +1,6 @@
-// ジェットコースターの状態管理ストア
+// ジェットコースターの状態管理ストア v2
 // カート（車体）のスポーン・搭乗・降車・走行状態を管理
+// チェーンリフト状態・エネルギー情報を追加
 
 import { create } from 'zustand';
 import * as THREE from 'three';
@@ -16,100 +17,83 @@ import type { GetBlockFn } from '../utils/collision';
 
 // ─── ストア外ランタイム状態（毎フレーム更新、Zustandの再レンダリング回避） ─
 export const coasterRuntime = {
-  /** トラックのスプライン曲線 */
   spline: null as THREE.CatmullRomCurve3 | null,
-  /** トラック経路（ブロック座標リスト） */
   trackPath: [] as Array<{ x: number; y: number; z: number; blockId: BlockId }>,
-  /** ループ区間情報 */
   loops: [] as LoopSegment[],
-  /** 閉ループコースか */
   isLoop: false,
-  /** 現在のワールド位置 */
   position: new THREE.Vector3(),
-  /** 現在のタンジェント（進行方向） */
   tangent: new THREE.Vector3(0, 0, 1),
-  /** 現在の勾配角 */
   slopeAngle: 0,
-  /** ランタイムが有効か */
   valid: false,
+  /** チェーンリフトのラチェットタイマー */
+  chainRatchetTimer: 0,
 };
 
 // ─── ストア型定義 ──────────────────────────────
 export interface CoasterState {
-  /** カートが存在するか */
   cartSpawned: boolean;
-  /** カートのワールド座標 */
   cartX: number;
   cartY: number;
   cartZ: number;
-  /** カートの回転 */
   cartPitch: number;
   cartYaw: number;
   cartRoll: number;
-  /** 現在速度 (m/s) */
   speed: number;
-  /** スプライン上の進行度 0-1 */
   progress: number;
-  /** プレイヤーが搭乗中か */
   isBoarded: boolean;
-  /** ブレーキ中か */
   braking: boolean;
-  /** カートのスポーン元レール座標 */
   spawnRailX: number;
   spawnRailY: number;
   spawnRailZ: number;
+  /** チェーンリフト上にいるか */
+  onChainLift: boolean;
+  /** 運動エネルギー (J/kg) */
+  kineticEnergy: number;
+  /** 位置エネルギー (J/kg) */
+  potentialEnergy: number;
+  /** 体感G力 */
+  gForce: number;
 
-  // ─── アクション ──
-  /** 指定レール上にカートをスポーンさせる */
+  // アクション
   spawnCart: (getBlock: GetBlockFn, railX: number, railY: number, railZ: number) => boolean;
-  /** カートを破棄する */
   despawnCart: () => void;
-  /** 搭乗 */
   board: () => void;
-  /** 降車 */
   dismount: () => void;
-  /** ブレーキ設定 */
   setBraking: (b: boolean) => void;
-  /** 初速を与えて発進 */
   launch: (initialSpeed?: number) => void;
-  /** 毎フレーム物理更新 */
   updatePhysics: (dt: number) => void;
 }
 
 export const useCoasterStore = create<CoasterState>((set, get) => ({
   cartSpawned: false,
-  cartX: 0,
-  cartY: 0,
-  cartZ: 0,
-  cartPitch: 0,
-  cartYaw: 0,
-  cartRoll: 0,
+  cartX: 0, cartY: 0, cartZ: 0,
+  cartPitch: 0, cartYaw: 0, cartRoll: 0,
   speed: 0,
   progress: 0,
   isBoarded: false,
   braking: false,
-  spawnRailX: 0,
-  spawnRailY: 0,
-  spawnRailZ: 0,
+  spawnRailX: 0, spawnRailY: 0, spawnRailZ: 0,
+  onChainLift: false,
+  kineticEnergy: 0,
+  potentialEnergy: 0,
+  gForce: 1,
 
   spawnCart: (getBlock, railX, railY, railZ) => {
     if (!isRailBlock(getBlock(railX, railY, railZ))) return false;
 
-    // トラック経路を構築
     const path = buildTrackPath(getBlock, railX, railY, railZ);
     if (path.length < 2) return false;
 
     const result = buildTrackSpline(path);
     if (!result) return false;
 
-    // ランタイム状態を設定
     coasterRuntime.spline = result.spline;
     coasterRuntime.trackPath = path;
     coasterRuntime.loops = result.loops;
     coasterRuntime.isLoop = result.isLoop;
     coasterRuntime.valid = true;
+    coasterRuntime.chainRatchetTimer = 0;
 
-    // 開始位置（経路上の開始レールに最も近い点）
     const startPoint = result.spline.getPointAt(0);
     coasterRuntime.position.copy(startPoint);
     result.spline.getTangentAt(0, coasterRuntime.tangent);
@@ -126,6 +110,10 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       progress: 0,
       isBoarded: false,
       braking: false,
+      onChainLift: false,
+      kineticEnergy: 0,
+      potentialEnergy: 0,
+      gForce: 1,
       spawnRailX: railX,
       spawnRailY: railY,
       spawnRailZ: railZ,
@@ -139,11 +127,16 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     coasterRuntime.loops = [];
     coasterRuntime.isLoop = false;
     coasterRuntime.valid = false;
+    coasterRuntime.chainRatchetTimer = 0;
     set({
       cartSpawned: false,
       isBoarded: false,
       speed: 0,
       progress: 0,
+      onChainLift: false,
+      kineticEnergy: 0,
+      potentialEnergy: 0,
+      gForce: 1,
     });
   },
 
@@ -177,6 +170,8 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
         progress: state.progress,
         speed: state.speed,
         braking: state.braking,
+        onChainLift: state.onChainLift,
+        chainRatchetTimer: coasterRuntime.chainRatchetTimer,
       },
       coasterRuntime.spline,
       coasterRuntime.trackPath,
@@ -188,14 +183,14 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     coasterRuntime.position.copy(result.position);
     coasterRuntime.tangent.copy(result.tangent);
     coasterRuntime.slopeAngle = result.slopeAngle;
+    coasterRuntime.chainRatchetTimer = result.chainRatchetTimer;
 
-    // Yaw: タンジェントの水平方向から算出
+    // Yaw
     const yaw = Math.atan2(result.tangent.x, result.tangent.z);
-    // Pitch: 勾配角そのまま
+    // Pitch
     const pitch = -result.slopeAngle;
-    // Roll: カーブの旋回に応じた傾き（速度と旋回率から推定）
+    // Roll: カーブの旋回に応じた傾き
     const speedFactor = Math.min(1, Math.abs(result.speed) / COASTER_MAX_SPEED);
-    // 前方向と真上の外積でロール方向を推定
     const lateralAccel = result.tangent.x * Math.cos(yaw) - result.tangent.z * Math.sin(yaw);
     const roll = -lateralAccel * speedFactor * 0.6;
 
@@ -208,6 +203,10 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       cartRoll: roll,
       speed: result.speed,
       progress: result.progress,
+      onChainLift: result.onChainLift,
+      kineticEnergy: result.kineticEnergy,
+      potentialEnergy: result.potentialEnergy,
+      gForce: result.gForce,
     });
   },
 }));

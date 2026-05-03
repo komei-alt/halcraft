@@ -176,4 +176,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.RAIL_LOOP,
     resultCount: 4,
   },
+  {
+    id: 'rail_chain',
+    name: 'チェーンリフト',
+    description: 'モーターとチェーンでカートを引き上げる坂道レール',
+    ingredients: { [BLOCK_IDS.IRON]: 5, [BLOCK_IDS.ELECTRIC]: 1, [BLOCK_IDS.WOOD]: 2 },
+    result: BLOCK_IDS.RAIL_CHAIN,
+    resultCount: 4,
+  },
 ];

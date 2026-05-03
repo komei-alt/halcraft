@@ -15,6 +15,7 @@ const RAIL_COLORS: Record<number, number> = {
   [BLOCK_IDS.RAIL_SLOPE]: 0x888888,
   [BLOCK_IDS.RAIL_BOOSTER]: 0xff4400,
   [BLOCK_IDS.RAIL_LOOP]: 0x8844ff,
+  [BLOCK_IDS.RAIL_CHAIN]: 0xcc8800,
 };
 
 const TIE_COLOR = 0x6b4226; // 枕木の色（木）
@@ -184,8 +185,8 @@ export function RailRenderer() {
         tmpVec.applyMatrix4(mat);
         allPositions.push(tmpVec.x, tmpVec.y, tmpVec.z);
 
-        // ブースターとループは専用色
-        if (rail.blockId === BLOCK_IDS.RAIL_BOOSTER || rail.blockId === BLOCK_IDS.RAIL_LOOP) {
+        // ブースター・ループ・チェーンリフトは専用色
+        if (rail.blockId === BLOCK_IDS.RAIL_BOOSTER || rail.blockId === BLOCK_IDS.RAIL_LOOP || rail.blockId === BLOCK_IDS.RAIL_CHAIN) {
           allColors.push(color.r, color.g, color.b);
         } else {
           allColors.push(baseRail.colors[si], baseRail.colors[si + 1], baseRail.colors[si + 2]);
