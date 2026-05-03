@@ -352,5 +352,5 @@ export const HOTBAR_BLOCKS: BlockId[] = [
 export const CHUNK_SIZE = 16;
 /** ワールドの高さ限界 */
 export const WORLD_HEIGHT = 64;
-/** 初期のレンダリング距離（チャンク数） — 村を含む広い世界 */
-export const RENDER_DISTANCE = 6;
+/** 初期のレンダリング距離（チャンク数） — 広大なバイオームワールド */
+export const RENDER_DISTANCE = 12;

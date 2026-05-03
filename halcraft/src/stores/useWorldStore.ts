@@ -33,11 +33,17 @@ interface WorldState {
 
   /** ワールド座標でブロックを破壊（空気に置き換え） */
   breakBlock: (x: number, y: number, z: number) => boolean;
+  /** 全チャンクを削除（ステージ切替時） */
+  clearChunks: () => void;
 }
 
 export const useWorldStore = create<WorldState>((set, get) => ({
   chunks: new Map(),
   chunkVersions: new Map(),
+
+  clearChunks: () => {
+    set({ chunks: new Map(), chunkVersions: new Map() });
+  },
 
   initChunks: (renderDistance) => {
     const newChunks = new Map<string, ChunkData>();

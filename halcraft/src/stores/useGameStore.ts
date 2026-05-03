@@ -4,6 +4,7 @@
 
 import { create } from 'zustand';
 import { usePlayerStore } from './usePlayerStore';
+import { useWorldStore } from './useWorldStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
@@ -148,6 +149,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       resetNoiseForBiome();
       clearHeightCache();
     }
+
+    // 既存のチャンクデータをクリア（バイオーム切替時に旧地形が残るのを防止）
+    // World コンポーネントの ensureChunksAround() が次フレームでチャンク再生成をトリガーする
+    const { clearChunks } = useWorldStore.getState();
+    clearChunks();
 
     set({
       currentStageId: stageId,

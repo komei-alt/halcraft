@@ -3,20 +3,22 @@
 // 近接する光源をクラスタリングして PointLight 数を最小化
 // パフォーマンスのため、プレイヤー近くの光源のみ描画
 
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 
 /** 実際に配置する PointLight の最大数（GPU負荷の上限） */
-const MAX_LIGHTS = 8;
-/** 光源を収集する最大距離 */
-const LIGHT_COLLECT_RANGE = 30;
+const MAX_LIGHTS = 12;
+/** 光源を収集する最大距離（ブロック単位） */
+const LIGHT_COLLECT_RANGE = 50;
 /** 光源を収集する最大距離の二乗 */
 const LIGHT_COLLECT_RANGE_SQ = LIGHT_COLLECT_RANGE * LIGHT_COLLECT_RANGE;
+/** 光源スキャン用のチャンク半径（LIGHT_COLLECT_RANGE をチャンクサイズで割って切り上げ） */
+const LIGHT_SCAN_CHUNK_RADIUS = Math.ceil(LIGHT_COLLECT_RANGE / CHUNK_SIZE);
 /** 光源クラスタリングの統合距離（この距離内の光源は1つにまとめる） */
-const CLUSTER_DISTANCE = 4;
+const CLUSTER_DISTANCE = 6;
 /** クラスタリング距離の二乗 */
 const CLUSTER_DISTANCE_SQ = CLUSTER_DISTANCE * CLUSTER_DISTANCE;
 /** 光源の更新インターバル（秒） */
@@ -116,24 +118,19 @@ function clusterLightSources(sources: LightSource[]): LightCluster[] {
   return clusters;
 }
 
-/** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
-export function BlockLights() {
-  const chunks = useWorldStore((s) => s.chunks);
-  const chunkVersions = useWorldStore((s) => s.chunkVersions);
+/** カメラ周辺のチャンクから発光ブロックを収集する（毎フレーム再計算を避けるためキャッシュ） */
+function collectNearbyLightSources(camX: number, camZ: number): LightSource[] {
+  const sources: LightSource[] = [];
+  const camCx = Math.floor(camX / CHUNK_SIZE);
+  const camCz = Math.floor(camZ / CHUNK_SIZE);
+  const chunks = useWorldStore.getState().chunks;
 
-  // 固定数の PointLight ref（プーリング方式で再利用）
-  const lightsRef = useRef<(THREE.PointLight | null)[]>(
-    Array.from({ length: MAX_LIGHTS }, () => null),
-  );
-  const lastUpdateTime = useRef(0);
-  const activeClusters = useRef<LightCluster[]>([]);
-
-  // 全チャンクから発光ブロックを収集（チャンク変更時のみ再計算）
-  const allLightSources = useMemo(() => {
-    const sources: LightSource[] = [];
-
-    chunks.forEach((chunkData, key) => {
-      const [chunkCx, chunkCz] = key.split(',').map(Number);
+  for (let dx = -LIGHT_SCAN_CHUNK_RADIUS; dx <= LIGHT_SCAN_CHUNK_RADIUS; dx++) {
+    for (let dz = -LIGHT_SCAN_CHUNK_RADIUS; dz <= LIGHT_SCAN_CHUNK_RADIUS; dz++) {
+      const cx = camCx + dx;
+      const cz = camCz + dz;
+      const chunkData = chunks.get(`${cx},${cz}`);
+      if (!chunkData) continue;
 
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
@@ -145,19 +142,28 @@ export function BlockLights() {
             if (!def?.lightColor) continue;
 
             sources.push({
-              x: chunkCx * CHUNK_SIZE + lx,
+              x: cx * CHUNK_SIZE + lx,
               y: ly,
-              z: chunkCz * CHUNK_SIZE + lz,
+              z: cz * CHUNK_SIZE + lz,
               blockId,
             });
           }
         }
       }
-    });
+    }
+  }
 
-    return sources;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunks, chunkVersions]);
+  return sources;
+}
+
+/** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
+export function BlockLights() {
+  // 固定数の PointLight ref（プーリング方式で再利用）
+  const lightsRef = useRef<(THREE.PointLight | null)[]>(
+    Array.from({ length: MAX_LIGHTS }, () => null),
+  );
+  const lastUpdateTime = useRef(0);
+  const activeClusters = useRef<LightCluster[]>([]);
 
   // 毎フレーム処理：クラスタ更新（スロットリング）+ 松明フリッカー
   useFrame(({ camera, clock }) => {
@@ -171,8 +177,11 @@ export function BlockLights() {
       const cy = camera.position.y;
       const cz = camera.position.z;
 
+      // カメラ周辺のチャンクから光源を収集
+      const allSources = collectNearbyLightSources(cx, cz);
+
       // プレイヤー近くの光源をフィルタ
-      const nearSources = allLightSources.filter((s) => {
+      const nearSources = allSources.filter((s) => {
         const dx = s.x - cx;
         const dy = s.y - cy;
         const dz = s.z - cz;
