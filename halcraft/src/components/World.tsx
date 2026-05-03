@@ -1,6 +1,7 @@
 // 地形チャンクレンダリングコンポーネント
 // ブロックデータを InstancedMesh で効率的に描画する
 // カメラ距離ベースのチャンクカリングで描画負荷を大幅削減
+// 段階的チャンク生成で初期ロードの体験を改善
 
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -207,22 +208,37 @@ const VISIBLE_DISTANCE = 10;
 /** ワールド全体の描画 */
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
+  const processChunkQueue = useWorldStore((s) => s.processChunkQueue);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const { camera } = useThree();
 
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
   const lastUpdateTime = useRef(0);
+  const initialized = useRef(false);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
     initChunks(RENDER_DISTANCE);
+    initialized.current = true;
+
+    // 即座生成分の可視チャンクリストを同期的に構築
+    const currentChunks = useWorldStore.getState().chunks;
+    const initial: [number, number][] = [];
+    currentChunks.forEach((_, key) => {
+      const [cx, cz] = key.split(',').map(Number);
+      initial.push([cx, cz]);
+    });
+    setVisibleChunks(initial);
   }, [initChunks]);
 
-  // カメラ位置ベースで可視チャンクを更新
+  // カメラ位置ベースで可視チャンクを更新 + 段階的チャンク生成
   const prevChunkKey = useRef('');
 
   useFrame(() => {
+    // 段階的チャンク生成キューを毎フレーム処理
+    processChunkQueue();
+
     const now = performance.now();
     // 初回（lastUpdateTime === 0）は即座に実行、以降は500ms間隔
     if (lastUpdateTime.current !== 0 && now - lastUpdateTime.current < 500) return;
