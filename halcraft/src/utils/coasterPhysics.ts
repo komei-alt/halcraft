@@ -511,16 +511,47 @@ export function detectRailOrientation(
     }
   }
 
-  const hasN = isRailBlock(getBlock(x, y, z - 1));
-  const hasS = isRailBlock(getBlock(x, y, z + 1));
-  const hasE = isRailBlock(getBlock(x + 1, y, z));
-  const hasW = isRailBlock(getBlock(x - 1, y, z));
+  // 水平隣接のレールを検出（同一Y + 上下1段も含む）
+  const hasN = isRailBlock(getBlock(x, y, z - 1))
+    || isRailBlock(getBlock(x, y + 1, z - 1))
+    || isRailBlock(getBlock(x, y - 1, z - 1));
+  const hasS = isRailBlock(getBlock(x, y, z + 1))
+    || isRailBlock(getBlock(x, y + 1, z + 1))
+    || isRailBlock(getBlock(x, y - 1, z + 1));
+  const hasE = isRailBlock(getBlock(x + 1, y, z))
+    || isRailBlock(getBlock(x + 1, y + 1, z))
+    || isRailBlock(getBlock(x + 1, y - 1, z));
+  const hasW = isRailBlock(getBlock(x - 1, y, z))
+    || isRailBlock(getBlock(x - 1, y + 1, z))
+    || isRailBlock(getBlock(x - 1, y - 1, z));
 
-  if (hasN && hasE && !hasS && !hasW) return 'curve-ne';
-  if (hasN && hasW && !hasS && !hasE) return 'curve-nw';
-  if (hasS && hasE && !hasN && !hasW) return 'curve-se';
-  if (hasS && hasW && !hasN && !hasE) return 'curve-sw';
+  const count = (hasN ? 1 : 0) + (hasS ? 1 : 0) + (hasE ? 1 : 0) + (hasW ? 1 : 0);
 
+  // ── 2方向（L字）: 確実にカーブ ──
+  if (count === 2) {
+    if (hasN && hasE) return 'curve-ne';
+    if (hasN && hasW) return 'curve-nw';
+    if (hasS && hasE) return 'curve-se';
+    if (hasS && hasW) return 'curve-sw';
+  }
+
+  // ── 3方向（T字）: 端点に近い2方向でカーブ判定 ──
+  // T字の場合、直線方向を優先（通過レール）し、曲がる方をカーブにしない
+  // ただし、一般的にはT字は直線として描画する
+  if (count >= 3) {
+    // NS直線が主線なら直線
+    if (hasN && hasS) return 'ns';
+    // EW直線が主線なら直線
+    if (hasE && hasW) return 'ew';
+    // 主線が無い場合はカーブ
+    if (hasN && hasE) return 'curve-ne';
+    if (hasN && hasW) return 'curve-nw';
+    if (hasS && hasE) return 'curve-se';
+    if (hasS && hasW) return 'curve-sw';
+  }
+
+  // ── 直線判定 ──
   if (hasE || hasW) return 'ew';
   return 'ns';
 }
+
