@@ -38,7 +38,7 @@ import { PlayerMachineGun } from './components/PlayerMachineGun';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
-import { useVehicleStore } from './stores/useVehicleStore';
+import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from './stores/useVehicleStore';
 import { useGameStore } from './stores/useGameStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
 import { getTerrainHeight } from './utils/terrain/heightmap';
@@ -146,15 +146,15 @@ export default function App() {
     }
     if (phase === 'playing' && !tankSpawned) {
       const terrainY = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z);
-      spawnTank(TANK_SPAWN.x, terrainY + 1.15, TANK_SPAWN.z);
+      spawnTank(TANK_SPAWN.x, terrainY + TANK_CONSTANTS.BODY_HEIGHT, TANK_SPAWN.z);
     }
     if (phase === 'playing' && !airplaneSpawned) {
       const terrainY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
-      spawnAirplane(AIRPLANE_SPAWN.x, terrainY + 1.8, AIRPLANE_SPAWN.z);
+      spawnAirplane(AIRPLANE_SPAWN.x, terrainY + AIRPLANE_CONSTANTS.BODY_HEIGHT, AIRPLANE_SPAWN.z);
     }
     if (phase === 'playing' && !carSpawned) {
       const terrainY = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z);
-      spawnCar(CAR_SPAWN.x, terrainY + 0.95, CAR_SPAWN.z);
+      spawnCar(CAR_SPAWN.x, terrainY + CAR_CONSTANTS.BODY_HEIGHT, CAR_SPAWN.z);
     }
   }, [
     phase,
