@@ -53,7 +53,7 @@ const TRAIL_PUFF_LIFETIME = 0.85;
 const MAX_TRAIL_PUFFS = 80;
 
 /** 武器のローカル配置 */
-const SHOULDER_OFFSET = new THREE.Vector3(0.34, -0.28, -0.5);
+const SHOULDER_OFFSET = new THREE.Vector3(0.32, -0.16, -0.42);
 const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, -1.56);
 const BACKBLAST_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, 0.16);
 const MODEL_FORWARD = new THREE.Vector3(0, 0, -1);
@@ -320,7 +320,7 @@ export function RocketLauncher() {
   const aimPoint = useRef(new THREE.Vector3());
   const playerCenter = useRef(new THREE.Vector3());
   const localTiltQuat = useMemo(() => {
-    const euler = new THREE.Euler(-0.08, -0.1, -0.04);
+    const euler = new THREE.Euler(-0.03, -0.06, -0.02);
     return new THREE.Quaternion().setFromEuler(euler);
   }, []);
 
@@ -872,21 +872,21 @@ export function RocketLauncher() {
           </mesh>
 
           {/* 右腕: トリガーグリップを握る */}
-          <mesh position={[0.34, -0.42, -0.2]} rotation={[-0.78, 0.08, -0.22]}>
+          <mesh position={[0.32, -0.25, -0.18]} rotation={[-0.68, 0.08, -0.2]}>
             <boxGeometry args={[0.15, 0.48, 0.15]} />
             <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
           </mesh>
-          <mesh position={[0.15, -0.19, -0.48]} rotation={[-0.14, 0.02, -0.08]}>
+          <mesh position={[0.15, -0.05, -0.48]} rotation={[-0.1, 0.02, -0.08]}>
             <boxGeometry args={[0.18, 0.16, 0.16]} />
             <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
           </mesh>
 
           {/* 左腕: 前方グリップを支えて肩撃ち姿勢にする */}
-          <mesh position={[-0.12, -0.43, -0.72]} rotation={[-0.92, -0.16, 0.3]}>
+          <mesh position={[-0.1, -0.18, -0.72]} rotation={[-0.78, -0.16, 0.34]}>
             <boxGeometry args={[0.14, 0.52, 0.14]} />
             <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
           </mesh>
-          <mesh position={[0.17, -0.14, -0.98]} rotation={[-0.08, 0.08, 0.04]}>
+          <mesh position={[0.17, 0.02, -0.98]} rotation={[-0.08, 0.08, 0.04]}>
             <boxGeometry args={[0.17, 0.15, 0.16]} />
             <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
           </mesh>

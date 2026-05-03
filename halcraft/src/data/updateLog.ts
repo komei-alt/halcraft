@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-03',
     items: [
+      { type: 'improve', text: 'ピッケル・ロケット・機関銃の持ち方がもっとわかりやすくなったよ' },
       { type: 'feature', text: '🎢 ジェットコースターパック追加！レールを自由に設置してコースを作れるよ！' },
       { type: 'feature', text: '⛓️ チェーンリフト追加！モーターとチェーンでカートを頂上まで引き上げるよ！ガチャガチャ音付き！' },
       { type: 'feature', text: '坂道レールで高低差のあるコースが作れる！重力で加速・減速するよ！' },

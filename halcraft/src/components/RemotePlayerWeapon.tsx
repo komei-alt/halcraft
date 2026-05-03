@@ -13,7 +13,6 @@ import { cloneSceneWithMaterials } from './vehicles/modelUtils';
 
 const MACHINE_GUN_MODEL_PATH = '/models/2026-05-01/machine-gun.glb';
 const MAX_REMOTE_AIM_PITCH = Math.PI / 3;
-const REMOTE_WEAPON_ANCHOR: [number, number, number] = [0.38, 0.92, -0.18];
 
 interface RemotePlayerWeaponProps {
   equippedItem: EquippedItem;
@@ -23,34 +22,64 @@ interface RemotePlayerWeaponProps {
   viewPitch: number;
 }
 
+interface RemoteWeaponPose {
+  anchor: [number, number, number];
+  rotation: [number, number, number];
+}
+
+function getRemoteWeaponPose(equippedItem: EquippedItem, pitch: number): RemoteWeaponPose {
+  switch (equippedItem) {
+    case 'builder':
+      return {
+        anchor: [0.51, 0.68, -0.13],
+        rotation: [0.08 + pitch * 0.12, 0, 0],
+      };
+    case 'rocket_launcher':
+      return {
+        anchor: [0.42, 1.43, -0.1],
+        rotation: [pitch * 0.6, -0.03, 0],
+      };
+    case 'machine_gun':
+      return {
+        anchor: [0.34, 1.08, -0.34],
+        rotation: [pitch * 0.72, -0.02, 0],
+      };
+    default:
+      return {
+        anchor: [0.42, 0.92, -0.18],
+        rotation: [pitch * 0.35, 0, 0],
+      };
+  }
+}
+
 /**
  * ピッケル（ビルダーモード）用のジオメトリ定義
  * マインクラフト風のボクセルピッケルを描画
  */
 function PickaxeModel() {
   return (
-    <group position={[0.11, -0.34, -0.02]} rotation={[0.42, 0.16, -0.82]}>
+    <group position={[0.08, 0, -0.04]} rotation={[0.12, 0.16, -1.08]}>
       {/* 柄（木の棒）: 原点付近が握り位置 */}
-      <mesh position={[0, -0.16, 0]}>
-        <boxGeometry args={[0.07, 0.82, 0.07]} />
+      <mesh position={[0, -0.02, 0]}>
+        <boxGeometry args={[0.07, 0.78, 0.07]} />
         <meshStandardMaterial color="#8B6914" roughness={0.85} />
       </mesh>
-      <mesh position={[0, 0.04, 0]}>
+      <mesh position={[0, -0.18, 0]}>
         <boxGeometry args={[0.095, 0.18, 0.095]} />
         <meshStandardMaterial color="#6f4b18" roughness={0.88} />
       </mesh>
       {/* ピッケルヘッド（石の刃） */}
-      <mesh position={[0, 0.31, 0]}>
+      <mesh position={[0, 0.35, 0]}>
         <boxGeometry args={[0.46, 0.09, 0.08]} />
         <meshStandardMaterial color="#777777" roughness={0.7} metalness={0.15} />
       </mesh>
       {/* ピッケルの先端（左） */}
-      <mesh position={[-0.29, 0.29, 0]}>
+      <mesh position={[-0.29, 0.33, 0]}>
         <boxGeometry args={[0.11, 0.07, 0.065]} />
         <meshStandardMaterial color="#666666" roughness={0.7} metalness={0.15} />
       </mesh>
       {/* ピッケルの先端（右） */}
-      <mesh position={[0.29, 0.29, 0]}>
+      <mesh position={[0.29, 0.33, 0]}>
         <boxGeometry args={[0.11, 0.07, 0.065]} />
         <meshStandardMaterial color="#666666" roughness={0.7} metalness={0.15} />
       </mesh>
@@ -64,7 +93,7 @@ function PickaxeModel() {
  */
 function RocketLauncherModel() {
   return (
-    <group position={[0, 0.03, -0.16]} rotation={[0.02, -0.04, -0.05]} scale={0.64}>
+    <group position={[0.02, 0, -0.2]} rotation={[0.01, -0.04, -0.04]} scale={0.7}>
       {/* メインチューブ */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.1, 0.12, 0.95, 12]} />
@@ -112,7 +141,7 @@ function MachineGunModel() {
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
 
   return (
-    <group position={[-0.02, -0.04, -0.26]} rotation={[0.02, Math.PI - 0.06, -0.03]} scale={0.095}>
+    <group position={[0.02, -0.02, -0.26]} rotation={[0.02, Math.PI - 0.04, -0.02]} scale={0.105}>
       <primitive object={model} />
     </group>
   );
@@ -125,15 +154,16 @@ function MachineGunModel() {
 export function RemotePlayerWeapon({ equippedItem, isMoving, viewPitch }: RemotePlayerWeaponProps) {
   const groupRef = useRef<THREE.Group>(null);
   const clampedPitch = THREE.MathUtils.clamp(viewPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+  const pose = getRemoteWeaponPose(equippedItem, clampedPitch);
 
   useFrame(() => {
     if (!groupRef.current) return;
     const bob = isMoving ? Math.sin(performance.now() * 0.008) * 0.025 : 0;
-    groupRef.current.position.y = REMOTE_WEAPON_ANCHOR[1] + bob;
+    groupRef.current.position.y = pose.anchor[1] + bob;
   });
 
   return (
-    <group ref={groupRef} position={REMOTE_WEAPON_ANCHOR} rotation={[clampedPitch, 0, 0]}>
+    <group ref={groupRef} position={pose.anchor} rotation={pose.rotation}>
       {equippedItem === 'builder' && <PickaxeModel />}
       {equippedItem === 'rocket_launcher' && <RocketLauncherModel />}
       {equippedItem === 'machine_gun' && <MachineGunModel />}

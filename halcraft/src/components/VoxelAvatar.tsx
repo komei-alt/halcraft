@@ -335,21 +335,35 @@ export function VoxelAvatar({
         rightArmRef.current.rotation.z = 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
-      } else if (equippedItem === 'rocket_launcher' || equippedItem === 'machine_gun') {
+      } else if (equippedItem === 'rocket_launcher') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        const brace = equippedItem === 'rocket_launcher' ? 0.98 : 1.12;
-        rightArmRef.current.rotation.x = brace + pitch * 0.45;
-        leftArmRef.current.rotation.x = brace + pitch * 0.55;
-        rightArmRef.current.rotation.z = -0.16;
-        leftArmRef.current.rotation.z = 0.28;
+        rightArmRef.current.position.set(0.43, 1.08, -0.04);
+        leftArmRef.current.position.set(-0.16, 1.04, -0.24);
+        rightArmRef.current.rotation.x = 1.24 + pitch * 0.35;
+        leftArmRef.current.rotation.x = 1.48 + pitch * 0.45;
+        rightArmRef.current.rotation.z = -0.26;
+        leftArmRef.current.rotation.z = 0.58;
+        leftLegRef.current.rotation.x = 0;
+        rightLegRef.current.rotation.x = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'machine_gun') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        rightArmRef.current.position.set(0.38, 0.92, -0.14);
+        leftArmRef.current.position.set(-0.26, 0.92, -0.2);
+        rightArmRef.current.rotation.x = 1.1 + pitch * 0.4;
+        leftArmRef.current.rotation.x = 1.16 + pitch * 0.45;
+        rightArmRef.current.rotation.z = -0.2;
+        leftArmRef.current.rotation.z = 0.32;
         leftLegRef.current.rotation.x = 0;
         rightLegRef.current.rotation.x = 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'builder') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        rightArmRef.current.rotation.x = 0.48 + pitch * 0.28;
-        rightArmRef.current.rotation.z = -0.22;
+        rightArmRef.current.position.set(0.48, 0.68, -0.1);
+        rightArmRef.current.rotation.x = 0.3 + pitch * 0.14;
+        rightArmRef.current.rotation.z = -0.42;
         leftArmRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.35 : 0;
         leftArmRef.current.rotation.z = 0;
         leftLegRef.current.rotation.x = isMoving ? -Math.sin(performance.now() * 0.006) * 0.45 : 0;
