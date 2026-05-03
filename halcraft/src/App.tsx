@@ -20,6 +20,8 @@ import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { TurretRenderer } from './components/TurretRenderer';
 import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from './components/DecorBlocks';
+import { RailRenderer } from './components/RailRenderer';
+import { CoasterCart } from './components/CoasterCart';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -35,9 +37,11 @@ import { VehicleCombat } from './components/vehicles/VehicleCombat';
 import { VehicleExplosionEffect } from './components/vehicles/VehicleExplosionEffect';
 import { VehicleHealthBars } from './components/vehicles/VehicleHealthBars';
 import { PlayerMachineGun } from './components/PlayerMachineGun';
+import { Lightsaber } from './components/Lightsaber';
 import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
+import { CoasterHUD } from './components/ui/CoasterHUD';
 import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from './stores/useVehicleStore';
 import { useGameStore } from './stores/useGameStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
@@ -103,6 +107,7 @@ function GameCanvas() {
         <MobDeathEffect />
         <RocketLauncher />
         <PlayerMachineGun />
+        <Lightsaber />
         <DroppedItems />
         <MobManager />
         <Helicopter />
@@ -119,6 +124,8 @@ function GameCanvas() {
         <RemotePlayers />
         <PlayerNameOverlay />
         <SoundManager />
+        <RailRenderer />
+        <CoasterCart />
       </Suspense>
     </Canvas>
   );
@@ -230,6 +237,7 @@ export default function App() {
           <VehicleAimHUD />
           <CockpitHUD />
           <MinimapHUD />
+          <CoasterHUD />
           <ControlsGuide />
           {!isTouch && <DesktopInputHint />}
           <VoiceChatUI />

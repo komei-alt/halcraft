@@ -49,10 +49,22 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     controls: [
       '左クリック長押し: 連射',
       '右クリック長押し: スコープ',
-      'V: 建築モードに戻る',
+      'V: ライトセイバーに切り替え',
     ],
     accent: '#ffe28a',
     glow: 'rgba(255, 220, 90, 0.28)',
+  },
+  lightsaber: {
+    icon: '⚔️',
+    title: 'ライトセイバー',
+    subtitle: '光の剣でコンボ斬りを繰り出す近接武器です',
+    controls: [
+      '左クリック: コンボ攻撃（5段）',
+      '連続クリックでコンボが繋がる',
+      'V: 建築モードに戻る',
+    ],
+    accent: '#c8b0ff',
+    glow: 'rgba(170, 130, 255, 0.3)',
   },
 };
 
@@ -80,14 +92,29 @@ function getMobileContent(item: EquippedItem): PopoverContent {
     };
   }
 
-  return {
-    ...base,
-    controls: [
-      '🔫 ボタン長押し: 連射',
-      '小ダメージ / 低反動',
-      '右上の装備ボタンで切り替え',
-    ],
-  };
+  if (item === 'machine_gun') {
+    return {
+      ...base,
+      controls: [
+        '🔫 ボタン長押し: 連射',
+        '小ダメージ / 低反動',
+        '右上の装備ボタンで切り替え',
+      ],
+    };
+  }
+
+  if (item === 'lightsaber') {
+    return {
+      ...base,
+      controls: [
+        'タップ: コンボ攻撃',
+        '連続タップでコンボが繋がる',
+        '右上の装備ボタンで切り替え',
+      ],
+    };
+  }
+
+  return base;
 }
 
 export function WeaponSwitchPopover() {

@@ -47,6 +47,11 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-03',
     items: [
+      { type: 'feature', text: '🎢 ジェットコースターパック追加！レールを自由に設置してコースを作れるよ！' },
+      { type: 'feature', text: '坂道レールで高低差のあるコースが作れる！重力で加速・減速するよ！' },
+      { type: 'feature', text: 'ブースターレールでカートを加速！ループレールで宙返りもできるよ！' },
+      { type: 'feature', text: 'レールの近くでFキーを押すとカートに乗れるよ！Spaceで発進！' },
+      { type: 'feature', text: 'ライトセイバーを追加！光の剣で5段コンボ攻撃ができるよ！色はランダムでカッコいい！' },
       { type: 'feature', text: 'ESCキーでポーズ画面が出るようになったよ！再開やタイトルに戻れるよ' },
       { type: 'feature', text: '建築と戦争の2カテゴリでステージが選べるようになったよ！' },
       { type: 'feature', text: '森・南国・雪原・砂漠の4つのバイオームで遊べるようになった！' },

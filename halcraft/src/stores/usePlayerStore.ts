@@ -23,7 +23,7 @@ function loadSkinId(): SkinId {
 const HOTBAR_SLOT_COUNT = HOTBAR_BLOCKS.length;
 
 /** 徒歩時に装備できるアイテム */
-export type EquippedItem = 'builder' | 'rocket_launcher' | 'machine_gun';
+export type EquippedItem = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
 
 /** 落下ダメージの閾値（これ以上落ちるとダメージ） */
 const FALL_DAMAGE_THRESHOLD = 3;
@@ -189,7 +189,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const next: Record<EquippedItem, EquippedItem> = {
         builder: 'rocket_launcher',
         rocket_launcher: 'machine_gun',
-        machine_gun: 'builder',
+        machine_gun: 'lightsaber',
+        lightsaber: 'builder',
       };
       return { equippedItem: next[state.equippedItem] };
     });
