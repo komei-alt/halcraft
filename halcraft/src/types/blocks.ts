@@ -28,6 +28,8 @@ export const BLOCK_IDS = {
   LADDER: 20,
   CAMPFIRE: 21,
   CANDLE: 22,
+  SNOW: 23,
+  SAND: 24,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -307,6 +309,27 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     lightDistance: 9,
     nonStandard: true,
     noCollision: true,
+  },
+  [BLOCK_IDS.SNOW]: {
+    id: BLOCK_IDS.SNOW,
+    name: '雪ブロック',
+    texture: 'snow.png',
+    faceTextures: {
+      top: 'snow_top.png',
+      side: 'snow_side.png',
+      bottom: 'dirt.png',
+    },
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+  },
+  [BLOCK_IDS.SAND]: {
+    id: BLOCK_IDS.SAND,
+    name: '砂ブロック',
+    texture: 'sand.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
   },
 };
 

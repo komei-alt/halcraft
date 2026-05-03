@@ -776,3 +776,73 @@ export function playVehicleExplosionSound(distance: number): void {
   rumble.start(now);
   rumble.stop(now + 1.2);
 }
+
+// ============================================
+// 13. 爆弾落下音（「ヒュー」という風切り音）
+// ============================================
+
+export function playBombFallingSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bombFalling', 200)) return;
+
+  const maxDist = 60;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.45 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+  const duration = 1.8; // 長めの落下音
+
+  // メインのピッチダウンするトーン（「ヒュー」の芯）
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1800, now);
+  osc.frequency.exponentialRampToValueAtTime(200, now + duration);
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(0.001, now);
+  oscGain.gain.linearRampToValueAtTime(volume * 0.55, now + 0.08);
+  oscGain.gain.setValueAtTime(volume * 0.55, now + duration * 0.6);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  osc.connect(oscGain);
+  oscGain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + duration);
+
+  // 倍音のレイヤー（厚みを出す）
+  const osc2 = ctx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(2700, now);
+  osc2.frequency.exponentialRampToValueAtTime(300, now + duration);
+
+  const osc2Gain = ctx.createGain();
+  osc2Gain.gain.setValueAtTime(0.001, now);
+  osc2Gain.gain.linearRampToValueAtTime(volume * 0.2, now + 0.1);
+  osc2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.85);
+
+  osc2.connect(osc2Gain);
+  osc2Gain.connect(ctx.destination);
+  osc2.start(now);
+  osc2.stop(now + duration);
+
+  // 風切りノイズ（シャー感）
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.setValueAtTime(3000, now);
+  noiseFilter.frequency.exponentialRampToValueAtTime(600, now + duration);
+  noiseFilter.Q.setValueAtTime(1.2, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.001, now);
+  noiseGain.gain.linearRampToValueAtTime(volume * 0.3, now + 0.15);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + duration);
+}

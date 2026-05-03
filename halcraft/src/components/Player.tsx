@@ -349,10 +349,10 @@ export function Player() {
     const pos = position.current;
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
-    const gameMode = gameState.gameMode;
-    let creativeFlying = gameMode === 'creative' && gameState.creativeFlying;
+    const isBuildMode = gameState.isBuildMode;
+    let creativeFlying = isBuildMode && gameState.creativeFlying;
 
-    if (gameMode !== 'creative' && gameState.creativeFlying) {
+    if (!isBuildMode && gameState.creativeFlying) {
       useGameStore.getState().setCreativeFlying(false);
       creativeFlying = false;
     }
@@ -381,7 +381,7 @@ export function Player() {
     const jumpJustPressed = jumpRequested && !lastJumpDown.current;
     lastJumpDown.current = jumpRequested;
 
-    if (!isInVehicle && isInputActive && gameMode === 'creative' && jumpJustPressed) {
+    if (!isInVehicle && isInputActive && isBuildMode && jumpJustPressed) {
       const now = performance.now();
       if (now - lastJumpPressTime.current <= CREATIVE_DOUBLE_JUMP_MS) {
         creativeFlying = !creativeFlying;
@@ -1076,7 +1076,7 @@ export function Player() {
     }
 
     // ========================================
-    // クリエイティブ飛行（Space二度押しでホバー、Space上昇 / Shift下降）
+    // 建築飛行（Space二度押しでホバー、Space上昇 / Shift下降）
     // ========================================
     if (creativeFlying) {
       updateAttackCooldown(dt);

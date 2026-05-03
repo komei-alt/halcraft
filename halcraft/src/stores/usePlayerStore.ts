@@ -258,8 +258,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   takeDamage: (amount, knockbackDirX, knockbackDirZ) => {
-    // クリエイティブモードではダメージを受けない
-    if (useGameStore.getState().gameMode === 'creative') return false;
+    // 建築カテゴリではダメージを受けない
+    if (useGameStore.getState().isBuildMode) return false;
     // 死亡中はダメージを受けない
     if (get().isDead) return false;
     // 無敵時間中はダメージを受けない
@@ -302,8 +302,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   applyFallDamage: (fallDistance) => {
-    // クリエイティブモードでは落下ダメージなし
-    if (useGameStore.getState().gameMode === 'creative') return;
+    // 建築カテゴリでは落下ダメージなし
+    if (useGameStore.getState().isBuildMode) return;
     if (fallDistance > FALL_DAMAGE_THRESHOLD) {
       const damage = Math.floor((fallDistance - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_PER_BLOCK);
       if (damage > 0) {
@@ -319,7 +319,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   respawn: () => {
-    const isCreative = useGameStore.getState().gameMode === 'creative';
+    const isBuild = useGameStore.getState().isBuildMode;
     set({
       hp: 20,
       isDead: false,
@@ -333,7 +333,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCharge: 1,
-      invincibleUntil: isCreative ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+      invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
     });
     // サーバーへ復活通知
     const socket = getSocket();

@@ -22,6 +22,7 @@ import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../u
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
+  playBombFallingSound,
   playBulletImpactSound,
   playMachineGunSound,
   playRocketExplosionSound,
@@ -66,7 +67,9 @@ const BOMB_EXPLOSION_DAMAGE = 35;
 const BOMB_EXPLOSION_MIN_DAMAGE = 5;
 const BOMB_EXPLOSION_BLOCK_RADIUS = 4.0;
 const BOMB_EXPLOSION_MAX_DESTROY_BLOCKS = 120;
-const BOMB_DROP_OFFSET = new THREE.Vector3(0, -1.5, 0);
+const BOMB_DROP_OFFSET_LEFT = new THREE.Vector3(-2.0, -1.5, 0);
+const BOMB_DROP_OFFSET_RIGHT = new THREE.Vector3(2.0, -1.5, 0);
+const BOMB_DROP_DELAY = 0.1; // 2発目の遅延（秒）
 
 interface BulletProjectile {
   id: number;
@@ -512,41 +515,72 @@ export function VehicleWeapons() {
     }
   }, [applyBombExplosionDamage, camera, destroyBombBlocks]);
 
-  /** 爆弾投下 */
+  /** 爆弾投下（左右2発、0.1s時間差） */
+  const pendingBombTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const dropBomb = useCallback(() => {
     const now = performance.now() / 1000;
     if (now - lastBombDrop.current < BOMB_COOLDOWN) return;
     lastBombDrop.current = now;
 
     const airplane = useVehicleStore.getState().airplane;
-    // 飛行機の腹部から爆弾を投下
-    const dropPos = BOMB_DROP_OFFSET.clone().applyEuler(
-      new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll),
-    ).add(new THREE.Vector3(airplane.x, airplane.y, airplane.z));
+    const euler = new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll);
+    const origin = new THREE.Vector3(airplane.x, airplane.y, airplane.z);
 
     // 飛行機の速度を継承（前方への慣性）
-    const forwardDir = new THREE.Vector3(0, 0, -1)
-      .applyEuler(new THREE.Euler(airplane.pitch, airplane.rotationY, airplane.roll));
-    const vel = forwardDir.multiplyScalar(airplane.speed);
-    vel.y = -2; // 少し下向きの初速
+    const forwardDir = new THREE.Vector3(0, 0, -1).applyEuler(euler);
 
-    const syncId = `bomb_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    // --- 1発目: 左側から投下 ---
+    const dropPosL = BOMB_DROP_OFFSET_LEFT.clone().applyEuler(euler).add(origin);
+    const velL = forwardDir.clone().multiplyScalar(airplane.speed);
+    velL.y = -2;
+    const syncIdL = `bomb_${Date.now()}_L_${Math.floor(Math.random() * 100000)}`;
 
     setBombs((prev) => [...prev, {
       id: nextProjectileId++,
-      syncId,
-      pos: dropPos.clone(),
-      prev: dropPos.clone(),
-      vel,
+      syncId: syncIdL,
+      pos: dropPosL.clone(),
+      prev: dropPosL.clone(),
+      vel: velL,
       age: 0,
     }]);
 
-    playRocketLaunchSound(dropPos.distanceTo(camera.position) * 0.6);
+    playBombFallingSound(dropPosL.distanceTo(camera.position));
     useMultiplayerStore.getState().sendRocketFire(
-      syncId,
-      [dropPos.x, dropPos.y, dropPos.z],
-      [vel.x, vel.y, vel.z],
+      syncIdL,
+      [dropPosL.x, dropPosL.y, dropPosL.z],
+      [velL.x, velL.y, velL.z],
     );
+
+    // --- 2発目: 右側から 0.1s 遅延で投下 ---
+    if (pendingBombTimer.current) clearTimeout(pendingBombTimer.current);
+    pendingBombTimer.current = setTimeout(() => {
+      const airplane2 = useVehicleStore.getState().airplane;
+      const euler2 = new THREE.Euler(airplane2.pitch, airplane2.rotationY, airplane2.roll);
+      const origin2 = new THREE.Vector3(airplane2.x, airplane2.y, airplane2.z);
+      const fwd2 = new THREE.Vector3(0, 0, -1).applyEuler(euler2);
+
+      const dropPosR = BOMB_DROP_OFFSET_RIGHT.clone().applyEuler(euler2).add(origin2);
+      const velR = fwd2.clone().multiplyScalar(airplane2.speed);
+      velR.y = -2;
+      const syncIdR = `bomb_${Date.now()}_R_${Math.floor(Math.random() * 100000)}`;
+
+      setBombs((prev) => [...prev, {
+        id: nextProjectileId++,
+        syncId: syncIdR,
+        pos: dropPosR.clone(),
+        prev: dropPosR.clone(),
+        vel: velR,
+        age: 0,
+      }]);
+
+      playBombFallingSound(dropPosR.distanceTo(camera.position));
+      useMultiplayerStore.getState().sendRocketFire(
+        syncIdR,
+        [dropPosR.x, dropPosR.y, dropPosR.z],
+        [velR.x, velR.y, velR.z],
+      );
+    }, BOMB_DROP_DELAY * 1000);
   }, [camera]);
 
   useEffect(() => {
@@ -812,19 +846,24 @@ export function VehicleWeapons() {
       ))}
       {bombs.map((bomb) => (
         <group key={bomb.id}>
-          {/* 爆弾本体 */}
+          {/* 爆弾本体（大型化） */}
           <mesh position={bomb.pos}>
-            <capsuleGeometry args={[0.22, 0.5, 8, 12]} />
+            <capsuleGeometry args={[0.4, 0.8, 8, 12]} />
             <meshStandardMaterial color="#3a3a3a" metalness={0.8} roughness={0.3} />
           </mesh>
-          {/* 爆弾の尾翼（赤いマーカー） */}
-          <mesh position={[bomb.pos.x, bomb.pos.y + 0.35, bomb.pos.z]}>
-            <boxGeometry args={[0.35, 0.04, 0.35]} />
+          {/* 爆弾の尾翼（赤いマーカー・大型化） */}
+          <mesh position={[bomb.pos.x, bomb.pos.y + 0.55, bomb.pos.z]}>
+            <boxGeometry args={[0.55, 0.06, 0.55]} />
             <meshStandardMaterial color="#cc3333" metalness={0.4} roughness={0.6} />
           </mesh>
-          {/* 落下の軌跡 */}
-          <Tracer start={bomb.prev} end={bomb.pos} color="#666666" radius={0.04} />
-          <pointLight position={bomb.pos} color="#ff4400" intensity={0.8} distance={6} />
+          {/* 十字の尾翼（もう一枚） */}
+          <mesh position={[bomb.pos.x, bomb.pos.y + 0.55, bomb.pos.z]} rotation={[0, Math.PI / 4, 0]}>
+            <boxGeometry args={[0.55, 0.06, 0.55]} />
+            <meshStandardMaterial color="#cc3333" metalness={0.4} roughness={0.6} />
+          </mesh>
+          {/* 落下の軌跡（太く） */}
+          <Tracer start={bomb.prev} end={bomb.pos} color="#666666" radius={0.07} />
+          <pointLight position={bomb.pos} color="#ff4400" intensity={1.5} distance={8} />
         </group>
       ))}
       {explosions.map((explosion) => (

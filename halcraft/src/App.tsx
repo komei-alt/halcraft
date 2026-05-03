@@ -41,8 +41,6 @@ import { MinimapHUD } from './components/ui/MinimapHUD';
 import { useVehicleStore } from './stores/useVehicleStore';
 import { useWorldStore } from './stores/useWorldStore';
 import { useGameStore } from './stores/useGameStore';
-import { useMobStore } from './stores/useMobStore';
-import { BLOCK_IDS } from './types/blocks';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
 import { getTerrainHeight } from './utils/terrain/heightmap';
 import { Crosshair } from './components/ui/Crosshair';
@@ -55,9 +53,6 @@ import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
-import { MissionOverlay } from './components/ui/MissionOverlay';
-import { CoreHealthBar } from './components/ui/CoreHealthBar';
-import { BossHealthBar } from './components/ui/BossHealthBar';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { ControlsGuide } from './components/ui/ControlsGuide';
 import { DesktopInputHint } from './components/ui/DesktopInputHint';
@@ -173,29 +168,6 @@ export default function App() {
     spawnCar,
   ]);
 
-  const currentStage = useGameStore((s) => s.currentStage);
-  const setCorePosition = useGameStore((s) => s.setCorePosition);
-  const trySpawnBoss = useMobStore((s) => s.trySpawnBoss);
-
-  // 防衛ミッション開始時にコアを自動配置 / ボスミッション時にボスを配置
-  useEffect(() => {
-    if (phase === 'playing') {
-      if (currentStage?.mission.type === 'defend_core') {
-        const coreX = 0;
-        const coreZ = -10;
-        const terrainY = getTerrainHeight(coreX, coreZ) + 1;
-        const setBlock = useWorldStore.getState().setBlock;
-        setBlock(coreX, terrainY, coreZ, BLOCK_IDS.CORE);
-        setCorePosition(coreX, terrainY, coreZ);
-      } else if (currentStage?.mission.type === 'defeat_boss') {
-        // スタート直後にプレイヤーの少し離れた場所にボスをスポーン
-        const playerX = 0;
-        const playerZ = 0;
-        trySpawnBoss(playerX, playerZ, getTerrainHeight);
-      }
-    }
-  }, [phase, currentStage, setCorePosition, trySpawnBoss]);
-
   // クラフト画面の開閉状態（モバイル用：外部から制御）
   const [craftingOpen, setCraftingOpen] = useState(false);
 
@@ -256,9 +228,6 @@ export default function App() {
           <RocketCooldownIndicator />
           <WeaponSwitchPopover />
           <VehicleAimHUD />
-          <MissionOverlay />
-          <CoreHealthBar />
-          <BossHealthBar />
           <CockpitHUD />
           <MinimapHUD />
           <ControlsGuide />

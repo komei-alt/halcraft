@@ -1,16 +1,16 @@
 // ゲーム全体の状態管理ストア
 // ゲームフェーズ（メニュー・プレイ中・ポーズ）と昼夜サイクルを管理
+// カテゴリ（建築/戦争）でゲームモードを自動導出
 
 import { create } from 'zustand';
 import { usePlayerStore } from './usePlayerStore';
-import { STAGES, type StageDefinition } from '../types/stages';
+import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
+import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
-export type GameMode = 'survival' | 'creative';
 
 /** 昼夜サイクルの定数 */
 // 基本サイクル: リアル20分 = ゲーム内1日 (1200秒)
-// 旧設定は600秒だったが、体感2倍ゆっくりにするため1200秒に変更
 const BASE_DAY_DURATION_SECONDS = 1200;
 
 /**
@@ -52,10 +52,7 @@ interface GameState {
   /** 現在のゲームフェーズ */
   phase: GamePhase;
 
-  /** プレイモード */
-  gameMode: GameMode;
-
-  /** クリエイティブ飛行中か */
+  /** 建築カテゴリの飛行中か */
   creativeFlying: boolean;
 
   /** 選択中のステージID */
@@ -64,18 +61,14 @@ interface GameState {
   /** 現在のステージ情報 (computed) */
   currentStage: StageDefinition | null;
 
-  /** ミッション進捗 */
-  missionProgress: number;
+  /** 現在のバイオーム設定 */
+  currentBiome: BiomeConfig | null;
 
-  /** ミッションクリア状態 */
-  missionCleared: boolean;
+  /** 現在のカテゴリ（buildなら平和モード、warなら戦闘モード） */
+  currentCategory: StageCategory | null;
 
-  /** 防衛用コアのHP */
-  coreHp: number;
-  coreMaxHp: number;
-  corePosition: { x: number; y: number; z: number } | null;
-  damageCore: (amount: number) => void;
-  setCorePosition: (x: number, y: number, z: number) => void;
+  /** 建築カテゴリか（平和モード = クリエイティブ的） */
+  isBuildMode: boolean;
 
   /** ゲーム内時間 (0.0 ~ 1.0)
    *  0.0 = 朝6時, 0.25 = 正午, 0.5 = 夕方6時, 0.75 = 深夜 */
@@ -99,14 +92,8 @@ interface GameState {
   /** ゲーム開始 */
   startGame: () => void;
 
-  /** プレイモードを変更 */
-  setGameMode: (mode: GameMode) => void;
-
   /** クリエイティブ飛行状態を変更 */
   setCreativeFlying: (flying: boolean) => void;
-
-  /** ミッション進捗を加算 */
-  addMissionProgress: (amount: number) => void;
 
   /** ポーズトグル */
   togglePause: () => void;
@@ -133,15 +120,12 @@ interface GameState {
 
 export const useGameStore = create<GameState>((set, get) => ({
   phase: 'menu',
-  gameMode: 'survival',
   creativeFlying: false,
   currentStageId: null,
   currentStage: null,
-  missionProgress: 0,
-  missionCleared: false,
-  coreHp: 100,
-  coreMaxHp: 100,
-  corePosition: null,
+  currentBiome: null,
+  currentCategory: null,
+  isBuildMode: false,
   gameTime: 0.0, // 朝スタート
   dayCount: 1,
   isNight: false,
@@ -152,20 +136,24 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setStage: (stageId) => {
     const stage = STAGES.find(s => s.id === stageId) || null;
-    set({ currentStageId: stageId, currentStage: stage, missionProgress: 0, missionCleared: false, corePosition: null });
+    const biome = stage ? BIOME_CONFIGS[stage.biome] : null;
+    const category = stage?.category ?? null;
+    set({
+      currentStageId: stageId,
+      currentStage: stage,
+      currentBiome: biome,
+      currentCategory: category,
+      isBuildMode: category === 'build',
+    });
   },
 
   startGame: () => {
-    const { gameMode } = get();
+    const { isBuildMode } = get();
     set({
       phase: 'playing',
       creativeFlying: false,
       gameTime: 0.0,
       dayCount: 1,
-      missionProgress: 0,
-      missionCleared: false,
-      coreHp: 100,
-      coreMaxHp: 100,
     });
 
     const player = usePlayerStore.getState();
@@ -178,53 +166,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       knockbackVz: 0,
       cameraShake: 0,
       equippedItem: 'builder',
-      invincibleUntil: gameMode === 'creative' ? Number.POSITIVE_INFINITY : Date.now() + 5000,
-    });
-  },
-
-  setGameMode: (gameMode) => {
-    set({ gameMode, creativeFlying: false });
-
-    const player = usePlayerStore.getState();
-    usePlayerStore.setState({
-      hp: gameMode === 'creative' ? player.maxHp : player.hp,
-      isDead: false,
-      isDamageFlash: false,
-      damageDirection: null,
-      knockbackVx: 0,
-      knockbackVz: 0,
-      cameraShake: 0,
-      invincibleUntil: gameMode === 'creative' ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+      // 建築カテゴリは無敵（クリエイティブ的）
+      invincibleUntil: isBuildMode ? Number.POSITIVE_INFINITY : Date.now() + 5000,
     });
   },
 
   setCreativeFlying: (creativeFlying) => set({ creativeFlying }),
-
-  damageCore: (amount: number) => {
-    const { coreHp, phase, gameOver } = get();
-    if (phase !== 'playing' || coreHp <= 0) return;
-    const newHp = Math.max(0, coreHp - amount);
-    set({ coreHp: newHp });
-    if (newHp <= 0) {
-      gameOver();
-    }
-  },
-
-  setCorePosition: (x, y, z) => set({ corePosition: { x, y, z } }),
-
-  addMissionProgress: (amount) => {
-    const stage = get().currentStage;
-    if (!stage || get().missionCleared) return;
-
-    const newProgress = get().missionProgress + amount;
-    const cleared = newProgress >= stage.mission.target;
-    set({ missionProgress: newProgress, missionCleared: cleared });
-    
-    if (cleared) {
-      console.log(`[Mission] ${stage.mission.title} をクリアしました！`);
-      // TODO: 必要ならクリア効果音などを再生
-    }
-  },
 
   togglePause: () => {
     const current = get().phase;
@@ -256,14 +203,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (newTime >= 1.0) {
       newTime -= 1.0;
       newDayCount++;
-      
-      // Survive Mission判定 / Defend Core ミッション判定
-      const stage = get().currentStage;
-      if (stage && !get().missionCleared) {
-        if (stage.mission.type === 'survive_night' || stage.mission.type === 'defend_core') {
-          get().addMissionProgress(1);
-        }
-      }
     }
 
     // 夜判定: 0.5 ~ 1.0 が夜（夕方6時～朝6時）
@@ -277,18 +216,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   syncTime: (gameTime, dayCount, isNight) => {
-    const wasNight = get().isNight;
-    const prevDayCount = get().dayCount;
     set({ gameTime, dayCount, isNight });
-
-    // Survive Mission判定 / Defend Core ミッション判定 (マルチプレイ時)
-    if (dayCount > prevDayCount || (wasNight && !isNight)) {
-      const stage = get().currentStage;
-      if (stage && !get().missionCleared) {
-        if (stage.mission.type === 'survive_night' || stage.mission.type === 'defend_core') {
-          get().addMissionProgress(1);
-        }
-      }
-    }
   },
 }));
