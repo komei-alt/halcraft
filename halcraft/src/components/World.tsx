@@ -202,7 +202,7 @@ function BlockTypeInstances({
 }
 
 /** カメラ視錐台カリング用の描画距離（チャンク単位） */
-const VISIBLE_DISTANCE = 7;
+const VISIBLE_DISTANCE = 10;
 
 /** ワールド全体の描画 */
 export function World() {

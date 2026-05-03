@@ -71,7 +71,7 @@ function GameCanvas() {
       camera={{
         fov: isTouch ? 65 : 70,
         near: 0.1,
-        far: isTouch ? 150 : 300,
+        far: isTouch ? 250 : 500,
       }}
       dpr={isTouch ? [1, 1.5] : [1, 2]}
       gl={{

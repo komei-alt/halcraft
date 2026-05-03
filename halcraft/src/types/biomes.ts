@@ -97,8 +97,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     sunsetSkyColor: 0xff7733,
     sunsetFogColor: 0xff6622,
     sunsetSunColor: 0xff6622,
-    fogNear: 100,
-    fogFar: 250,
+    fogNear: 140,
+    fogFar: 350,
   },
 
   tropical: {
@@ -127,8 +127,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     sunsetSkyColor: 0xff5522,
     sunsetFogColor: 0xff4400,
     sunsetSunColor: 0xff5522,
-    fogNear: 120,
-    fogFar: 280,
+    fogNear: 160,
+    fogFar: 380,
   },
 
   snow: {
@@ -157,8 +157,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     sunsetSkyColor: 0xcc7755,
     sunsetFogColor: 0xbb6644,
     sunsetSunColor: 0xcc7755,
-    fogNear: 60,
-    fogFar: 180,
+    fogNear: 100,
+    fogFar: 280,
   },
 
   desert: {
@@ -187,8 +187,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     sunsetSkyColor: 0xe06622,
     sunsetFogColor: 0xcc5511,
     sunsetSunColor: 0xe06622,
-    fogNear: 130,
-    fogFar: 300,
+    fogNear: 170,
+    fogFar: 400,
   },
 };
 

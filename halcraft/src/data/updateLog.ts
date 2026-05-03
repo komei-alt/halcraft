@@ -45,6 +45,16 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-03',
+    items: [
+      { type: 'feature', text: '建築と戦争の2カテゴリでステージが選べるようになったよ！' },
+      { type: 'feature', text: '森・南国・雪原・砂漠の4つのバイオームで遊べるようになった！' },
+      { type: 'improve', text: 'マップが2倍に広くなったよ！もっと遠くまで冒険できる！' },
+      { type: 'improve', text: '各バイオームに合わせた木（オーク・ヤシ・松・サボテン）が生えるよ' },
+      { type: 'improve', text: 'バイオームごとに空の色や霧の雰囲気が変わるようになった' },
+    ],
+  },
+  {
     date: '2026-05-02',
     items: [
       { type: 'improve', text: '手に持つピッケル・ロケット・機関銃の見た目と構え方がかっこよくなったよ' },
