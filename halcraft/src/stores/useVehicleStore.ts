@@ -225,7 +225,8 @@ export const TANK_CONSTANTS = {
   BOARD_DISTANCE: 5,
   CAMERA_HEIGHT: 2.9,
   CAMERA_BACK: 1.7,
-  BODY_HEIGHT: 0.72,
+  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
+  BODY_HEIGHT: 1.0,
   CANNON_COOLDOWN: 0.9,
 } as const;
 
@@ -243,6 +244,7 @@ export const AIRPLANE_CONSTANTS = {
   CAMERA_BACK: 12.5,
   CAMERA_LOOK_HEIGHT: 2.2,
   CAMERA_LOOK_AHEAD: 16,
+  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
   BODY_HEIGHT: 1.0,
   GRAVITY: 7.5,
   LIFT: 0.42,
@@ -257,7 +259,8 @@ export const CAR_CONSTANTS = {
   DECELERATION: 8,
   TURN_SPEED: 1.55,
   BOARD_DISTANCE: 5,
-  BODY_HEIGHT: 0.95,
+  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
+  BODY_HEIGHT: 1.0,
   CAMERA_HEIGHT: 2.75,
   CAMERA_BACK: 5.8,
 } as const;

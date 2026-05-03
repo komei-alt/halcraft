@@ -10,7 +10,7 @@ import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
-import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
+
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
 import { spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
@@ -40,7 +40,7 @@ const LIGHTSABER_BASE_DAMAGE = 5;
 /** 攻撃リーチ */
 const ATTACK_REACH = 4.0;
 /** モブ判定半径 */
-const MOB_HIT_RADIUS = 0.85;
+
 /** プレイヤー判定 */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -165,7 +165,6 @@ export function Lightsaber() {
 
   // コンボ状態
   const comboIndex = useRef(0);
-  const comboTimer = useRef(0);
   const swingProgress = useRef(0); // 0=アイドル、0-1=スイング中
   const isSwinging = useRef(false);
   const lastComboTime = useRef(0);

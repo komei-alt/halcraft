@@ -5,6 +5,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useGLTF, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
+import { computeGroundOffset } from '../../utils/autoGround';
 
 /** GLBモデルのパス */
 /** 最適化済みモデル（ポリゴン削減版）。元は prototype_original.glb にバックアップ */
@@ -108,6 +109,12 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
   // 原モデル: Yサイズ約7.5ユニット → ゲーム内で約3.6ユニット（2倍サイズ）
   const SCALE = 0.48;
 
+  // 自動接地: GLBのバウンディングボックスからモデル底面をY=0に揃える
+  const autoGroundY = useMemo(
+    () => computeGroundOffset(scene, SCALE, MODEL_PATH),
+    [scene],
+  );
+
   return (
     <group
       ref={groupRef}
@@ -118,9 +125,8 @@ export function Prototype({ mob, animTime }: PrototypeProps) {
       <primitive
         object={clonedScene}
         scale={[SCALE, SCALE, SCALE]}
-        // モデルの中心を足元に合わせるオフセット（接地）
-        // 原点がモデル中心にあるため、高さの半分を持ち上げる
-        position={[0, 2.4, 0]}
+        // 自動接地によるオフセット
+        position={[0, autoGroundY, 0]}
       />
 
 

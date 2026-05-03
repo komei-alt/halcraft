@@ -142,4 +142,38 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.BEDROCK,
     resultCount: 1,
   },
+
+  // === ジェットコースター ===
+  {
+    id: 'rail',
+    name: 'レール',
+    description: '鉄から作るジェットコースターのレール',
+    ingredients: { [BLOCK_IDS.IRON]: 3, [BLOCK_IDS.WOOD]: 1 },
+    result: BLOCK_IDS.RAIL,
+    resultCount: 8,
+  },
+  {
+    id: 'rail_slope',
+    name: '坂道レール',
+    description: '高低差をつけるための傾斜レール',
+    ingredients: { [BLOCK_IDS.IRON]: 4, [BLOCK_IDS.WOOD]: 2 },
+    result: BLOCK_IDS.RAIL_SLOPE,
+    resultCount: 4,
+  },
+  {
+    id: 'rail_booster',
+    name: 'ブースターレール',
+    description: 'カートを加速させるパワーレール',
+    ingredients: { [BLOCK_IDS.IRON]: 4, [BLOCK_IDS.ELECTRIC]: 2 },
+    result: BLOCK_IDS.RAIL_BOOSTER,
+    resultCount: 2,
+  },
+  {
+    id: 'rail_loop',
+    name: 'ループレール',
+    description: '垂直ループを作る特殊レール',
+    ingredients: { [BLOCK_IDS.IRON]: 6, [BLOCK_IDS.ENCHANT]: 2 },
+    result: BLOCK_IDS.RAIL_LOOP,
+    resultCount: 4,
+  },
 ];

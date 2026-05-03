@@ -1,14 +1,21 @@
 // GLB モブ描画の共通コンポーネント
 // 2026-04-29 追加モデルを既存AIの見た目として使う
+// 自動接地: modelPosition.y を手動指定する必要なし（computeGroundOffset で自動計算）
 
 import { useEffect, useMemo } from 'react';
 import { Billboard, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
+import { computeGroundOffset } from '../../utils/autoGround';
 
 export interface GlbMobModelConfig {
   path: string;
   scale: number;
+  /**
+   * モデルのローカル位置オフセット。
+   * Y 値は自動接地で上書きされるため、XZ の微調整のみに使う。
+   * Y を手動で制御したい場合は `disableAutoGround: true` を設定する。
+   */
   modelPosition: [number, number, number];
   modelRotation?: [number, number, number];
   hpBarY: number;
@@ -17,6 +24,8 @@ export interface GlbMobModelConfig {
   angryTint?: THREE.Color;
   bobAmount?: number;
   bobSpeed?: number;
+  /** true にすると自動接地を無効化し、modelPosition.y をそのまま使う */
+  disableAutoGround?: boolean;
 }
 
 interface GlbMobProps {
@@ -85,6 +94,15 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const clonedScene = useMemo(() => cloneSceneWithMaterials(scene), [scene]);
   const originalColors = useMemo(() => collectOriginalColors(clonedScene), [clonedScene]);
 
+  // 自動接地: GLBバウンディングボックスからY底面を0に揃える
+  const groundedPosition = useMemo((): [number, number, number] => {
+    if (config.disableAutoGround) {
+      return config.modelPosition;
+    }
+    const autoY = computeGroundOffset(scene, config.scale, config.path);
+    return [config.modelPosition[0], autoY, config.modelPosition[2]];
+  }, [scene, config.scale, config.path, config.modelPosition, config.disableAutoGround]);
+
   const isDamaged = mob.hitTimer > 0;
   const isAngry = mob.angryAtPlayer;
   const tint = useMemo(() => {
@@ -109,7 +127,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       <primitive
         object={clonedScene}
         scale={[config.scale, config.scale, config.scale]}
-        position={config.modelPosition}
+        position={groundedPosition}
         rotation={config.modelRotation ?? [0, 0, 0]}
       />
 

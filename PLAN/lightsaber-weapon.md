@@ -112,9 +112,9 @@
 
 ## 実装タスク
 
-- [ ] **Step 1**: `usePlayerStore` に `'lightsaber'` を `EquippedItem` 型に追加。`cycleEquippedItem` の遷移ルートに組み込み
-- [ ] **Step 2**: `lightsaberSounds.ts` を作成。4種のサウンド関数を実装
-- [ ] **Step 3**: `Lightsaber.tsx` を作成
+- [x] **Step 1**: `usePlayerStore` に `'lightsaber'` を `EquippedItem` 型に追加。`cycleEquippedItem` の遷移ルートに組み込み
+- [x] **Step 2**: `lightsaberSounds.ts` を作成。4種のサウンド関数を実装
+- [x] **Step 3**: `Lightsaber.tsx` を作成
   - 3.1: 刃とヒルトの3D形状描画
   - 3.2: カメラ追従（FPSビュー配置）
   - 3.3: ランダム色の選択と適用
@@ -123,10 +123,10 @@
   - 3.6: マウスクリック入力 → コンボトリガー
   - 3.7: ヒット判定（既存の `findTargetMobData` / `findTargetPlayer` パターンを利用）
   - 3.8: サウンド再生のトリガー
-- [ ] **Step 4**: `BlockInteraction.tsx` — ライトセイバー装備時は既存の `equippedItem !== 'builder'` ガードで近接攻撃が自動スキップされるため、変更不要
-- [ ] **Step 5**: `WeaponSwitchPopover.tsx` にライトセイバー用コンテンツ追加
-- [ ] **Step 6**: `App.tsx` に `<Lightsaber />` を追加
-- [ ] **Step 7**: `updateLog.ts` にリリースノート追記、`package.json` のバージョン更新
+- [x] **Step 4**: `BlockInteraction.tsx` — ライトセイバー装備時は既存の `equippedItem !== 'builder'` ガードで近接攻撃が自動スキップされるため、変更不要
+- [x] **Step 5**: `WeaponSwitchPopover.tsx` にライトセイバー用コンテンツ追加
+- [x] **Step 6**: `App.tsx` に `<Lightsaber />` を追加
+- [x] **Step 7**: `updateLog.ts` にリリースノート追記、`package.json` のバージョン更新
 
 ## 受け入れ条件
 

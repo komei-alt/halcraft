@@ -30,6 +30,10 @@ export const BLOCK_IDS = {
   CANDLE: 22,
   SNOW: 23,
   SAND: 24,
+  RAIL: 25,
+  RAIL_SLOPE: 26,
+  RAIL_BOOSTER: 27,
+  RAIL_LOOP: 28,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -331,6 +335,53 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     unbreakable: false,
     emissive: false,
   },
+  [BLOCK_IDS.RAIL]: {
+    id: BLOCK_IDS.RAIL,
+    name: 'レール',
+    texture: 'rail.svg',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+  },
+  [BLOCK_IDS.RAIL_SLOPE]: {
+    id: BLOCK_IDS.RAIL_SLOPE,
+    name: '坂道レール',
+    texture: 'rail_slope.svg',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+  },
+  [BLOCK_IDS.RAIL_BOOSTER]: {
+    id: BLOCK_IDS.RAIL_BOOSTER,
+    name: 'ブースターレール',
+    texture: 'rail_booster.svg',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xff4400),
+    emissiveIntensity: 0.8,
+    lightColor: new THREE.Color(0xff6622),
+    lightIntensity: 1.2,
+    lightDistance: 6,
+    nonStandard: true,
+    noCollision: true,
+  },
+  [BLOCK_IDS.RAIL_LOOP]: {
+    id: BLOCK_IDS.RAIL_LOOP,
+    name: 'ループレール',
+    texture: 'rail_loop.svg',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0x8844ff),
+    emissiveIntensity: 0.5,
+    nonStandard: true,
+    noCollision: true,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -346,6 +397,10 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.SPAWNER,
   BLOCK_IDS.TURRET,
   BLOCK_IDS.CORE,
+  BLOCK_IDS.RAIL,
+  BLOCK_IDS.RAIL_SLOPE,
+  BLOCK_IDS.RAIL_BOOSTER,
+  BLOCK_IDS.RAIL_LOOP,
 ];
 
 /** チャンクサイズ定数 */

@@ -11,10 +11,10 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isValidSkinId } from '../../types/skins';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
+import { computeGroundOffset } from '../../utils/autoGround';
 import {
   TANK_AVATAR_POSITION,
   TANK_AVATAR_SCALE,
-  TANK_MODEL_POSITION,
   TANK_MODEL_SCALE,
   TANK_MODEL_YAW,
   TANK_TURRET_PIVOT,
@@ -55,6 +55,16 @@ export function Tank() {
   const modelParts = useMemo(() => createTankModelParts(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
 
+  // 自動接地: GLBのバウンディングボックスからモデル底面をY=0に揃える
+  const autoGroundY = useMemo(
+    () => computeGroundOffset(gltf.scene, TANK_MODEL_SCALE, TANK_MODEL_PATH),
+    [gltf.scene],
+  );
+  const modelPos: [number, number, number] = useMemo(
+    () => [0, autoGroundY, 0],
+    [autoGroundY],
+  );
+
   useFrame(() => {
     if (promptRef.current) {
       const dist = camera.position.distanceTo(new THREE.Vector3(tank.x, tank.y, tank.z));
@@ -76,7 +86,7 @@ export function Tank() {
       <primitive
         object={modelParts.hull}
         scale={TANK_MODEL_SCALE}
-        position={TANK_MODEL_POSITION}
+        position={modelPos}
         rotation={[0, TANK_MODEL_YAW, 0]}
       />
 
@@ -85,9 +95,9 @@ export function Tank() {
           object={modelParts.turret}
           scale={TANK_MODEL_SCALE}
           position={[
-            TANK_MODEL_POSITION[0] - TANK_TURRET_PIVOT[0],
-            TANK_MODEL_POSITION[1] - TANK_TURRET_PIVOT[1],
-            TANK_MODEL_POSITION[2] - TANK_TURRET_PIVOT[2],
+            modelPos[0] - TANK_TURRET_PIVOT[0],
+            modelPos[1] - TANK_TURRET_PIVOT[1],
+            modelPos[2] - TANK_TURRET_PIVOT[2],
           ]}
           rotation={[0, TANK_MODEL_YAW, 0]}
         />

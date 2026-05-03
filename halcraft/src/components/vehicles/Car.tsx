@@ -17,10 +17,11 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isValidSkinId } from '../../types/skins';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
+import { computeGroundOffset } from '../../utils/autoGround';
 
 const CAR_MODEL_PATH = '/models/2026-05-01/car-1.glb';
 const CAR_MODEL_SCALE = 0.34;
-const CAR_MODEL_POSITION: [number, number, number] = [0, 0.66, 1.92];
+const CAR_MODEL_XZ_OFFSET: [number, number] = [0, 1.92];  // XZのオフセットのみ保持、Yは自動接地
 const CAR_MODEL_YAW = Math.PI;
 const CAR_AVATAR_SCALE = 0.46;
 
@@ -38,6 +39,16 @@ export function Car() {
   const gltf = useGLTF(CAR_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
+
+  // 自動接地: GLBのバウンディングボックスからモデル底面をY=0に揃える
+  const modelPos: [number, number, number] = useMemo(
+    () => [
+      CAR_MODEL_XZ_OFFSET[0],
+      computeGroundOffset(gltf.scene, CAR_MODEL_SCALE, CAR_MODEL_PATH),
+      CAR_MODEL_XZ_OFFSET[1],
+    ],
+    [gltf.scene],
+  );
 
   useFrame(() => {
     if (promptRef.current) {
@@ -60,7 +71,7 @@ export function Car() {
       <primitive
         object={model}
         scale={CAR_MODEL_SCALE}
-        position={CAR_MODEL_POSITION}
+        position={modelPos}
         rotation={[0, CAR_MODEL_YAW, 0]}
       />
 

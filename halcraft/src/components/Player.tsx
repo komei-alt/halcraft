@@ -23,6 +23,8 @@ import {
 } from '../stores/useVehicleStore';
 import { checkAABBCollision, isBlockSolid } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
+import { useCoasterStore } from '../stores/useCoasterStore';
+import { isRailBlock, CART_BOARD_DISTANCE } from '../utils/coasterPhysics';
 import {
   joystickInput,
   touchLook,
@@ -414,7 +416,20 @@ export function Player() {
     if (interactPressed.current && (isInputActive || (isInVehicle && isVehicleInputActive))) {
       interactPressed.current = false;
 
-      if (activeVehicle !== null) {
+      // --- コースター搭乗/降車チェック ---
+      const coasterState = useCoasterStore.getState();
+      if (coasterState.isBoarded) {
+        // コースターから降車
+        coasterState.dismount();
+        coasterState.despawnCart();
+        const groundY = getTerrainHeight(Math.floor(pos.x), Math.floor(pos.z)) + 1.001;
+        pos.y = groundY;
+        vel.set(0, 0, 0);
+        onGround.current = true;
+        lastGroundY.current = pos.y;
+        euler.current.x = 0;
+        camera.quaternion.setFromEuler(euler.current);
+      } else if (activeVehicle !== null) {
         const vehicle =
           activeVehicle === 'helicopter' ? vehicleState.helicopter :
           activeVehicle === 'tank' ? vehicleState.tank :
@@ -450,71 +465,104 @@ export function Player() {
         euler.current.x = 0;
         camera.quaternion.setFromEuler(euler.current);
       } else {
-        const candidates: Array<{ type: VehicleType; dist: number }> = [];
-
-        if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
-          const dx = pos.x - heli.x;
-          const dy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
-          const dz = pos.z - heli.z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'helicopter', dist });
-        }
-
-        const tank = vehicleState.tank;
-        if (tank.spawned && tank.seats.pilot === null) {
-          const dx = pos.x - tank.x;
-          const dy = (pos.y + PLAYER_HEIGHT / 2) - tank.y;
-          const dz = pos.z - tank.z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (dist < TANK_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'tank', dist });
-        }
-
-        const airplane = vehicleState.airplane;
-        if (airplane.spawned && airplane.seats.pilot === null) {
-          const dx = pos.x - airplane.x;
-          const dy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
-          const dz = pos.z - airplane.z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'airplane', dist });
-        }
-
-        const car = vehicleState.car;
-        if (car.spawned && vehicleState.findAvailableCarSeat() !== null) {
-          const dx = pos.x - car.x;
-          const dy = (pos.y + PLAYER_HEIGHT / 2) - car.y;
-          const dz = pos.z - car.z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (dist < CAR_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'car', dist });
-        }
-
-        candidates.sort((a, b) => a.dist - b.dist);
-        const nearest = candidates[0]?.type;
-
-        if (nearest === 'helicopter') {
-          const assignedSeat = vehicleState.boardHelicopter();
-          if (assignedSeat) {
-            sendHelicopterBoard(assignedSeat);
-            euler.current.y = heli.rotationY;
-            euler.current.x = -0.1;
-            if (assignedSeat === 'pilot') {
-              helicopterCameraActive.current = false;
+        // --- まずレール近接チェック（コースター搭乗） ---
+        let boardedCoaster = false;
+        const px = Math.floor(pos.x);
+        const py = Math.floor(pos.y);
+        const pz = Math.floor(pos.z);
+        // 周辺3×3×3の範囲でレールを探索
+        for (let dx = -1; dx <= 1 && !boardedCoaster; dx++) {
+          for (let dy = -1; dy <= 1 && !boardedCoaster; dy++) {
+            for (let dz = -1; dz <= 1 && !boardedCoaster; dz++) {
+              const rx = px + dx;
+              const ry = py + dy;
+              const rz = pz + dz;
+              if (isRailBlock(getBlock(rx, ry, rz))) {
+                const dist = Math.sqrt(
+                  (pos.x - (rx + 0.5)) ** 2 +
+                  (pos.y - (ry + 0.5)) ** 2 +
+                  (pos.z - (rz + 0.5)) ** 2,
+                );
+                if (dist < CART_BOARD_DISTANCE) {
+                  const success = coasterState.spawnCart(getBlock, rx, ry, rz);
+                  if (success) {
+                    coasterState.board();
+                    boardedCoaster = true;
+                  }
+                }
+              }
             }
-            camera.quaternion.setFromEuler(euler.current);
           }
-        } else if (nearest === 'tank' || nearest === 'airplane' || nearest === 'car') {
-          const assignedSeat = vehicleState.boardVehicle(nearest);
-          if (assignedSeat) {
-            sendVehicleBoard(nearest);
-            const v = nearest === 'tank' ? vehicleState.tank : nearest === 'airplane' ? vehicleState.airplane : vehicleState.car;
-            euler.current.y = v.rotationY;
-            euler.current.x = nearest === 'airplane' ? -0.04 : -0.08;
-            if (nearest === 'airplane') {
-              airplaneControlYaw.current = v.rotationY;
-              airplaneControlPitch.current = 0;
-              airplaneControlActive.current = true;
-              airplaneCameraActive.current = false;
+        }
+
+        if (!boardedCoaster) {
+          // --- 既存の乗り物搭乗ロジック ---
+          const candidates: Array<{ type: VehicleType; dist: number }> = [];
+
+          if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
+            const ddx = pos.x - heli.x;
+            const ddy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
+            const ddz = pos.z - heli.z;
+            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'helicopter', dist });
+          }
+
+          const tank = vehicleState.tank;
+          if (tank.spawned && tank.seats.pilot === null) {
+            const ddx = pos.x - tank.x;
+            const ddy = (pos.y + PLAYER_HEIGHT / 2) - tank.y;
+            const ddz = pos.z - tank.z;
+            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (dist < TANK_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'tank', dist });
+          }
+
+          const airplane = vehicleState.airplane;
+          if (airplane.spawned && airplane.seats.pilot === null) {
+            const ddx = pos.x - airplane.x;
+            const ddy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
+            const ddz = pos.z - airplane.z;
+            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'airplane', dist });
+          }
+
+          const car = vehicleState.car;
+          if (car.spawned && vehicleState.findAvailableCarSeat() !== null) {
+            const ddx = pos.x - car.x;
+            const ddy = (pos.y + PLAYER_HEIGHT / 2) - car.y;
+            const ddz = pos.z - car.z;
+            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (dist < CAR_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'car', dist });
+          }
+
+          candidates.sort((a, b) => a.dist - b.dist);
+          const nearest = candidates[0]?.type;
+
+          if (nearest === 'helicopter') {
+            const assignedSeat = vehicleState.boardHelicopter();
+            if (assignedSeat) {
+              sendHelicopterBoard(assignedSeat);
+              euler.current.y = heli.rotationY;
+              euler.current.x = -0.1;
+              if (assignedSeat === 'pilot') {
+                helicopterCameraActive.current = false;
+              }
+              camera.quaternion.setFromEuler(euler.current);
             }
-            camera.quaternion.setFromEuler(euler.current);
+          } else if (nearest === 'tank' || nearest === 'airplane' || nearest === 'car') {
+            const assignedSeat = vehicleState.boardVehicle(nearest);
+            if (assignedSeat) {
+              sendVehicleBoard(nearest);
+              const v = nearest === 'tank' ? vehicleState.tank : nearest === 'airplane' ? vehicleState.airplane : vehicleState.car;
+              euler.current.y = v.rotationY;
+              euler.current.x = nearest === 'airplane' ? -0.04 : -0.08;
+              if (nearest === 'airplane') {
+                airplaneControlYaw.current = v.rotationY;
+                airplaneControlPitch.current = 0;
+                airplaneControlActive.current = true;
+                airplaneCameraActive.current = false;
+              }
+              camera.quaternion.setFromEuler(euler.current);
+            }
           }
         }
       }
@@ -522,6 +570,39 @@ export function Player() {
     // interactPressedをリセット（既に処理済み）
     if (!keys.current.interact) {
       interactPressed.current = false;
+    }
+
+    // ========================================
+    // コースター搭乗中 — Player側はカメラ制御のみ（物理はCoasterCartで処理）
+    // ========================================
+    const coasterBoarded = useCoasterStore.getState().isBoarded;
+    if (coasterBoarded) {
+      updateAttackCooldown(dt);
+      consumeKnockback();
+
+      // Space キーでブレーキ / 発進
+      const coasterStore = useCoasterStore.getState();
+      if (isTouch.current ? mobileActions.jump : keys.current.jump) {
+        if (Math.abs(coasterStore.speed) < 0.5) {
+          coasterStore.launch(8);
+        } else {
+          coasterStore.setBraking(true);
+        }
+      } else {
+        coasterStore.setBraking(false);
+      }
+
+      // カメラはCoasterCartが管理するので、位置を同期
+      pos.x = coasterStore.cartX;
+      pos.y = coasterStore.cartY + 1.5;
+      pos.z = coasterStore.cartZ;
+
+      const now = performance.now();
+      if (now - lastSendTime.current > 50) {
+        sendPosition([pos.x, pos.y, pos.z], [euler.current.y, euler.current.x]);
+        lastSendTime.current = now;
+      }
+      return; // 通常物理をスキップ
     }
 
     // ========================================
