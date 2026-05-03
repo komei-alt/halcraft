@@ -19,6 +19,9 @@ interface WorldState {
   /** 初期チャンクを一括生成 */
   initChunks: (renderDistance: number) => void;
 
+  /** カメラ周辺の未生成チャンクを動的に生成 */
+  ensureChunksAround: (camCx: number, camCz: number, radius: number) => void;
+
   /** チャンクを取得（生成済みのみ） */
   getChunk: (cx: number, cz: number) => ChunkData | undefined;
 
@@ -49,6 +52,34 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     }
 
     set({ chunks: newChunks, chunkVersions: newVersions });
+  },
+
+  ensureChunksAround: (camCx, camCz, radius) => {
+    const { chunks, chunkVersions } = get();
+    let hasNew = false;
+    let newChunks: Map<string, ChunkData> | null = null;
+    let newVersions: Map<string, number> | null = null;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        const cx = camCx + dx;
+        const cz = camCz + dz;
+        const key = chunkKey(cx, cz);
+        if (!chunks.has(key)) {
+          if (!newChunks) {
+            newChunks = new Map(chunks);
+            newVersions = new Map(chunkVersions);
+          }
+          newChunks.set(key, generateChunk(cx, cz));
+          newVersions!.set(key, 0);
+          hasNew = true;
+        }
+      }
+    }
+
+    if (hasNew && newChunks && newVersions) {
+      set({ chunks: newChunks, chunkVersions: newVersions });
+    }
   },
 
   getChunk: (cx, cz) => {

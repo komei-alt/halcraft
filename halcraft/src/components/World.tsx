@@ -201,21 +201,19 @@ function BlockTypeInstances({
   );
 }
 
-/** カメラ視錐台カリング用の描画距離（ブロック単位） */
-const VISIBLE_DISTANCE = 5; // チャンク単位（近いチャンクだけ描画）
+/** カメラ視錐台カリング用の描画距離（チャンク単位） */
+const VISIBLE_DISTANCE = 5;
 
 /** ワールド全体の描画 */
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
+  const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const chunks = useWorldStore((s) => s.chunks);
   const { camera } = useThree();
 
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
   const lastUpdateTime = useRef(0);
-  // 再利用用配列（GCプレッシャー削減）
-  const visibleBuffer = useRef<[number, number][]>([]);
-  const keyBuffer = useRef<string[]>([]);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
@@ -234,11 +232,14 @@ export function World() {
     const camX = Math.floor(camera.position.x / CHUNK_SIZE);
     const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
-    const visible = visibleBuffer.current;
-    const keyParts = keyBuffer.current;
-    visible.length = 0;
-    keyParts.length = 0;
-    chunks.forEach((_, key) => {
+    // カメラ周辺の未生成チャンクを動的に生成
+    ensureChunksAround(camX, camZ, VISIBLE_DISTANCE);
+
+    // 可視範囲のチャンクを収集
+    const visible: [number, number][] = [];
+    const keyParts: string[] = [];
+    const currentChunks = useWorldStore.getState().chunks;
+    currentChunks.forEach((_, key) => {
       const [cx, cz] = key.split(',').map(Number);
       const dx = Math.abs(cx - camX);
       const dz = Math.abs(cz - camZ);
@@ -254,6 +255,7 @@ export function World() {
     if (newKey === prevChunkKey.current) return;
     prevChunkKey.current = newKey;
 
+    // 新しい配列をstateにセット（参照共有を防ぐ）
     setVisibleChunks(visible);
   });
 
