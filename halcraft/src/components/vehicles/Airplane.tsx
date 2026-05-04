@@ -11,10 +11,10 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isValidSkinId } from '../../types/skins';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
-import { computeGroundOffset } from '../../utils/autoGround';
 import {
   AIRPLANE_AVATAR_POSITION,
   AIRPLANE_AVATAR_SCALE,
+  AIRPLANE_MODEL_POSITION,
   AIRPLANE_MODEL_SCALE,
   AIRPLANE_MODEL_YAW,
 } from './vehicleModelConfig';
@@ -28,12 +28,6 @@ export function Airplane() {
   const gltf = useGLTF(AIRPLANE_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
-
-  // 自動接地: GLBのバウンディングボックスからモデル底面をY=0に揃える
-  const modelPos: [number, number, number] = useMemo(
-    () => [0, computeGroundOffset(gltf.scene, AIRPLANE_MODEL_SCALE, AIRPLANE_MODEL_PATH), 0],
-    [gltf.scene],
-  );
 
   useFrame(() => {
     if (promptRef.current) {
@@ -56,7 +50,7 @@ export function Airplane() {
       <primitive
         object={model}
         scale={AIRPLANE_MODEL_SCALE}
-        position={modelPos}
+        position={AIRPLANE_MODEL_POSITION}
         rotation={[0, AIRPLANE_MODEL_YAW, 0]}
       />
       <AirplanePassengerAvatar />

@@ -182,6 +182,7 @@ const CAR_SPAWN = {
   x: RUNWAY_CENTER.x - 18,
   z: RUNWAY_CENTER.z + Math.floor(RUNWAY_WIDTH / 2) + 12,
 };
+const VEHICLE_GROUND_TOP_OFFSET = 1.0;
 const SEAT_PRIORITY = ['pilot', 'gunner_left', 'gunner_right'];
 const CAR_SEAT_PRIORITY = ['driver', 'front_passenger', 'rear_left', 'rear_right'];
 
@@ -251,7 +252,7 @@ function makeDefaultHeliState() {
 
 function makeDefaultTankState() {
   const x = TANK_SPAWN.x;
-  const y = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z) + 1.15;
+  const y = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z) + VEHICLE_GROUND_TOP_OFFSET;
   const z = TANK_SPAWN.z;
   return {
     spawned: true,
@@ -276,7 +277,7 @@ function makeDefaultTankState() {
 
 function makeDefaultAirplaneState() {
   const x = AIRPLANE_SPAWN.x;
-  const y = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z) + 1.8;
+  const y = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z) + VEHICLE_GROUND_TOP_OFFSET;
   const z = AIRPLANE_SPAWN.z;
   return {
     spawned: true,

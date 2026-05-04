@@ -15,6 +15,7 @@ import { computeGroundOffset } from '../../utils/autoGround';
 import {
   TANK_AVATAR_POSITION,
   TANK_AVATAR_SCALE,
+  TANK_GROUND_CONTACT_NODE,
   TANK_MODEL_SCALE,
   TANK_MODEL_YAW,
   TANK_TURRET_PIVOT,
@@ -26,6 +27,7 @@ const PROMPT_COLOR = '#9be7ff';
 interface TankModelParts {
   hull: THREE.Object3D;
   turret: THREE.Group;
+  groundContact: THREE.Object3D | null;
 }
 
 function createTankModelParts(scene: THREE.Object3D): TankModelParts {
@@ -44,6 +46,7 @@ function createTankModelParts(scene: THREE.Object3D): TankModelParts {
   return {
     hull,
     turret,
+    groundContact: tracks ?? null,
   };
 }
 
@@ -55,10 +58,14 @@ export function Tank() {
   const modelParts = useMemo(() => createTankModelParts(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
 
-  // 自動接地: GLBのバウンディングボックスからモデル底面をY=0に揃える
+  // 自動接地: 戦車全体ではなくキャタピラ底面を地面に合わせる
   const autoGroundY = useMemo(
-    () => computeGroundOffset(gltf.scene, TANK_MODEL_SCALE, TANK_MODEL_PATH),
-    [gltf.scene],
+    () => computeGroundOffset(
+      modelParts.groundContact ?? gltf.scene,
+      TANK_MODEL_SCALE,
+      `${TANK_MODEL_PATH}:${TANK_GROUND_CONTACT_NODE}`,
+    ),
+    [gltf.scene, modelParts.groundContact],
   );
   const modelPos: [number, number, number] = useMemo(
     () => [0, autoGroundY, 0],
