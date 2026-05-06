@@ -10,18 +10,19 @@ const ICON_COUNT = 10; // 各アイコンは2ポイント分
 export function HungerBar() {
   const hunger = usePlayerStore((s) => s.hunger);
   const phase = useGameStore((s) => s.phase);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
 
-  // メニュー画面では非表示
-  if (phase !== 'playing') return null;
+  // メニュー画面・ビルドモードでは非表示
+  if (phase !== 'playing' || isBuildMode) return null;
 
   return (
     <div
       style={{
         position: 'fixed',
-        bottom: 52,
-        right: 'calc(50% - 180px)',
-        transform: 'translateX(50%)',
+        bottom: 76,
+        left: 'calc(50% + 2px)',
         display: 'flex',
+        flexDirection: 'row-reverse',
         gap: 1,
         zIndex: 100,
         pointerEvents: 'none',

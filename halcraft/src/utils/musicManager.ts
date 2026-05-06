@@ -99,6 +99,12 @@ export function startBGM(): void {
   if (isPlaying) return;
 
   audioCtx = new AudioContext();
+  // ブラウザの自動再生ポリシー対応
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {
+      // ユーザーインタラクション後にリトライ
+    });
+  }
   masterGain = audioCtx.createGain();
   masterGain.gain.value = BGM_VOLUME;
   masterGain.connect(audioCtx.destination);

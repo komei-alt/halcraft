@@ -90,8 +90,15 @@ export function WaterRenderer() {
     const indexedWater = getIndexedBlockPositions(BLOCK_IDS.WATER);
 
     for (const pos of indexedWater) {
-      // 水面のみ描画（上に水がなければ水面）
-      if (getBlock(pos.x, pos.y + 1, pos.z) !== BLOCK_IDS.WATER) {
+      // 空気に隣接する水ブロックのみ描画（埋もれた水は不要）
+      const hasExposedFace =
+        getBlock(pos.x, pos.y + 1, pos.z) !== BLOCK_IDS.WATER ||
+        getBlock(pos.x, pos.y - 1, pos.z) === BLOCK_IDS.AIR ||
+        getBlock(pos.x + 1, pos.y, pos.z) === BLOCK_IDS.AIR ||
+        getBlock(pos.x - 1, pos.y, pos.z) === BLOCK_IDS.AIR ||
+        getBlock(pos.x, pos.y, pos.z + 1) === BLOCK_IDS.AIR ||
+        getBlock(pos.x, pos.y, pos.z - 1) === BLOCK_IDS.AIR;
+      if (hasExposedFace) {
         positions.push(pos.x, pos.y, pos.z);
       }
     }

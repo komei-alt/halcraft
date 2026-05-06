@@ -17,7 +17,7 @@ import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
-import { playHitSound } from '../utils/sounds';
+import { playHitSound, playBlockBreakSound } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
 
@@ -351,7 +351,8 @@ export function BlockInteraction() {
   }, [camera, damageMob, findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack]);
 
   // レイマーチングで照準先のブロックを検出
-  useFrame(() => {
+  useFrame((_, frameDelta) => {
+    const dt = Math.min(frameDelta, 0.1);
     rayDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     rayOrigin.current.copy(camera.position);
     const dir = rayDir.current;
@@ -435,12 +436,27 @@ export function BlockInteraction() {
       const def = BLOCK_DEFS[blockId];
       const hardness = isBuildMode ? 0 : (def?.hardness ?? 0.5);
 
-      // ターゲットが変わったらリセット
-      if (!bp || bp.x !== found.x || bp.y !== found.y || bp.z !== found.z) {
+      // hardness <= 0 のブロック（TNT等）は即破壊
+      if (hardness <= 0) {
+        if (breakBlock(found.x, found.y, found.z)) {
+          spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
+          if (!isBuildMode) {
+            dropItem(blockId, found.x, found.y, found.z);
+          }
+          sendBlockBreak(found.x, found.y, found.z);
+          if (BLOCK_DEFS[blockId]?.explosive) {
+            const cp = camera.position;
+            triggerTntExplosion(found.x, found.y, found.z, [cp.x, cp.y - 1.6, cp.z]);
+          }
+        }
+        breakProgressRef.current = null;
+        setBreakProgressState(null);
+        isBreakingRef.current = false;
+      } else if (!bp || bp.x !== found.x || bp.y !== found.y || bp.z !== found.z) {
+        // ターゲットが変わったらリセット
         breakProgressRef.current = { x: found.x, y: found.y, z: found.z, progress: 0, hardness };
       } else {
-        // 進行度を加算
-        const dt = 1 / 60; // おおよそのフレーム間隔
+        // 進行度を加算（実際のフレーム間隔を使用）
         bp.progress += dt / hardness;
 
         if (bp.progress >= 1) {
@@ -451,9 +467,11 @@ export function BlockInteraction() {
               dropItem(blockId, found.x, found.y, found.z);
             }
             sendBlockBreak(found.x, found.y, found.z);
+            playBlockBreakSound();
             // TNT爆発チェック
             if (BLOCK_DEFS[blockId]?.explosive) {
-              triggerTntExplosion(found.x, found.y, found.z);
+              const cp = camera.position;
+              triggerTntExplosion(found.x, found.y, found.z, [cp.x, cp.y - 1.6, cp.z]);
             }
           }
           breakProgressRef.current = null;
@@ -490,8 +508,10 @@ export function BlockInteraction() {
                 dropItem(blockId, t.x, t.y, t.z);
               }
               sendBlockBreak(t.x, t.y, t.z);
+              playBlockBreakSound();
               if (BLOCK_DEFS[blockId]?.explosive) {
-                triggerTntExplosion(t.x, t.y, t.z);
+                const cp = camera.position;
+                triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
               }
             }
           }
@@ -541,8 +561,10 @@ export function BlockInteraction() {
             if (breakBlock(t.x, t.y, t.z)) {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
+              playBlockBreakSound();
               if (BLOCK_DEFS[blockId]?.explosive) {
-                triggerTntExplosion(t.x, t.y, t.z);
+                const cp = camera.position;
+                triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
               }
             }
           }
@@ -552,9 +574,23 @@ export function BlockInteraction() {
         }
       }
     } else if (e.button === 2) {
-      // 右クリック: ブロック設置
+      // 右クリック: TNT起爆 or ブロック設置
       const t = targetRef.current;
-      if (!t || !t.hasPlaceTarget) return;
+      if (!t) return;
+
+      // TNTブロックを右クリックで遠隔起爆
+      const targetBlockId = getBlock(t.x, t.y, t.z);
+      if (BLOCK_DEFS[targetBlockId]?.explosive) {
+        if (breakBlock(t.x, t.y, t.z)) {
+          spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
+          sendBlockBreak(t.x, t.y, t.z);
+          const cp = camera.position;
+          triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
+        }
+        return;
+      }
+
+      if (!t.hasPlaceTarget) return;
       // プレイヤーの体と重ならないかチェック
       if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return;
       const selectedBlock = getSelectedBlock();
@@ -566,7 +602,7 @@ export function BlockInteraction() {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode, camera]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

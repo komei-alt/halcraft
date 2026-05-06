@@ -7,6 +7,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useMobStore } from '../stores/useMobStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { spawnBlockBreakEffect } from './effectTriggers';
+import { playTntExplosionSound } from './sounds';
 
 /** TNT爆発の半径 */
 const EXPLOSION_RADIUS = 4;
@@ -20,8 +21,12 @@ const CHAIN_DELAY = 150;
  * @param x TNTブロックのX座標
  * @param y TNTブロックのY座標
  * @param z TNTブロックのZ座標
+ * @param playerPos プレイヤー位置 [x, y, z]（省略時はダメージ計算スキップ）
  */
-export function triggerTntExplosion(x: number, y: number, z: number): void {
+export function triggerTntExplosion(
+  x: number, y: number, z: number,
+  playerPos?: [number, number, number],
+): void {
   const worldStore = useWorldStore.getState();
   const playerStore = usePlayerStore.getState();
   const mobStore = useMobStore.getState();
@@ -58,27 +63,36 @@ export function triggerTntExplosion(x: number, y: number, z: number): void {
   }
 
   // プレイヤーへのダメージ（距離減衰）
-  // カメラ位置からプレイヤー位置を取得（R3Fのカメラがプレイヤー目線）
-  const cameraEl = document.querySelector('canvas');
-  // @ts-expect-error R3F internal
-  const threeCamera = cameraEl?.__r3f?.store?.getState()?.camera;
-  const px = threeCamera?.position?.x ?? 0;
-  const py = (threeCamera?.position?.y ?? 0) - 1.6; // 目線→足元
-  const pz = threeCamera?.position?.z ?? 0;
-  const playerDist = Math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2);
-  if (playerDist < EXPLOSION_RADIUS * 1.5) {
-    const damageFactor = 1 - playerDist / (EXPLOSION_RADIUS * 1.5);
-    const damage = Math.ceil(EXPLOSION_MAX_DAMAGE * damageFactor);
-    if (damage > 0) {
-      playerStore.takeDamage(damage);
-      // ノックバック
-      const kbX = playerDist > 0 ? (px - x) / playerDist : 0;
-      const kbZ = playerDist > 0 ? (pz - z) / playerDist : 0;
-      usePlayerStore.setState({
-        knockbackVx: kbX * 8,
-        knockbackVz: kbZ * 8,
-      });
+  if (playerPos) {
+    const [px, py, pz] = playerPos;
+    const playerDist = Math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2);
+
+    // 爆発音（プレイヤー距離に基づく音量）
+    playTntExplosionSound(playerDist);
+
+    // カメラシェイク（距離に応じて減衰）
+    const shakeFactor = Math.max(0, 1 - playerDist / (EXPLOSION_RADIUS * 2));
+    if (shakeFactor > 0) {
+      usePlayerStore.setState({ cameraShake: Math.min(1, shakeFactor * 0.8) });
     }
+
+    if (playerDist < EXPLOSION_RADIUS * 1.5) {
+      const damageFactor = 1 - playerDist / (EXPLOSION_RADIUS * 1.5);
+      const damage = Math.ceil(EXPLOSION_MAX_DAMAGE * damageFactor);
+      if (damage > 0) {
+        playerStore.takeDamage(damage);
+        // ノックバック
+        const kbX = playerDist > 0 ? (px - x) / playerDist : 0;
+        const kbZ = playerDist > 0 ? (pz - z) / playerDist : 0;
+        usePlayerStore.setState({
+          knockbackVx: kbX * 8,
+          knockbackVz: kbZ * 8,
+        });
+      }
+    }
+  } else {
+    // playerPos なしでも音は鳴らす（距離0で最大音量）
+    playTntExplosionSound(0);
   }
 
   // モブへのダメージ
@@ -102,7 +116,7 @@ export function triggerTntExplosion(x: number, y: number, z: number): void {
       // まだTNTが残っている場合のみ連鎖
       if (currentBlock === BLOCK_IDS.TNT) {
         useWorldStore.getState().breakBlock(tnt.x, tnt.y, tnt.z);
-        triggerTntExplosion(tnt.x, tnt.y, tnt.z);
+        triggerTntExplosion(tnt.x, tnt.y, tnt.z, playerPos);
       }
     }, CHAIN_DELAY * (i + 1));
   });

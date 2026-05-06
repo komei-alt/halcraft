@@ -21,6 +21,10 @@ export function initAmbientSounds(): void {
   if (isRunning) return;
 
   audioCtx = new AudioContext();
+  // ブラウザの自動再生ポリシー対応
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
   masterGain = audioCtx.createGain();
   masterGain.gain.value = AMBIENT_VOLUME;
   masterGain.connect(audioCtx.destination);

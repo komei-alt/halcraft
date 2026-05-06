@@ -846,3 +846,140 @@ export function playBombFallingSound(distance: number): void {
   noise.start(now);
   noise.stop(now + duration);
 }
+
+// ============================================
+// 14. TNT爆発音
+// ============================================
+
+export function playTntExplosionSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('tntExplosion', 80)) return;
+
+  const maxDist = 80;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, 0.85 * (1 - distance / maxDist));
+
+  const now = ctx.currentTime;
+
+  // 1. 超低音の主爆発
+  const boom = ctx.createOscillator();
+  boom.type = 'sawtooth';
+  boom.frequency.setValueAtTime(60, now);
+  boom.frequency.exponentialRampToValueAtTime(20, now + 0.6);
+
+  const boomFilter = ctx.createBiquadFilter();
+  boomFilter.type = 'lowpass';
+  boomFilter.frequency.setValueAtTime(160, now);
+  boomFilter.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+
+  const boomGain = ctx.createGain();
+  boomGain.gain.setValueAtTime(volume * 0.8, now);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+
+  boom.connect(boomFilter);
+  boomFilter.connect(boomGain);
+  boomGain.connect(ctx.destination);
+  boom.start(now);
+  boom.stop(now + 0.7);
+
+  // 2. 初期衝撃波（鋭い破裂音）
+  const crack = ctx.createBufferSource();
+  crack.buffer = getNoiseBuffer(ctx);
+
+  const crackFilter = ctx.createBiquadFilter();
+  crackFilter.type = 'highpass';
+  crackFilter.frequency.setValueAtTime(1000, now);
+
+  const crackGain = ctx.createGain();
+  crackGain.gain.setValueAtTime(volume * 0.6, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  crack.connect(crackFilter);
+  crackFilter.connect(crackGain);
+  crackGain.connect(ctx.destination);
+  crack.start(now);
+  crack.stop(now + 0.18);
+
+  // 3. 破片の飛散ノイズ
+  const debris = ctx.createBufferSource();
+  debris.buffer = getNoiseBuffer(ctx);
+
+  const debrisFilter = ctx.createBiquadFilter();
+  debrisFilter.type = 'bandpass';
+  debrisFilter.frequency.setValueAtTime(1800, now + 0.05);
+  debrisFilter.Q.setValueAtTime(1.2, now);
+
+  const debrisGain = ctx.createGain();
+  debrisGain.gain.setValueAtTime(0.001, now);
+  debrisGain.gain.linearRampToValueAtTime(volume * 0.4, now + 0.06);
+  debrisGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+  debris.connect(debrisFilter);
+  debrisFilter.connect(debrisGain);
+  debrisGain.connect(ctx.destination);
+  debris.start(now);
+  debris.stop(now + 0.35);
+
+  // 4. 余韻の轟音
+  const rumble = ctx.createBufferSource();
+  rumble.buffer = getNoiseBuffer(ctx);
+
+  const rumbleFilter = ctx.createBiquadFilter();
+  rumbleFilter.type = 'bandpass';
+  rumbleFilter.frequency.setValueAtTime(70, now);
+  rumbleFilter.Q.setValueAtTime(0.3, now);
+
+  const rumbleGain = ctx.createGain();
+  rumbleGain.gain.setValueAtTime(volume * 0.18, now + 0.08);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+  rumble.connect(rumbleFilter);
+  rumbleFilter.connect(rumbleGain);
+  rumbleGain.connect(ctx.destination);
+  rumble.start(now);
+  rumble.stop(now + 0.9);
+}
+
+// ============================================
+// 15. ブロック破壊音
+// ============================================
+
+export function playBlockBreakSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('blockBreak', 60)) return;
+
+  const now = ctx.currentTime;
+
+  // クランチノイズ（短い破砕音）
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(1200 + Math.random() * 600, now);
+  filter.Q.setValueAtTime(1.5, now);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.08);
+
+  // 低音パンチ
+  const thud = ctx.createOscillator();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(100 + Math.random() * 30, now);
+
+  const thudGain = ctx.createGain();
+  thudGain.gain.setValueAtTime(0.1, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+  thud.connect(thudGain);
+  thudGain.connect(ctx.destination);
+  thud.start(now);
+  thud.stop(now + 0.06);
+}

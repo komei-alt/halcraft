@@ -355,6 +355,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       rocketCooldown: 0,
       rocketCharge: 1,
       invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+      hunger: 20,
+      hungerExhaustion: 0,
+      airSupply: 15,
+      isSubmerged: false,
+      isInWater: false,
     });
     // サーバーへ復活通知
     const socket = getSocket();
