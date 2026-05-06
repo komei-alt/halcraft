@@ -76,8 +76,8 @@ const waterGeometry = new THREE.BoxGeometry(1, 1, 1);
 /** 水ブロックの InstancedMesh 描画 */
 export function WaterRenderer() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(createWaterMaterial());
   const dummyRef = useRef(new THREE.Object3D());
+  const material = useMemo(() => createWaterMaterial(), []);
 
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
@@ -118,17 +118,22 @@ export function WaterRenderer() {
     meshRef.current.instanceMatrix.needsUpdate = true;
   }, [waterPositions, count]);
 
-  // 毎フレーム time uniform を更新（波アニメーション）
+  // 毎フレーム time uniform を更新（Three.js のマテリアル副作用）
+  /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
-    materialRef.current.uniforms.uTime.value += delta;
+    const waterMaterial = meshRef.current?.material;
+    if (waterMaterial instanceof THREE.ShaderMaterial) {
+      waterMaterial.uniforms.uTime.value += delta;
+    }
   });
+  /* eslint-enable react-hooks/immutability */
 
   if (count === 0) return null;
 
   return (
     <instancedMesh
       ref={meshRef}
-      args={[waterGeometry, materialRef.current, count]}
+      args={[waterGeometry, material, count]}
       renderOrder={100}
       frustumCulled={false}
     />
