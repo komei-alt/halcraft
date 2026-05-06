@@ -2,6 +2,8 @@
 // プレイヤーの位置や状況に応じて環境音を再生する
 // Web Audio API で手続き的に生成（外部ファイル不要）
 
+import { SEA_LEVEL } from '../types/blocks';
+
 let audioCtx: AudioContext | null = null;
 let windNode: OscillatorNode | null = null;
 let windGain: GainNode | null = null;
@@ -102,7 +104,7 @@ export function updateAmbientSounds(
   isOutside: boolean,
   isUnderwater: boolean,
   isUnderground: boolean,
-  _playerY: number,
+  playerY: number,
 ): void {
   if (!audioCtx || !windGain || !waterGain || !caveGain) return;
 
@@ -118,7 +120,8 @@ export function updateAmbientSounds(
   waterGain.gain.linearRampToValueAtTime(waterTarget, now + fadeTime);
 
   // 洞窟音: 地下
-  const caveTarget = isUnderground && !isUnderwater ? 0.4 : 0;
+  const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
+  const caveTarget = isUnderground && !isUnderwater ? 0.25 + caveDepth * 0.2 : 0;
   caveGain.gain.linearRampToValueAtTime(caveTarget, now + fadeTime);
 }
 

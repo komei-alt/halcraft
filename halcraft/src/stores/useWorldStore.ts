@@ -10,6 +10,9 @@ import type { ChunkData } from '../utils/terrain/types';
 /** チャンクキーの生成 */
 const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
 
+/** ワールド座標キーの生成 */
+const blockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
 /** 1フレームあたりに必ず生成するチャンク数 */
 const MIN_CHUNKS_PER_FRAME = 2;
 
@@ -21,6 +24,75 @@ const CHUNK_GENERATION_BUDGET_MS = 7;
 
 /** 初期ロード時の即座生成半径（足元付近を確実に表示） */
 const IMMEDIATE_RADIUS = 3;
+
+/** 1フレームで処理する流体更新の上限 */
+const MAX_FLUID_UPDATES_PER_FRAME = 96;
+
+/** 水が横方向へ広がれる最大距離 */
+const WATER_MAX_FLOW_LEVEL = 5;
+
+/** 溶岩が横方向へ広がれる最大距離 */
+const LAVA_MAX_FLOW_LEVEL = 2;
+
+interface FluidUpdateTarget {
+  x: number;
+  y: number;
+  z: number;
+}
+
+const HORIZONTAL_FLUID_DIRECTIONS = [
+  [-1, 0, 0],
+  [1, 0, 0],
+  [0, 0, -1],
+  [0, 0, 1],
+] as const;
+
+const FLUID_NEIGHBOR_DIRECTIONS = [
+  [0, 0, 0],
+  [0, -1, 0],
+  [0, 1, 0],
+  ...HORIZONTAL_FLUID_DIRECTIONS,
+] as const;
+
+const fluidLevels = new Map<string, number>();
+const fluidUpdateQueue: FluidUpdateTarget[] = [];
+const queuedFluidUpdates = new Set<string>();
+
+function isLiquidBlock(blockId: BlockId): blockId is typeof BLOCK_IDS.WATER | typeof BLOCK_IDS.LAVA {
+  return blockId === BLOCK_IDS.WATER || blockId === BLOCK_IDS.LAVA;
+}
+
+function getMaxFluidLevel(blockId: BlockId): number {
+  return blockId === BLOCK_IDS.LAVA ? LAVA_MAX_FLOW_LEVEL : WATER_MAX_FLOW_LEVEL;
+}
+
+function queueFluidUpdate(x: number, y: number, z: number): void {
+  if (y < 0 || y >= WORLD_HEIGHT) return;
+  const key = blockKey(x, y, z);
+  if (queuedFluidUpdates.has(key)) return;
+  queuedFluidUpdates.add(key);
+  fluidUpdateQueue.push({ x, y, z });
+}
+
+function queueFluidNeighborhood(x: number, y: number, z: number): void {
+  for (const [dx, dy, dz] of FLUID_NEIGHBOR_DIRECTIONS) {
+    queueFluidUpdate(x + dx, y + dy, z + dz);
+  }
+}
+
+function clearFluidSimulation(): void {
+  fluidLevels.clear();
+  fluidUpdateQueue.length = 0;
+  queuedFluidUpdates.clear();
+}
+
+function getChunkCoords(x: number, z: number) {
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cz = Math.floor(z / CHUNK_SIZE);
+  const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  return { cx, cz, lx, lz, key: chunkKey(cx, cz) };
+}
 
 export interface IndexedBlockPosition {
   x: number;
@@ -97,6 +169,9 @@ interface WorldState {
   /** キューからチャンクを段階的に生成（毎フレーム呼ばれる） */
   processChunkQueue: () => void;
 
+  /** 水・溶岩の流体更新を処理（毎フレーム呼ばれる） */
+  processFluidSimulation: () => void;
+
   /** カメラ周辺の未生成チャンクを動的に生成 */
   ensureChunksAround: (camCx: number, camCz: number, radius: number) => void;
 
@@ -130,6 +205,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   isInitialLoading: false,
 
   clearChunks: () => {
+    clearFluidSimulation();
     set({
       chunks: new Map(),
       chunkVersions: new Map(),
@@ -141,6 +217,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   initChunks: (renderDistance) => {
+    clearFluidSimulation();
     const newChunks = new Map<string, ChunkData>();
     const newVersions = new Map<string, number>();
     const newIndexes = new Map<string, ChunkBlockIndex>();
@@ -231,6 +308,142 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     }));
   },
 
+  processFluidSimulation: () => {
+    if (fluidUpdateQueue.length === 0) return;
+
+    const { chunks } = get();
+    const nextChunks = new Map(chunks);
+    const affectedChunkKeys = new Set<string>();
+
+    const readBlock = (x: number, y: number, z: number): BlockId | undefined => {
+      if (y < 0 || y >= WORLD_HEIGHT) return undefined;
+      const { key, lx, lz } = getChunkCoords(x, z);
+      const chunk = nextChunks.get(key);
+      if (!chunk) return undefined;
+      return chunk[lx][y][lz];
+    };
+
+    const getFluidLevel = (x: number, y: number, z: number): number => {
+      return fluidLevels.get(blockKey(x, y, z)) ?? 0;
+    };
+
+    const writeBlock = (x: number, y: number, z: number, blockId: BlockId, fluidLevel = 0): boolean => {
+      if (y < 0 || y >= WORLD_HEIGHT) return false;
+      const { cx, cz, key, lx, lz } = getChunkCoords(x, z);
+      const chunk = nextChunks.get(key);
+      if (!chunk) return false;
+
+      const positionKey = blockKey(x, y, z);
+      const previousBlock = chunk[lx][y][lz];
+      const previousLevel = fluidLevels.get(positionKey) ?? 0;
+      if (previousBlock === blockId && (!isLiquidBlock(blockId) || previousLevel === fluidLevel)) {
+        return false;
+      }
+
+      chunk[lx][y][lz] = blockId;
+      if (isLiquidBlock(blockId)) {
+        fluidLevels.set(positionKey, fluidLevel);
+      } else {
+        fluidLevels.delete(positionKey);
+      }
+
+      affectedChunkKeys.add(chunkKey(cx, cz));
+      queueFluidNeighborhood(x, y, z);
+      return true;
+    };
+
+    const writeFluid = (x: number, y: number, z: number, fluidBlock: BlockId, fluidLevel: number): boolean => {
+      const targetBlock = readBlock(x, y, z);
+      if (targetBlock === undefined) return false;
+
+      if (targetBlock === fluidBlock) {
+        if (getFluidLevel(x, y, z) <= fluidLevel) return false;
+        return writeBlock(x, y, z, fluidBlock, fluidLevel);
+      }
+
+      if (isLiquidBlock(targetBlock)) {
+        return writeBlock(x, y, z, BLOCK_IDS.STONE);
+      }
+
+      if (targetBlock !== BLOCK_IDS.AIR) return false;
+      return writeBlock(x, y, z, fluidBlock, fluidLevel);
+    };
+
+    const hasFluidSupport = (x: number, y: number, z: number, fluidBlock: BlockId, fluidLevel: number): boolean => {
+      if (readBlock(x, y + 1, z) === fluidBlock) return true;
+      for (const [dx, , dz] of HORIZONTAL_FLUID_DIRECTIONS) {
+        const nx = x + dx;
+        const nz = z + dz;
+        if (readBlock(nx, y, nz) === fluidBlock && getFluidLevel(nx, y, nz) < fluidLevel) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    let changed = false;
+    let processed = 0;
+
+    while (processed < MAX_FLUID_UPDATES_PER_FRAME && fluidUpdateQueue.length > 0) {
+      const target = fluidUpdateQueue.shift()!;
+      queuedFluidUpdates.delete(blockKey(target.x, target.y, target.z));
+      processed++;
+
+      const currentBlock = readBlock(target.x, target.y, target.z);
+      if (currentBlock === undefined || !isLiquidBlock(currentBlock)) continue;
+
+      const currentLevel = getFluidLevel(target.x, target.y, target.z);
+      if (currentLevel > 0 && !hasFluidSupport(target.x, target.y, target.z, currentBlock, currentLevel)) {
+        changed = writeBlock(target.x, target.y, target.z, BLOCK_IDS.AIR) || changed;
+        continue;
+      }
+
+      const belowY = target.y - 1;
+      if (belowY >= 0) {
+        const belowBlock = readBlock(target.x, belowY, target.z);
+        if (belowBlock === BLOCK_IDS.AIR) {
+          changed = writeFluid(target.x, belowY, target.z, currentBlock, 1) || changed;
+          continue;
+        }
+        if (belowBlock !== undefined && isLiquidBlock(belowBlock) && belowBlock !== currentBlock) {
+          changed = writeBlock(target.x, belowY, target.z, BLOCK_IDS.STONE) || changed;
+          continue;
+        }
+      }
+
+      const maxFluidLevel = getMaxFluidLevel(currentBlock);
+      if (currentLevel >= maxFluidLevel) continue;
+
+      for (const [dx, , dz] of HORIZONTAL_FLUID_DIRECTIONS) {
+        const nx = target.x + dx;
+        const nz = target.z + dz;
+        changed = writeFluid(nx, target.y, nz, currentBlock, currentLevel + 1) || changed;
+      }
+    }
+
+    if (!changed) return;
+
+    set((state) => {
+      const newVersions = new Map(state.chunkVersions);
+      const newIndexes = new Map(state.chunkBlockIndexes);
+
+      for (const key of affectedChunkKeys) {
+        const [cx, cz] = key.split(',').map(Number);
+        const chunk = nextChunks.get(key);
+        if (!chunk) continue;
+        newVersions.set(key, (newVersions.get(key) ?? 0) + 1);
+        newIndexes.set(key, buildChunkBlockIndex(chunk, cx, cz));
+      }
+
+      return {
+        chunks: nextChunks,
+        chunkVersions: newVersions,
+        chunkBlockIndexes: newIndexes,
+        blockIndexVersion: state.blockIndexVersion + 1,
+      };
+    });
+  },
+
   ensureChunksAround: (camCx, camCz, radius) => {
     const { chunks, chunkGenQueue } = get();
     const queuedKeys = new Set(chunkGenQueue.map(([cx, cz]) => chunkKey(cx, cz)));
@@ -290,29 +503,27 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   getBlock: (x, y, z) => {
     if (y < 0 || y >= WORLD_HEIGHT) return BLOCK_IDS.AIR;
-    const cx = Math.floor(x / CHUNK_SIZE);
-    const cz = Math.floor(z / CHUNK_SIZE);
-    const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-
-    const chunk = get().chunks.get(chunkKey(cx, cz));
+    const { key, lx, lz } = getChunkCoords(x, z);
+    const chunk = get().chunks.get(key);
     if (!chunk) return BLOCK_IDS.AIR;
     return chunk[lx][y][lz];
   },
 
   setBlock: (x, y, z, blockId) => {
     if (y < 0 || y >= WORLD_HEIGHT) return;
-    const cx = Math.floor(x / CHUNK_SIZE);
-    const cz = Math.floor(z / CHUNK_SIZE);
-    const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const key = chunkKey(cx, cz);
+    const { cx, cz, key, lx, lz } = getChunkCoords(x, z);
 
     const chunk = get().chunks.get(key);
     if (!chunk) return;
 
     // チャンクデータを直接変更（パフォーマンスのため）
     chunk[lx][y][lz] = blockId;
+    if (isLiquidBlock(blockId)) {
+      fluidLevels.set(blockKey(x, y, z), 0);
+    } else {
+      fluidLevels.delete(blockKey(x, y, z));
+    }
+    queueFluidNeighborhood(x, y, z);
 
     // バージョンをインクリメントして再描画を促す
     set((state) => {

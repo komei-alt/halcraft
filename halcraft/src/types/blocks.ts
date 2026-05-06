@@ -547,6 +547,8 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.TNT,
   BLOCK_IDS.STONE,
   BLOCK_IDS.SAND,
+  BLOCK_IDS.WATER,
+  BLOCK_IDS.LAVA,
 ];
 
 /** チャンクサイズ定数 */
@@ -554,6 +556,6 @@ export const CHUNK_SIZE = 16;
 /** ワールドの高さ限界 */
 export const WORLD_HEIGHT = 128;
 /** 海面レベル（この高さ以下の空気ブロックが水で埋まる） */
-export const SEA_LEVEL = 22;
+export const SEA_LEVEL = 16;
 /** 初期のレンダリング距離（チャンク数） — 広大なバイオームワールド */
 export const RENDER_DISTANCE = 12;

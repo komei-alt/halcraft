@@ -107,6 +107,7 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
           const blockDef = BLOCK_DEFS[blockId];
+          if (blockId === BLOCK_IDS.WATER) continue;
           if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
           counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
@@ -129,6 +130,7 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
           const blockDef = BLOCK_DEFS[blockId];
+          if (blockId === BLOCK_IDS.WATER) continue;
           if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
 
@@ -208,6 +210,7 @@ const VISIBLE_DISTANCE = 10;
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
   const processChunkQueue = useWorldStore((s) => s.processChunkQueue);
+  const processFluidSimulation = useWorldStore((s) => s.processFluidSimulation);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const { camera } = useThree();
 
@@ -226,6 +229,7 @@ export function World() {
   useFrame(() => {
     // 段階的チャンク生成キューを毎フレーム処理
     processChunkQueue();
+    processFluidSimulation();
 
     const now = performance.now();
     // 初回（lastUpdateTime === 0）は即座に実行、以降は500ms間隔
