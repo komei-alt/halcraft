@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-06',
     items: [
+      { type: 'feature', text: '🎵 BGM追加！穏やかなピアノ音楽が自動再生されるよ！' },
+      { type: 'feature', text: '🌬️ 環境音追加！地上は風の音、水中は水の音、地下は洞窟の反響が聞こえるよ！' },
       { type: 'feature', text: '📦 チェストブロック追加！アイテムを保管できるよ！' },
       { type: 'feature', text: '🔥 かまどブロック追加！鉱石を精錬できるよ！' },
       { type: 'feature', text: '💥 TNTブロック追加！壊すと大爆発！連鎖爆発もするよ！' },

@@ -14,6 +14,9 @@ import {
   playHelicopterRotor,
 } from '../utils/sounds';
 import { useVehicleStore } from '../stores/useVehicleStore';
+import { startBGM } from '../utils/musicManager';
+import { initAmbientSounds, updateAmbientSounds } from '../utils/ambientSounds';
+import { SEA_LEVEL } from '../types/blocks';
 
 /** 足音の最小速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -37,6 +40,7 @@ export function SoundManager() {
   // 前フレームのカメラ位置（速度推定用）
   const lastCameraPos = useRef({ x: 0, y: 0, z: 0 });
   const initialized = useRef(false);
+  const bgmStarted = useRef(false);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.1);
@@ -60,6 +64,13 @@ export function SoundManager() {
     if (!initialized.current) {
       lastCameraPos.current = { x: cx, y: cy, z: cz };
       initialized.current = true;
+
+      // BGMと環境音を開始
+      if (!bgmStarted.current) {
+        bgmStarted.current = true;
+        startBGM();
+        initAmbientSounds();
+      }
       return;
     }
 
@@ -137,6 +148,12 @@ export function SoundManager() {
         playHelicopterRotor(dist);
       }
     }
+
+    // --- 環境音の更新 ---
+    const isUnderwater = playerState.isSubmerged;
+    const isUnderground = cy < SEA_LEVEL;
+    const isOutside = !isUnderground;
+    updateAmbientSounds(isOutside, isUnderwater, isUnderground, cy);
   });
 
   return null;
