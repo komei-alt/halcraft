@@ -19,6 +19,7 @@ import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playHitSound } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
+import { triggerTntExplosion } from '../utils/tntExplosion';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -450,6 +451,10 @@ export function BlockInteraction() {
               dropItem(blockId, found.x, found.y, found.z);
             }
             sendBlockBreak(found.x, found.y, found.z);
+            // TNT爆発チェック
+            if (BLOCK_DEFS[blockId]?.explosive) {
+              triggerTntExplosion(found.x, found.y, found.z);
+            }
           }
           breakProgressRef.current = null;
         }
@@ -485,6 +490,9 @@ export function BlockInteraction() {
                 dropItem(blockId, t.x, t.y, t.z);
               }
               sendBlockBreak(t.x, t.y, t.z);
+              if (BLOCK_DEFS[blockId]?.explosive) {
+                triggerTntExplosion(t.x, t.y, t.z);
+              }
             }
           }
         }
@@ -533,6 +541,9 @@ export function BlockInteraction() {
             if (breakBlock(t.x, t.y, t.z)) {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
+              if (BLOCK_DEFS[blockId]?.explosive) {
+                triggerTntExplosion(t.x, t.y, t.z);
+              }
             }
           }
         } else {

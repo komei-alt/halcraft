@@ -47,6 +47,9 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-06',
     items: [
+      { type: 'feature', text: '📦 チェストブロック追加！アイテムを保管できるよ！' },
+      { type: 'feature', text: '🔥 かまどブロック追加！鉱石を精錬できるよ！' },
+      { type: 'feature', text: '💥 TNTブロック追加！壊すと大爆発！連鎖爆発もするよ！' },
       { type: 'feature', text: '⛏️ 洞窟システム追加！地下を掘ると自然な洞窟が見つかるよ！' },
       { type: 'feature', text: '💎 鉱石追加！石炭・鉄・金・ダイヤモンドが地下に眠っているよ！' },
       { type: 'feature', text: 'ブロックの硬さシステム！石や鉱石は壊すのに時間がかかるよ' },

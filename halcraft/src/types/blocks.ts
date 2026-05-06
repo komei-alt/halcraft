@@ -42,6 +42,9 @@ export const BLOCK_IDS = {
   IRON_ORE: 34,
   GOLD_ORE: 35,
   DIAMOND_ORE: 36,
+  CHEST: 37,
+  FURNACE: 38,
+  TNT: 39,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -90,6 +93,8 @@ export interface BlockInfo {
   hardness?: number;
   /** 採掘に必要な最低ツールティア（0=素手, 1=木, 2=石, 3=鉄, 4=ダイヤ） */
   minToolTier?: number;
+  /** 爆破可能か（TNT） */
+  explosive?: boolean;
 }
 
 /** 全ブロックの定義テーブル */
@@ -486,6 +491,37 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     hardness: 6,
     minToolTier: 3,
   },
+  [BLOCK_IDS.CHEST]: {
+    id: BLOCK_IDS.CHEST,
+    name: 'チェスト',
+    texture: 'chest.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 2,
+  },
+  [BLOCK_IDS.FURNACE]: {
+    id: BLOCK_IDS.FURNACE,
+    name: 'かまど',
+    texture: 'furnace.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xff6600),
+    emissiveIntensity: 0.3,
+    hardness: 3,
+    minToolTier: 1,
+  },
+  [BLOCK_IDS.TNT]: {
+    id: BLOCK_IDS.TNT,
+    name: 'TNT',
+    texture: 'tnt.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 0,
+    explosive: true,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -506,6 +542,11 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.RAIL_BOOSTER,
   BLOCK_IDS.RAIL_LOOP,
   BLOCK_IDS.RAIL_CHAIN,
+  BLOCK_IDS.CHEST,
+  BLOCK_IDS.FURNACE,
+  BLOCK_IDS.TNT,
+  BLOCK_IDS.STONE,
+  BLOCK_IDS.SAND,
 ];
 
 /** チャンクサイズ定数 */
