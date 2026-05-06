@@ -66,6 +66,7 @@ import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
 import { AirSupplyBar } from './components/ui/AirSupplyBar';
 import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
+import { HungerBar } from './components/ui/HungerBar';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
 import './App.css';
@@ -243,6 +244,7 @@ export default function App() {
           <MinimapHUD />
           <CoasterHUD />
           <AirSupplyBar />
+          <HungerBar />
           <UnderwaterOverlay />
           <ControlsGuide />
           {!isTouch && <DesktopInputHint />}

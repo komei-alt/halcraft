@@ -1456,6 +1456,44 @@ export function Player() {
       }
     }
 
+    // --- 空腹ゲージの減少（サバイバルモードのみ） ---
+    if (!isBuildMode) {
+      const ps = usePlayerStore.getState();
+      let exhaustion = ps.hungerExhaustion;
+      const isMoving = Math.abs(vel.x) > 0.5 || Math.abs(vel.z) > 0.5;
+
+      if (isMoving) {
+        // 歩行で疲労蓄積、ダッシュで2倍
+        const moveExhaustion = keys.current.sprint ? 0.2 * dt : 0.08 * dt;
+        exhaustion += moveExhaustion;
+      }
+      // 水中は疲労が速い
+      if (isSwimming) {
+        exhaustion += 0.1 * dt;
+      }
+
+      // exhaustion が 4 溜まると空腹が 1 減少
+      let newHunger = ps.hunger;
+      if (exhaustion >= 4) {
+        exhaustion -= 4;
+        newHunger = Math.max(0, newHunger - 1);
+      }
+
+      // 空腹0で HP 減少
+      if (newHunger <= 0) {
+        ps.takeDamage(0.5 * dt);
+      }
+
+      // 空腹18以上で自然HP回復（ダメージ後3秒経過で）
+      if (newHunger >= 18 && ps.hp < 20 && performance.now() - ps.lastDamageTime > 3000) {
+        const newHp = Math.min(20, ps.hp + 0.5 * dt);
+        usePlayerStore.setState({ hp: newHp });
+        exhaustion += 0.15 * dt; // 回復で疲労
+      }
+
+      usePlayerStore.setState({ hunger: newHunger, hungerExhaustion: exhaustion });
+    }
+
     // --- カメラシェイクの減衰（MobManagerに依存せず常にここで処理） ---
     updateAttackCooldown(dt);
 

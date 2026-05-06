@@ -108,6 +108,12 @@ interface PlayerState {
   /** 息ゲージ（秒） */
   airSupply: number;
 
+  /** 空腹ゲージ（0-20） */
+  hunger: number;
+
+  /** 空腹減少用の蓄積カウンタ */
+  hungerExhaustion: number;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -180,6 +186,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isSubmerged: false,
   isInWater: false,
   airSupply: 15,
+  hunger: 20,
+  hungerExhaustion: 0,
 
   getSelectedBlock: () => {
     const state = get();
