@@ -16,7 +16,7 @@ import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectile
 import { spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playBulletImpactSound, playMachineGunSound } from '../utils/sounds';
 import { cloneSceneWithMaterials } from './vehicles/modelUtils';
-import { checkProjectileHitVehicle } from './vehicles/VehicleCombat';
+import { checkProjectileHitVehicle } from '../utils/vehicleCombat';
 
 const MACHINE_GUN_MODEL_PATH = '/models/2026-05-01/machine-gun.glb';
 const BULLET_DAMAGE = 1;

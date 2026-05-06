@@ -10,6 +10,7 @@ import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
 import { getCurrentBiome } from './biomeConfig';
+import { carveCaves } from './caves';
 import type { ChunkData } from './types';
 
 /**
@@ -74,6 +75,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
       }
     }
   }
+
+  // 地形生成後に洞窟をカービング
+  carveCaves(chunk, cx, cz);
 
   // 地形生成後に木を配置
   placeTreesInChunk(chunk, cx, cz);

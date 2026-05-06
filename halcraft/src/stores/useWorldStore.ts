@@ -43,7 +43,7 @@ function getAdaptiveChunkLimit(): number {
 function shouldIndexBlock(blockId: BlockId): boolean {
   if (blockId === BLOCK_IDS.AIR) return false;
   const def = BLOCK_DEFS[blockId];
-  return Boolean(def?.nonStandard || def?.lightColor);
+  return Boolean(def?.nonStandard || def?.lightColor || def?.isLiquid);
 }
 
 function buildChunkBlockIndex(chunk: ChunkData, cx: number, cz: number): ChunkBlockIndex {

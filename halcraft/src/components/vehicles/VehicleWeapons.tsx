@@ -31,7 +31,7 @@ import {
 } from '../../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 import { TANK_TURRET_PIVOT } from './vehicleModelConfig';
-import { checkProjectileHitVehicle } from './VehicleCombat';
+import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 
 const BULLET_SPEED = 130;
 const BULLET_MAX_AGE = 0.95;

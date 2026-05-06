@@ -5,7 +5,7 @@
 import { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT } from '../types/blocks';
+import { BLOCK_IDS } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 
 /** 水面シェーダーマテリアル（波アニメーション + 半透明） */
@@ -79,36 +79,25 @@ export function WaterRenderer() {
   const materialRef = useRef<THREE.ShaderMaterial>(createWaterMaterial());
   const dummyRef = useRef(new THREE.Object3D());
 
-  // 全チャンクから水ブロック位置を収集
-  const chunks = useWorldStore((s) => s.chunks);
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
+  const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
+  const getBlock = useWorldStore((s) => s.getBlock);
 
   const waterPositions = useMemo(() => {
+    // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
+    void blockIndexVersion;
     const positions: number[] = [];
+    const indexedWater = getIndexedBlockPositions(BLOCK_IDS.WATER);
 
-    chunks.forEach((chunk, key) => {
-      const [cx, cz] = key.split(',').map(Number);
-      const baseX = cx * CHUNK_SIZE;
-      const baseZ = cz * CHUNK_SIZE;
-
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-          for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-            if (chunk[lx][ly][lz] === BLOCK_IDS.WATER) {
-              // 水面のみ描画（上に水がなければ水面）
-              const above = ly + 1 < WORLD_HEIGHT ? chunk[lx][ly + 1][lz] : BLOCK_IDS.AIR;
-              if (above !== BLOCK_IDS.WATER) {
-                positions.push(baseX + lx, ly, baseZ + lz);
-              }
-            }
-          }
-        }
+    for (const pos of indexedWater) {
+      // 水面のみ描画（上に水がなければ水面）
+      if (getBlock(pos.x, pos.y + 1, pos.z) !== BLOCK_IDS.WATER) {
+        positions.push(pos.x, pos.y, pos.z);
       }
-    });
+    }
 
     return new Float32Array(positions);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunks, blockIndexVersion]);
+  }, [blockIndexVersion, getBlock, getIndexedBlockPositions]);
 
   const count = waterPositions.length / 3;
 
