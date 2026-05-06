@@ -66,3 +66,20 @@ export function checkAABBCollision(
   }
   return false;
 }
+
+/**
+ * 指定位置が水の中かチェック
+ * プレイヤーの目線高さで判定する
+ */
+export function isInWater(getBlock: GetBlockFn, x: number, y: number, z: number): boolean {
+  const blockId = getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+  return blockId === BLOCK_IDS.WATER;
+}
+
+/**
+ * 指定位置が溶岩の中かチェック
+ */
+export function isInLava(getBlock: GetBlockFn, x: number, y: number, z: number): boolean {
+  const blockId = getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+  return blockId === BLOCK_IDS.LAVA;
+}

@@ -73,11 +73,9 @@ export function Environment() {
 
   // scene の初期設定（マウント時に一度だけ実行）
   // scene は R3F が管理する外部オブジェクトであり、副作用として初期化する必要がある
-  /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     ensureSceneEnvironment(scene);
   }, [scene]);
-  /* eslint-enable react-hooks/immutability */
 
   // 毎フレーム昼夜サイクルを更新
   useFrame((_, delta) => {

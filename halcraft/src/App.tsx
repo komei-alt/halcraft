@@ -22,6 +22,7 @@ import { TurretRenderer } from './components/TurretRenderer';
 import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from './components/DecorBlocks';
 import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
+import { WaterRenderer } from './components/WaterRenderer';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -63,6 +64,8 @@ import { DesktopInputHint } from './components/ui/DesktopInputHint';
 import { WeaponSwitchPopover } from './components/ui/WeaponSwitchPopover';
 import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
+import { AirSupplyBar } from './components/ui/AirSupplyBar';
+import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
 import './App.css';
@@ -126,6 +129,7 @@ function GameCanvas() {
         <SoundManager />
         <RailRenderer />
         <CoasterCart />
+        <WaterRenderer />
       </Suspense>
     </Canvas>
   );
@@ -238,6 +242,8 @@ export default function App() {
           <CockpitHUD />
           <MinimapHUD />
           <CoasterHUD />
+          <AirSupplyBar />
+          <UnderwaterOverlay />
           <ControlsGuide />
           {!isTouch && <DesktopInputHint />}
           <VoiceChatUI />

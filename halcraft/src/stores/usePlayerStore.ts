@@ -99,6 +99,15 @@ interface PlayerState {
   /** ダメージを受けた方向（ラジアン、画面上の角度） */
   damageDirection: number | null;
 
+  /** 水中に沈んでいるか（目線が水中） */
+  isSubmerged: boolean;
+
+  /** 水に触れているか（足または目が水中） */
+  isInWater: boolean;
+
+  /** 息ゲージ（秒） */
+  airSupply: number;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -168,6 +177,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   knockbackVx: 0,
   knockbackVz: 0,
   damageDirection: null,
+  isSubmerged: false,
+  isInWater: false,
+  airSupply: 15,
 
   getSelectedBlock: () => {
     const state = get();

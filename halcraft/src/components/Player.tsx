@@ -21,7 +21,7 @@ import {
   ALL_SEATS,
   type VehicleType,
 } from '../stores/useVehicleStore';
-import { checkAABBCollision, isBlockSolid } from '../utils/collision';
+import { checkAABBCollision, isBlockSolid, isInWater, isInLava } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { isRailBlock, CART_BOARD_DISTANCE, COASTER_START_PUSH_SPEED } from '../utils/coasterPhysics';
@@ -48,6 +48,16 @@ const CREATIVE_DOUBLE_JUMP_MS = 350;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
+/** 水中の移動速度倍率 */
+const WATER_SPEED_MULT = 0.45;
+/** 水中の重力倍率 */
+const WATER_GRAVITY_MULT = 0.15;
+/** 水中の泳ぎ上昇速度 */
+const WATER_SWIM_SPEED = 3.5;
+/** 最大息（秒） */
+const MAX_AIR_SUPPLY = 15;
+/** 溶岩ダメージ（毎秒） */
+const LAVA_DAMAGE_PER_SEC = 4;
 const AIRCRAFT_MOUSE_YAW_RANGE = 0.72;
 const HELICOPTER_BANK_LIMIT = 0.45;
 const HELICOPTER_PILOT_CAMERA_FOLLOW_RATE = 8;
@@ -1284,17 +1294,62 @@ export function Player() {
     // 通常の歩行物理（ヘリコプターに乗っていない場合）
     // ========================================
 
+    // --- 水中/溶岩判定 ---
+    const eyeY = pos.y + PLAYER_HEIGHT - 0.2;
+    const feetY = pos.y + 0.1;
+    const inWaterEye = isInWater(getBlock, pos.x, eyeY, pos.z);
+    const inWaterFeet = isInWater(getBlock, pos.x, feetY, pos.z);
+    const isSwimming = inWaterEye || inWaterFeet;
+    const inLava = isInLava(getBlock, pos.x, feetY, pos.z);
+
+    // 水中状態をストアに通知（UIに使う）
+    const playerStore = usePlayerStore.getState();
+    if (playerStore.isSubmerged !== inWaterEye) {
+      usePlayerStore.setState({ isSubmerged: inWaterEye });
+    }
+    if (playerStore.isInWater !== isSwimming) {
+      usePlayerStore.setState({ isInWater: isSwimming });
+    }
+
+    // --- 息ゲージ（水中のみ減少） ---
+    if (inWaterEye && !isBuildMode) {
+      const newAir = Math.max(0, playerStore.airSupply - dt);
+      usePlayerStore.setState({ airSupply: newAir });
+      if (newAir <= 0) {
+        // 息切れ: 毎秒2ダメージ
+        playerStore.takeDamage(2 * dt);
+      }
+    } else if (playerStore.airSupply < MAX_AIR_SUPPLY) {
+      // 水上で息回復
+      usePlayerStore.setState({
+        airSupply: Math.min(MAX_AIR_SUPPLY, playerStore.airSupply + dt * 3),
+      });
+    }
+
+    // --- 溶岩ダメージ ---
+    if (inLava && !isBuildMode) {
+      playerStore.takeDamage(LAVA_DAMAGE_PER_SEC * dt);
+    }
+
     // --- ジャンプ（重力適用前に処理） ---
-    if (isInputActive && jumpRequested && onGround.current) {
-      vel.y = JUMP_VELOCITY;
-      onGround.current = false;
+    if (isInputActive && jumpRequested) {
+      if (isSwimming) {
+        // 水中: ジャンプキーで泳ぎ上昇
+        vel.y = WATER_SWIM_SPEED;
+      } else if (onGround.current) {
+        vel.y = JUMP_VELOCITY;
+        onGround.current = false;
+      }
     }
 
     // --- 重力（空中の場合のみ適用、接地中はスキップして振動を防ぐ） ---
     if (!onGround.current) {
-      vel.y += GRAVITY * dt;
-      // 終端速度を制限
-      if (vel.y < -40) vel.y = -40;
+      // 水中は重力を大幅に弱める
+      const gravity = isSwimming ? GRAVITY * WATER_GRAVITY_MULT : GRAVITY;
+      vel.y += gravity * dt;
+      // 終端速度を制限（水中は遅い）
+      const terminalVel = isSwimming ? -5 : -40;
+      if (vel.y < terminalVel) vel.y = terminalVel;
     } else {
       // 接地中は垂直速度を強制的にゼロ維持（重力→衝突→スナップの振動を防止）
       vel.y = 0;
@@ -1309,7 +1364,8 @@ export function Player() {
     }
 
     // --- 水平入力 ---
-    const speed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;
+    const baseSpeed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;
+    const speed = isSwimming ? baseSpeed * WATER_SPEED_MULT : baseSpeed;
 
     let inputX: number;
     let inputZ: number;
@@ -1331,9 +1387,10 @@ export function Player() {
       vel.x = moveDir.current.x * speed;
       vel.z = moveDir.current.z * speed;
     } else {
-      // 入力なし → 減速
-      vel.x *= 0.85;
-      vel.z *= 0.85;
+      // 入力なし → 減速（水中はさらに速い減速）
+      const friction = isSwimming ? 0.92 : 0.85;
+      vel.x *= friction;
+      vel.z *= friction;
       if (Math.abs(vel.x) < 0.01) vel.x = 0;
       if (Math.abs(vel.z) < 0.01) vel.z = 0;
     }

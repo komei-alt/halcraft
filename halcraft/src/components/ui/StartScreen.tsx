@@ -107,13 +107,11 @@ export function StartScreen() {
     [selectedCategory],
   );
 
-  // カテゴリ切替時に、選択中のステージが新しいカテゴリに属さなければ先頭に変更
-  useEffect(() => {
-    const belongs = filteredStages.some(s => s.id === selectedStageId);
-    if (!belongs && filteredStages.length > 0) {
-      setSelectedStageId(filteredStages[0].id);
-    }
-  }, [selectedCategory, filteredStages, selectedStageId]);
+  // カテゴリ切替直後は、stateを書き換えずに表示・開始対象だけを先頭ステージへ補正する
+  const activeStageId = useMemo(() => {
+    if (filteredStages.some(s => s.id === selectedStageId)) return selectedStageId;
+    return filteredStages[0]?.id ?? selectedStageId;
+  }, [filteredStages, selectedStageId]);
 
   // ビューポートサイズを追跡（UpdateLog 表示判定＋レイアウト切り替え用）
   const [viewportSize, setViewportSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -174,18 +172,26 @@ export function StartScreen() {
     const trimmedName = name.trim();
     try { 
       localStorage.setItem(PLAYER_NAME_KEY, trimmedName); 
-      localStorage.setItem(SELECTED_STAGE_KEY, selectedStageId); 
+      localStorage.setItem(SELECTED_STAGE_KEY, activeStageId); 
       localStorage.setItem(SELECTED_CATEGORY_KEY, selectedCategory);
     } catch { /* noop */ }
 
-    // ゲーム開始 + マルチプレイ接続
-    requestFullscreen();
-    initAudio();
-    initPushIfPWA().catch(() => { /* noop */ });
-
-    setStage(selectedStageId);
+    // ゲーム開始は、Fullscreen や通知などの補助処理に失敗しても必ず先に進める
+    setStage(activeStageId);
     startGame();
-    join(trimmedName, selectedStageId);
+    join(trimmedName, activeStageId);
+
+    try {
+      requestFullscreen();
+    } catch {
+      // noop
+    }
+    try {
+      initAudio();
+    } catch {
+      // noop
+    }
+    initPushIfPWA().catch(() => { /* noop */ });
 
     // メニューのクリック直後に canvas をアクティブ化して操作不能に見える状態を防ぐ
     window.requestAnimationFrame(() => {
@@ -194,7 +200,7 @@ export function StartScreen() {
         activateDesktopGameplayInput();
       }, 120);
     });
-  }, [isValidName, isJoining, name, selectedCategory, selectedStageId, setStage, startGame, join]);
+  }, [isValidName, isJoining, name, selectedCategory, activeStageId, setStage, startGame, join]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -350,7 +356,7 @@ export function StartScreen() {
           }}
         >
           {filteredStages.map((stage) => {
-            const isSelected = selectedStageId === stage.id;
+            const isSelected = activeStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
             return (
               <div

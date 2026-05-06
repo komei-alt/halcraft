@@ -35,6 +35,9 @@ export const BLOCK_IDS = {
   RAIL_BOOSTER: 27,
   RAIL_LOOP: 28,
   RAIL_CHAIN: 29,
+  WATER: 30,
+  STONE: 31,
+  LAVA: 32,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -77,6 +80,8 @@ export interface BlockInfo {
   nonStandard?: boolean;
   /** 当たり判定がないか（松明のように通過できるもの） */
   noCollision?: boolean;
+  /** 液体ブロックか（水・溶岩） */
+  isLiquid?: boolean;
 }
 
 /** 全ブロックの定義テーブル */
@@ -398,6 +403,41 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     nonStandard: true,
     noCollision: true,
   },
+  [BLOCK_IDS.WATER]: {
+    id: BLOCK_IDS.WATER,
+    name: '水',
+    texture: 'water.png',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: false,
+    noCollision: true,
+    isLiquid: true,
+  },
+  [BLOCK_IDS.STONE]: {
+    id: BLOCK_IDS.STONE,
+    name: '石ブロック',
+    texture: 'stone.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+  },
+  [BLOCK_IDS.LAVA]: {
+    id: BLOCK_IDS.LAVA,
+    name: '溶岩',
+    texture: 'lava.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0xff4400),
+    emissiveIntensity: 1.5,
+    lightColor: new THREE.Color(0xff6622),
+    lightIntensity: 3.5,
+    lightDistance: 15,
+    nonStandard: false,
+    noCollision: true,
+    isLiquid: true,
+  },
 };
 
 /** ホットバーに並ぶブロックの順番 */
@@ -423,6 +463,8 @@ export const HOTBAR_BLOCKS: BlockId[] = [
 /** チャンクサイズ定数 */
 export const CHUNK_SIZE = 16;
 /** ワールドの高さ限界 */
-export const WORLD_HEIGHT = 64;
+export const WORLD_HEIGHT = 128;
+/** 海面レベル（この高さ以下の空気ブロックが水で埋まる） */
+export const SEA_LEVEL = 22;
 /** 初期のレンダリング距離（チャンク数） — 広大なバイオームワールド */
 export const RENDER_DISTANCE = 12;

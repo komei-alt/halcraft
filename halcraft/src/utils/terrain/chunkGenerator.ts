@@ -2,7 +2,7 @@
 // 基本地形＋構造物配置のオーケストレータ
 // バイオーム設定に基づいてブロック種を変更
 
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../../types/blocks';
+import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, type BlockId } from '../../types/blocks';
 import { getTerrainHeight } from './heightmap';
 import { placeTreesInChunk } from './structures/trees';
 import { placePlayerHouse } from './structures/house';
@@ -15,6 +15,7 @@ import type { ChunkData } from './types';
 /**
  * チャンク座標 (cx, cz) のチャンクデータを生成する
  * バイオーム設定に基づいて地表・地中ブロックを選択
+ * 石レイヤー・水面生成を含む
  * 地形生成後に木を自動配置する
  */
 export function generateChunk(cx: number, cz: number): ChunkData {
@@ -24,7 +25,8 @@ export function generateChunk(cx: number, cz: number): ChunkData {
   // バイオームのブロック種を取得
   const surfaceBlock: BlockId = biome.surfaceBlock;
   const subSurfaceBlock: BlockId = biome.subSurfaceBlock;
-  const deepBlock: BlockId = biome.deepBlock;
+  // 砂漠は水を置かない
+  const fillWater = biome.id !== 'desert';
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     chunk[lx] = [];
@@ -45,17 +47,28 @@ export function generateChunk(cx: number, cz: number): ChunkData {
         if (ly === 0) {
           // 最下層は必ず岩盤
           blockId = BLOCK_IDS.BEDROCK;
+        } else if (ly < surfaceY - 6) {
+          // 深層は石ブロック
+          blockId = BLOCK_IDS.STONE;
         } else if (ly < surfaceY - 3) {
-          // 地中深くは深層ブロック
-          blockId = deepBlock;
+          // 石と地表の間は地中ブロック（土など）
+          blockId = subSurfaceBlock;
         } else if (ly < surfaceY) {
           // 地表の数ブロック下は地中ブロック
           blockId = subSurfaceBlock;
         } else if (ly === surfaceY) {
           // 地表面はバイオームの地表ブロック
-          blockId = surfaceBlock;
+          // 水面以下の地表は砂に置き換え（水底）
+          if (fillWater && surfaceY < SEA_LEVEL) {
+            blockId = BLOCK_IDS.SAND;
+          } else {
+            blockId = surfaceBlock;
+          }
+        } else if (fillWater && ly > surfaceY && ly <= SEA_LEVEL) {
+          // 地表より上で海面以下は水で埋める
+          blockId = BLOCK_IDS.WATER;
         }
-        // ly > surfaceY は AIR
+        // ly > surfaceY && ly > SEA_LEVEL は AIR
 
         chunk[lx][ly][lz] = blockId;
       }
