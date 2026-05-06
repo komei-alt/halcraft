@@ -38,6 +38,10 @@ export const BLOCK_IDS = {
   WATER: 30,
   STONE: 31,
   LAVA: 32,
+  COAL_ORE: 33,
+  IRON_ORE: 34,
+  GOLD_ORE: 35,
+  DIAMOND_ORE: 36,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -82,6 +86,10 @@ export interface BlockInfo {
   noCollision?: boolean;
   /** 液体ブロックか（水・溶岩） */
   isLiquid?: boolean;
+  /** 硬さ（破壊にかかる秒数、未指定は0.5） */
+  hardness?: number;
+  /** 採掘に必要な最低ツールティア（0=素手, 1=木, 2=石, 3=鉄, 4=ダイヤ） */
+  minToolTier?: number;
 }
 
 /** 全ブロックの定義テーブル */
@@ -437,6 +445,46 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     nonStandard: false,
     noCollision: true,
     isLiquid: true,
+  },
+  [BLOCK_IDS.COAL_ORE]: {
+    id: BLOCK_IDS.COAL_ORE,
+    name: '石炭鉱石',
+    texture: 'coal_ore.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 3,
+    minToolTier: 1,
+  },
+  [BLOCK_IDS.IRON_ORE]: {
+    id: BLOCK_IDS.IRON_ORE,
+    name: '鉄鉱石',
+    texture: 'iron_ore.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 4,
+    minToolTier: 2,
+  },
+  [BLOCK_IDS.GOLD_ORE]: {
+    id: BLOCK_IDS.GOLD_ORE,
+    name: '金鉱石',
+    texture: 'gold_ore.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 5,
+    minToolTier: 3,
+  },
+  [BLOCK_IDS.DIAMOND_ORE]: {
+    id: BLOCK_IDS.DIAMOND_ORE,
+    name: 'ダイヤモンド鉱石',
+    texture: 'diamond_ore.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 6,
+    minToolTier: 3,
   },
 };
 

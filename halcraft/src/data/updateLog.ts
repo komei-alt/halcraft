@@ -47,6 +47,10 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-06',
     items: [
+      { type: 'feature', text: '⛏️ 洞窟システム追加！地下を掘ると自然な洞窟が見つかるよ！' },
+      { type: 'feature', text: '💎 鉱石追加！石炭・鉄・金・ダイヤモンドが地下に眠っているよ！' },
+      { type: 'feature', text: 'ブロックの硬さシステム！石や鉱石は壊すのに時間がかかるよ' },
+      { type: 'feature', text: 'ブロック破壊がマイクラみたいに段階的になったよ！押しっぱなしで掘れる！' },
       { type: 'feature', text: '🌊 水ブロック追加！海や湖が自然に広がるようになったよ！' },
       { type: 'feature', text: '水に入ると泳げるようになった！水中では動きがゆっくりになるよ' },
       { type: 'feature', text: '水中に潜ると息ゲージが出るよ！息がなくなるとダメージを受けるので注意！' },

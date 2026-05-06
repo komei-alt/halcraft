@@ -13,7 +13,7 @@ import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
-import { BLOCK_IDS } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
@@ -53,6 +53,17 @@ interface TargetBlock {
   distance: number;
 }
 
+/** ブロック破壊の進行状態 */
+interface BreakProgress {
+  x: number;
+  y: number;
+  z: number;
+  /** 現在の破壊進行度（0〜1） */
+  progress: number;
+  /** そのブロックの硬さ（秒） */
+  hardness: number;
+}
+
 interface TargetPlayer {
   id: string;
   x: number;
@@ -89,6 +100,33 @@ function BlockHighlight({ target }: { target: TargetBlock | null }) {
       geometry={highlightGeometry}
       material={highlightMaterial}
     />
+  );
+}
+
+/** ブロック破壊の進行度表示（ひび割れオーバーレイ） */
+function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProgress | null }) {
+  if (!breakProgress || breakProgress.progress <= 0) return null;
+  const stage = Math.min(9, Math.floor(breakProgress.progress * 10));
+  // 10段階の透明度（進行するほど濃く）
+  const opacity = 0.15 + stage * 0.075;
+  return (
+    <mesh
+      position={[
+        breakProgress.x + 0.5,
+        breakProgress.y + 0.5,
+        breakProgress.z + 0.5,
+      ]}
+    >
+      <boxGeometry args={[1.005, 1.005, 1.005]} />
+      <meshBasicMaterial
+        color={0x000000}
+        transparent
+        opacity={opacity}
+        depthTest={true}
+        polygonOffset
+        polygonOffsetFactor={-1}
+      />
+    </mesh>
   );
 }
 
@@ -154,6 +192,12 @@ export function BlockInteraction() {
   const tempOrigin = useRef(new THREE.Vector3());
   const tempToTarget = useRef(new THREE.Vector3());
   const tempClosest = useRef(new THREE.Vector3());
+
+  // ブロック破壊の進行状態
+  const breakProgressRef = useRef<BreakProgress | null>(null);
+  const [breakProgressState, setBreakProgressState] = useState<BreakProgress | null>(null);
+  // 左クリック押しっぱなし状態
+  const isBreakingRef = useRef(false);
 
   // 照準先のリモートプレイヤーを検索
   const getAttackDistanceLimit = useCallback((): number => {
@@ -341,6 +385,16 @@ export function BlockInteraction() {
 
       const block = getBlock(bx, by, bz);
       if (block !== BLOCK_IDS.AIR) {
+        // 液体ブロックは破壊対象外（通過）
+        const def = BLOCK_DEFS[block];
+        if (def?.isLiquid || def?.noCollision) {
+          // 液体・非実体ブロックは空気と同じ扱い
+          lastAirX = bx;
+          lastAirY = by;
+          lastAirZ = bz;
+          hasLastAir = true;
+          continue;
+        }
         // 固体ブロックにヒット！
         found = {
           x: bx, y: by, z: bz,
@@ -368,6 +422,47 @@ export function BlockInteraction() {
       if (found.x === prev.x && found.y === prev.y && found.z === prev.z) return prev;
       return found;
     });
+
+    // --- 段階的ブロック破壊の進行（デスクトップ 左クリック押しっぱなし） ---
+    if (isBreakingRef.current && found && !isTouch.current) {
+      if (usePlayerStore.getState().isDead) { isBreakingRef.current = false; return; }
+      if (useVehicleStore.getState().isInVehicle()) { isBreakingRef.current = false; return; }
+      if (equippedItem !== 'builder') { isBreakingRef.current = false; return; }
+
+      const bp = breakProgressRef.current;
+      const blockId = getBlock(found.x, found.y, found.z);
+      const def = BLOCK_DEFS[blockId];
+      const hardness = isBuildMode ? 0 : (def?.hardness ?? 0.5);
+
+      // ターゲットが変わったらリセット
+      if (!bp || bp.x !== found.x || bp.y !== found.y || bp.z !== found.z) {
+        breakProgressRef.current = { x: found.x, y: found.y, z: found.z, progress: 0, hardness };
+      } else {
+        // 進行度を加算
+        const dt = 1 / 60; // おおよそのフレーム間隔
+        bp.progress += dt / hardness;
+
+        if (bp.progress >= 1) {
+          // 破壊完了！
+          if (breakBlock(found.x, found.y, found.z)) {
+            spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
+            if (!isBuildMode) {
+              dropItem(blockId, found.x, found.y, found.z);
+            }
+            sendBlockBreak(found.x, found.y, found.z);
+          }
+          breakProgressRef.current = null;
+        }
+      }
+
+      setBreakProgressState(breakProgressRef.current ? { ...breakProgressRef.current } : null);
+    } else if (!isBreakingRef.current) {
+      // 押していない場合はリセット
+      if (breakProgressRef.current) {
+        breakProgressRef.current = null;
+        setBreakProgressState(null);
+      }
+    }
 
     // --- モバイル: タッチによるブロック操作の処理 ---
     if (isTouch.current) {
@@ -428,19 +523,21 @@ export function BlockInteraction() {
     if (equippedItem !== 'builder') return;
 
     if (e.button === 0) {
-      // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック破壊
+      // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック段階破壊開始
       if (!tryMeleeAttack()) {
-        // ブロック破壊
-        const t = targetRef.current;
-        if (!t) return;
-        const blockId = getBlock(t.x, t.y, t.z);
-        if (breakBlock(t.x, t.y, t.z)) {
-          // パーティクルエフェクト + ドロップアイテム
-          spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-          if (!isBuildMode) {
-            dropItem(blockId, t.x, t.y, t.z);
+        // ビルドモードは即破壊
+        if (isBuildMode) {
+          const t = targetRef.current;
+          if (t) {
+            const blockId = getBlock(t.x, t.y, t.z);
+            if (breakBlock(t.x, t.y, t.z)) {
+              spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
+              sendBlockBreak(t.x, t.y, t.z);
+            }
           }
-          sendBlockBreak(t.x, t.y, t.z);
+        } else {
+          // サバイバルモード: 押しっぱなしで段階的破壊
+          isBreakingRef.current = true;
         }
       }
     } else if (e.button === 2) {
@@ -460,20 +557,34 @@ export function BlockInteraction() {
     }
   }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode]);
 
+  // 左クリック離し → 破壊中止
+  const handleMouseUp = useCallback((e: MouseEvent) => {
+    if (e.button === 0) {
+      isBreakingRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     // デスクトップのみ: マウスイベントを登録
     if (isTouch.current) return;
 
     document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mouseup', handleMouseUp);
     // 右クリックのコンテキストメニューを無効化
     const preventContext = (e: Event) => e.preventDefault();
     document.addEventListener('contextmenu', preventContext);
 
     return () => {
       document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('contextmenu', preventContext);
     };
-  }, [handleMouseDown]);
+  }, [handleMouseDown, handleMouseUp]);
 
-  return <BlockHighlight target={target} />;
+  return (
+    <>
+      <BlockHighlight target={target} />
+      <BlockBreakProgressOverlay breakProgress={breakProgressState} />
+    </>
+  );
 }

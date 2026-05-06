@@ -11,12 +11,13 @@ import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
 import { getCurrentBiome } from './biomeConfig';
 import { carveCaves } from './caves';
+import { placeOres } from './ores';
 import type { ChunkData } from './types';
 
 /**
  * チャンク座標 (cx, cz) のチャンクデータを生成する
  * バイオーム設定に基づいて地表・地中ブロックを選択
- * 石レイヤー・水面生成を含む
+ * 石レイヤー・水面生成・洞窟カービング・鉱石配置を含む
  * 地形生成後に木を自動配置する
  */
 export function generateChunk(cx: number, cz: number): ChunkData {
@@ -78,6 +79,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // 地形生成後に洞窟をカービング
   carveCaves(chunk, cx, cz);
+
+  // 洞窟後に鉱石を配置（石ブロックを鉱石に置き換え）
+  placeOres(chunk, cx, cz);
 
   // 地形生成後に木を配置
   placeTreesInChunk(chunk, cx, cz);
