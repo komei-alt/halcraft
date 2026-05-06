@@ -6,7 +6,7 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 
 /** 実際に配置する PointLight の最大数（GPU負荷の上限） */
@@ -15,8 +15,6 @@ const MAX_LIGHTS = 12;
 const LIGHT_COLLECT_RANGE = 50;
 /** 光源を収集する最大距離の二乗 */
 const LIGHT_COLLECT_RANGE_SQ = LIGHT_COLLECT_RANGE * LIGHT_COLLECT_RANGE;
-/** 光源スキャン用のチャンク半径（LIGHT_COLLECT_RANGE をチャンクサイズで割って切り上げ） */
-const LIGHT_SCAN_CHUNK_RADIUS = Math.ceil(LIGHT_COLLECT_RANGE / CHUNK_SIZE);
 /** 光源クラスタリングの統合距離（この距離内の光源は1つにまとめる） */
 const CLUSTER_DISTANCE = 6;
 /** クラスタリング距離の二乗 */
@@ -119,41 +117,8 @@ function clusterLightSources(sources: LightSource[]): LightCluster[] {
 }
 
 /** カメラ周辺のチャンクから発光ブロックを収集する（毎フレーム再計算を避けるためキャッシュ） */
-function collectNearbyLightSources(camX: number, camZ: number): LightSource[] {
-  const sources: LightSource[] = [];
-  const camCx = Math.floor(camX / CHUNK_SIZE);
-  const camCz = Math.floor(camZ / CHUNK_SIZE);
-  const chunks = useWorldStore.getState().chunks;
-
-  for (let dx = -LIGHT_SCAN_CHUNK_RADIUS; dx <= LIGHT_SCAN_CHUNK_RADIUS; dx++) {
-    for (let dz = -LIGHT_SCAN_CHUNK_RADIUS; dz <= LIGHT_SCAN_CHUNK_RADIUS; dz++) {
-      const cx = camCx + dx;
-      const cz = camCz + dz;
-      const chunkData = chunks.get(`${cx},${cz}`);
-      if (!chunkData) continue;
-
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-          for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            const blockId = chunkData[lx][ly][lz];
-            if (blockId === BLOCK_IDS.AIR) continue;
-
-            const def = BLOCK_DEFS[blockId];
-            if (!def?.lightColor) continue;
-
-            sources.push({
-              x: cx * CHUNK_SIZE + lx,
-              y: ly,
-              z: cz * CHUNK_SIZE + lz,
-              blockId,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  return sources;
+function collectNearbyLightSources(): LightSource[] {
+  return useWorldStore.getState().getIndexedLightBlockPositions();
 }
 
 /** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
@@ -178,7 +143,7 @@ export function BlockLights() {
       const cz = camera.position.z;
 
       // カメラ周辺のチャンクから光源を収集
-      const allSources = collectNearbyLightSources(cx, cz);
+      const allSources = collectNearbyLightSources();
 
       // プレイヤー近くの光源をフィルタ
       const nearSources = allSources.filter((s) => {

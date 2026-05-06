@@ -91,8 +91,7 @@ interface ChunkRendererProps {
 /** 1チャンク分のブロックを描画するコンポーネント */
 function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
   const getChunk = useWorldStore((s) => s.getChunk);
-  const chunkVersions = useWorldStore((s) => s.chunkVersions);
-  const version = chunkVersions.get(`${cx},${cz}`) ?? 0;
+  const version = useWorldStore((s) => s.chunkVersions.get(`${cx},${cz}`) ?? 0);
 
   const chunkData = getChunk(cx, cz);
 
@@ -215,21 +214,10 @@ export function World() {
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
   const lastUpdateTime = useRef(0);
-  const initialized = useRef(false);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
     initChunks(RENDER_DISTANCE);
-    initialized.current = true;
-
-    // 即座生成分の可視チャンクリストを同期的に構築
-    const currentChunks = useWorldStore.getState().chunks;
-    const initial: [number, number][] = [];
-    currentChunks.forEach((_, key) => {
-      const [cx, cz] = key.split(',').map(Number);
-      initial.push([cx, cz]);
-    });
-    setVisibleChunks(initial);
   }, [initChunks]);
 
   // カメラ位置ベースで可視チャンクを更新 + 段階的チャンク生成

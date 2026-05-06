@@ -28,12 +28,17 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     chunk[lx] = [];
+    const worldX = cx * CHUNK_SIZE + lx;
+    const surfaceHeights: number[] = [];
+
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      surfaceHeights[lz] = getTerrainHeight(worldX, cz * CHUNK_SIZE + lz);
+    }
+
     for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
       chunk[lx][ly] = [];
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-        const worldX = cx * CHUNK_SIZE + lx;
-        const worldZ = cz * CHUNK_SIZE + lz;
-        const surfaceY = getTerrainHeight(worldX, worldZ);
+        const surfaceY = surfaceHeights[lz];
 
         let blockId: BlockId = BLOCK_IDS.AIR;
 

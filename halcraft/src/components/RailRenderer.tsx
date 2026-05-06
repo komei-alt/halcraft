@@ -6,7 +6,7 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT } from '../types/blocks';
+import { BLOCK_IDS } from '../types/blocks';
 import { isRailBlock, detectRailOrientation, type RailOrientation } from '../utils/coasterPhysics';
 
 /** レールの色定義 */
@@ -189,13 +189,8 @@ function isCurveOrientation(o: RailOrientation): boolean {
 export function RailRenderer() {
   const meshRef = useRef<THREE.Mesh>(null);
   const getBlock = useWorldStore((s) => s.getBlock);
-  const chunkVersions = useWorldStore((s) => s.chunkVersions);
-
-  const versionKey = useMemo(() => {
-    let sum = 0;
-    for (const v of chunkVersions.values()) sum += v;
-    return sum;
-  }, [chunkVersions]);
+  const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
+  const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
 
   // 直線レールとカーブレールの基本ジオメトリ
   const straightGeo = useMemo(() => createStraightRailGeometry(), []);
@@ -205,24 +200,20 @@ export function RailRenderer() {
   const mergedGeo = useMemo(() => {
     const rails: RailInstance[] = [];
 
-    const chunks = useWorldStore.getState().chunks;
-    for (const [chunkKeyStr, chunkData] of chunks.entries()) {
-      const parts = chunkKeyStr.split(',');
-      const cx = parseInt(parts[0]) * CHUNK_SIZE;
-      const cz = parseInt(parts[1]) * CHUNK_SIZE;
+    const railBlockIds = [
+      BLOCK_IDS.RAIL,
+      BLOCK_IDS.RAIL_SLOPE,
+      BLOCK_IDS.RAIL_BOOSTER,
+      BLOCK_IDS.RAIL_LOOP,
+      BLOCK_IDS.RAIL_CHAIN,
+    ];
 
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-          for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            const blockId = chunkData[lx][ly][lz];
-            if (!isRailBlock(blockId)) continue;
-
-            const wx = cx + lx;
-            const wz = cz + lz;
-            const orientation = detectRailOrientation(getBlock, wx, ly, wz);
-            rails.push({ x: wx, y: ly, z: wz, blockId, orientation });
-          }
-        }
+    for (const railBlockId of railBlockIds) {
+      const positions = getIndexedBlockPositions(railBlockId);
+      for (const pos of positions) {
+        if (!isRailBlock(pos.blockId)) continue;
+        const orientation = detectRailOrientation(getBlock, pos.x, pos.y, pos.z);
+        rails.push({ x: pos.x, y: pos.y, z: pos.z, blockId: pos.blockId, orientation });
       }
     }
 
@@ -344,7 +335,7 @@ export function RailRenderer() {
     geo.computeVertexNormals();
     return geo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versionKey, straightGeo, curveGeo, getBlock]);
+  }, [blockIndexVersion, straightGeo, curveGeo, getBlock, getIndexedBlockPositions]);
 
   // 特殊レールの発光アニメーション
   const matRef = useRef<THREE.MeshStandardMaterial>(null);

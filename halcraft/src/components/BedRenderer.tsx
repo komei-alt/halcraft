@@ -4,14 +4,8 @@
 
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT } from '../types/blocks';
+import { BLOCK_IDS } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
-
-interface BedPosition {
-  x: number;
-  y: number;
-  z: number;
-}
 
 // === 共有マテリアル（全ベッドで再利用） ===
 const woodFrameMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.85 });
@@ -38,34 +32,15 @@ const pillowBulgeGeom = new THREE.BoxGeometry(0.5, 0.04, 0.14);
 
 /** ワールド内のすべてのベッドを描画 */
 export function BedRenderer() {
-  const chunks = useWorldStore((s) => s.chunks);
-  const chunkVersions = useWorldStore((s) => s.chunkVersions);
+  const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
+  const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
 
-  // 全チャンクからベッドの位置を収集
+  // 索引済みのベッド位置だけを取得
   const bedPositions = useMemo(() => {
-    const positions: BedPosition[] = [];
-
-    chunks.forEach((chunkData, key) => {
-      const [cx, cz] = key.split(',').map(Number);
-
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-          for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            if (chunkData[lx][ly][lz] === BLOCK_IDS.BED) {
-              positions.push({
-                x: cx * CHUNK_SIZE + lx,
-                y: ly,
-                z: cz * CHUNK_SIZE + lz,
-              });
-            }
-          }
-        }
-      }
-    });
-
-    return positions;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunks, chunkVersions]);
+    // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
+    void blockIndexVersion;
+    return getIndexedBlockPositions(BLOCK_IDS.BED);
+  }, [blockIndexVersion, getIndexedBlockPositions]);
 
   return (
     <group>

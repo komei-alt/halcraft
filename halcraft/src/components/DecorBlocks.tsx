@@ -1,43 +1,18 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
+import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 
-interface BlockPosition {
-  x: number;
-  y: number;
-  z: number;
-}
-
-function usePlacedBlockPositions(blockId: BlockId): BlockPosition[] {
-  const chunks = useWorldStore((s) => s.chunks);
-  const chunkVersions = useWorldStore((s) => s.chunkVersions);
+function usePlacedBlockPositions(blockId: BlockId) {
+  const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
+  const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
 
   return useMemo(() => {
-    const positions: BlockPosition[] = [];
-
-    chunks.forEach((chunkData, key) => {
-      void chunkVersions.get(key);
-      const [cx, cz] = key.split(',').map(Number);
-
-      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-          for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-            if (chunkData[lx][ly][lz] !== blockId) continue;
-
-            positions.push({
-              x: cx * CHUNK_SIZE + lx,
-              y: ly,
-              z: cz * CHUNK_SIZE + lz,
-            });
-          }
-        }
-      }
-    });
-
-    return positions;
-  }, [blockId, chunks, chunkVersions]);
+    // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
+    void blockIndexVersion;
+    return getIndexedBlockPositions(blockId);
+  }, [blockId, blockIndexVersion, getIndexedBlockPositions]);
 }
 
 const doorBodyMat = new THREE.MeshStandardMaterial({ color: 0x7d5b33, roughness: 0.92 });

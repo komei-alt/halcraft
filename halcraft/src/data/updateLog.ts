@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-06',
+    items: [
+      { type: 'improve', text: '広いマップでもブロックやライトを探す処理が速くなって、ゲームが重くなりにくくなったよ' },
+    ],
+  },
+  {
     date: '2026-05-03',
     items: [
       { type: 'fix', text: 'ゲーム開始時に足元が透明になるバグを修正！マップがすぐ見えるようになったよ' },

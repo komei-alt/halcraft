@@ -10,7 +10,6 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { BLOCK_IDS } from '../types/blocks';
-import { CHUNK_SIZE } from '../types/blocks';
 import { spawnDamagePopup } from '../utils/effectTriggers';
 import { rayMarchProjectile } from '../utils/projectilePhysics';
 import { playMachineGunSound, playBulletImpactSound } from '../utils/sounds';
@@ -30,8 +29,6 @@ const TURRET_DAMAGE = 3;
 const MOB_HIT_RADIUS = 1.2;
 /** 弾道の重力 */
 const BULLET_GRAVITY = 2.0;
-/** タレット検索間隔（秒） */
-const SCAN_INTERVAL = 0.5;
 /** トレイル長さ */
 const TRAIL_LENGTH = 3.0;
 /** インパクトパーティクル数 */
@@ -93,41 +90,19 @@ let nextTurretProjId = 10000;
 // メインコンポーネント
 // ────────────────────────────────────────────────────────
 export function TurretRenderer() {
-  const [turretPositions, setTurretPositions] = useState<TurretPos[]>([]);
-  const scanTimer = useRef(0);
+  const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
+  const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
 
-  // ワールドのチャンクからTURRETブロックを定期スキャン
-  useFrame((_, delta) => {
-    scanTimer.current += delta;
-    if (scanTimer.current < SCAN_INTERVAL) return;
-    scanTimer.current = 0;
-
-    const chunks = useWorldStore.getState().chunks;
-    const found: TurretPos[] = [];
-
-    for (const [chunkKey, data] of chunks.entries()) {
-      const parts = chunkKey.split(',');
-      const cx = parseInt(parts[0]) * CHUNK_SIZE;
-      const cz = parseInt(parts[1]) * CHUNK_SIZE;
-
-      for (let x = 0; x < CHUNK_SIZE; x++) {
-        if (!data[x]) continue;
-        for (let y = 0; y < 64; y++) {
-          if (!data[x][y]) continue;
-          for (let z = 0; z < CHUNK_SIZE; z++) {
-            if (data[x][y][z] === BLOCK_IDS.TURRET) {
-              const wx = cx + x;
-              const wz = cz + z;
-              const key = `${wx},${y},${wz}`;
-              found.push({ x: wx + 0.5, y: y + 0.5, z: wz + 0.5, key });
-            }
-          }
-        }
-      }
-    }
-
-    setTurretPositions(found);
-  });
+  const turretPositions = useMemo<TurretPos[]>(() => {
+    // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
+    void blockIndexVersion;
+    return getIndexedBlockPositions(BLOCK_IDS.TURRET).map((pos) => ({
+      x: pos.x + 0.5,
+      y: pos.y + 0.5,
+      z: pos.z + 0.5,
+      key: `${pos.x},${pos.y},${pos.z}`,
+    }));
+  }, [blockIndexVersion, getIndexedBlockPositions]);
 
   if (turretPositions.length === 0) return null;
 

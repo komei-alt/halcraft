@@ -30,6 +30,19 @@ let cachedBiomeId: string | null = null;
 let cachedFogNear = 100;
 let cachedFogFar = 250;
 
+function ensureSceneEnvironment(scene: THREE.Scene): { background: THREE.Color; fog: THREE.Fog } {
+  if (!(scene.background instanceof THREE.Color)) {
+    scene.background = new THREE.Color(0x87ceeb);
+  }
+  if (!(scene.fog instanceof THREE.Fog)) {
+    scene.fog = new THREE.Fog(0x87ceeb, cachedFogNear, cachedFogFar);
+  }
+  return {
+    background: scene.background,
+    fog: scene.fog,
+  };
+}
+
 function updateBiomeColors(biomeId: string): void {
   if (biomeId === cachedBiomeId) return;
   cachedBiomeId = biomeId;
@@ -62,8 +75,7 @@ export function Environment() {
   // scene は R3F が管理する外部オブジェクトであり、副作用として初期化する必要がある
   /* eslint-disable react-hooks/immutability */
   useEffect(() => {
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 100, 250);
+    ensureSceneEnvironment(scene);
   }, [scene]);
   /* eslint-enable react-hooks/immutability */
 
@@ -78,12 +90,11 @@ export function Environment() {
     // バイオーム色を更新
     const biomeId = gameState.currentBiome?.id ?? 'forest';
     updateBiomeColors(biomeId);
+    const sceneEnvironment = ensureSceneEnvironment(scene);
 
     // 霧距離をバイオームに合わせる
-    if (scene.fog instanceof THREE.Fog) {
-      scene.fog.near = cachedFogNear;
-      scene.fog.far = cachedFogFar;
-    }
+    sceneEnvironment.fog.near = cachedFogNear;
+    sceneEnvironment.fog.far = cachedFogFar;
 
     // 時間帯に応じた環境を計算（再利用オブジェクトで0アロケーション）
     let sunIntensity: number;
@@ -140,10 +151,8 @@ export function Environment() {
     );
 
     // シーンに適用
-    (scene.background as THREE.Color).copy(_skyColor);
-    if (scene.fog instanceof THREE.Fog) {
-      scene.fog.color.copy(_fogColor);
-    }
+    sceneEnvironment.background.copy(_skyColor);
+    sceneEnvironment.fog.color.copy(_fogColor);
 
     // ライト更新
     if (sunRef.current) {
