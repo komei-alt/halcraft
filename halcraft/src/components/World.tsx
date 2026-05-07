@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { isBlockExposed } from '../utils/terrain/blockExposure';
+import { getPerformanceProfile } from '../utils/performance';
 
 /** テクスチャキャッシュ（コンポーネント外で管理） */
 const textureCache = new Map<string, THREE.Texture>();
@@ -203,9 +204,6 @@ function BlockTypeInstances({
   );
 }
 
-/** カメラ視錐台カリング用の描画距離（チャンク単位） */
-const VISIBLE_DISTANCE = 10;
-
 /** ワールド全体の描画 */
 export function World() {
   const initChunks = useWorldStore((s) => s.initChunks);
@@ -213,6 +211,9 @@ export function World() {
   const processFluidSimulation = useWorldStore((s) => s.processFluidSimulation);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const { camera } = useThree();
+  const performanceProfile = getPerformanceProfile();
+  const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
+  const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
 
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
@@ -220,8 +221,8 @@ export function World() {
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
-    initChunks(RENDER_DISTANCE);
-  }, [initChunks]);
+    initChunks(initialRenderDistance);
+  }, [initChunks, initialRenderDistance]);
 
   // カメラ位置ベースで可視チャンクを更新 + 段階的チャンク生成
   const prevChunkKey = useRef('');
@@ -240,7 +241,7 @@ export function World() {
     const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     // カメラ周辺の未生成チャンクを動的に生成
-    ensureChunksAround(camX, camZ, VISIBLE_DISTANCE);
+    ensureChunksAround(camX, camZ, visibleDistance);
 
     // 可視範囲のチャンクを収集
     const visible: [number, number][] = [];
@@ -251,7 +252,7 @@ export function World() {
       const dx = Math.abs(cx - camX);
       const dz = Math.abs(cz - camZ);
       // チェビシェフ距離で判定（正方形の範囲）
-      if (Math.max(dx, dz) <= VISIBLE_DISTANCE) {
+      if (Math.max(dx, dz) <= visibleDistance) {
         visible.push([cx, cz]);
         keyParts.push(key);
       }

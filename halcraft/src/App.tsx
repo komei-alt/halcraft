@@ -73,10 +73,12 @@ import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
 import { HungerBar } from './components/ui/HungerBar';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
+import { getPerformanceProfile } from './utils/performance';
 import './App.css';
 
 function GameCanvas() {
   const isTouch = isTouchDevice();
+  const performanceProfile = getPerformanceProfile();
 
   return (
     <Canvas
@@ -84,9 +86,9 @@ function GameCanvas() {
       camera={{
         fov: isTouch ? 65 : 70,
         near: 0.1,
-        far: isTouch ? 250 : 500,
+        far: performanceProfile.cameraFar,
       }}
-      dpr={isTouch ? [1, 1.5] : [1, 2]}
+      dpr={[1, performanceProfile.maxDpr]}
       gl={{
         antialias: false,
         powerPreference: isTouch ? 'default' : 'high-performance',

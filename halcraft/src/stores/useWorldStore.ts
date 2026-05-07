@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { BLOCK_DEFS, BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 import { generateChunk } from '../utils/terrain/chunkGenerator';
 import type { ChunkData } from '../utils/terrain/types';
+import { getPerformanceProfile } from '../utils/performance';
 
 /** チャンクキーの生成 */
 const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
@@ -14,13 +15,7 @@ const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
 const blockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
 /** 1フレームあたりに必ず生成するチャンク数 */
-const MIN_CHUNKS_PER_FRAME = 2;
-
-/** 1フレームあたりに生成するチャンク数の上限 */
-const MAX_CHUNKS_PER_FRAME = 12;
-
-/** 1フレーム内でチャンク生成に使う最大時間（高性能機では余力を使う） */
-const CHUNK_GENERATION_BUDGET_MS = 7;
+const MIN_CHUNKS_PER_FRAME = 1;
 
 /** 初期ロード時の即座生成半径（足元付近を確実に表示） */
 const IMMEDIATE_RADIUS = 3;
@@ -109,7 +104,8 @@ function nowMs(): number {
 
 function getAdaptiveChunkLimit(): number {
   const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 8 : 8;
-  return Math.max(MIN_CHUNKS_PER_FRAME, Math.min(MAX_CHUNKS_PER_FRAME, Math.floor(cores / 2)));
+  const profileLimit = getPerformanceProfile().maxChunksPerFrame;
+  return Math.max(MIN_CHUNKS_PER_FRAME, Math.min(profileLimit, Math.floor(cores / 2)));
 }
 
 function shouldIndexBlock(blockId: BlockId): boolean {
@@ -279,7 +275,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     while (processed < chunkGenQueue.length) {
       if (
         generated >= MIN_CHUNKS_PER_FRAME &&
-        (generated >= chunkLimit || nowMs() - startedAt >= CHUNK_GENERATION_BUDGET_MS)
+        (generated >= chunkLimit || nowMs() - startedAt >= getPerformanceProfile().chunkGenerationBudgetMs)
       ) {
         break;
       }
