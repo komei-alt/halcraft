@@ -16,6 +16,8 @@ import {
 import { CRAFTING_RECIPES } from '../../types/crafting';
 import { type ToolId, TOOL_DEFS } from '../../types/tools';
 import { type ArmorId, ARMOR_DEFS } from '../../types/armor';
+import { type PotionId, POTION_DEFS } from '../../types/potions';
+import { useEffectStore } from '../../stores/useEffectStore';
 
 // === 定数 ===
 /** グリッドセルのサイズ (px) */
@@ -185,6 +187,10 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
         // 防具レシピの場合、防具を自動装備
         if (recipe.armorId) {
           equipArmor(recipe.armorId as ArmorId);
+        }
+        // ポーションレシピの場合、即座に使用
+        if (recipe.potionId) {
+          useEffectStore.getState().usePotion(recipe.potionId as PotionId);
         }
         setAddedBlockId(recipe.result);
         setTimeout(() => setAddedBlockId(null), 300);
@@ -588,10 +594,13 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
               const canMake = inventoryCanCraft(recipe);
               const isToolRecipe = !!recipe.toolId;
               const isArmorRecipe = !!recipe.armorId;
+              const isPotionRecipe = !!recipe.potionId;
               const toolDef = isToolRecipe ? TOOL_DEFS[recipe.toolId as ToolId] : null;
               const armorDef = isArmorRecipe ? ARMOR_DEFS[recipe.armorId as ArmorId] : null;
+              const potionDef = isPotionRecipe ? POTION_DEFS[recipe.potionId as PotionId] : null;
               const alreadyHas = (isToolRecipe && !!playerTools[recipe.toolId!])
                 || (isArmorRecipe && !!equippedArmor[armorDef?.slot ?? 'helmet']);
+              // ポーションは何度でも作れるので alreadyHas にならない
               const texUrl = getTextureUrl(recipe.result);
 
               return (
@@ -633,6 +642,8 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                       <span style={{ fontSize: 18 }}>{toolDef.emoji}</span>
                     ) : armorDef ? (
                       <span style={{ fontSize: 18 }}>{armorDef.emoji}</span>
+                    ) : potionDef ? (
+                      <span style={{ fontSize: 18 }}>{potionDef.emoji}</span>
                     ) : texUrl ? (
                       <img
                         src={texUrl}
@@ -651,7 +662,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                   {/* レシピ名 + 素材 */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      color: toolDef ? toolDef.color : armorDef ? armorDef.color : '#E8E8E8',
+                      color: toolDef ? toolDef.color : armorDef ? armorDef.color : potionDef ? potionDef.color : '#E8E8E8',
                       fontSize: 12,
                       fontWeight: 700,
                       textShadow: '1px 1px 2px rgba(0,0,0,0.5)',

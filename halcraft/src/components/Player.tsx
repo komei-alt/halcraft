@@ -35,6 +35,8 @@ import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActi
 import { getTerrainHeight } from '../utils/terrain/heightmap';
 import { airplaneRealtime } from '../utils/airplaneRealtime';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
+import { useEffectStore } from '../stores/useEffectStore';
+import { getSpeedMultiplier, getJumpBoostMultiplier } from '../types/potions';
 
 // 定数
 const MOVE_SPEED = 4.5;
@@ -1313,11 +1315,15 @@ export function Player() {
 
     // --- 息ゲージ（水中のみ減少） ---
     if (inWaterEye && !isBuildMode) {
-      const newAir = Math.max(0, playerStore.airSupply - dt);
-      usePlayerStore.setState({ airSupply: newAir });
-      if (newAir <= 0) {
-        // 息切れ: 毎秒2ダメージ
-        playerStore.takeDamage(2 * dt);
+      // 水中呼吸エフェクトがあれば息が減らない
+      const hasWaterBreathing = useEffectStore.getState().hasEffect('water_breathing');
+      if (!hasWaterBreathing) {
+        const newAir = Math.max(0, playerStore.airSupply - dt);
+        usePlayerStore.setState({ airSupply: newAir });
+        if (newAir <= 0) {
+          // 息切れ: 毎秒2ダメージ
+          playerStore.takeDamage(2 * dt);
+        }
       }
     } else if (playerStore.airSupply < MAX_AIR_SUPPLY) {
       // 水上で息回復
@@ -1326,9 +1332,12 @@ export function Player() {
       });
     }
 
-    // --- 溶岩ダメージ ---
+    // --- 溶岩ダメージ（耐火エフェクトで無効化） ---
     if (inLava && !isBuildMode) {
-      playerStore.takeDamage(LAVA_DAMAGE_PER_SEC * dt);
+      const hasFireRes = useEffectStore.getState().hasEffect('fire_resistance');
+      if (!hasFireRes) {
+        playerStore.takeDamage(LAVA_DAMAGE_PER_SEC * dt);
+      }
     }
 
     // --- ジャンプ（重力適用前に処理） ---
@@ -1339,6 +1348,11 @@ export function Player() {
       } else if (onGround.current) {
         vel.y = JUMP_VELOCITY;
         onGround.current = false;
+        // ジャンプブーストエフェクト
+        const jumpLevel = useEffectStore.getState().getEffectLevel('jump_boost');
+        if (jumpLevel > 0) {
+          vel.y = JUMP_VELOCITY * getJumpBoostMultiplier(jumpLevel);
+        }
       }
     }
 
@@ -1365,7 +1379,13 @@ export function Player() {
 
     // --- 水平入力 ---
     const baseSpeed = keys.current.sprint ? SPRINT_SPEED : MOVE_SPEED;
-    const speed = isSwimming ? baseSpeed * WATER_SPEED_MULT : baseSpeed;
+    // ポーションエフェクトによる速度倍率
+    const speedLevel = useEffectStore.getState().getEffectLevel('speed');
+    const slownessLevel = useEffectStore.getState().getEffectLevel('slowness');
+    let effectMult = 1.0;
+    if (speedLevel > 0) effectMult *= getSpeedMultiplier(speedLevel);
+    if (slownessLevel > 0) effectMult *= 0.7; // 鈍足: 30%減速
+    const speed = (isSwimming ? baseSpeed * WATER_SPEED_MULT : baseSpeed) * effectMult;
 
     let inputX: number;
     let inputZ: number;

@@ -1020,3 +1020,69 @@ export function playToolBreakSound(): void {
   ring.start(now);
   ring.stop(now + 0.4);
 }
+
+/** ポーション飲用SE — ゴクゴクという液体音 */
+export function playPotionDrinkSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  // 3回の「ゴク」を連続再生
+  for (let i = 0; i < 3; i++) {
+    const t = now + i * 0.12;
+    const gulp = ctx.createOscillator();
+    gulp.type = 'sine';
+    gulp.frequency.setValueAtTime(300 + i * 50, t);
+    gulp.frequency.exponentialRampToValueAtTime(150, t + 0.08);
+
+    const gulpGain = ctx.createGain();
+    gulpGain.gain.setValueAtTime(0.12, t);
+    gulpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+
+    gulp.connect(gulpGain);
+    gulpGain.connect(ctx.destination);
+    gulp.start(t);
+    gulp.stop(t + 0.1);
+  }
+
+  // シュワっという気泡音
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.2, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.03;
+  }
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const hpf = ctx.createBiquadFilter();
+  hpf.type = 'highpass';
+  hpf.frequency.value = 4000;
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.08, now + 0.3);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+  noise.connect(hpf);
+  hpf.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now + 0.3);
+  noise.stop(now + 0.5);
+}
+
+/** エフェクト終了SE — パシュッという消滅音 */
+export function playEffectExpireSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(800, now);
+  osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.2);
+}

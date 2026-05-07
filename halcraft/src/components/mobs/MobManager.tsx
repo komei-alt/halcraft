@@ -22,6 +22,8 @@ import { IronGolem } from './IronGolem';
 import { BossRenderer } from './BossRenderer';
 import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
 import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTriggers';
+import { useEffectStore } from '../../stores/useEffectStore';
+import { getRegenRate } from '../../types/potions';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -105,6 +107,16 @@ export function MobManager() {
 
     // HP回復を毎フレーム更新
     updateRegen(dt);
+
+    // エフェクトタイマー更新
+    useEffectStore.getState().updateEffects(dt);
+
+    // 再生エフェクトによるHP回復
+    const regenLevel = useEffectStore.getState().getEffectLevel('regeneration');
+    if (regenLevel > 0) {
+      const regenHP = getRegenRate(regenLevel) * dt;
+      usePlayerStore.getState().heal(regenHP);
+    }
 
     const isNight = gameState.isNight;
     const playerX = camera.position.x;

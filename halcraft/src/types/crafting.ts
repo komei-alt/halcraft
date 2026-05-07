@@ -21,6 +21,8 @@ export interface CraftingRecipe {
   toolId?: string;
   /** 防具クラフトの場合、付与する防具ID */
   armorId?: string;
+  /** ポーションクラフトの場合、使用するポーションID */
+  potionId?: string;
 }
 
 /** 全クラフトレシピの定義 */
@@ -487,5 +489,70 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.DIAMOND_GEM,
     resultCount: 1,
     armorId: 'diamond_boots',
+  },
+
+  // === ポーション ===
+  {
+    id: 'speed_potion',
+    name: '俊足のポーション',
+    description: '60秒間 移動速度が40%アップ',
+    ingredients: { [BLOCK_IDS.GRASS]: 3, [BLOCK_IDS.DIAMOND_GEM]: 1 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    potionId: 'speed_potion',
+  },
+  {
+    id: 'strength_potion',
+    name: '怪力のポーション',
+    description: '60秒間 攻撃力が3増加',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 3, [BLOCK_IDS.GOLD_INGOT]: 1 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    potionId: 'strength_potion',
+  },
+  {
+    id: 'regeneration_potion',
+    name: '再生のポーション',
+    description: '45秒間 HPが徐々に回復',
+    ingredients: { [BLOCK_IDS.GOLD_INGOT]: 3, [BLOCK_IDS.DIAMOND_GEM]: 1 },
+    result: BLOCK_IDS.GOLD_INGOT,
+    resultCount: 1,
+    potionId: 'regeneration_potion',
+  },
+  {
+    id: 'fire_resistance_potion',
+    name: '耐火のポーション',
+    description: '3分間 炎と溶岩のダメージを無効化',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 5, [BLOCK_IDS.LAVA]: 1 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    potionId: 'fire_resistance_potion',
+  },
+  {
+    id: 'water_breathing_potion',
+    name: '水中呼吸のポーション',
+    description: '3分間 水中で息が減らなくなる',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 3, [BLOCK_IDS.WATER]: 1 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    potionId: 'water_breathing_potion',
+  },
+  {
+    id: 'night_vision_potion',
+    name: '暗視のポーション',
+    description: '3分間 暗闇でも明るく見える',
+    ingredients: { [BLOCK_IDS.GOLD_INGOT]: 3, [BLOCK_IDS.TORCH]: 2 },
+    result: BLOCK_IDS.GOLD_INGOT,
+    resultCount: 1,
+    potionId: 'night_vision_potion',
+  },
+  {
+    id: 'jump_boost_potion',
+    name: '跳躍のポーション',
+    description: '60秒間 ジャンプ力がアップ',
+    ingredients: { [BLOCK_IDS.GRASS]: 5, [BLOCK_IDS.IRON_INGOT]: 1 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    potionId: 'jump_boost_potion',
   },
 ];
