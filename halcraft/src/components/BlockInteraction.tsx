@@ -553,6 +553,25 @@ export function BlockInteraction() {
             if (selectedBlock === BLOCK_IDS.SPAWNER) {
               spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
             }
+
+            // レバー設置時: 隣接するTNTを遠隔起爆
+            if (selectedBlock === BLOCK_IDS.LEVER) {
+              const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+              for (const [dx, dy, dz] of dirs) {
+                const nx = t.placeX + dx;
+                const ny = t.placeY + dy;
+                const nz = t.placeZ + dz;
+                const neighborBlock = getBlock(nx, ny, nz);
+                if (BLOCK_DEFS[neighborBlock]?.explosive) {
+                  if (breakBlock(nx, ny, nz)) {
+                    spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
+                    sendBlockBreak(nx, ny, nz);
+                    const cp = camera.position;
+                    triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -621,6 +640,25 @@ export function BlockInteraction() {
       // SPAWNERブロック設置時:アイアンゴーレムをスポーン
       if (selectedBlock === BLOCK_IDS.SPAWNER) {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
+      }
+
+      // レバー設置時: 隣接するTNTを遠隔起爆
+      if (selectedBlock === BLOCK_IDS.LEVER) {
+        const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+        for (const [dx, dy, dz] of dirs) {
+          const nx = t.placeX + dx;
+          const ny = t.placeY + dy;
+          const nz = t.placeZ + dz;
+          const neighborBlock = getBlock(nx, ny, nz);
+          if (BLOCK_DEFS[neighborBlock]?.explosive) {
+            if (breakBlock(nx, ny, nz)) {
+              spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
+              sendBlockBreak(nx, ny, nz);
+              const cp = camera.position;
+              triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
+            }
+          }
+        }
       }
     }
   }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode, camera]);

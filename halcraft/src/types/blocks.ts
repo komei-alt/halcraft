@@ -51,6 +51,7 @@ export const BLOCK_IDS = {
   STICK: 43,
   WHEAT_SEEDS: 44,
   FARMLAND: 45,
+  LEVER: 46,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -594,6 +595,17 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 0.3,
     blockCategory: 'dirt',
+  },
+  [BLOCK_IDS.LEVER]: {
+    id: BLOCK_IDS.LEVER,
+    name: 'レバー',
+    texture: 'stone.png',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    hardness: 0,
+    noCollision: true,
+    nonStandard: true,
   },
 };
 

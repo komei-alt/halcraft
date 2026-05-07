@@ -573,4 +573,14 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.FARMLAND,
     resultCount: 1,
   },
+
+  // === レッドストーン ===
+  {
+    id: 'lever',
+    name: 'レバー',
+    description: '隣接するTNTを遠隔起爆できる',
+    ingredients: { [BLOCK_IDS.STICK]: 1, [BLOCK_IDS.STONE]: 1 },
+    result: BLOCK_IDS.LEVER,
+    resultCount: 1,
+  },
 ];
