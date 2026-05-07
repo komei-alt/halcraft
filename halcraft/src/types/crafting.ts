@@ -555,4 +555,22 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     resultCount: 1,
     potionId: 'jump_boost_potion',
   },
+
+  // === 農業 ===
+  {
+    id: 'wheat_seeds',
+    name: '小麦の種',
+    description: '草ブロックから小麦の種を入手',
+    ingredients: { [BLOCK_IDS.GRASS]: 2 },
+    result: BLOCK_IDS.WHEAT_SEEDS,
+    resultCount: 4,
+  },
+  {
+    id: 'farmland',
+    name: '耕地',
+    description: '草ブロックを耕して耕地にする',
+    ingredients: { [BLOCK_IDS.GRASS]: 1 },
+    result: BLOCK_IDS.FARMLAND,
+    resultCount: 1,
+  },
 ];

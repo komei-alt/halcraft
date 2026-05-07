@@ -49,6 +49,8 @@ export const BLOCK_IDS = {
   GOLD_INGOT: 41,
   DIAMOND_GEM: 42,
   STICK: 43,
+  WHEAT_SEEDS: 44,
+  FARMLAND: 45,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -571,6 +573,27 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+  },
+  [BLOCK_IDS.WHEAT_SEEDS]: {
+    id: BLOCK_IDS.WHEAT_SEEDS,
+    name: '小麦の種',
+    texture: 'grass_top.png',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    hardness: 0,
+    noCollision: true,
+    nonStandard: true,
+  },
+  [BLOCK_IDS.FARMLAND]: {
+    id: BLOCK_IDS.FARMLAND,
+    name: '耕地',
+    texture: 'dirt.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    hardness: 0.3,
+    blockCategory: 'dirt',
   },
 };
 
