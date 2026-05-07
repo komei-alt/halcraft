@@ -45,6 +45,18 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-07',
+    items: [
+      { type: 'feature', text: '🪓 ツールシステム追加！木/石/鉄/ダイヤの4段階×ピッケル・斧・シャベル・剣の16種類！' },
+      { type: 'feature', text: '⛏️ ツールで掘ると速くなる！適切なツールを使うと採掘スピードがアップ！' },
+      { type: 'feature', text: '🔒 ティア制限追加！鉄鉱石は石以上のピッケルが必要、ダイヤは鉄以上が必要だよ！' },
+      { type: 'feature', text: '💪 ツールには耐久値があるよ！使いすぎると壊れちゃうから気をつけて！' },
+      { type: 'feature', text: '🛡️ 防具システム追加！革/鉄/ダイヤの防具でダメージを軽減できるよ！' },
+      { type: 'feature', text: '⚒️ クラフトレシピパネル追加！素材を集めてツールや防具を作ろう！' },
+      { type: 'feature', text: '🔧 精錬レシピ追加！鉄鉱石→鉄インゴット、金鉱石→金インゴットに変換！' },
+    ],
+  },
+  {
     date: '2026-05-06',
     items: [
       { type: 'feature', text: '🎵 BGM追加！穏やかなピアノ音楽が自動再生されるよ！' },
