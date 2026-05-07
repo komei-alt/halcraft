@@ -13,6 +13,7 @@ import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
+import { useExperienceStore } from '../stores/useExperienceStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -482,6 +483,11 @@ export function BlockInteraction() {
             // ツール耐久値消費
             if (!isBuildMode) {
               usePlayerStore.getState().damageTool();
+              // 鉱石採掘時にXP獲得
+              const cat = def?.blockCategory;
+              if (cat === 'ore') {
+                useExperienceStore.getState().addXp(3 + Math.floor(Math.random() * 5));
+              }
             }
             // TNT爆発チェック
             if (BLOCK_DEFS[blockId]?.explosive) {

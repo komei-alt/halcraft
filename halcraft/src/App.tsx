@@ -60,6 +60,7 @@ import { CraftingScreen } from './components/ui/CraftingScreen';
 import { ToolHUD } from './components/ui/ToolHUD';
 import { ArmorHUD } from './components/ui/ArmorHUD';
 import { EffectIcons } from './components/ui/EffectIcons';
+import { XPBar } from './components/ui/XPBar';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { ControlsGuide } from './components/ui/ControlsGuide';
@@ -240,6 +241,7 @@ export default function App() {
           <ToolHUD />
           <ArmorHUD />
           <EffectIcons />
+          <XPBar />
           <TimeDisplay />
           <DamageOverlay />
           <AttackIndicator />

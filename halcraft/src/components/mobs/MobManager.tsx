@@ -24,6 +24,7 @@ import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
 import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTriggers';
 import { useEffectStore } from '../../stores/useEffectStore';
 import { getRegenRate } from '../../types/potions';
+import { useExperienceStore } from '../../stores/useExperienceStore';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -327,6 +328,8 @@ export function MobManager() {
       playMobDeathSound(distance);
 
       if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin') {
+        // XP獲得（5-10 XP）
+        useExperienceStore.getState().addXp(5 + Math.floor(Math.random() * 6));
         const roll = Math.random();
         if (roll < 0.4) {
           dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));

@@ -1086,3 +1086,48 @@ export function playEffectExpireSound(): void {
   osc.start(now);
   osc.stop(now + 0.2);
 }
+
+/** XP獲得SE — キラリという短い高音 */
+export function playXPGainSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1200, now);
+  osc.frequency.exponentialRampToValueAtTime(2000, now + 0.06);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.06, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.08);
+}
+
+/** レベルアップSE — 上昇する和音 */
+export function playLevelUpSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+  for (let i = 0; i < notes.length; i++) {
+    const t = now + i * 0.08;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(notes[i], t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  }
+}
