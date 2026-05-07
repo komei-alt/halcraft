@@ -12,6 +12,7 @@ import { placeVillage, chunkContainsVillage } from './structures/village';
 import { getCurrentBiome } from './biomeConfig';
 import { carveCaves } from './caves';
 import { placeOres } from './ores';
+import { placeDungeon } from './dungeons';
 import type { ChunkData } from './types';
 
 /**
@@ -82,6 +83,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // 洞窟後に鉱石を配置（石ブロックを鉱石に置き換え）
   placeOres(chunk, cx, cz);
+
+  // 地下ダンジョンを配置
+  placeDungeon(chunk, cx, cz);
 
   // 地形生成後に木を配置
   placeTreesInChunk(chunk, cx, cz);
