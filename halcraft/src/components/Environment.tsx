@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import { BIOME_CONFIGS } from '../types/biomes';
 import { getPerformanceProfile } from '../utils/performance';
+import { useSettingsStore } from '../stores/useSettingsStore';
 
 /** 再利用用オブジェクト（GCプレッシャー削減） */
 const _skyColor = new THREE.Color();
@@ -69,6 +70,7 @@ export function Environment() {
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
+  useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
 
   const advanceTime = useGameStore((s) => s.advanceTime);
@@ -187,7 +189,7 @@ export function Environment() {
         ref={sunRef}
         position={[50, 80, 30]}
         intensity={1.8}
-        castShadow
+        castShadow={performanceProfile.shadowsEnabled}
         shadow-mapSize-width={performanceProfile.shadowMapSize}
         shadow-mapSize-height={performanceProfile.shadowMapSize}
         shadow-camera-far={performanceProfile.shadowCameraFar}

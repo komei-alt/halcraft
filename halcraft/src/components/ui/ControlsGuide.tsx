@@ -3,11 +3,12 @@
 // 右下に常時表示（コンパクトなデザインで邪魔にならない）
 // Hキーで表示/非表示を切り替え可能
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useVehicleStore, CAR_SEAT_NAMES, SEAT_NAMES, VEHICLE_NAMES } from '../../stores/useVehicleStore';
 import type { CarSeatType, SeatType, VehicleType } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
 import { isTouchDevice } from '../../utils/device';
 
 /** キーバッジのスタイル */
@@ -338,8 +339,9 @@ export function ControlsGuide() {
   const tankSeat = useVehicleStore((s) => s.tank.mySeat);
   const airplaneSeat = useVehicleStore((s) => s.airplane.mySeat);
   const carSeat = useVehicleStore((s) => s.car.mySeat);
+  const showControlsGuide = useSettingsStore((s) => s.showControlsGuide);
+  const setShowControlsGuide = useSettingsStore((s) => s.setShowControlsGuide);
   const isTouch = isTouchDevice();
-  const [visible, setVisible] = useState(() => !isTouch);
 
   // Hキーで表示/非表示トグル
   useEffect(() => {
@@ -347,14 +349,14 @@ export function ControlsGuide() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyH' && !e.repeat) {
-        setVisible((prev) => !prev);
+        setShowControlsGuide(!useSettingsStore.getState().showControlsGuide);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isTouch]);
+  }, [isTouch, setShowControlsGuide]);
 
-  if (!visible) return null;
+  if (!showControlsGuide) return null;
 
   const mySeat = activeVehicle === 'helicopter'
     ? helicopterSeat

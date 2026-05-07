@@ -8,6 +8,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 import { isBlockExposed } from '../utils/terrain/blockExposure';
 import { getPerformanceProfile } from '../utils/performance';
 
@@ -211,6 +212,7 @@ export function World() {
   const processFluidSimulation = useWorldStore((s) => s.processFluidSimulation);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const { camera } = useThree();
+  useSettingsStore((s) => s.renderDistance);
   const performanceProfile = getPerformanceProfile();
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
   const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
@@ -218,11 +220,12 @@ export function World() {
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
   const lastUpdateTime = useRef(0);
+  const initialRenderDistanceRef = useRef(initialRenderDistance);
 
   // 初回マウント時にチャンクを生成
   useEffect(() => {
-    initChunks(initialRenderDistance);
-  }, [initChunks, initialRenderDistance]);
+    initChunks(initialRenderDistanceRef.current);
+  }, [initChunks]);
 
   // カメラ位置ベースで可視チャンクを更新 + 段階的チャンク生成
   const prevChunkKey = useRef('');

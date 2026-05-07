@@ -8,7 +8,11 @@ import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice } from '../../utils/device';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 
-export function PauseScreen() {
+interface PauseScreenProps {
+  onOpenSettings: () => void;
+}
+
+export function PauseScreen({ onOpenSettings }: PauseScreenProps) {
   const phase = useGameStore((s) => s.phase);
   const togglePause = useGameStore((s) => s.togglePause);
   const returnToMenu = useGameStore((s) => s.returnToMenu);
@@ -138,6 +142,44 @@ export function PauseScreen() {
           }}
         >
           ▶ 再開
+        </button>
+
+        <button
+          id="pause-settings-btn"
+          type="button"
+          onClick={onOpenSettings}
+          style={{
+            padding: isTouch ? '14px 24px' : '16px 32px',
+            fontSize: isTouch ? 16 : 20,
+            fontWeight: 700,
+            color: '#fff',
+            background: 'linear-gradient(145deg, rgba(70, 140, 210, 0.5), rgba(40, 100, 170, 0.5))',
+            border: '2px solid rgba(120, 200, 255, 0.58)',
+            borderRadius: 10,
+            cursor: 'pointer',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            textShadow: '1px 1px 3px rgba(0,0,0,0.5)',
+            boxShadow: '0 4px 16px rgba(70, 140, 210, 0.2)',
+            transition: 'all 0.2s ease',
+            letterSpacing: 3,
+            backdropFilter: 'blur(4px)',
+          }}
+          onMouseEnter={(e) => {
+            const btn = e.currentTarget;
+            btn.style.background = 'linear-gradient(145deg, rgba(90, 165, 235, 0.6), rgba(55, 120, 190, 0.6))';
+            btn.style.borderColor = 'rgba(150, 220, 255, 0.8)';
+            btn.style.boxShadow = '0 6px 24px rgba(70, 140, 210, 0.35)';
+            btn.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            const btn = e.currentTarget;
+            btn.style.background = 'linear-gradient(145deg, rgba(70, 140, 210, 0.5), rgba(40, 100, 170, 0.5))';
+            btn.style.borderColor = 'rgba(120, 200, 255, 0.58)';
+            btn.style.boxShadow = '0 4px 16px rgba(70, 140, 210, 0.2)';
+            btn.style.transform = 'translateY(0)';
+          }}
+        >
+          ⚙ 設定
         </button>
 
         {/* タイトルに戻るボタン */}

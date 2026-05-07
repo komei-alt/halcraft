@@ -8,6 +8,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 import { getPerformanceProfile } from '../utils/performance';
 /** 光源クラスタリングの統合距離（この距離内の光源は1つにまとめる） */
 const CLUSTER_DISTANCE = 6;
@@ -117,6 +118,7 @@ function collectNearbyLightSources(): LightSource[] {
 
 /** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
 export function BlockLights() {
+  useSettingsStore((s) => s.lightingQuality);
   const performanceProfile = getPerformanceProfile();
   const maxLights = performanceProfile.maxDynamicLights;
   const lightCollectRangeSq = performanceProfile.lightCollectRange * performanceProfile.lightCollectRange;

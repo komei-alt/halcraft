@@ -7,6 +7,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useSettingsStore } from '../stores/useSettingsStore';
 
 /** 水面シェーダーマテリアル（波アニメーション + 半透明） */
 function createWaterMaterial(): THREE.ShaderMaterial {
@@ -82,6 +83,7 @@ export function WaterRenderer() {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const waterAnimation = useSettingsStore((s) => s.waterAnimation);
 
   const waterPositions = useMemo(() => {
     // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
@@ -128,6 +130,7 @@ export function WaterRenderer() {
   // 毎フレーム time uniform を更新（Three.js のマテリアル副作用）
   /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
+    if (!waterAnimation) return;
     const waterMaterial = meshRef.current?.material;
     if (waterMaterial instanceof THREE.ShaderMaterial) {
       waterMaterial.uniforms.uTime.value += delta;

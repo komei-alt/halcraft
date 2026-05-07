@@ -71,18 +71,24 @@ import { SkinSelector } from './components/ui/SkinSelector';
 import { AirSupplyBar } from './components/ui/AirSupplyBar';
 import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
 import { HungerBar } from './components/ui/HungerBar';
+import { SettingsButton, SettingsMenu } from './components/ui/SettingsMenu';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
 import { getPerformanceProfile } from './utils/performance';
+import { useSettingsStore } from './stores/useSettingsStore';
 import './App.css';
 
 function GameCanvas() {
   const isTouch = isTouchDevice();
+  useSettingsStore((s) => s.graphicsPreset);
+  useSettingsStore((s) => s.renderDistance);
+  useSettingsStore((s) => s.shadowQuality);
+  useSettingsStore((s) => s.resolutionScale);
   const performanceProfile = getPerformanceProfile();
 
   return (
     <Canvas
-      shadows={{ type: THREE.PCFShadowMap }}
+      shadows={performanceProfile.shadowsEnabled ? { type: THREE.PCFShadowMap } : false}
       camera={{
         fov: isTouch ? 65 : 70,
         near: 0.1,
@@ -199,6 +205,7 @@ export default function App() {
 
   // スキン変更UI の開閉状態
   const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const toggleSkinSelector = useCallback(() => {
     setSkinSelectorOpen((prev) => {
@@ -230,10 +237,27 @@ export default function App() {
     activateDesktopGameplayInput();
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    document.exitPointerLock?.();
+    setSettingsOpen(true);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+    if (phase === 'playing' && !isTouch) {
+      window.setTimeout(() => activateDesktopGameplayInput(), 80);
+    }
+  }, [phase, isTouch]);
+
   return (
     <>
       <StartScreen />
       <MaintenanceOverlay />
+      <SettingsButton
+        variant={phase === 'menu' ? 'menu' : 'hud'}
+        onClick={handleOpenSettings}
+      />
+      <SettingsMenu open={settingsOpen} onClose={handleCloseSettings} />
       {phase !== 'menu' && (
         <>
           <GameCanvas />
@@ -268,7 +292,7 @@ export default function App() {
             <MobileControls onOpenCrafting={handleOpenCrafting} />
           )}
           {/* ポーズ画面 */}
-          <PauseScreen />
+          <PauseScreen onOpenSettings={handleOpenSettings} />
           {/* スキン変更オーバーレイ */}
           {skinSelectorOpen && (
             <SkinSelector overlay onClose={handleCloseSkinSelector} />
