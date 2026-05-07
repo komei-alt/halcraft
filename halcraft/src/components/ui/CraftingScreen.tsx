@@ -13,6 +13,8 @@ import {
   type BlockId,
   BLOCK_IDS,
 } from '../../types/blocks';
+import { CRAFTING_RECIPES } from '../../types/crafting';
+import { type ToolId, TOOL_DEFS } from '../../types/tools';
 
 // === 定数 ===
 /** グリッドセルのサイズ (px) */
@@ -100,6 +102,11 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const assignHotbarSlot = usePlayerStore((s) => s.assignHotbarSlot);
+  const addTool = usePlayerStore((s) => s.addTool);
+  const equipTool = usePlayerStore((s) => s.equipTool);
+  const playerTools = usePlayerStore((s) => s.tools);
+  const inventoryCanCraft = useInventoryStore((s) => s.canCraft);
+  const inventoryCraft = useInventoryStore((s) => s.craft);
   const isTouch = isTouchDevice();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -159,6 +166,24 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
       setTimeout(() => setAddedBlockId(null), 300);
     },
     [addItem],
+  );
+
+  // レシピからクラフト実行
+  const handleCraftRecipe = useCallback(
+    (recipeId: string) => {
+      const recipe = CRAFTING_RECIPES.find((r) => r.id === recipeId);
+      if (!recipe || !inventoryCanCraft(recipe)) return;
+      if (inventoryCraft(recipe)) {
+        // ツールレシピの場合、ツールをインベントリに追加して自動装備
+        if (recipe.toolId) {
+          addTool(recipe.toolId as ToolId);
+          equipTool(recipe.toolId as ToolId);
+        }
+        setAddedBlockId(recipe.result);
+        setTimeout(() => setAddedBlockId(null), 300);
+      }
+    },
+    [inventoryCanCraft, inventoryCraft, addTool, equipTool],
   );
 
   // インベントリアイテムをクリックしてホットバーにセット
@@ -530,6 +555,118 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                     }}
                   >
                     {name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ============================ */}
+        {/* 右パネル2: レシピクラフト   */}
+        {/* ============================ */}
+        <div style={{ ...stonePanelStyle, minWidth: 260, maxHeight: isTouch ? 'auto' : '70vh', overflowY: 'auto' }}>
+          <div style={{
+            color: '#E8E8E8',
+            fontSize: 14,
+            fontWeight: 700,
+            marginBottom: 6,
+            textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+          }}>
+            ⚒️ クラフトレシピ
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {CRAFTING_RECIPES.map((recipe) => {
+              const canMake = inventoryCanCraft(recipe);
+              const isToolRecipe = !!recipe.toolId;
+              const toolDef = isToolRecipe ? TOOL_DEFS[recipe.toolId as ToolId] : null;
+              const alreadyHas = isToolRecipe && !!playerTools[recipe.toolId!];
+              const texUrl = getTextureUrl(recipe.result);
+
+              return (
+                <div
+                  key={recipe.id}
+                  onClick={() => !alreadyHas && handleCraftRecipe(recipe.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 8px',
+                    borderRadius: 3,
+                    background: alreadyHas
+                      ? 'rgba(100,100,100,0.3)'
+                      : canMake
+                        ? 'rgba(80, 200, 80, 0.15)'
+                        : 'rgba(0,0,0,0.15)',
+                    border: canMake && !alreadyHas
+                      ? '1px solid rgba(80,200,80,0.4)'
+                      : '1px solid rgba(255,255,255,0.1)',
+                    cursor: canMake && !alreadyHas ? 'pointer' : 'default',
+                    opacity: canMake || alreadyHas ? 1 : 0.5,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {/* アイコン */}
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    background: CELL_BG,
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `1px solid ${CELL_BORDER_DARK}`,
+                    flexShrink: 0,
+                  }}>
+                    {toolDef ? (
+                      <span style={{ fontSize: 18 }}>{toolDef.emoji}</span>
+                    ) : texUrl ? (
+                      <img
+                        src={texUrl}
+                        alt={recipe.name}
+                        draggable={false}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          imageRendering: 'pixelated',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    ) : null}
+                  </div>
+
+                  {/* レシピ名 + 素材 */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      color: toolDef ? toolDef.color : '#E8E8E8',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+                    }}>
+                      {recipe.name}
+                      {alreadyHas && <span style={{ color: '#888', fontSize: 10 }}> (所持)</span>}
+                    </div>
+                    <div style={{
+                      color: 'rgba(255,255,255,0.4)',
+                      fontSize: 10,
+                      marginTop: 1,
+                    }}>
+                      {Object.entries(recipe.ingredients).map(([idStr, count]) => {
+                        const bDef = BLOCK_DEFS[parseInt(idStr)];
+                        return bDef ? `${bDef.name}×${count}` : '';
+                      }).filter(Boolean).join(' + ')}
+                    </div>
+                  </div>
+
+                  {/* 状態 */}
+                  <div style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: alreadyHas ? '#888' : canMake ? '#6F6' : '#F66',
+                    flexShrink: 0,
+                  }}>
+                    {alreadyHas ? '✔' : canMake ? '作る' : '×'}
                   </div>
                 </div>
               );

@@ -17,6 +17,8 @@ export interface CraftingRecipe {
   result: BlockId;
   /** 完成品の個数 */
   resultCount: number;
+  /** ツールクラフトの場合、付与するツールID */
+  toolId?: string;
 }
 
 /** 全クラフトレシピの定義 */
@@ -183,5 +185,191 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     ingredients: { [BLOCK_IDS.IRON]: 5, [BLOCK_IDS.ELECTRIC]: 1, [BLOCK_IDS.WOOD]: 2 },
     result: BLOCK_IDS.RAIL_CHAIN,
     resultCount: 4,
+  },
+
+  // === 素材加工 ===
+  {
+    id: 'stick',
+    name: '棒',
+    description: '木材から作る基本素材',
+    ingredients: { [BLOCK_IDS.WOOD]: 1 },
+    result: BLOCK_IDS.STICK,
+    resultCount: 4,
+  },
+  {
+    id: 'smelt_iron',
+    name: '鉄インゴット',
+    description: '鉄鉱石を精錬して作る金属素材',
+    ingredients: { [BLOCK_IDS.IRON_ORE]: 1 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+  },
+  {
+    id: 'smelt_gold',
+    name: '金インゴット',
+    description: '金鉱石を精錬して作る金属素材',
+    ingredients: { [BLOCK_IDS.GOLD_ORE]: 1 },
+    result: BLOCK_IDS.GOLD_INGOT,
+    resultCount: 1,
+  },
+  {
+    id: 'diamond_from_ore',
+    name: 'ダイヤモンド',
+    description: 'ダイヤ鉱石から取り出す宝石',
+    ingredients: { [BLOCK_IDS.DIAMOND_ORE]: 1 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+  },
+
+  // === 木のツール ===
+  {
+    id: 'wood_pickaxe',
+    name: '木のピッケル',
+    description: '木材と棒で作る最初のピッケル',
+    ingredients: { [BLOCK_IDS.WOOD]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.WOOD,  // ツールはアイテムID扱い
+    resultCount: 1,
+    toolId: 'wood_pickaxe',
+  },
+  {
+    id: 'wood_axe',
+    name: '木の斧',
+    description: '木材と棒で作る最初の斧',
+    ingredients: { [BLOCK_IDS.WOOD]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.WOOD,
+    resultCount: 1,
+    toolId: 'wood_axe',
+  },
+  {
+    id: 'wood_shovel',
+    name: '木のシャベル',
+    description: '木材と棒で作る最初のシャベル',
+    ingredients: { [BLOCK_IDS.WOOD]: 1, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.WOOD,
+    resultCount: 1,
+    toolId: 'wood_shovel',
+  },
+  {
+    id: 'wood_sword',
+    name: '木の剣',
+    description: '木材と棒で作る最初の剣',
+    ingredients: { [BLOCK_IDS.WOOD]: 2, [BLOCK_IDS.STICK]: 1 },
+    result: BLOCK_IDS.WOOD,
+    resultCount: 1,
+    toolId: 'wood_sword',
+  },
+
+  // === 石のツール ===
+  {
+    id: 'stone_pickaxe',
+    name: '石のピッケル',
+    description: '石と棒で作る丈夫なピッケル',
+    ingredients: { [BLOCK_IDS.STONE]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.STONE,
+    resultCount: 1,
+    toolId: 'stone_pickaxe',
+  },
+  {
+    id: 'stone_axe',
+    name: '石の斧',
+    description: '石と棒で作る丈夫な斧',
+    ingredients: { [BLOCK_IDS.STONE]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.STONE,
+    resultCount: 1,
+    toolId: 'stone_axe',
+  },
+  {
+    id: 'stone_shovel',
+    name: '石のシャベル',
+    description: '石と棒で作る丈夫なシャベル',
+    ingredients: { [BLOCK_IDS.STONE]: 1, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.STONE,
+    resultCount: 1,
+    toolId: 'stone_shovel',
+  },
+  {
+    id: 'stone_sword',
+    name: '石の剣',
+    description: '石と棒で作る丈夫な剣',
+    ingredients: { [BLOCK_IDS.STONE]: 2, [BLOCK_IDS.STICK]: 1 },
+    result: BLOCK_IDS.STONE,
+    resultCount: 1,
+    toolId: 'stone_sword',
+  },
+
+  // === 鉄のツール ===
+  {
+    id: 'iron_pickaxe',
+    name: '鉄のピッケル',
+    description: '鉄インゴットと棒で作る高性能ピッケル',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    toolId: 'iron_pickaxe',
+  },
+  {
+    id: 'iron_axe',
+    name: '鉄の斧',
+    description: '鉄インゴットと棒で作る高性能斧',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    toolId: 'iron_axe',
+  },
+  {
+    id: 'iron_shovel',
+    name: '鉄のシャベル',
+    description: '鉄インゴットと棒で作る高性能シャベル',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 1, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    toolId: 'iron_shovel',
+  },
+  {
+    id: 'iron_sword',
+    name: '鉄の剣',
+    description: '鉄インゴットと棒で作る高性能剣',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 2, [BLOCK_IDS.STICK]: 1 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    toolId: 'iron_sword',
+  },
+
+  // === ダイヤのツール ===
+  {
+    id: 'diamond_pickaxe',
+    name: 'ダイヤのピッケル',
+    description: 'ダイヤモンドと棒で作る最強ピッケル',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    toolId: 'diamond_pickaxe',
+  },
+  {
+    id: 'diamond_axe',
+    name: 'ダイヤの斧',
+    description: 'ダイヤモンドと棒で作る最強斧',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 3, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    toolId: 'diamond_axe',
+  },
+  {
+    id: 'diamond_shovel',
+    name: 'ダイヤのシャベル',
+    description: 'ダイヤモンドと棒で作る最強シャベル',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 1, [BLOCK_IDS.STICK]: 2 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    toolId: 'diamond_shovel',
+  },
+  {
+    id: 'diamond_sword',
+    name: 'ダイヤの剣',
+    description: 'ダイヤモンドと棒で作る最強剣',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 2, [BLOCK_IDS.STICK]: 1 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    toolId: 'diamond_sword',
   },
 ];

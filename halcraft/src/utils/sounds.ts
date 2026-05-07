@@ -983,3 +983,40 @@ export function playBlockBreakSound(): void {
   thud.start(now);
   thud.stop(now + 0.06);
 }
+
+/** ツール破壊SE — 金属が砕ける音 */
+export function playToolBreakSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  // 高音のガラス的な砕け音
+  const crack = ctx.createOscillator();
+  crack.type = 'sawtooth';
+  crack.frequency.setValueAtTime(2000, now);
+  crack.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+
+  const crackGain = ctx.createGain();
+  crackGain.gain.setValueAtTime(0.15, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  crack.connect(crackGain);
+  crackGain.connect(ctx.destination);
+  crack.start(now);
+  crack.stop(now + 0.2);
+
+  // 金属的な残響
+  const ring = ctx.createOscillator();
+  ring.type = 'sine';
+  ring.frequency.setValueAtTime(800, now);
+  ring.frequency.exponentialRampToValueAtTime(100, now + 0.4);
+
+  const ringGain = ctx.createGain();
+  ringGain.gain.setValueAtTime(0.08, now);
+  ringGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+  ring.connect(ringGain);
+  ringGain.connect(ctx.destination);
+  ring.start(now);
+  ring.stop(now + 0.4);
+}

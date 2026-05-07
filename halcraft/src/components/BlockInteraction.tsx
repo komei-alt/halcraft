@@ -435,9 +435,19 @@ export function BlockInteraction() {
       const blockId = getBlock(found.x, found.y, found.z);
       const def = BLOCK_DEFS[blockId];
       const hardness = isBuildMode ? 0 : (def?.hardness ?? 0.5);
+      const minTier = def?.minToolTier ?? 0;
+      const playerTier = usePlayerStore.getState().getToolTierLevel();
 
-      // hardness <= 0 のブロック（TNT等）は即破壊
-      if (hardness <= 0) {
+      // ティア不足でブロックが掘れない（ビルドモード除く）
+      if (!isBuildMode && minTier > 0 && playerTier < minTier) {
+        // 進行度をリセット（掘れないことを示す）
+        if (bp) {
+          breakProgressRef.current = null;
+          setBreakProgressState(null);
+        }
+        // TODO: 掘れない音のフィードバック
+      } else if (hardness <= 0) {
+        // hardness <= 0 のブロック（TNT等）は即破壊
         if (breakBlock(found.x, found.y, found.z)) {
           spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
           if (!isBuildMode) {
@@ -456,8 +466,9 @@ export function BlockInteraction() {
         // ターゲットが変わったらリセット
         breakProgressRef.current = { x: found.x, y: found.y, z: found.z, progress: 0, hardness };
       } else {
-        // 進行度を加算（実際のフレーム間隔を使用）
-        bp.progress += dt / hardness;
+        // 進行度を加算（ツール速度倍率適用）
+        const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory);
+        bp.progress += (dt * miningSpeed) / hardness;
 
         if (bp.progress >= 1) {
           // 破壊完了！
@@ -468,6 +479,10 @@ export function BlockInteraction() {
             }
             sendBlockBreak(found.x, found.y, found.z);
             playBlockBreakSound();
+            // ツール耐久値消費
+            if (!isBuildMode) {
+              usePlayerStore.getState().damageTool();
+            }
             // TNT爆発チェック
             if (BLOCK_DEFS[blockId]?.explosive) {
               const cp = camera.position;

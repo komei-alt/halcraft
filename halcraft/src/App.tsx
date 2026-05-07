@@ -57,6 +57,7 @@ import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StartScreen } from './components/ui/StartScreen';
 import { PauseScreen } from './components/ui/PauseScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
+import { ToolHUD } from './components/ui/ToolHUD';
 import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
 import { ControlsGuide } from './components/ui/ControlsGuide';
@@ -234,6 +235,7 @@ export default function App() {
           <Crosshair />
           <Hotbar />
           <HealthBar />
+          <ToolHUD />
           <TimeDisplay />
           <DamageOverlay />
           <AttackIndicator />

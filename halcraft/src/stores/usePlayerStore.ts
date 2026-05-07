@@ -6,6 +6,8 @@ import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
 import { getSocket } from '../utils/socket';
 import { useGameStore } from './useGameStore';
 import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
+import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
+import { playToolBreakSound } from '../utils/sounds';
 
 /** localStorage のキー（スキン保存用） */
 const SKIN_STORAGE_KEY = 'halcraft-skin-id';
@@ -114,6 +116,12 @@ interface PlayerState {
   /** 空腹減少用の蓄積カウンタ */
   hungerExhaustion: number;
 
+  /** 現在装備中のツールID（null=素手） */
+  equippedToolId: ToolId | null;
+
+  /** ツールインベントリ { toolId: 残り耐久値 } */
+  tools: Record<string, number>;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -161,6 +169,24 @@ interface PlayerState {
 
   /** スキンを変更 */
   setSkin: (skinId: SkinId) => void;
+
+  /** ツールを装備 */
+  equipTool: (toolId: ToolId | null) => void;
+
+  /** ツールをインベントリに追加 */
+  addTool: (toolId: ToolId) => void;
+
+  /** 装備中ツールの耐久値を1減らす（0で破壊） */
+  damageTool: () => void;
+
+  /** 現在の採掘速度倍率を取得 */
+  getMiningSpeed: (blockCategory?: string) => number;
+
+  /** 現在の攻撃力を取得 */
+  getAttackDamage: () => number;
+
+  /** 現在のツールティアレベルを取得 */
+  getToolTierLevel: () => number;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -188,6 +214,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   airSupply: 15,
   hunger: 20,
   hungerExhaustion: 0,
+  equippedToolId: null,
+  tools: {},
 
   getSelectedBlock: () => {
     const state = get();
@@ -393,5 +421,65 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setSkin: (skinId) => {
     set({ skinId });
     try { localStorage.setItem(SKIN_STORAGE_KEY, skinId); } catch { /* noop */ }
+  },
+
+  equipTool: (toolId) => {
+    if (toolId && !get().tools[toolId]) return; // 持っていないツールは装備不可
+    set({ equippedToolId: toolId });
+  },
+
+  addTool: (toolId) => {
+    const def = TOOL_DEFS[toolId];
+    if (!def) return;
+    set((state) => ({
+      tools: { ...state.tools, [toolId]: def.maxDurability },
+    }));
+  },
+
+  damageTool: () => {
+    const { equippedToolId, tools } = get();
+    if (!equippedToolId) return;
+    const current = tools[equippedToolId];
+    if (current === undefined) return;
+    const newDurability = current - 1;
+    if (newDurability <= 0) {
+      // ツール破壊
+      const newTools = { ...tools };
+      delete newTools[equippedToolId];
+      set({ tools: newTools, equippedToolId: null });
+      playToolBreakSound();
+    } else {
+      set({ tools: { ...tools, [equippedToolId]: newDurability } });
+    }
+  },
+
+  getMiningSpeed: (blockCategory?: string) => {
+    const { equippedToolId } = get();
+    if (!equippedToolId) return HAND_MINING_SPEED;
+    const def = TOOL_DEFS[equippedToolId];
+    if (!def) return HAND_MINING_SPEED;
+    // 適切なツール種別なら速度倍率適用、そうでなければ素手と同じ
+    if (isEffectiveTool(def.type, blockCategory)) {
+      return def.miningSpeed;
+    }
+    // ピッケルは鉱石にも有効
+    if (def.type === 'pickaxe' && blockCategory === 'ore') {
+      return def.miningSpeed;
+    }
+    return HAND_MINING_SPEED;
+  },
+
+  getAttackDamage: () => {
+    const { equippedToolId } = get();
+    if (!equippedToolId) return HAND_ATTACK_DAMAGE;
+    const def = TOOL_DEFS[equippedToolId];
+    return def?.attackDamage ?? HAND_ATTACK_DAMAGE;
+  },
+
+  getToolTierLevel: () => {
+    const { equippedToolId } = get();
+    if (!equippedToolId) return HAND_TIER_LEVEL;
+    const def = TOOL_DEFS[equippedToolId];
+    return def?.tierLevel ?? HAND_TIER_LEVEL;
   },
 }));

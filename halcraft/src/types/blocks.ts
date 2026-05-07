@@ -45,6 +45,10 @@ export const BLOCK_IDS = {
   CHEST: 37,
   FURNACE: 38,
   TNT: 39,
+  IRON_INGOT: 40,
+  GOLD_INGOT: 41,
+  DIAMOND_GEM: 42,
+  STICK: 43,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -95,6 +99,8 @@ export interface BlockInfo {
   minToolTier?: number;
   /** 爆破可能か（TNT） */
   explosive?: boolean;
+  /** ブロックカテゴリ（ツール効果判定用: 'stone'|'wood'|'dirt'|'ore'） */
+  blockCategory?: string;
 }
 
 /** 全ブロックの定義テーブル */
@@ -111,6 +117,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+    blockCategory: 'dirt',
   },
   [BLOCK_IDS.DIRT]: {
     id: BLOCK_IDS.DIRT,
@@ -119,6 +126,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+    blockCategory: 'dirt',
   },
   [BLOCK_IDS.WOOD]: {
     id: BLOCK_IDS.WOOD,
@@ -127,6 +135,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+    blockCategory: 'wood',
   },
   [BLOCK_IDS.IRON]: {
     id: BLOCK_IDS.IRON,
@@ -434,6 +443,9 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+    hardness: 1.5,
+    minToolTier: 1,
+    blockCategory: 'stone',
   },
   [BLOCK_IDS.LAVA]: {
     id: BLOCK_IDS.LAVA,
@@ -460,6 +472,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 3,
     minToolTier: 1,
+    blockCategory: 'ore',
   },
   [BLOCK_IDS.IRON_ORE]: {
     id: BLOCK_IDS.IRON_ORE,
@@ -470,6 +483,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 4,
     minToolTier: 2,
+    blockCategory: 'ore',
   },
   [BLOCK_IDS.GOLD_ORE]: {
     id: BLOCK_IDS.GOLD_ORE,
@@ -480,6 +494,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 5,
     minToolTier: 3,
+    blockCategory: 'ore',
   },
   [BLOCK_IDS.DIAMOND_ORE]: {
     id: BLOCK_IDS.DIAMOND_ORE,
@@ -490,6 +505,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 6,
     minToolTier: 3,
+    blockCategory: 'ore',
   },
   [BLOCK_IDS.CHEST]: {
     id: BLOCK_IDS.CHEST,
@@ -521,6 +537,40 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     emissive: false,
     hardness: 0,
     explosive: true,
+  },
+  [BLOCK_IDS.IRON_INGOT]: {
+    id: BLOCK_IDS.IRON_INGOT,
+    name: '鉄インゴット',
+    texture: 'iron_ingot.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+  },
+  [BLOCK_IDS.GOLD_INGOT]: {
+    id: BLOCK_IDS.GOLD_INGOT,
+    name: '金インゴット',
+    texture: 'gold_ingot.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+  },
+  [BLOCK_IDS.DIAMOND_GEM]: {
+    id: BLOCK_IDS.DIAMOND_GEM,
+    name: 'ダイヤモンド',
+    texture: 'diamond_gem.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0x00ced1),
+    emissiveIntensity: 0.3,
+  },
+  [BLOCK_IDS.STICK]: {
+    id: BLOCK_IDS.STICK,
+    name: '棒',
+    texture: 'stick.png',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
   },
 };
 
