@@ -517,7 +517,8 @@ export function BlockInteraction() {
     }
 
     // --- デスクトップ: 右クリック長押しによる連続ブロック設置 ---
-    if (!isTouch.current && isPlacingRef.current) {
+    // 左クリック破壊中は設置を禁止（破壊と設置が競合して壊せないバグ防止）
+    if (!isTouch.current && isPlacingRef.current && !isBreakingRef.current) {
       if (!usePlayerStore.getState().isDead
         && !useVehicleStore.getState().isInVehicle()
         && equippedItem === 'builder'
@@ -527,6 +528,12 @@ export function BlockInteraction() {
         const t = targetRef.current;
         if (t && t.hasPlaceTarget) {
           const coordKey = `${t.placeX},${t.placeY},${t.placeZ}`;
+          // 設置先が空気ブロックでない場合はスキップ（既にブロックがある場所に重複設置しない）
+          const placeTarget = getBlock(t.placeX, t.placeY, t.placeZ);
+          if (placeTarget !== BLOCK_IDS.AIR) {
+            // 既にブロックがある→座標を記録してスキップ
+            lastPlacedRef.current = coordKey;
+          } else {
           // 照準先が変わったら即座に設置（クールダウンリセット）
           const targetChanged = coordKey !== lastPlacedRef.current;
           if (targetChanged || placeTimerRef.current >= PLACE_INTERVAL) {
@@ -571,6 +578,7 @@ export function BlockInteraction() {
             }
             placeTimerRef.current = 0;
           }
+          } // 空気ブロックチェックのelse終了
         }
       }
     }
@@ -755,10 +763,32 @@ export function BlockInteraction() {
     const preventContext = (e: Event) => e.preventDefault();
     document.addEventListener('contextmenu', preventContext);
 
+    // PointerLock解除時に全refをリセット（右クリック押しっぱなしが残るバグ防止）
+    const handlePointerLockChange = () => {
+      if (!document.pointerLockElement) {
+        isBreakingRef.current = false;
+        isPlacingRef.current = false;
+        lastPlacedRef.current = '';
+        breakProgressRef.current = null;
+        setBreakProgressState(null);
+      }
+    };
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+
+    // ウィンドウフォーカス失消時もリセット
+    const handleBlur = () => {
+      isBreakingRef.current = false;
+      isPlacingRef.current = false;
+      lastPlacedRef.current = '';
+    };
+    window.addEventListener('blur', handleBlur);
+
     return () => {
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('contextmenu', preventContext);
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [handleMouseDown, handleMouseUp]);
 
