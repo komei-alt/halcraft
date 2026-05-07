@@ -7,6 +7,7 @@ import { getSocket } from '../utils/socket';
 import { useGameStore } from './useGameStore';
 import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
+import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { playToolBreakSound } from '../utils/sounds';
 
 /** localStorage のキー（スキン保存用） */
@@ -122,6 +123,12 @@ interface PlayerState {
   /** ツールインベントリ { toolId: 残り耐久値 } */
   tools: Record<string, number>;
 
+  /** 装備中の防具 { slot: armorId } */
+  equippedArmor: Partial<Record<ArmorSlot, ArmorId>>;
+
+  /** 防具耐久値 { armorId: 残り耐久値 } */
+  armorDurability: Record<string, number>;
+
   /** 選択中のブロックIDを取得 */
   getSelectedBlock: () => BlockId;
 
@@ -187,6 +194,15 @@ interface PlayerState {
 
   /** 現在のツールティアレベルを取得 */
   getToolTierLevel: () => number;
+
+  /** 防具を装備 */
+  equipArmor: (armorId: ArmorId) => void;
+
+  /** 防具を外す */
+  unequipArmor: (slot: ArmorSlot) => void;
+
+  /** 防具の総防御力を取得 */
+  getTotalDefense: () => number;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -216,6 +232,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   hungerExhaustion: 0,
   equippedToolId: null,
   tools: {},
+  equippedArmor: {},
+  armorDurability: {},
 
   getSelectedBlock: () => {
     const state = get();
@@ -313,7 +331,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (get().isDead) return false;
     // 無敵時間中はダメージを受けない
     if (Date.now() < get().invincibleUntil) return false;
-    const newHp = Math.max(0, get().hp - amount);
+
+    // 防具によるダメージ軽減
+    const totalDef = get().getTotalDefense();
+    const reduction = calculateDamageReduction(totalDef);
+    const reducedAmount = amount * (1 - reduction);
+    const newHp = Math.max(0, get().hp - reducedAmount);
+
+    // 防具耐久値消費
+    if (totalDef > 0) {
+      const { equippedArmor, armorDurability } = get();
+      const newDurability = { ...armorDurability };
+      const newEquipped = { ...equippedArmor };
+      for (const [slot, armorId] of Object.entries(equippedArmor)) {
+        if (!armorId) continue;
+        const dur = (newDurability[armorId] ?? 0) - 1;
+        if (dur <= 0) {
+          delete newDurability[armorId];
+          delete newEquipped[slot as ArmorSlot];
+          playToolBreakSound(); // 防具破壊音
+        } else {
+          newDurability[armorId] = dur;
+        }
+      }
+      set({ armorDurability: newDurability, equippedArmor: newEquipped });
+    }
 
     // ノックバック計算
     let kbVx = 0;
@@ -481,5 +523,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!equippedToolId) return HAND_TIER_LEVEL;
     const def = TOOL_DEFS[equippedToolId];
     return def?.tierLevel ?? HAND_TIER_LEVEL;
+  },
+
+  equipArmor: (armorId) => {
+    const def = ARMOR_DEFS[armorId];
+    if (!def) return;
+    set((state) => ({
+      equippedArmor: { ...state.equippedArmor, [def.slot]: armorId },
+      armorDurability: {
+        ...state.armorDurability,
+        [armorId]: def.maxDurability,
+      },
+    }));
+  },
+
+  unequipArmor: (slot) => {
+    set((state) => {
+      const newArmor = { ...state.equippedArmor };
+      const armorId = newArmor[slot];
+      delete newArmor[slot];
+      const newDurability = { ...state.armorDurability };
+      if (armorId) delete newDurability[armorId];
+      return { equippedArmor: newArmor, armorDurability: newDurability };
+    });
+  },
+
+  getTotalDefense: () => {
+    const { equippedArmor } = get();
+    return calculateTotalDefense(equippedArmor);
   },
 }));

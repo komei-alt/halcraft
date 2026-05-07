@@ -19,6 +19,8 @@ export interface CraftingRecipe {
   resultCount: number;
   /** ツールクラフトの場合、付与するツールID */
   toolId?: string;
+  /** 防具クラフトの場合、付与する防具ID */
+  armorId?: string;
 }
 
 /** 全クラフトレシピの定義 */
@@ -371,5 +373,119 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.DIAMOND_GEM,
     resultCount: 1,
     toolId: 'diamond_sword',
+  },
+
+  // === 革の防具 ===
+  {
+    id: 'leather_helmet',
+    name: '革のヘルメット',
+    description: '革で作る基本の頭防具',
+    ingredients: { [BLOCK_IDS.GRASS]: 5 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    armorId: 'leather_helmet',
+  },
+  {
+    id: 'leather_chestplate',
+    name: '革のチェストプレート',
+    description: '革で作る基本の胸当て',
+    ingredients: { [BLOCK_IDS.GRASS]: 8 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    armorId: 'leather_chestplate',
+  },
+  {
+    id: 'leather_leggings',
+    name: '革のレギンス',
+    description: '革で作る基本の足防具',
+    ingredients: { [BLOCK_IDS.GRASS]: 7 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    armorId: 'leather_leggings',
+  },
+  {
+    id: 'leather_boots',
+    name: '革のブーツ',
+    description: '革で作る基本のブーツ',
+    ingredients: { [BLOCK_IDS.GRASS]: 4 },
+    result: BLOCK_IDS.GRASS,
+    resultCount: 1,
+    armorId: 'leather_boots',
+  },
+
+  // === 鉄の防具 ===
+  {
+    id: 'iron_helmet',
+    name: '鉄のヘルメット',
+    description: '鉄インゴットで作る頑丈な頭防具',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 5 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    armorId: 'iron_helmet',
+  },
+  {
+    id: 'iron_chestplate',
+    name: '鉄のチェストプレート',
+    description: '鉄インゴットで作る頑丈な胸当て',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 8 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    armorId: 'iron_chestplate',
+  },
+  {
+    id: 'iron_leggings',
+    name: '鉄のレギンス',
+    description: '鉄インゴットで作る頑丈な足防具',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 7 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    armorId: 'iron_leggings',
+  },
+  {
+    id: 'iron_boots',
+    name: '鉄のブーツ',
+    description: '鉄インゴットで作る頑丈なブーツ',
+    ingredients: { [BLOCK_IDS.IRON_INGOT]: 4 },
+    result: BLOCK_IDS.IRON_INGOT,
+    resultCount: 1,
+    armorId: 'iron_boots',
+  },
+
+  // === ダイヤの防具 ===
+  {
+    id: 'diamond_helmet',
+    name: 'ダイヤのヘルメット',
+    description: 'ダイヤモンドで作る最強の頭防具',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 5 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    armorId: 'diamond_helmet',
+  },
+  {
+    id: 'diamond_chestplate',
+    name: 'ダイヤのチェストプレート',
+    description: 'ダイヤモンドで作る最強の胸当て',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 8 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    armorId: 'diamond_chestplate',
+  },
+  {
+    id: 'diamond_leggings',
+    name: 'ダイヤのレギンス',
+    description: 'ダイヤモンドで作る最強の足防具',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 7 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    armorId: 'diamond_leggings',
+  },
+  {
+    id: 'diamond_boots',
+    name: 'ダイヤのブーツ',
+    description: 'ダイヤモンドで作る最強のブーツ',
+    ingredients: { [BLOCK_IDS.DIAMOND_GEM]: 4 },
+    result: BLOCK_IDS.DIAMOND_GEM,
+    resultCount: 1,
+    armorId: 'diamond_boots',
   },
 ];
