@@ -583,4 +583,17 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     result: BLOCK_IDS.LEVER,
     resultCount: 1,
   },
+
+  // === ネザー ===
+  {
+    id: 'nether_portal',
+    name: 'ネザーポータル',
+    description: '別次元「ネザー」への入口を作る',
+    ingredients: {
+      [BLOCK_IDS.DIAMOND_GEM]: 4,
+      [BLOCK_IDS.IRON_INGOT]: 4,
+    },
+    result: BLOCK_IDS.NETHER_PORTAL,
+    resultCount: 1,
+  },
 ];

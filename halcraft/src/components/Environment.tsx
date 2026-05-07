@@ -140,6 +140,15 @@ export function Environment() {
       _sunColor.copy(_nightSun);
     }
 
+    // ネザーディメンション時は固定の暗赤色環境に上書き
+    if (gameState.dimension === 'nether') {
+      _skyColor.setHex(0x1A0000);
+      _fogColor.setHex(0x330808);
+      _sunColor.setHex(0xFF4400);
+      sunIntensity = 0.5;
+      ambientIntensity = 0.3;
+    }
+
     // 太陽の位置を時間に連動（円弧を描く）
     const sunAngle = gameTime * Math.PI * 2;
     _sunPosition.set(

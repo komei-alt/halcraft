@@ -22,6 +22,7 @@ import {
   type VehicleType,
 } from '../stores/useVehicleStore';
 import { checkAABBCollision, isBlockSolid, isInWater, isInLava } from '../utils/collision';
+import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { isRailBlock, CART_BOARD_DISTANCE, COASTER_START_PUSH_SPEED } from '../utils/coasterPhysics';
@@ -1337,6 +1338,17 @@ export function Player() {
       const hasFireRes = useEffectStore.getState().hasEffect('fire_resistance');
       if (!hasFireRes) {
         playerStore.takeDamage(LAVA_DAMAGE_PER_SEC * dt);
+      }
+    }
+
+    // --- ネザーポータル判定 ---
+    const feetBlock = getBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+    if (feetBlock === BLOCK_IDS.NETHER_PORTAL) {
+      const gameState = useGameStore.getState();
+      if (gameState.dimension === 'overworld') {
+        gameState.travelToNether();
+      } else {
+        gameState.travelToOverworld();
       }
     }
 

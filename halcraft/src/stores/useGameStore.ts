@@ -84,6 +84,14 @@ interface GameState {
   /** 昼か夜か */
   isNight: boolean;
 
+  /** 現在のディメンション */
+  dimension: 'overworld' | 'nether';
+
+  /** ネザーへ移動 */
+  travelToNether: () => void;
+  /** オーバーワールドへ戻る */
+  travelToOverworld: () => void;
+
   /** 更新通知を表示するか */
   updateAvailable: boolean;
 
@@ -133,8 +141,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   gameTime: 0.0, // 朝スタート
   dayCount: 1,
   isNight: false,
+  dimension: 'overworld',
   updateAvailable: false,
   isMultiplayer: false,
+
+  travelToNether: () => set({ dimension: 'nether' }),
+  travelToOverworld: () => set({ dimension: 'overworld' }),
 
   dismissUpdate: () => set({ updateAvailable: false }),
 
