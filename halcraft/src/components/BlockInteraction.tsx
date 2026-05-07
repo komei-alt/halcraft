@@ -34,6 +34,8 @@ const ATTACK_REACH = 3.5;
 const ATTACK_DAMAGE = 3;
 /** プレイヤーへの攻撃ダメージ */
 const PVP_DAMAGE = 3;
+/** 連続設置の間隔（秒） — Minecraft は約 4tick = 200ms */
+const PLACE_INTERVAL = 0.2;
 /** プレイヤーの当たり判定サイズ */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -200,6 +202,12 @@ export function BlockInteraction() {
   const [breakProgressState, setBreakProgressState] = useState<BreakProgress | null>(null);
   // 左クリック押しっぱなし状態
   const isBreakingRef = useRef(false);
+  // 右クリック押しっぱなし状態（連続設置用）
+  const isPlacingRef = useRef(false);
+  // 連続設置のクールダウンタイマー
+  const placeTimerRef = useRef(0);
+  // 直前に設置した座標（同じ座標に二重設置しない）
+  const lastPlacedRef = useRef<string>('');
 
   // 照準先のリモートプレイヤーを検索
   const getAttackDistanceLimit = useCallback((): number => {
@@ -508,6 +516,65 @@ export function BlockInteraction() {
       }
     }
 
+    // --- デスクトップ: 右クリック長押しによる連続ブロック設置 ---
+    if (!isTouch.current && isPlacingRef.current) {
+      if (!usePlayerStore.getState().isDead
+        && !useVehicleStore.getState().isInVehicle()
+        && equippedItem === 'builder'
+        && document.pointerLockElement
+      ) {
+        placeTimerRef.current += dt;
+        const t = targetRef.current;
+        if (t && t.hasPlaceTarget) {
+          const coordKey = `${t.placeX},${t.placeY},${t.placeZ}`;
+          // 照準先が変わったら即座に設置（クールダウンリセット）
+          const targetChanged = coordKey !== lastPlacedRef.current;
+          if (targetChanged || placeTimerRef.current >= PLACE_INTERVAL) {
+            // TNT右クリック起爆チェック
+            const targetBlockId = getBlock(t.x, t.y, t.z);
+            if (BLOCK_DEFS[targetBlockId]?.explosive) {
+              if (breakBlock(t.x, t.y, t.z)) {
+                spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
+                sendBlockBreak(t.x, t.y, t.z);
+                const cp = camera.position;
+                triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
+              }
+            } else if (!wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) {
+              const selectedBlock = getSelectedBlock();
+              setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+              sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+              playBlockBreakSound();
+
+              // SPAWNERブロック設置時
+              if (selectedBlock === BLOCK_IDS.SPAWNER) {
+                spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
+              }
+              // レバー設置時: 隣接TNT遠隔起爆
+              if (selectedBlock === BLOCK_IDS.LEVER) {
+                const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+                for (const [dx, dy, dz] of dirs) {
+                  const nx = t.placeX + dx;
+                  const ny = t.placeY + dy;
+                  const nz = t.placeZ + dz;
+                  const neighborBlock = getBlock(nx, ny, nz);
+                  if (BLOCK_DEFS[neighborBlock]?.explosive) {
+                    if (breakBlock(nx, ny, nz)) {
+                      spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
+                      sendBlockBreak(nx, ny, nz);
+                      const cp = camera.position;
+                      triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
+                    }
+                  }
+                }
+              }
+              lastPlacedRef.current = coordKey;
+            }
+            placeTimerRef.current = 0;
+          }
+        }
+      }
+    }
+
     // --- モバイル: タッチによるブロック操作の処理 ---
     if (isTouch.current) {
       if (usePlayerStore.getState().isDead) return;
@@ -614,7 +681,11 @@ export function BlockInteraction() {
         }
       }
     } else if (e.button === 2) {
-      // 右クリック: TNT起爆 or ブロック設置
+      // 右クリック押下: 連続設置モード開始 + 初回即設置
+      isPlacingRef.current = true;
+      placeTimerRef.current = 0;
+      lastPlacedRef.current = '';
+
       const t = targetRef.current;
       if (!t) return;
 
@@ -631,18 +702,18 @@ export function BlockInteraction() {
       }
 
       if (!t.hasPlaceTarget) return;
-      // プレイヤーの体と重ならないかチェック
       if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return;
       const selectedBlock = getSelectedBlock();
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+      playBlockBreakSound();
+      lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
 
-      // SPAWNERブロック設置時:アイアンゴーレムをスポーン
+      // SPAWNERブロック設置時
       if (selectedBlock === BLOCK_IDS.SPAWNER) {
         spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
       }
-
-      // レバー設置時: 隣接するTNTを遠隔起爆
+      // レバー設置時: 隣接TNT遠隔起爆
       if (selectedBlock === BLOCK_IDS.LEVER) {
         const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
         for (const [dx, dy, dz] of dirs) {
@@ -667,6 +738,10 @@ export function BlockInteraction() {
   const handleMouseUp = useCallback((e: MouseEvent) => {
     if (e.button === 0) {
       isBreakingRef.current = false;
+    }
+    if (e.button === 2) {
+      isPlacingRef.current = false;
+      lastPlacedRef.current = '';
     }
   }, []);
 
