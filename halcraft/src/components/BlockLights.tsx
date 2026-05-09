@@ -133,6 +133,14 @@ export function BlockLights() {
   useFrame(({ camera, clock }) => {
     const elapsed = clock.getElapsedTime();
 
+    if (maxLights <= 0 || lightCollectRangeSq <= 0) {
+      activeClusters.current = [];
+      for (const light of lightsRef.current) {
+        if (light) light.visible = false;
+      }
+      return;
+    }
+
     // クラスタリングとソートは UPDATE_INTERVAL ごとに実行
     if (elapsed - lastUpdateTime.current >= UPDATE_INTERVAL) {
       lastUpdateTime.current = elapsed;

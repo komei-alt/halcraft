@@ -62,18 +62,18 @@ function getPresetTier(preset: GraphicsPreset): PerformanceTier {
 const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
   low: {
     tier: 'low',
-    shadowsEnabled: true,
-    maxDpr: 1.15,
+    shadowsEnabled: false,
+    maxDpr: 1,
     cameraFar: 220,
     visibleChunkRadius: 5,
-    initialRenderDistance: 6,
-    maxChunksPerFrame: 2,
-    chunkGenerationBudgetMs: 2.5,
+    initialRenderDistance: 5,
+    maxChunksPerFrame: 1,
+    chunkGenerationBudgetMs: 2,
     maxDynamicLights: 6,
     lightCollectRange: 32,
-    shadowMapSize: 768,
-    shadowCameraSize: 36,
-    shadowCameraFar: 110,
+    shadowMapSize: 0,
+    shadowCameraSize: 0,
+    shadowCameraFar: 0,
   },
   balanced: {
     tier: 'balanced',
@@ -108,9 +108,15 @@ const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
 };
 
 function getMaxDpr(scale: ResolutionScale, tier: PerformanceTier): number {
-  if (scale === 'performance') return 1.1;
-  if (scale === 'crisp') return tier === 'high' ? 1.8 : 1.55;
-  return tier === 'high' ? 1.45 : 1.35;
+  if (scale === 'performance') return 1;
+  if (scale === 'crisp') {
+    if (tier === 'high') return 1.8;
+    if (tier === 'balanced') return 1.5;
+    return 1.25;
+  }
+  if (tier === 'high') return 1.45;
+  if (tier === 'balanced') return 1.3;
+  return 1.15;
 }
 
 function applyLightingQuality(profile: PerformanceProfile, quality: LightingQuality): PerformanceProfile {
@@ -164,25 +170,23 @@ function applyShadowQuality(profile: PerformanceProfile, quality: ShadowQuality)
     };
   }
 
-  return {
-    ...profile,
-    shadowsEnabled: true,
-    shadowMapSize: 1024,
-    shadowCameraSize: 46,
-    shadowCameraFar: 140,
-  };
+  return profile;
 }
 
 export function getPerformanceProfile(): PerformanceProfile {
   const settings = useSettingsStore.getState();
   const tier = getPresetTier(settings.graphicsPreset);
+  const baseProfile = BASE_PROFILES[tier];
+  const effectiveRenderDistance = settings.graphicsPreset === 'auto'
+    ? Math.min(settings.renderDistance, baseProfile.visibleChunkRadius)
+    : settings.renderDistance;
 
   let profile: PerformanceProfile = {
-    ...BASE_PROFILES[tier],
+    ...baseProfile,
     tier,
-    visibleChunkRadius: settings.renderDistance,
-    initialRenderDistance: Math.max(4, Math.min(settings.renderDistance + 1, 10)),
-    cameraFar: Math.max(180, settings.renderDistance * 38),
+    visibleChunkRadius: effectiveRenderDistance,
+    initialRenderDistance: Math.max(4, Math.min(effectiveRenderDistance + (tier === 'low' ? 0 : 1), 10)),
+    cameraFar: Math.max(160, effectiveRenderDistance * 38),
     maxDpr: getMaxDpr(settings.resolutionScale, tier),
   };
 

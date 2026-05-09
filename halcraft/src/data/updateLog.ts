@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-09',
+    items: [
+      { type: 'improve', text: '重いときにすぐ軽くできるボタンと、自動設定の軽量化を強化したよ' },
+    ],
+  },
+  {
     date: '2026-05-07',
     items: [
       { type: 'feature', text: '⚙️ 設定メニュー追加！画質・ライティング・影・表示距離をゲーム内で変えられるよ！' },

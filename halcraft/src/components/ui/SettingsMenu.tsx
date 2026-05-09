@@ -10,6 +10,7 @@ import {
   type ShadowQuality,
 } from '../../stores/useSettingsStore';
 import { isTouchDevice } from '../../utils/device';
+import { getPerformanceProfile, type PerformanceTier } from '../../utils/performance';
 
 interface SettingsButtonProps {
   variant: 'menu' | 'hud';
@@ -91,6 +92,24 @@ const resolutionOptions: Array<SegmentOption<ResolutionScale>> = [
   { value: 'balanced', label: '標準', icon: 'M' },
   { value: 'crisp', label: 'くっきり', icon: 'H' },
 ];
+
+const tierLabels: Record<PerformanceTier, string> = {
+  low: '軽量',
+  balanced: '標準',
+  high: '高画質',
+};
+
+const quickButtonStyle: CSSProperties = {
+  minHeight: 36,
+  padding: '8px 12px',
+  borderRadius: 6,
+  border: '1px solid rgba(120, 210, 255, 0.72)',
+  background: 'rgba(70, 155, 210, 0.28)',
+  color: '#fff',
+  fontWeight: 900,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
 
 function Segment<T extends string>({
   value,
@@ -245,6 +264,18 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setShowControlsGuide = useSettingsStore((s) => s.setShowControlsGuide);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
   const isTouch = isTouchDevice();
+  const performanceProfile = getPerformanceProfile();
+  const presetLabel = presetOptions.find((o) => o.value === graphicsPreset)?.label ?? graphicsPreset;
+  const presetValueLabel = graphicsPreset === 'auto'
+    ? `${presetLabel} / ${tierLabels[performanceProfile.tier]}`
+    : presetLabel;
+  const renderDistanceLabel = performanceProfile.visibleChunkRadius === renderDistance
+    ? `${renderDistance} chunks`
+    : `${renderDistance} / 有効 ${performanceProfile.visibleChunkRadius}`;
+  const shadowLabel = performanceProfile.shadowsEnabled
+    ? shadowOptions.find((o) => o.value === shadowQuality)?.label
+    : 'なし';
+  const resolutionLabel = `${resolutionOptions.find((o) => o.value === resolutionScale)?.label} ${Math.round(performanceProfile.maxDpr * 100)}%`;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -334,10 +365,69 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
           </button>
         </div>
 
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isTouch ? '1fr' : '1fr auto',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 16px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(255, 255, 255, 0.035)',
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              color: 'rgba(255, 255, 255, 0.74)',
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: '0.06em',
+            }}>
+              現在の負荷
+            </div>
+            <div style={{
+              marginTop: 4,
+              color: '#fff',
+              fontSize: isTouch ? 14 : 15,
+              fontWeight: 900,
+              letterSpacing: 0,
+            }}>
+              {tierLabels[performanceProfile.tier]} / {performanceProfile.visibleChunkRadius} chunks / {Math.round(performanceProfile.maxDpr * 100)}%
+            </div>
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            justifyContent: isTouch ? 'stretch' : 'flex-end',
+          }}>
+            <button
+              type="button"
+              onClick={() => applyGraphicsPreset('light')}
+              style={{
+                ...quickButtonStyle,
+                flex: isTouch ? '1 1 130px' : '0 0 auto',
+                background: 'rgba(70, 175, 120, 0.30)',
+                borderColor: 'rgba(120, 235, 165, 0.70)',
+              }}
+            >
+              快適優先
+            </button>
+            <button
+              type="button"
+              onClick={() => applyGraphicsPreset('auto')}
+              style={{
+                ...quickButtonStyle,
+                flex: isTouch ? '1 1 130px' : '0 0 auto',
+              }}
+            >
+              端末に合わせる
+            </button>
+          </div>
+        </div>
+
         <div style={sectionStyle}>
           <div style={labelStyle}>
             <span>画質プリセット</span>
-            <span style={valueStyle}>{presetOptions.find((o) => o.value === graphicsPreset)?.label}</span>
+            <span style={valueStyle}>{presetValueLabel}</span>
           </div>
           <Segment value={graphicsPreset} options={presetOptions} onChange={applyGraphicsPreset} />
         </div>
@@ -345,7 +435,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
         <div style={sectionStyle}>
           <div style={labelStyle}>
             <span>表示距離</span>
-            <span style={valueStyle}>{renderDistance} chunks</span>
+            <span style={valueStyle}>{renderDistanceLabel}</span>
           </div>
           <input
             type="range"
@@ -383,7 +473,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={labelStyle}>
               <span>影</span>
-              <span style={valueStyle}>{shadowOptions.find((o) => o.value === shadowQuality)?.label}</span>
+              <span style={valueStyle}>{shadowLabel}</span>
             </div>
             <Segment
               value={shadowQuality}
@@ -403,7 +493,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={labelStyle}>
               <span>解像度</span>
-              <span style={valueStyle}>{resolutionOptions.find((o) => o.value === resolutionScale)?.label}</span>
+              <span style={valueStyle}>{resolutionLabel}</span>
             </div>
             <Segment
               value={resolutionScale}

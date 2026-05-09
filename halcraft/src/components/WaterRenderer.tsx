@@ -2,12 +2,13 @@
 // 水面の波アニメーション + 半透明マテリアルで臨場感を出す
 // InstancedMesh を使用して大量の水ブロックを効率的に描画
 
-import { useMemo, useEffect, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS } from '../types/blocks';
+import { BLOCK_IDS, CHUNK_SIZE, RENDER_DISTANCE } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { getPerformanceProfile } from '../utils/performance';
 
 /** 水面シェーダーマテリアル（波アニメーション + 半透明） */
 function createWaterMaterial(): THREE.ShaderMaterial {
@@ -73,17 +74,25 @@ function createWaterMaterial(): THREE.ShaderMaterial {
 
 /** 共有boxGeometry（水ブロック用） */
 const waterGeometry = new THREE.BoxGeometry(1, 1, 1);
+const WATER_CENTER_UPDATE_INTERVAL_MS = 650;
 
 /** 水ブロックの InstancedMesh 描画 */
 export function WaterRenderer() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummyRef = useRef(new THREE.Object3D());
+  const lastCenterUpdate = useRef(0);
   const material = useMemo(() => createWaterMaterial(), []);
+  const { camera } = useThree();
 
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
   const getBlock = useWorldStore((s) => s.getBlock);
+  useSettingsStore((s) => s.graphicsPreset);
+  useSettingsStore((s) => s.renderDistance);
   const waterAnimation = useSettingsStore((s) => s.waterAnimation);
+  const performanceProfile = getPerformanceProfile();
+  const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius + 1);
+  const [cameraChunk, setCameraChunk] = useState({ cx: 0, cz: 0 });
 
   const waterPositions = useMemo(() => {
     // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
@@ -92,6 +101,12 @@ export function WaterRenderer() {
     const indexedWater = getIndexedBlockPositions(BLOCK_IDS.WATER);
 
     for (const pos of indexedWater) {
+      const chunkX = Math.floor(pos.x / CHUNK_SIZE);
+      const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
+      if (Math.max(Math.abs(chunkX - cameraChunk.cx), Math.abs(chunkZ - cameraChunk.cz)) > visibleDistance) {
+        continue;
+      }
+
       // 空気に隣接する水ブロックのみ描画（埋もれた水は不要）
       const hasExposedFace =
         getBlock(pos.x, pos.y + 1, pos.z) !== BLOCK_IDS.WATER ||
@@ -106,7 +121,7 @@ export function WaterRenderer() {
     }
 
     return new Float32Array(positions);
-  }, [blockIndexVersion, getBlock, getIndexedBlockPositions]);
+  }, [blockIndexVersion, cameraChunk.cx, cameraChunk.cz, getBlock, getIndexedBlockPositions, visibleDistance]);
 
   const count = waterPositions.length / 3;
 
@@ -130,6 +145,18 @@ export function WaterRenderer() {
   // 毎フレーム time uniform を更新（Three.js のマテリアル副作用）
   /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
+    const now = performance.now();
+    if (now - lastCenterUpdate.current >= WATER_CENTER_UPDATE_INTERVAL_MS) {
+      lastCenterUpdate.current = now;
+      const nextCx = Math.floor(camera.position.x / CHUNK_SIZE);
+      const nextCz = Math.floor(camera.position.z / CHUNK_SIZE);
+      setCameraChunk((current) => (
+        current.cx === nextCx && current.cz === nextCz
+          ? current
+          : { cx: nextCx, cz: nextCz }
+      ));
+    }
+
     if (!waterAnimation) return;
     const waterMaterial = meshRef.current?.material;
     if (waterMaterial instanceof THREE.ShaderMaterial) {
