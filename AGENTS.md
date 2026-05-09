@@ -164,7 +164,7 @@ Hobby _Hal_Game 01/
 
 ### 5.1 AIファースト
 
-- **全てAntigravity上で完結**する。
+- **Codex / Claude Code を主作業環境とする**。Antigravity は active 作業環境から除外する。
 - 人間が手動コーディングすることを前提としない。
 
 ### 5.2 パフォーマンス設計
