@@ -8,13 +8,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
-
-/** 実際に配置する PointLight の最大数（GPU負荷の上限） */
-const MAX_LIGHTS = 12;
-/** 光源を収集する最大距離（ブロック単位） */
-const LIGHT_COLLECT_RANGE = 50;
-/** 光源を収集する最大距離の二乗 */
-const LIGHT_COLLECT_RANGE_SQ = LIGHT_COLLECT_RANGE * LIGHT_COLLECT_RANGE;
+import { useSettingsStore } from '../stores/useSettingsStore';
+import { getPerformanceProfile } from '../utils/performance';
 /** 光源クラスタリングの統合距離（この距離内の光源は1つにまとめる） */
 const CLUSTER_DISTANCE = 6;
 /** クラスタリング距離の二乗 */
@@ -123,9 +118,13 @@ function collectNearbyLightSources(): LightSource[] {
 
 /** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
 export function BlockLights() {
+  useSettingsStore((s) => s.lightingQuality);
+  const performanceProfile = getPerformanceProfile();
+  const maxLights = performanceProfile.maxDynamicLights;
+  const lightCollectRangeSq = performanceProfile.lightCollectRange * performanceProfile.lightCollectRange;
   // 固定数の PointLight ref（プーリング方式で再利用）
   const lightsRef = useRef<(THREE.PointLight | null)[]>(
-    Array.from({ length: MAX_LIGHTS }, () => null),
+    Array.from({ length: maxLights }, () => null),
   );
   const lastUpdateTime = useRef(0);
   const activeClusters = useRef<LightCluster[]>([]);
@@ -150,7 +149,7 @@ export function BlockLights() {
         const dx = s.x - cx;
         const dy = s.y - cy;
         const dz = s.z - cz;
-        return dx * dx + dy * dy + dz * dz < LIGHT_COLLECT_RANGE_SQ;
+        return dx * dx + dy * dy + dz * dz < lightCollectRangeSq;
       });
 
       // 距離でソート
@@ -160,16 +159,16 @@ export function BlockLights() {
         return da - db;
       });
 
-      // クラスタリングして最大 MAX_LIGHTS 個に
+      // クラスタリングして端末ごとの上限個数に
       const clusters = clusterLightSources(nearSources);
-      activeClusters.current = clusters.slice(0, MAX_LIGHTS);
+      activeClusters.current = clusters.slice(0, maxLights);
     }
 
     // ライトの位置・強度を更新
     const clusters = activeClusters.current;
     const t = elapsed;
 
-    for (let i = 0; i < MAX_LIGHTS; i++) {
+    for (let i = 0; i < maxLights; i++) {
       const light = lightsRef.current[i];
       if (!light) continue;
 
@@ -199,7 +198,7 @@ export function BlockLights() {
   return (
     <group>
       {/* 固定数の PointLight プール（再利用方式） */}
-      {Array.from({ length: MAX_LIGHTS }, (_, i) => (
+      {Array.from({ length: maxLights }, (_, i) => (
         <pointLight
           key={`block-light-${i}`}
           ref={(el) => { lightsRef.current[i] = el; }}

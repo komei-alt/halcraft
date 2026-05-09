@@ -1,0 +1,174 @@
+// ユーザー設定ストア
+// グラフィック品質・表示補助を localStorage に保存する
+
+import { create } from 'zustand';
+
+const SETTINGS_STORAGE_KEY = 'halcraft-settings';
+
+export type GraphicsPreset = 'auto' | 'light' | 'balanced' | 'quality';
+export type LightingQuality = 'simple' | 'standard' | 'rich';
+export type ShadowQuality = 'off' | 'low' | 'standard' | 'high';
+export type ResolutionScale = 'performance' | 'balanced' | 'crisp';
+
+export interface SettingsSnapshot {
+  graphicsPreset: GraphicsPreset;
+  renderDistance: number;
+  lightingQuality: LightingQuality;
+  shadowQuality: ShadowQuality;
+  resolutionScale: ResolutionScale;
+  waterAnimation: boolean;
+  showControlsGuide: boolean;
+}
+
+interface SettingsState extends SettingsSnapshot {
+  setGraphicsPreset: (preset: GraphicsPreset) => void;
+  applyGraphicsPreset: (preset: GraphicsPreset) => void;
+  setRenderDistance: (distance: number) => void;
+  setLightingQuality: (quality: LightingQuality) => void;
+  setShadowQuality: (quality: ShadowQuality) => void;
+  setResolutionScale: (scale: ResolutionScale) => void;
+  setWaterAnimation: (enabled: boolean) => void;
+  setShowControlsGuide: (enabled: boolean) => void;
+  resetSettings: () => void;
+}
+
+export const DEFAULT_SETTINGS: SettingsSnapshot = {
+  graphicsPreset: 'auto',
+  renderDistance: 7,
+  lightingQuality: 'standard',
+  shadowQuality: 'standard',
+  resolutionScale: 'balanced',
+  waterAnimation: true,
+  showControlsGuide: true,
+};
+
+const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
+  auto: DEFAULT_SETTINGS,
+  light: {
+    graphicsPreset: 'light',
+    renderDistance: 5,
+    lightingQuality: 'simple',
+    shadowQuality: 'off',
+    resolutionScale: 'performance',
+    waterAnimation: false,
+    showControlsGuide: true,
+  },
+  balanced: {
+    graphicsPreset: 'balanced',
+    renderDistance: 7,
+    lightingQuality: 'standard',
+    shadowQuality: 'standard',
+    resolutionScale: 'balanced',
+    waterAnimation: true,
+    showControlsGuide: true,
+  },
+  quality: {
+    graphicsPreset: 'quality',
+    renderDistance: 9,
+    lightingQuality: 'rich',
+    shadowQuality: 'high',
+    resolutionScale: 'crisp',
+    waterAnimation: true,
+    showControlsGuide: true,
+  },
+};
+
+function isGraphicsPreset(value: unknown): value is GraphicsPreset {
+  return value === 'auto' || value === 'light' || value === 'balanced' || value === 'quality';
+}
+
+function isLightingQuality(value: unknown): value is LightingQuality {
+  return value === 'simple' || value === 'standard' || value === 'rich';
+}
+
+function isShadowQuality(value: unknown): value is ShadowQuality {
+  return value === 'off' || value === 'low' || value === 'standard' || value === 'high';
+}
+
+function isResolutionScale(value: unknown): value is ResolutionScale {
+  return value === 'performance' || value === 'balanced' || value === 'crisp';
+}
+
+function clampRenderDistance(value: number): number {
+  return Math.max(4, Math.min(10, Math.round(value)));
+}
+
+function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot {
+  return {
+    graphicsPreset: state.graphicsPreset,
+    renderDistance: state.renderDistance,
+    lightingQuality: state.lightingQuality,
+    shadowQuality: state.shadowQuality,
+    resolutionScale: state.resolutionScale,
+    waterAnimation: state.waterAnimation,
+    showControlsGuide: state.showControlsGuide,
+  };
+}
+
+function saveSettings(snapshot: SettingsSnapshot): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // 保存できない環境でもゲームは止めない。
+  }
+}
+
+function loadSettings(): SettingsSnapshot {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+
+    const parsed = JSON.parse(raw) as Partial<Record<keyof SettingsSnapshot, unknown>>;
+    return {
+      graphicsPreset: isGraphicsPreset(parsed.graphicsPreset) ? parsed.graphicsPreset : DEFAULT_SETTINGS.graphicsPreset,
+      renderDistance: typeof parsed.renderDistance === 'number'
+        ? clampRenderDistance(parsed.renderDistance)
+        : DEFAULT_SETTINGS.renderDistance,
+      lightingQuality: isLightingQuality(parsed.lightingQuality)
+        ? parsed.lightingQuality
+        : DEFAULT_SETTINGS.lightingQuality,
+      shadowQuality: isShadowQuality(parsed.shadowQuality) ? parsed.shadowQuality : DEFAULT_SETTINGS.shadowQuality,
+      resolutionScale: isResolutionScale(parsed.resolutionScale)
+        ? parsed.resolutionScale
+        : DEFAULT_SETTINGS.resolutionScale,
+      waterAnimation: typeof parsed.waterAnimation === 'boolean'
+        ? parsed.waterAnimation
+        : DEFAULT_SETTINGS.waterAnimation,
+      showControlsGuide: typeof parsed.showControlsGuide === 'boolean'
+        ? parsed.showControlsGuide
+        : DEFAULT_SETTINGS.showControlsGuide,
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export const useSettingsStore = create<SettingsState>((set) => {
+  const setAndSave = (partial: Partial<SettingsSnapshot>) => {
+    set((state) => {
+      const next = {
+        ...pickSnapshot(state),
+        ...partial,
+      };
+      saveSettings(next);
+      return next;
+    });
+  };
+
+  return {
+    ...loadSettings(),
+
+    setGraphicsPreset: (graphicsPreset) => setAndSave({ graphicsPreset }),
+    applyGraphicsPreset: (preset) => setAndSave(PRESET_SETTINGS[preset]),
+    setRenderDistance: (renderDistance) => setAndSave({ renderDistance: clampRenderDistance(renderDistance) }),
+    setLightingQuality: (lightingQuality) => setAndSave({ lightingQuality }),
+    setShadowQuality: (shadowQuality) => setAndSave({ shadowQuality }),
+    setResolutionScale: (resolutionScale) => setAndSave({ resolutionScale }),
+    setWaterAnimation: (waterAnimation) => setAndSave({ waterAnimation }),
+    setShowControlsGuide: (showControlsGuide) => setAndSave({ showControlsGuide }),
+    resetSettings: () => setAndSave(DEFAULT_SETTINGS),
+  };
+});
