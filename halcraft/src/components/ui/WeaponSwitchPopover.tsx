@@ -5,7 +5,12 @@ import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
 import { getMasteryPerkSummary } from '../../types/masteryPerks';
-import { formatStageCombatBonus, getStageCombatStyleForItem } from '../../types/stageCombatStyles';
+import {
+  formatStageCombatBonus,
+  getStageCombatStyle,
+  getStageCombatStyleForItem,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
 import { isTouchDevice } from '../../utils/device';
 
 const SHOW_DURATION_MS = 2200;
@@ -193,6 +198,9 @@ export function WeaponSwitchPopover() {
   const masteryTitle = mastery ? getMasteryTitle(displayItem, mastery.level) : '';
   const masteryPerk = mastery ? getMasteryPerkSummary(displayItem, mastery.level) : '';
   const stageStyle = getStageCombatStyleForItem(currentStageId, displayItem);
+  const recommendedStageStyle = getStageCombatStyle(currentStageId);
+  const tacticStyle = stageStyle ?? recommendedStageStyle;
+  const tacticMatched = Boolean(stageStyle);
 
   return (
     <div
@@ -343,14 +351,14 @@ export function WeaponSwitchPopover() {
           </div>
         )}
 
-        {stageStyle && (
+        {tacticStyle && (
           <div
             style={{
               marginTop: 9,
               padding: '7px 8px',
               borderRadius: 7,
-              background: `${stageStyle.accent}16`,
-              border: `1px solid ${stageStyle.accent}44`,
+              background: `${tacticStyle.accent}16`,
+              border: `1px solid ${tacticStyle.accent}44`,
               color: 'rgba(255,255,255,0.84)',
               fontSize: isTouch ? 10 : 11,
               lineHeight: '14px',
@@ -359,14 +367,16 @@ export function WeaponSwitchPopover() {
           >
             <div
               style={{
-                color: stageStyle.accent,
+                color: tacticStyle.accent,
                 fontWeight: 950,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
             >
-              {stageStyle.icon} {stageStyle.title}
+              {tacticStyle.icon} {tacticMatched
+                ? tacticStyle.title
+                : `推奨: ${getStageCombatWeaponLabel(tacticStyle.weapon)}`}
             </div>
             <div
               style={{
@@ -376,7 +386,9 @@ export function WeaponSwitchPopover() {
                 textOverflow: 'ellipsis',
               }}
             >
-              {formatStageCombatBonus(stageStyle)}
+              {tacticMatched
+                ? formatStageCombatBonus(tacticStyle)
+                : `${tacticStyle.shortLabel}: ${formatStageCombatBonus(tacticStyle)}`}
             </div>
           </div>
         )}

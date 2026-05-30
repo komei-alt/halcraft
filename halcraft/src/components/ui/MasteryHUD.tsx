@@ -15,7 +15,9 @@ import { BLOCK_DEFS, HOTBAR_BLOCKS, type BlockId } from '../../types/blocks';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
 import {
   formatStageCombatBonus,
+  getStageCombatStyle,
   getStageCombatStyleForItem,
+  getStageCombatWeaponLabel,
   type StageCombatStyle,
 } from '../../types/stageCombatStyles';
 import { getBlockUseHint } from '../../utils/blockUseFeedback';
@@ -41,6 +43,8 @@ interface ItemActionStatusOptions {
   rocketCooldown: number;
   attackCharge: number;
   stageStyle: StageCombatStyle | null;
+  recommendedStageStyle: StageCombatStyle | null;
+  swapActionLabel: string;
 }
 
 function clampRatio(value: number): number {
@@ -63,7 +67,20 @@ function getItemActionStatus({
   rocketCooldown,
   attackCharge,
   stageStyle,
+  recommendedStageStyle,
+  swapActionLabel,
 }: ItemActionStatusOptions): ItemActionStatus {
+  if (recommendedStageStyle && recommendedStageStyle.weapon !== equippedItem) {
+    return {
+      label: 'マップ相性OFF',
+      detail: `${recommendedStageStyle.shortLabel}: ${swapActionLabel}${getStageCombatWeaponLabel(recommendedStageStyle.weapon)} / ${formatStageCombatBonus(recommendedStageStyle)}`,
+      meterLabel: 'MAP',
+      meterText: 'SWAP',
+      meterRatio: 0.26,
+      meterColor: recommendedStageStyle.accent,
+    };
+  }
+
   if (equippedItem === 'builder') {
     const hasStock = selectedCount > 0;
     return {
@@ -144,6 +161,7 @@ export function MasteryHUD() {
   const perkSummary = getMasteryPerkSummary(equippedItem, mastery.level);
   const nextPerkSummary = getNextMasteryPerkSummary(equippedItem, mastery.level);
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
+  const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const eventMatches = recentEvent?.item === equippedItem;
   const statLabel = equippedItem === 'builder'
     ? `${mastery.blocksChanged} ブロック`
@@ -162,6 +180,8 @@ export function MasteryHUD() {
     rocketCooldown,
     attackCharge,
     stageStyle,
+    recommendedStageStyle,
+    swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
   });
 
   return (
@@ -408,6 +428,18 @@ export function MasteryHUD() {
             }}
           >
             マップ: {stageStyle.shortLabel} / {formatStageCombatBonus(stageStyle)}
+          </span>
+        )}
+        {!stageStyle && recommendedStageStyle && (
+          <span
+            style={{
+              color: recommendedStageStyle.accent,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            推奨: {getStageCombatWeaponLabel(recommendedStageStyle.weapon)} / {formatStageCombatBonus(recommendedStageStyle)}
           </span>
         )}
       </div>

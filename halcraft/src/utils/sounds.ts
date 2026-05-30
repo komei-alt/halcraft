@@ -1114,6 +1114,7 @@ export function playInventoryEmptySound(): void {
 }
 
 type ItemSwitchSoundKind = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+type StageCombatCueSoundKind = 'match';
 
 /** 装備切替SE — アイテムごとの役割が耳でも分かる短い合図 */
 export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
@@ -1176,6 +1177,37 @@ export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
     noise.start(now);
     noise.stop(now + 0.16);
   }
+}
+
+/** マップ推奨武器に合った時の短い作戦SE */
+export function playStageCombatCueSound(kind: StageCombatCueSoundKind = 'match'): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`stageCombatCue:${kind}`, 520)) return;
+  const now = ctx.currentTime;
+  const notes = [523.25, 783.99, 1046.5];
+
+  notes.forEach((note, index) => {
+    const t = now + index * 0.04;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * 1.06, t + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1800, t);
+    filter.Q.setValueAtTime(1.7, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.04, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
 }
 
 type CombatFeedbackSoundKind = 'hit' | 'critical' | 'defeat';

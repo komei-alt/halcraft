@@ -13,6 +13,7 @@ import {
   useModeFlowStore,
 } from '../../stores/useModeFlowStore';
 import { useMobStore } from '../../stores/useMobStore';
+import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import {
   getStageBossEncounter,
   getStageBossEncounterById,
@@ -30,6 +31,11 @@ import {
   getNextStageBuildMilestone,
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
+import {
+  formatStageCombatBonus,
+  getStageCombatStyle,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
 import { getStageEvent } from '../../types/stageEvents';
 import type { StageDefinition } from '../../types/stages';
 import { getStageModeRule } from '../../types/stageModeRules';
@@ -153,6 +159,24 @@ function getBuildScoreGuidance(
   };
 }
 
+function getCombatStyleGuidance(
+  stage: StageDefinition,
+  equippedItem: EquippedItem,
+  swapLabel: string,
+): StageGuidance | null {
+  if (stage.category !== 'war') return null;
+  const style = getStageCombatStyle(stage.id);
+  if (!style || style.weapon === equippedItem) return null;
+
+  return {
+    icon: style.icon,
+    label: `${getStageCombatWeaponLabel(style.weapon)}へ切替`,
+    detail: `${style.shortLabel}: ${formatStageCombatBonus(style)}`,
+    accent: style.accent,
+    progressText: swapLabel,
+  };
+}
+
 function getStageGuidance(
   stage: StageDefinition,
   stats: StageChallengeStats,
@@ -162,10 +186,13 @@ function getStageGuidance(
   bossSpawned: boolean,
   buildScore: number,
   buildMilestones: number[],
+  equippedItem: EquippedItem,
+  swapLabel: string,
 ): StageGuidance {
   const challengeGuidance = getChallengeGuidance(stage, stats, completedIds);
   const conditionGuidance = getConditionGuidance(stage, charge);
   const buildScoreGuidance = getBuildScoreGuidance(stage, buildScore, buildMilestones);
+  const combatStyleGuidance = getCombatStyleGuidance(stage, equippedItem, swapLabel);
   const condition = getStageCondition(stage.id);
   const conditionClose = Boolean(
     condition && charge > 0 && condition.target - charge <= Math.ceil(condition.target * 0.35),
@@ -175,7 +202,7 @@ function getStageGuidance(
   if (stage.category === 'build') {
     return buildScoreGuidance ?? challengeGuidance ?? conditionGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
   }
-  return challengeGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
+  return combatStyleGuidance ?? challengeGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
 }
 
 export function StageProgressHUD() {
@@ -195,6 +222,7 @@ export function StageProgressHUD() {
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
+  const equippedItem = usePlayerStore((s) => s.equippedItem);
   const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
   const recentStageEvent = useStageEventStore((s) => s.recentEvent);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
@@ -248,6 +276,8 @@ export function StageProgressHUD() {
         bossSpawned,
         buildScore,
         buildMilestones,
+        equippedItem,
+        isCompact ? '装備ボタン' : 'Vで切替',
       );
   const enemyProfile = getStageEnemyProfile(stage.id);
   const eventDefinition = getStageEvent(stage.id);

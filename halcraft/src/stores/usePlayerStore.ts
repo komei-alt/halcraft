@@ -9,8 +9,8 @@ import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
-import { getStageCombatModifier } from '../types/stageCombatStyles';
-import { playItemSwitchSound, playToolBreakSound } from '../utils/sounds';
+import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
+import { playItemSwitchSound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
 
 /** localStorage のキー（スキン保存用） */
@@ -53,6 +53,13 @@ const DAMAGE_INVINCIBLE_MS = 500;
 
 function getMasteryLevel(item: EquippedItem): number {
   return useMasteryStore.getState().items[item]?.level ?? 1;
+}
+
+function playEquippedItemSwitchFeedback(item: EquippedItem): void {
+  playItemSwitchSound(item);
+  if (getStageCombatStyleForItem(useGameStore.getState().currentStageId, item)) {
+    playStageCombatCueSound();
+  }
 }
 
 interface PlayerState {
@@ -261,7 +268,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const current = get().equippedItem;
     if (current === item) return;
     set({ equippedItem: item });
-    playItemSwitchSound(item);
+    playEquippedItemSwitchFeedback(item);
   },
 
   cycleEquippedItem: () => {
@@ -276,7 +283,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       switchedTo = next[state.equippedItem];
       return { equippedItem: switchedTo };
     });
-    playItemSwitchSound(switchedTo);
+    playEquippedItemSwitchFeedback(switchedTo);
   },
 
   assignHotbarSlot: (slot, blockId) => {

@@ -37,6 +37,13 @@ export const DEFAULT_STAGE_COMBAT_MODIFIER: StageCombatModifier = {
   lightsaberComboWindowMultiplier: 1,
 };
 
+export const STAGE_COMBAT_WEAPON_LABELS: Record<EquippedItem, string> = {
+  builder: '建築',
+  rocket_launcher: 'ロケット',
+  machine_gun: '機関銃',
+  lightsaber: 'ライトセイバー',
+};
+
 export const STAGE_COMBAT_STYLES: Record<string, StageCombatStyle> = {
   'war-forest': {
     stageId: 'war-forest',
@@ -112,6 +119,10 @@ export function getStageCombatModifier(
     lightsaberReachBonus: style.lightsaberReachBonus ?? 0,
     lightsaberComboWindowMultiplier: style.lightsaberComboWindowMultiplier ?? 1,
   };
+}
+
+export function getStageCombatWeaponLabel(item: EquippedItem): string {
+  return STAGE_COMBAT_WEAPON_LABELS[item];
 }
 
 export function formatStageCombatBonus(style: StageCombatStyle): string {
