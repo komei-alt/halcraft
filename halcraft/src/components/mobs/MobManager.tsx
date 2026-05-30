@@ -26,6 +26,7 @@ import { useEffectStore } from '../../stores/useEffectStore';
 import { getRegenRate } from '../../types/potions';
 import { useExperienceStore } from '../../stores/useExperienceStore';
 import { useMasteryStore } from '../../stores/useMasteryStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -345,6 +346,7 @@ export function MobManager() {
 
       if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin' || event.type === 'boss_giant') {
         useGameStore.getState().registerEnemyDefeat();
+        useStageChallengeStore.getState().recordEnemyDefeat(event.type);
         // XP獲得（5-10 XP）
         const baseXp = event.type === 'boss_giant' ? 80 : 5 + Math.floor(Math.random() * 6);
         useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier)));

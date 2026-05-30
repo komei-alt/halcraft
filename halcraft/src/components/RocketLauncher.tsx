@@ -11,6 +11,7 @@ import { onRemoteRocketExplode, onRemoteRocketFire, useMultiplayerStore } from '
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
+import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -477,6 +478,7 @@ export function RocketLauncher() {
         amount: 10 + masteryHits * 5,
         critical: masteryHits >= 3,
       });
+      useStageChallengeStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
     }
   }, [camera, takeDamage]);
 
@@ -484,6 +486,7 @@ export function RocketLauncher() {
     if (applyGameplay) {
       destroyExplosionBlocks(pos);
       applyExplosionDamage(pos);
+      useStageChallengeStore.getState().recordDetonation();
     }
     setExplosions((prev) => {
       const next = [...prev, createExplosion(pos)];
@@ -750,6 +753,7 @@ export function RocketLauncher() {
             amount: 18,
             critical: true,
           });
+          useStageChallengeStore.getState().recordWeaponHit('rocket_launcher');
           explosionsToSpawn.push({
             pos: projectile.pos.clone(),
             syncId: projectile.syncId,

@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'feature', text: 'マップごとに3つのチャレンジが出て、達成メダルを集められるようになったよ！' },
+      { type: 'feature', text: 'ステージ選択で、そのマップのチャレンジ達成数が見えるようになったよ' },
       { type: 'feature', text: '武器や建築を使いこむと熟練度が上がるようになったよ！' },
       { type: 'feature', text: '今の装備のレベルと成長がゲーム中に見えるHUDを追加したよ' },
       { type: 'improve', text: 'ライトセイバーも装備ボタンと操作ガイドに出るようになったよ' },

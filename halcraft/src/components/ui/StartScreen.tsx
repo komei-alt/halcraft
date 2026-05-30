@@ -15,6 +15,8 @@ import { InstallBanner } from './mobile/InstallBanner';
 import { UpdateLog } from './UpdateLog';
 import { SkinSelector } from './SkinSelector';
 import { STAGES, type StageCategory } from '../../types/stages';
+import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel } from '../../types/stageChallenges';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
@@ -87,6 +89,7 @@ export function StartScreen() {
   const setStage = useGameStore((s) => s.setStage);
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
+  const bestByStage = useStageChallengeStore((s) => s.bestByStage);
 
   const [name, setName] = useState(() => {
     try { return localStorage.getItem(PLAYER_NAME_KEY) || ''; } catch { return ''; }
@@ -359,6 +362,10 @@ export function StartScreen() {
           {filteredStages.map((stage) => {
             const isSelected = activeStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
+            const challengeCount = getStageChallenges(stage.id).length;
+            const completedCount = bestByStage[stage.id]?.completedCount ?? 0;
+            const medal = getStageChallengeMedal(completedCount, challengeCount);
+            const medalLabel = getStageChallengeMedalLabel(medal);
             return (
               <div
                 key={stage.id}
@@ -422,6 +429,21 @@ export function StartScreen() {
                   color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)',
                 }}>
                   {players > 0 ? `🟢 ${players}人` : '○ 0人'}
+                </div>
+                <div
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 5,
+                    color: medal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.58)',
+                    fontSize: isTouch ? 8 : 9,
+                    fontWeight: 900,
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  <span>{completedCount}/{challengeCount}</span>
+                  <span>{medalLabel}</span>
                 </div>
               </div>
             );

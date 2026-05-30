@@ -11,6 +11,7 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
+import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
@@ -282,6 +283,7 @@ export function PlayerMachineGun() {
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '連射ヒット', amount: 6 });
+          useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           continue;
         }
 
@@ -289,6 +291,7 @@ export function PlayerMachineGun() {
           useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, BULLET_DAMAGE, moveDir.x * 1.5, moveDir.z * 1.5);
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '対戦ヒット', amount: 7 });
+          useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           continue;
         }
 
@@ -300,6 +303,7 @@ export function PlayerMachineGun() {
           spawnDamagePopup(BULLET_DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
           playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '乗り物ヒット', amount: 7 });
+          useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           continue;
         }
 

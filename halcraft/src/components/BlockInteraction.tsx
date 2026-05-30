@@ -15,7 +15,8 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useExperienceStore } from '../stores/useExperienceStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
-import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
+import { useStageChallengeStore } from '../stores/useStageChallengeStore';
+import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
@@ -151,6 +152,8 @@ export function BlockInteraction() {
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const recordBuilderAction = useMasteryStore((s) => s.recordBuilderAction);
   const recordItemHit = useMasteryStore((s) => s.recordItemHit);
+  const recordStageBlockPlace = useStageChallengeStore((s) => s.recordBlockPlace);
+  const recordStageBlockBreak = useStageChallengeStore((s) => s.recordBlockBreak);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -306,17 +309,22 @@ export function BlockInteraction() {
     return closestMob;
   }, [camera]);
 
-  const recordBlockBreakMastery = useCallback((blockId: number) => {
+  const recordBlockBreakMastery = useCallback((blockId: BlockId) => {
     const def = BLOCK_DEFS[blockId];
     recordBuilderAction(def?.blockCategory === 'ore' ? 'mine_ore' : 'block_break');
     if (def?.explosive) {
       recordBuilderAction('detonate');
     }
-  }, [recordBuilderAction]);
+    recordStageBlockBreak(blockId, {
+      isOre: def?.blockCategory === 'ore',
+      isExplosive: Boolean(def?.explosive),
+    });
+  }, [recordBuilderAction, recordStageBlockBreak]);
 
-  const recordBlockPlaceMastery = useCallback((blockId: number) => {
+  const recordBlockPlaceMastery = useCallback((blockId: BlockId) => {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
-  }, [recordBuilderAction]);
+    recordStageBlockPlace(blockId);
+  }, [recordBuilderAction, recordStageBlockPlace]);
 
   const tryMeleeAttack = useCallback((): boolean => {
     const maxAttackDistance = getAttackDistanceLimit();

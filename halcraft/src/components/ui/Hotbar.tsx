@@ -112,10 +112,14 @@ export function Hotbar() {
           display: 'flex',
           gap: 2,
           padding: 4,
+          maxWidth: 'calc(100vw - 24px)',
+          overflowX: 'auto',
+          boxSizing: 'border-box',
           background: 'rgba(0,0,0,0.55)',
           borderRadius: 6,
           border: '2px solid rgba(255,255,255,0.15)',
           backdropFilter: 'blur(6px)',
+          scrollbarWidth: 'none',
         }}
       >
         {hotbarSlots.map((blockId, index) => {
