@@ -94,6 +94,9 @@ export function MobManager() {
     const dt = Math.min(delta, 0.05);
     const gameState = useGameStore.getState();
     const playerState = usePlayerStore.getState();
+    const stageRules = gameState.currentStage?.rules;
+    const enemyTuning = stageRules?.enemyTuning ?? undefined;
+    const isWarMode = !gameState.isBuildMode && enemyTuning !== undefined;
 
     if (gameState.phase !== 'playing' || playerState.isDead) return;
 
@@ -124,18 +127,29 @@ export function MobManager() {
     const playerZ = camera.position.z;
     const playerY = camera.position.y - 1.6; // 足元
 
-    // 夜→昼の切り替わりで敵モブ削除（味方は残す）
-    if (wasNight.current && !isNight) {
+    // 夜→昼の切り替わり、または建築モードでは敵モブ削除（味方は残す）
+    if ((wasNight.current && !isNight) || gameState.isBuildMode) {
       const currentState = useMobStore.getState();
       useMobStore.getState().setMobs(currentState.mobs.filter((m) => m.isAlly));
     }
     wasNight.current = isNight;
 
-    // 夜間のみゾンビ・クモスポーン
-    if (isNight) {
-      trySpawnZombie(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
-      trySpawnSpider(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
-      trySpawnDarwin(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+    // 戦争ステージの夜間のみ敵スポーン。ステージごとに湧き方を変える
+    if (isWarMode && enemyTuning && isNight) {
+      trySpawnZombie(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
+      trySpawnSpider(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
+      trySpawnDarwin(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
+    }
+
+    // 撃破数がステージ目標に届いたらボスを出す
+    if (
+      isWarMode &&
+      enemyTuning &&
+      !gameState.bossSpawned &&
+      gameState.enemiesDefeated >= enemyTuning.bossAfterDefeats
+    ) {
+      useMobStore.getState().trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+      useGameStore.getState().setBossSpawned(true);
     }
 
     // 昼間はニワトリスポーン
@@ -319,6 +333,7 @@ export function MobManager() {
 
     // --- 死亡イベントの処理（エフェクト・サウンド・ドロップ） ---
     const deathEvents = consumeDeathEvents();
+    const xpMultiplier = stageRules?.enemyTuning?.xpMultiplier ?? 1;
     for (const event of deathEvents) {
       spawnMobDeathEffect(event.type, event.x, event.y, event.z);
 
@@ -327,9 +342,11 @@ export function MobManager() {
       const distance = Math.sqrt(ddx * ddx + ddz * ddz);
       playMobDeathSound(distance);
 
-      if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin') {
+      if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin' || event.type === 'boss_giant') {
+        useGameStore.getState().registerEnemyDefeat();
         // XP獲得（5-10 XP）
-        useExperienceStore.getState().addXp(5 + Math.floor(Math.random() * 6));
+        const baseXp = event.type === 'boss_giant' ? 80 : 5 + Math.floor(Math.random() * 6);
+        useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier)));
         const roll = Math.random();
         if (roll < 0.4) {
           dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));

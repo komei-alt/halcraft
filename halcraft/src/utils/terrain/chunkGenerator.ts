@@ -9,6 +9,7 @@ import { placePlayerHouse } from './structures/house';
 import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
+import { placeStageLandmarks } from './structures/stageLandmarks';
 import { getCurrentBiome } from './biomeConfig';
 import { carveCaves } from './caves';
 import { placeOres } from './ores';
@@ -109,6 +110,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
   if (chunkContainsVillage(cx, cz)) {
     placeVillage(chunk, cx, cz);
   }
+
+  // ステージごとの目的地・防衛拠点を最後に重ねて、マップごとの差を見える化する
+  placeStageLandmarks(chunk, cx, cz);
 
   return chunk;
 }

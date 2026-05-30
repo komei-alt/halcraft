@@ -129,6 +129,7 @@ export function StartScreen() {
 
   // 横画面かどうか（高さが極端に低い）
   const isLandscapeMobile = viewportSize.h < 500 && viewportSize.w > viewportSize.h;
+  const compactLayout = isTouch || viewportSize.w < 560;
 
   // 定期的にステージのプレイヤー数を取得
   useEffect(() => {
@@ -352,7 +353,7 @@ export function StartScreen() {
             gap: isTouch ? 8 : 12,
             flexWrap: 'wrap',
             justifyContent: 'center',
-            maxWidth: isTouch ? 340 : 600,
+            maxWidth: isTouch ? 340 : 820,
           }}
         >
           {filteredStages.map((stage) => {
@@ -363,28 +364,61 @@ export function StartScreen() {
                 key={stage.id}
                 onClick={() => setSelectedStageId(stage.id)}
                 style={{
-                  width: isTouch ? 100 : 130,
-                  padding: isTouch ? '6px 8px' : '8px 12px',
-                  background: isSelected ? 'rgba(50, 180, 50, 0.4)' : 'rgba(0,0,0,0.5)',
+                  width: isTouch ? 154 : 188,
+                  minHeight: isTouch ? 124 : 142,
+                  padding: isTouch ? '8px 9px' : '10px 12px',
+                  background: isSelected ? `${stage.color}55` : 'rgba(0,0,0,0.5)',
                   backdropFilter: 'blur(8px)',
                   border: '2px solid',
-                  borderColor: isSelected ? 'rgba(100, 220, 100, 0.8)' : 'rgba(255,255,255,0.2)',
-                  borderRadius: isTouch ? 10 : 12,
+                  borderColor: isSelected ? `${stage.color}cc` : 'rgba(255,255,255,0.2)',
+                  borderRadius: 8,
                   color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 3,
-                  boxShadow: isSelected ? '0 0 15px rgba(100,220,100,0.4)' : 'none',
+                  gap: 5,
+                  boxShadow: isSelected ? `0 0 18px ${stage.color}66` : 'none',
+                  textAlign: 'center',
                 }}
               >
                 <div style={{ fontSize: isTouch ? 20 : 24 }}>{stage.icon}</div>
-                <div style={{ fontSize: isTouch ? 11 : 13, fontWeight: 'bold' }}>{stage.name}</div>
+                <div style={{ fontSize: isTouch ? 12 : 14, fontWeight: 900, lineHeight: '16px' }}>{stage.name}</div>
+                <div style={{
+                  minHeight: isTouch ? 26 : 30,
+                  fontSize: isTouch ? 9 : 10,
+                  lineHeight: isTouch ? '13px' : '15px',
+                  color: 'rgba(255,255,255,0.68)',
+                }}>
+                  {stage.rules.shortPitch}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  gap: 3,
+                }}>
+                  {stage.rules.featureTags.slice(0, isTouch ? 2 : 3).map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'rgba(255,255,255,0.74)',
+                        fontSize: isTouch ? 8 : 9,
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
                 <div style={{
                   fontSize: isTouch ? 9 : 11,
-                  marginTop: 2,
+                  marginTop: 'auto',
                   color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)',
                 }}>
                   {players > 0 ? `🟢 ${players}人` : '○ 0人'}
@@ -514,13 +548,15 @@ export function StartScreen() {
         {/* 操作説明 */}
         <div
           style={{
-            marginTop: isTouch ? 12 : 20,
+            marginTop: compactLayout ? 12 : 20,
             display: 'flex',
-            flexDirection: isTouch ? 'column' : 'row',
-            gap: isTouch ? 4 : 20,
+            flexDirection: compactLayout ? 'column' : 'row',
+            gap: compactLayout ? 4 : 20,
             alignItems: 'center',
+            maxWidth: 'calc(100vw - 32px)',
+            textAlign: 'center',
             color: 'rgba(255,255,255,0.5)',
-            fontSize: isTouch ? 10 : 12,
+            fontSize: compactLayout ? 10 : 12,
             textShadow: '0 1px 3px rgba(0,0,0,0.8)',
           }}
         >

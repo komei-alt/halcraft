@@ -3,14 +3,17 @@
 // Web Audio API で手続き的に生成（外部ファイル不要）
 
 import { SEA_LEVEL } from '../types/blocks';
+import type { BiomeId } from '../types/stages';
 
 let audioCtx: AudioContext | null = null;
 let windNode: OscillatorNode | null = null;
 let windGain: GainNode | null = null;
+let windFilterNode: BiquadFilterNode | null = null;
 let waterGain: GainNode | null = null;
 let waterNode: AudioBufferSourceNode | null = null;
 let caveGain: GainNode | null = null;
 let caveNode: OscillatorNode | null = null;
+let caveFilterNode: BiquadFilterNode | null = null;
 let masterGain: GainNode | null = null;
 let isRunning = false;
 
@@ -41,6 +44,7 @@ export function initAmbientSounds(): void {
   windFilter.type = 'lowpass';
   windFilter.frequency.value = 400;
   windFilter.Q.value = 1;
+  windFilterNode = windFilter;
   windOsc.connect(windFilter);
   windFilter.connect(windGain);
   windOsc.start();
@@ -89,6 +93,7 @@ export function initAmbientSounds(): void {
   const caveFilter = audioCtx.createBiquadFilter();
   caveFilter.type = 'lowpass';
   caveFilter.frequency.value = 100;
+  caveFilterNode = caveFilter;
   caveOsc.connect(caveFilter);
   caveFilter.connect(caveGain);
   caveOsc.start();
@@ -109,23 +114,36 @@ export function updateAmbientSounds(
   isUnderwater: boolean,
   isUnderground: boolean,
   playerY: number,
+  biomeId: BiomeId = 'forest',
+  isNight = false,
+  stageAmbientIntensity = 1,
 ): void {
   if (!audioCtx || !windGain || !waterGain || !caveGain) return;
 
   const now = audioCtx.currentTime;
   const fadeTime = 1.5;
+  const nightBoost = isNight ? 1.18 : 1;
+  const biomeWind = biomeId === 'snow' ? 0.82 : biomeId === 'desert' ? 0.68 : biomeId === 'tropical' ? 0.42 : 0.5;
+  const biomeWater = biomeId === 'tropical' ? 1.0 : biomeId === 'desert' ? 0.28 : 0.75;
+  const windTone = biomeId === 'snow' ? 640 : biomeId === 'desert' ? 520 : biomeId === 'tropical' ? 360 : 420;
+  const caveTone = biomeId === 'desert' ? 78 : biomeId === 'snow' ? 120 : 100;
+
+  windFilterNode?.frequency.linearRampToValueAtTime(windTone, now + fadeTime);
+  caveFilterNode?.frequency.linearRampToValueAtTime(caveTone, now + fadeTime);
 
   // 風音: 屋外 + 地上
-  const windTarget = isOutside && !isUnderwater && !isUnderground ? 0.5 : 0;
+  const windTarget = isOutside && !isUnderwater && !isUnderground
+    ? biomeWind * nightBoost * stageAmbientIntensity
+    : 0;
   windGain.gain.linearRampToValueAtTime(windTarget, now + fadeTime);
 
   // 水音: 水中
-  const waterTarget = isUnderwater ? 0.8 : 0;
+  const waterTarget = isUnderwater ? 0.8 * biomeWater * stageAmbientIntensity : 0;
   waterGain.gain.linearRampToValueAtTime(waterTarget, now + fadeTime);
 
   // 洞窟音: 地下
   const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
-  const caveTarget = isUnderground && !isUnderwater ? 0.25 + caveDepth * 0.2 : 0;
+  const caveTarget = isUnderground && !isUnderwater ? (0.25 + caveDepth * 0.2) * stageAmbientIntensity : 0;
   caveGain.gain.linearRampToValueAtTime(caveTarget, now + fadeTime);
 }
 
@@ -145,8 +163,10 @@ export function stopAmbientSounds(): void {
     waterNode = null;
     caveNode = null;
     windGain = null;
+    windFilterNode = null;
     waterGain = null;
     caveGain = null;
+    caveFilterNode = null;
     masterGain = null;
   }, 500);
 }

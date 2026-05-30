@@ -54,6 +54,7 @@ import { DamageOverlay } from './components/ui/DamageOverlay';
 import { AttackIndicator } from './components/ui/AttackIndicator';
 import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator';
 import { TimeDisplay } from './components/ui/TimeDisplay';
+import { StageProgressHUD } from './components/ui/StageProgressHUD';
 import { StartScreen } from './components/ui/StartScreen';
 import { PauseScreen } from './components/ui/PauseScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
@@ -269,6 +270,7 @@ export default function App() {
           <EffectIcons />
           <XPBar />
           <TimeDisplay />
+          <StageProgressHUD />
           <DamageOverlay />
           <AttackIndicator />
           <RocketCooldownIndicator />

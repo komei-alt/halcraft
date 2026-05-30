@@ -2,6 +2,7 @@
 // ゾンビ・クモ（敵）、プロトタイプ・アイアンゴーレム（味方）、ニワトリ（中立）を管理
 
 import { create } from 'zustand';
+import type { StageEnemyTuning } from '../types/stages';
 
 /** モブの種類 */
 export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
@@ -85,6 +86,16 @@ const ANGRY_DURATION = 30;
 
 let nextMobId = 0;
 
+function countHostileMobs(mobs: MobData[]): number {
+  return mobs.filter((m) => !m.isAlly && m.type !== 'boss_giant').length;
+}
+
+function getSpawnDistance(tuning?: StageEnemyTuning): number {
+  const min = tuning?.spawnDistanceMin ?? SPAWN_DISTANCE_MIN;
+  const max = tuning?.spawnDistanceMax ?? SPAWN_DISTANCE_MAX;
+  return min + Math.random() * (max - min);
+}
+
 interface MobState {
   /** 全モブ */
   mobs: MobData[];
@@ -114,7 +125,7 @@ interface MobState {
   setMobs: (mobs: MobData[]) => void;
 
   /** 夜のスポーンロジック */
-  trySpawnZombie: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnZombie: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
 
   /** プロトタイプ味方モブのスポーンロジック（常時1体） */
   trySpawnPrototype: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
@@ -123,10 +134,10 @@ interface MobState {
   trySpawnChicken: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
 
   /** 夜間のクモスポーン */
-  trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
 
   /** 夜間のダーウィンスポーン */
-  trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
 
   /** 巨大ボスのスポーンロジック */
   trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
@@ -247,16 +258,16 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ mobs });
   },
 
-  trySpawnZombie: (playerX, playerZ, surfaceYFn) => {
+  trySpawnZombie: (playerX, playerZ, surfaceYFn, tuning) => {
     const state = get();
-    if (state.mobs.length >= MAX_MOBS) return;
+    if (countHostileMobs(state.mobs) >= (tuning?.maxHostileMobs ?? MAX_MOBS)) return;
 
     const now = performance.now() / 1000;
-    if (now - state.lastSpawnTime < SPAWN_INTERVAL) return;
+    if (now - state.lastSpawnTime < (tuning?.zombieIntervalSeconds ?? SPAWN_INTERVAL)) return;
 
     // ランダムな角度でスポーン位置を決定
     const angle = Math.random() * Math.PI * 2;
-    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
@@ -299,17 +310,18 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ _lastChickenSpawnTime: now } as Partial<MobState>);
   },
 
-  trySpawnSpider: (playerX, playerZ, surfaceYFn) => {
+  trySpawnSpider: (playerX, playerZ, surfaceYFn, tuning) => {
     const state = get();
     const spiderCount = state.mobs.filter((m) => m.type === 'spider').length;
-    if (spiderCount >= MAX_SPIDERS) return;
+    if (spiderCount >= (tuning?.maxSpiders ?? MAX_SPIDERS)) return;
+    if (countHostileMobs(state.mobs) >= (tuning?.maxHostileMobs ?? MAX_MOBS)) return;
 
     const now = performance.now() / 1000;
     const lastTime = (state as MobState & { _lastSpiderSpawnTime: number })._lastSpiderSpawnTime;
-    if (now - lastTime < SPAWN_INTERVAL) return;
+    if (now - lastTime < (tuning?.spiderIntervalSeconds ?? SPAWN_INTERVAL)) return;
 
     const angle = Math.random() * Math.PI * 2;
-    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
@@ -318,17 +330,18 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
   },
 
-  trySpawnDarwin: (playerX, playerZ, surfaceYFn) => {
+  trySpawnDarwin: (playerX, playerZ, surfaceYFn, tuning) => {
     const state = get();
     const darwinCount = state.mobs.filter((m) => m.type === 'darwin').length;
-    if (darwinCount >= MAX_DARWINS) return;
+    if (darwinCount >= (tuning?.maxDarwins ?? MAX_DARWINS)) return;
+    if (countHostileMobs(state.mobs) >= (tuning?.maxHostileMobs ?? MAX_MOBS)) return;
 
     const now = performance.now() / 1000;
     const lastTime = (state as MobState & { _lastDarwinSpawnTime: number })._lastDarwinSpawnTime;
-    if (now - lastTime < DARWIN_SPAWN_INTERVAL) return;
+    if (now - lastTime < (tuning?.darwinIntervalSeconds ?? DARWIN_SPAWN_INTERVAL)) return;
 
     const angle = Math.random() * Math.PI * 2;
-    const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
+    const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;

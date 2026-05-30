@@ -153,7 +153,15 @@ export function SoundManager() {
     const isUnderwater = playerState.isSubmerged;
     const isUnderground = cy < SEA_LEVEL;
     const isOutside = !isUnderground;
-    updateAmbientSounds(isOutside, isUnderwater, isUnderground, cy);
+    updateAmbientSounds(
+      isOutside,
+      isUnderwater,
+      isUnderground,
+      cy,
+      gameState.currentBiome?.id,
+      gameState.isNight,
+      gameState.currentStage?.rules.ambientIntensity ?? 1,
+    );
   });
 
   return null;

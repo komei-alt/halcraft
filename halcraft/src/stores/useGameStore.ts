@@ -5,9 +5,14 @@
 import { create } from 'zustand';
 import { usePlayerStore } from './usePlayerStore';
 import { useWorldStore } from './useWorldStore';
+import { useInventoryStore } from './useInventoryStore';
+import { useMobStore } from './useMobStore';
+import { useExperienceStore } from './useExperienceStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
+import { TOOL_DEFS } from '../types/tools';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
+import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
 import { resetNoiseForBiome } from '../utils/terrain/noise';
 import { clearHeightCache } from '../utils/terrain/heightmap';
 
@@ -74,6 +79,15 @@ interface GameState {
   /** 建築カテゴリか（平和モード = クリエイティブ的） */
   isBuildMode: boolean;
 
+  /** ステージ開始からの経過秒数 */
+  stageElapsedSeconds: number;
+
+  /** このステージで倒した敵の数 */
+  enemiesDefeated: number;
+
+  /** ステージボスを出現させたか */
+  bossSpawned: boolean;
+
   /** ゲーム内時間 (0.0 ~ 1.0)
    *  0.0 = 朝6時, 0.25 = 正午, 0.5 = 夕方6時, 0.75 = 深夜 */
   gameTime: number;
@@ -103,6 +117,12 @@ interface GameState {
 
   /** ゲーム開始 */
   startGame: () => void;
+
+  /** 敵撃破数を進める */
+  registerEnemyDefeat: () => void;
+
+  /** ボス出現済みにする */
+  setBossSpawned: (value: boolean) => void;
 
   /** クリエイティブ飛行状態を変更 */
   setCreativeFlying: (flying: boolean) => void;
@@ -138,6 +158,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentBiome: null,
   currentCategory: null,
   isBuildMode: false,
+  stageElapsedSeconds: 0,
+  enemiesDefeated: 0,
+  bossSpawned: false,
   gameTime: 0.0, // 朝スタート
   dayCount: 1,
   isNight: false,
@@ -161,6 +184,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       resetNoiseForBiome();
       clearHeightCache();
     }
+    setCurrentTerrainStage(stage);
 
     // 既存のチャンクデータをクリア（バイオーム切替時に旧地形が残るのを防止）
     // World コンポーネントの ensureChunksAround() が次フレームでチャンク再生成をトリガーする
@@ -173,16 +197,41 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentBiome: biome,
       currentCategory: category,
       isBuildMode: category === 'build',
+      stageElapsedSeconds: 0,
+      enemiesDefeated: 0,
+      bossSpawned: false,
     });
   },
 
   startGame: () => {
-    const { isBuildMode } = get();
+    const { isBuildMode, currentStage } = get();
+    const rules = currentStage?.rules;
+    const starterKit = rules?.starterKit;
+
+    const starterItems: Record<number, number> = {};
+    for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {
+      if (count && count > 0) starterItems[Number(blockId)] = count;
+    }
+    useInventoryStore.setState({ items: starterItems });
+    useMobStore.getState().clearAllMobs();
+    useExperienceStore.getState().resetXp();
+
+    const startingTools: Record<string, number> = {};
+    for (const toolId of starterKit?.tools ?? []) {
+      const def = TOOL_DEFS[toolId];
+      if (def) startingTools[toolId] = def.maxDurability;
+    }
+
     set({
       phase: 'playing',
       creativeFlying: false,
-      gameTime: 0.0,
+      gameTime: rules?.startTime ?? 0.0,
       dayCount: 1,
+      isNight: (rules?.startTime ?? 0.0) >= 0.5,
+      stageElapsedSeconds: 0,
+      enemiesDefeated: 0,
+      bossSpawned: false,
+      dimension: 'overworld',
     });
 
     const player = usePlayerStore.getState();
@@ -195,10 +244,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       knockbackVz: 0,
       cameraShake: 0,
       equippedItem: 'builder',
+      equippedToolId: starterKit?.equippedToolId ?? null,
+      tools: startingTools,
+      hunger: starterKit?.hunger ?? 20,
+      hungerExhaustion: 0,
+      airSupply: 15,
+      isSubmerged: false,
+      isInWater: false,
       // 建築カテゴリは無敵（クリエイティブ的）
       invincibleUntil: isBuildMode ? Number.POSITIVE_INFINITY : Date.now() + 5000,
     });
   },
+
+  registerEnemyDefeat: () => {
+    set((state) => ({ enemiesDefeated: state.enemiesDefeated + 1 }));
+  },
+
+  setBossSpawned: (value) => set({ bossSpawned: value }),
 
   setCreativeFlying: (creativeFlying) => set({ creativeFlying }),
 
@@ -216,16 +278,21 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   advanceTime: (deltaSeconds) => {
     if (get().phase !== 'playing') return;
+    const elapsedSeconds = get().stageElapsedSeconds + deltaSeconds;
     // マルチプレイ中はサーバーからの同期に任せる
-    if (get().isMultiplayer) return;
+    if (get().isMultiplayer) {
+      set({ stageElapsedSeconds: elapsedSeconds });
+      return;
+    }
 
     const currentTime = get().gameTime;
+    const dayDurationSeconds = get().currentStage?.rules.dayDurationSeconds ?? BASE_DAY_DURATION_SECONDS;
 
     // 時間帯に応じた速度係数を取得
     const speedMultiplier = getTimeSpeedMultiplier(currentTime);
 
     // 基本の時間増分 × 時間帯別速度係数
-    const timeIncrement = (deltaSeconds / BASE_DAY_DURATION_SECONDS) * speedMultiplier;
+    const timeIncrement = (deltaSeconds / dayDurationSeconds) * speedMultiplier;
     let newTime = currentTime + timeIncrement;
     let newDayCount = get().dayCount;
 
@@ -241,6 +308,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       gameTime: newTime,
       dayCount: newDayCount,
       isNight,
+      stageElapsedSeconds: elapsedSeconds,
     });
   },
 
