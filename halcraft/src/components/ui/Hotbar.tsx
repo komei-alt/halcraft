@@ -7,7 +7,7 @@ import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { BLOCK_DEFS } from '../../types/blocks';
-import { getBlockUseHint } from '../../utils/blockUseFeedback';
+import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
 
 export function Hotbar() {
@@ -23,6 +23,7 @@ export function Hotbar() {
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
   const selectedDef = BLOCK_DEFS[selectedBlock];
   const selectedCount = items[selectedBlock] ?? 0;
+  const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
 
   // セルサイズ（モバイルではやや小さめ）
   const cellSize = isTouch ? 40 : 48;
@@ -68,13 +69,15 @@ export function Hotbar() {
             padding: isTouch ? '8px 12px' : '7px 12px',
             borderRadius: 999,
             border: selectedCount > 0
-              ? '1px solid rgba(255, 224, 150, 0.34)'
+              ? `1px solid ${selectedProfile.accent}7a`
               : '1px solid rgba(255, 105, 105, 0.55)',
             background: selectedCount > 0
-              ? 'rgba(24, 20, 16, 0.68)'
+              ? `linear-gradient(135deg, ${selectedProfile.glow}, rgba(24, 20, 16, 0.72))`
               : 'rgba(70, 18, 18, 0.72)',
             color: '#fff',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
+            boxShadow: selectedCount > 0
+              ? `0 8px 24px rgba(0,0,0,0.22), 0 0 18px ${selectedProfile.glow}`
+              : '0 8px 24px rgba(0,0,0,0.22)',
             backdropFilter: 'blur(8px)',
             fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
           }}
@@ -90,6 +93,9 @@ export function Hotbar() {
           >
             <span
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
                 fontSize: isTouch ? 12 : 13,
                 fontWeight: 900,
                 overflow: 'hidden',
@@ -97,7 +103,36 @@ export function Hotbar() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {selectedDef.name}
+              <span
+                style={{
+                  flexShrink: 0,
+                  filter: selectedCount > 0 ? `drop-shadow(0 0 6px ${selectedProfile.glow})` : undefined,
+                }}
+              >
+                {selectedProfile.icon}
+              </span>
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {selectedDef.name}
+              </span>
+              {selectedCount > 0 && (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    color: selectedProfile.accent,
+                    fontSize: isTouch ? 9 : 10,
+                    fontWeight: 900,
+                  }}
+                >
+                  {selectedProfile.eyebrow}
+                </span>
+              )}
             </span>
             <span
               style={{
@@ -109,7 +144,7 @@ export function Hotbar() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {selectedCount > 0 ? getBlockUseHint(selectedBlock, currentStageId) : '素材なし / クラフト画面で補充'}
+              {selectedCount > 0 ? selectedProfile.detail : '素材なし / クラフト画面で補充'}
             </span>
           </span>
           <span
@@ -119,8 +154,8 @@ export function Hotbar() {
               textAlign: 'center',
               padding: '4px 9px',
               borderRadius: 999,
-              background: selectedCount > 0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,0,0,0.16)',
-              color: selectedCount > 0 ? '#ffe8a8' : '#ffb3b3',
+              background: selectedCount > 0 ? `${selectedProfile.accent}24` : 'rgba(255,0,0,0.16)',
+              color: selectedCount > 0 ? selectedProfile.accent : '#ffb3b3',
               fontSize: isTouch ? 12 : 13,
               fontWeight: 900,
               fontFamily: 'monospace',
@@ -211,6 +246,7 @@ export function Hotbar() {
           const texUrl = textures.get(blockId);
           const count = items[blockId] ?? 0;
           const hasItem = count > 0;
+          const profile = getBlockUseProfile(blockId, currentStageId);
 
           return (
             <div
@@ -227,11 +263,11 @@ export function Hotbar() {
                 width: cellSize,
                 height: cellSize,
                 border: isSelected
-                  ? '3px solid #fff'
-                  : '2px solid rgba(255,255,255,0.2)',
+                  ? `3px solid ${profile.accent}`
+                  : `2px solid ${hasItem ? `${profile.accent}66` : 'rgba(255,255,255,0.18)'}`,
                 borderRadius: 4,
                 background: isSelected
-                  ? 'rgba(255,255,255,0.18)'
+                  ? `linear-gradient(135deg, ${profile.glow}, rgba(255,255,255,0.14))`
                   : 'rgba(0,0,0,0.3)',
                 opacity: hasItem ? 1 : 0.46,
                 display: 'flex',
@@ -239,6 +275,9 @@ export function Hotbar() {
                 justifyContent: 'center',
                 position: 'relative',
                 transition: 'border 0.1s, background 0.1s',
+                boxShadow: isSelected
+                  ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 14px ${profile.glow}`
+                  : 'none',
                 imageRendering: 'pixelated',
                 touchAction: 'none',
                 WebkitTapHighlightColor: 'transparent',
@@ -255,6 +294,22 @@ export function Hotbar() {
                     imageRendering: 'pixelated',
                     objectFit: 'cover',
                     pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {hasItem && (
+                <span
+                  title={profile.eyebrow}
+                  style={{
+                    position: 'absolute',
+                    top: 3,
+                    right: 3,
+                    width: isSelected ? 8 : 6,
+                    height: isSelected ? 8 : 6,
+                    borderRadius: 999,
+                    background: profile.accent,
+                    boxShadow: `0 0 8px ${profile.glow}`,
+                    border: '1px solid rgba(0,0,0,0.35)',
                   }}
                 />
               )}

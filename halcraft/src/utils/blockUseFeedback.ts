@@ -42,6 +42,16 @@ export interface BlockUseFeedbackContent {
   soundKind: BlockUseFeedbackSoundKind;
 }
 
+interface BlockPurposeDefinition {
+  icon: string;
+  eyebrow: string;
+  detail: string;
+  accent: string;
+  glow: string;
+  kind: BlockUseFeedbackKind;
+  soundKind: BlockUseFeedbackSoundKind;
+}
+
 const LIGHT_BLOCKS = new Set<BlockId>([
   BLOCK_IDS.TORCH,
   BLOCK_IDS.CANDLE,
@@ -57,6 +67,330 @@ const RAIL_BLOCKS = new Set<BlockId>([
   BLOCK_IDS.RAIL_LOOP,
   BLOCK_IDS.RAIL_CHAIN,
 ]);
+
+const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
+  [BLOCK_IDS.GRASS]: {
+    icon: '🌱',
+    eyebrow: '地面づくり',
+    detail: '自然な床や丘を広げられる',
+    accent: '#8ddf6a',
+    glow: 'rgba(120, 220, 100, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.DIRT]: {
+    icon: '🟫',
+    eyebrow: '土台づくり',
+    detail: '地形の穴埋めや仮足場に使える',
+    accent: '#c08a55',
+    glow: 'rgba(170, 105, 52, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.WOOD]: {
+    icon: '🪵',
+    eyebrow: '建材配置',
+    detail: '壁・床・橋をすばやく組める',
+    accent: '#d6a15f',
+    glow: 'rgba(214, 150, 84, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.RAW_WOOD]: {
+    icon: '🌳',
+    eyebrow: '柱づくり',
+    detail: '木の柱や森らしい骨組みに使える',
+    accent: '#b77942',
+    glow: 'rgba(170, 110, 54, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.IRON]: {
+    icon: '⬜',
+    eyebrow: '要塞建材',
+    detail: '硬い壁や基地の外装に向く',
+    accent: '#dbe4ee',
+    glow: 'rgba(210, 226, 238, 0.26)',
+    kind: 'defense',
+    soundKind: 'defense',
+  },
+  [BLOCK_IDS.IRON_CRACKED]: {
+    icon: '◻️',
+    eyebrow: '古い要塞材',
+    detail: '壊れた基地や遺跡の表情を作れる',
+    accent: '#bfc8d3',
+    glow: 'rgba(190, 202, 214, 0.24)',
+    kind: 'defense',
+    soundKind: 'defense',
+  },
+  [BLOCK_IDS.IRON_MOSSY]: {
+    icon: '🟩',
+    eyebrow: '苔むした外装',
+    detail: '古い建物や森の廃墟に合う',
+    accent: '#98c48d',
+    glow: 'rgba(140, 190, 120, 0.26)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.BEDROCK]: {
+    icon: '⬛',
+    eyebrow: '最硬土台',
+    detail: '絶対に崩したくない境界を作る',
+    accent: '#9aa0aa',
+    glow: 'rgba(150, 156, 168, 0.22)',
+    kind: 'defense',
+    soundKind: 'defense',
+  },
+  [BLOCK_IDS.GLASS]: {
+    icon: '🔷',
+    eyebrow: '透明建材',
+    detail: '展望台や窓で景色を見せられる',
+    accent: '#9fe8ff',
+    glow: 'rgba(130, 220, 255, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.ENCHANT]: {
+    icon: '🔮',
+    eyebrow: '魔法装置',
+    detail: '拠点の中心や特別な部屋を演出する',
+    accent: '#b388ff',
+    glow: 'rgba(160, 100, 255, 0.34)',
+    kind: 'utility',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.STAIRS]: {
+    icon: '↗️',
+    eyebrow: '段差づくり',
+    detail: '入口・屋根・登れる道を整えられる',
+    accent: '#d2b48c',
+    glow: 'rgba(190, 150, 104, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.BED]: {
+    icon: '🛏️',
+    eyebrow: '休憩ポイント',
+    detail: '部屋やベースに生活感を足せる',
+    accent: '#ff9fb3',
+    glow: 'rgba(255, 130, 160, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.LEAVES]: {
+    icon: '🍃',
+    eyebrow: '緑の飾り',
+    detail: '木陰・庭・森の輪郭を作れる',
+    accent: '#9ee66c',
+    glow: 'rgba(120, 220, 110, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.CORE]: {
+    icon: '💠',
+    eyebrow: '拠点コア',
+    detail: '基地や作品の中心マーカーになる',
+    accent: '#80cbc4',
+    glow: 'rgba(100, 210, 200, 0.3)',
+    kind: 'utility',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.DOOR]: {
+    icon: '🚪',
+    eyebrow: '入口づくり',
+    detail: '家や基地に入れる場所を作る',
+    accent: '#d49a59',
+    glow: 'rgba(200, 130, 70, 0.3)',
+    kind: 'utility',
+    soundKind: 'switch',
+  },
+  [BLOCK_IDS.LADDER]: {
+    icon: '🪜',
+    eyebrow: '縦移動',
+    detail: '塔や地下への上り下りを作れる',
+    accent: '#c8955d',
+    glow: 'rgba(190, 130, 75, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.SNOW]: {
+    icon: '❄️',
+    eyebrow: '雪景色づくり',
+    detail: '白い屋根・城・雪原の形を作れる',
+    accent: '#d8f6ff',
+    glow: 'rgba(185, 230, 255, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.SAND]: {
+    icon: '🏜️',
+    eyebrow: '砂地づくり',
+    detail: '砂漠の土台や大きな斜面を作れる',
+    accent: '#ffd27a',
+    glow: 'rgba(255, 202, 110, 0.3)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.STONE]: {
+    icon: '🪨',
+    eyebrow: '石の足場',
+    detail: '戦場の遮蔽や建物の基礎に使える',
+    accent: '#b9c0c8',
+    glow: 'rgba(170, 178, 188, 0.26)',
+    kind: 'defense',
+    soundKind: 'defense',
+  },
+  [BLOCK_IDS.COAL_ORE]: {
+    icon: '⚫',
+    eyebrow: '鉱石配置',
+    detail: '採掘場や洞窟の資源感を出せる',
+    accent: '#8f969c',
+    glow: 'rgba(130, 136, 144, 0.24)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.IRON_ORE]: {
+    icon: '⛏️',
+    eyebrow: '鉱脈配置',
+    detail: '採掘目標や洞窟の見どころになる',
+    accent: '#d0d7df',
+    glow: 'rgba(190, 200, 210, 0.26)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.GOLD_ORE]: {
+    icon: '🟡',
+    eyebrow: '宝鉱石',
+    detail: '宝物部屋や目立つ報酬地点に使える',
+    accent: '#ffd96a',
+    glow: 'rgba(255, 210, 90, 0.3)',
+    kind: 'utility',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.DIAMOND_ORE]: {
+    icon: '💎',
+    eyebrow: 'レア鉱石',
+    detail: '一番見つけたい場所の目印になる',
+    accent: '#80ffff',
+    glow: 'rgba(100, 240, 255, 0.3)',
+    kind: 'condition',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.CHEST]: {
+    icon: '📦',
+    eyebrow: '保管ポイント',
+    detail: '拠点や部屋に倉庫らしさを足せる',
+    accent: '#d79b52',
+    glow: 'rgba(210, 145, 70, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.FURNACE]: {
+    icon: '🔥',
+    eyebrow: '作業設備',
+    detail: '工房や基地の生産エリアに置きたい',
+    accent: '#ffad66',
+    glow: 'rgba(255, 150, 80, 0.3)',
+    kind: 'utility',
+    soundKind: 'light',
+  },
+  [BLOCK_IDS.IRON_INGOT]: {
+    icon: '🔩',
+    eyebrow: '素材配置',
+    detail: '工房や宝箱まわりの素材表現に使える',
+    accent: '#d5dde8',
+    glow: 'rgba(200, 210, 225, 0.24)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.GOLD_INGOT]: {
+    icon: '🏅',
+    eyebrow: '宝素材',
+    detail: '報酬部屋やゴール地点を明るくする',
+    accent: '#ffd166',
+    glow: 'rgba(255, 200, 90, 0.3)',
+    kind: 'condition',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.DIAMOND_GEM]: {
+    icon: '💎',
+    eyebrow: '宝石素材',
+    detail: '特別な報酬や王座の飾りに使える',
+    accent: '#76f7ff',
+    glow: 'rgba(90, 230, 255, 0.32)',
+    kind: 'condition',
+    soundKind: 'condition',
+  },
+  [BLOCK_IDS.STICK]: {
+    icon: '🪵',
+    eyebrow: '小物素材',
+    detail: '柵・支柱・細かい飾りの代わりになる',
+    accent: '#c58b55',
+    glow: 'rgba(190, 125, 70, 0.24)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.WHEAT_SEEDS]: {
+    icon: '🌾',
+    eyebrow: '畑の種',
+    detail: '畑や村の暮らしを表現できる',
+    accent: '#d6e86e',
+    glow: 'rgba(200, 220, 90, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.FARMLAND]: {
+    icon: '🚜',
+    eyebrow: '畑づくり',
+    detail: '村や拠点の食料エリアを作れる',
+    accent: '#a87948',
+    glow: 'rgba(150, 100, 55, 0.26)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.NETHERRACK]: {
+    icon: '🌋',
+    eyebrow: '異世界地形',
+    detail: '危険な洞窟やボス部屋の雰囲気を作る',
+    accent: '#ff6f61',
+    glow: 'rgba(255, 90, 70, 0.3)',
+    kind: 'explosive',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.SOUL_SAND]: {
+    icon: '🕳️',
+    eyebrow: '不気味な床',
+    detail: '暗い通路や罠っぽい地形を作れる',
+    accent: '#9b7aa0',
+    glow: 'rgba(140, 100, 150, 0.28)',
+    kind: 'utility',
+    soundKind: 'utility',
+  },
+  [BLOCK_IDS.NETHER_PORTAL]: {
+    icon: '🌀',
+    eyebrow: 'ポータル演出',
+    detail: '別世界への入口として目立つ',
+    accent: '#9c6bff',
+    glow: 'rgba(130, 80, 255, 0.34)',
+    kind: 'condition',
+    soundKind: 'condition',
+  },
+};
+
+function createPurposeFeedback(blockId: BlockId): BlockUseFeedbackContent | null {
+  const purpose = BLOCK_PURPOSES[blockId];
+  if (!purpose) return null;
+  return {
+    icon: purpose.icon,
+    eyebrow: purpose.eyebrow,
+    title: BLOCK_DEFS[blockId]?.name ?? 'ブロック',
+    detail: purpose.detail,
+    accent: purpose.accent,
+    glow: purpose.glow,
+    kind: purpose.kind,
+    soundKind: purpose.soundKind,
+  };
+}
 
 function getConditionHint(blockId: BlockId, stageId: string | null | undefined): string | null {
   const condition = getStageCondition(stageId);
@@ -102,7 +436,25 @@ export function getBlockUseHint(blockId: BlockId, stageId?: string | null): stri
   if (LIGHT_BLOCKS.has(blockId)) return '暗い場所を照らす';
   if (RAIL_BLOCKS.has(blockId)) return 'コースター用レール';
   if (blockId === BLOCK_IDS.WATER || blockId === BLOCK_IDS.LAVA) return '流れる地形ブロック';
-  return '置くと1個消費';
+  return BLOCK_PURPOSES[blockId]?.detail ?? '置くと1個消費';
+}
+
+export function getBlockUseProfile(
+  blockId: BlockId,
+  stageId?: string | null,
+): BlockUseFeedbackContent {
+  return getConditionFeedback(blockId, stageId)
+    ?? getBlockUseFeedback(blockId, stageId)
+    ?? {
+      icon: '⬛',
+      eyebrow: 'ブロック配置',
+      title: BLOCK_DEFS[blockId]?.name ?? 'ブロック',
+      detail: '置くと1個消費',
+      accent: '#d7dee8',
+      glow: 'rgba(210, 220, 235, 0.24)',
+      kind: 'utility',
+      soundKind: 'utility',
+    };
 }
 
 export function getBlockUseFeedback(
@@ -215,5 +567,5 @@ export function getBlockUseFeedback(
     };
   }
 
-  return getConditionFeedback(blockId, stageId);
+  return getConditionFeedback(blockId, stageId) ?? createPurposeFeedback(blockId);
 }
