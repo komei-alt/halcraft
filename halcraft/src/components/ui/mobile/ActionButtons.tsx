@@ -60,6 +60,12 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     mobileActions.fireMachineGun = false;
   }, []);
 
+  const handleLightsaber = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.breakBlock = true;
+  }, []);
+
   const handleVehicleGunStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -189,12 +195,16 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           borderRadius: 8,
           background: equippedItem === 'rocket_launcher'
             ? 'rgba(255, 150, 80, 0.22)'
+            : equippedItem === 'lightsaber'
+              ? 'rgba(170, 130, 255, 0.22)'
             : 'rgba(120, 180, 255, 0.18)',
           border: equippedItem === 'rocket_launcher'
             ? '2px solid rgba(255, 170, 110, 0.4)'
             : equippedItem === 'machine_gun'
               ? '2px solid rgba(255, 220, 120, 0.4)'
-            : '2px solid rgba(170, 215, 255, 0.34)',
+              : equippedItem === 'lightsaber'
+                ? '2px solid rgba(190, 160, 255, 0.42)'
+                : '2px solid rgba(170, 215, 255, 0.34)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -209,7 +219,13 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           transition: 'background 0.15s, border-color 0.15s',
         }}
       >
-        {equippedItem === 'rocket_launcher' ? '🚀' : equippedItem === 'machine_gun' ? '🔫' : '⛏️'}
+        {equippedItem === 'rocket_launcher'
+          ? '🚀'
+          : equippedItem === 'machine_gun'
+            ? '🔫'
+            : equippedItem === 'lightsaber'
+              ? '⚔️'
+              : '⛏️'}
       </div>
 
       {equippedItem === 'rocket_launcher' ? (
@@ -267,6 +283,33 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
           }}
         >
           🔫
+        </div>
+      ) : equippedItem === 'lightsaber' ? (
+        <div
+          onTouchStart={handleLightsaber}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: `calc(${64 + 80}px + env(safe-area-inset-bottom))`,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: 8,
+            background: 'rgba(170, 130, 255, 0.22)',
+            border: '2px solid rgba(190, 160, 255, 0.42)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+            touchAction: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: 20,
+            color: 'rgba(255, 245, 255, 0.86)',
+            textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          ⚔️
         </div>
       ) : (
         <div

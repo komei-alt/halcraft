@@ -120,7 +120,6 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const [addedBlockId, setAddedBlockId] = useState<BlockId | null>(null);
 
   // 外部からの開閉同期（モバイル用）— 外部 prop を内部 state に同期する正当なパターン
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (externalOpen !== undefined) {
       setIsOpen(externalOpen);
@@ -129,7 +128,6 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
       }
     }
   }, [externalOpen, isTouch]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Eキーでクラフト画面の開閉（デスクトップのみ）
   const handleKeyDown = useCallback(

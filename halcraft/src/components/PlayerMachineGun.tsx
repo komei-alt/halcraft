@@ -10,6 +10,7 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
+import { useMasteryStore } from '../stores/useMasteryStore';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
@@ -176,6 +177,7 @@ export function PlayerMachineGun() {
 
     flashTimer.current = 0.065;
     playMachineGunSound(startPos.distanceTo(camera.position));
+    useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
       [startPos.x, startPos.y, startPos.z],
       [shootDir.current.x, shootDir.current.y, shootDir.current.z],
@@ -279,12 +281,14 @@ export function PlayerMachineGun() {
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
+          useMasteryStore.getState().recordItemHit('machine_gun', { label: '連射ヒット', amount: 6 });
           continue;
         }
 
         if (hit.type === 'player' && hit.targetId) {
           useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, BULLET_DAMAGE, moveDir.x * 1.5, moveDir.z * 1.5);
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
+          useMasteryStore.getState().recordItemHit('machine_gun', { label: '対戦ヒット', amount: 7 });
           continue;
         }
 
@@ -295,6 +299,7 @@ export function PlayerMachineGun() {
           spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
           spawnDamagePopup(BULLET_DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
           playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
+          useMasteryStore.getState().recordItemHit('machine_gun', { label: '乗り物ヒット', amount: 7 });
           continue;
         }
 

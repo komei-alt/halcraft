@@ -47,6 +47,9 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'feature', text: '武器や建築を使いこむと熟練度が上がるようになったよ！' },
+      { type: 'feature', text: '今の装備のレベルと成長がゲーム中に見えるHUDを追加したよ' },
+      { type: 'improve', text: 'ライトセイバーも装備ボタンと操作ガイドに出るようになったよ' },
       { type: 'improve', text: '環境音がやさしく自然になって、ずっと鳴っても耳がつかれにくくなったよ' },
       { type: 'feature', text: 'マップごとに目的・支給アイテム・敵の出方が変わるようになったよ！' },
       { type: 'feature', text: 'ゲーム中にステージの目標と進みぐあいが見えるHUDを追加したよ' },

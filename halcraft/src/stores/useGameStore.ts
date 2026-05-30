@@ -8,6 +8,7 @@ import { useWorldStore } from './useWorldStore';
 import { useInventoryStore } from './useInventoryStore';
 import { useMobStore } from './useMobStore';
 import { useExperienceStore } from './useExperienceStore';
+import { useMasteryStore } from './useMasteryStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
@@ -215,6 +216,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     useInventoryStore.setState({ items: starterItems });
     useMobStore.getState().clearAllMobs();
     useExperienceStore.getState().resetXp();
+    useMasteryStore.getState().resetRuntime();
 
     const startingTools: Record<string, number> = {};
     for (const toolId of starterKit?.tools ?? []) {

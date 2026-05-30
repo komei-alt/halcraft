@@ -25,6 +25,7 @@ import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTr
 import { useEffectStore } from '../../stores/useEffectStore';
 import { getRegenRate } from '../../types/potions';
 import { useExperienceStore } from '../../stores/useExperienceStore';
+import { useMasteryStore } from '../../stores/useMasteryStore';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -347,6 +348,11 @@ export function MobManager() {
         // XP獲得（5-10 XP）
         const baseXp = event.type === 'boss_giant' ? 80 : 5 + Math.floor(Math.random() * 6);
         useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier)));
+        useMasteryStore.getState().recordItemDefeat(null, {
+          label: event.type === 'boss_giant' ? 'ボス撃破' : '敵をたおした',
+          amount: event.type === 'boss_giant' ? 90 : 24,
+          critical: event.type === 'boss_giant',
+        });
         const roll = Math.random();
         if (roll < 0.4) {
           dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));

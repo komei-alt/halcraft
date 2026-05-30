@@ -14,6 +14,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useExperienceStore } from '../stores/useExperienceStore';
+import { useMasteryStore } from '../stores/useMasteryStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -148,6 +149,8 @@ export function BlockInteraction() {
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
+  const recordBuilderAction = useMasteryStore((s) => s.recordBuilderAction);
+  const recordItemHit = useMasteryStore((s) => s.recordItemHit);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -303,6 +306,18 @@ export function BlockInteraction() {
     return closestMob;
   }, [camera]);
 
+  const recordBlockBreakMastery = useCallback((blockId: number) => {
+    const def = BLOCK_DEFS[blockId];
+    recordBuilderAction(def?.blockCategory === 'ore' ? 'mine_ore' : 'block_break');
+    if (def?.explosive) {
+      recordBuilderAction('detonate');
+    }
+  }, [recordBuilderAction]);
+
+  const recordBlockPlaceMastery = useCallback((blockId: number) => {
+    recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
+  }, [recordBuilderAction]);
+
   const tryMeleeAttack = useCallback((): boolean => {
     const maxAttackDistance = getAttackDistanceLimit();
     if (maxAttackDistance <= 0) return false;
@@ -330,6 +345,7 @@ export function BlockInteraction() {
         false,
       );
       playHitSound();
+      recordItemHit('builder', { label: '近接ヒット', amount: 7 });
       return true;
     }
 
@@ -353,11 +369,12 @@ export function BlockInteraction() {
         isCritical,
       );
       playHitSound();
+      recordItemHit('builder', { critical: isCritical, label: isCritical ? '会心ヒット' : '近接ヒット' });
       return true;
     }
 
     return false;
-  }, [camera, damageMob, findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack]);
+  }, [camera, damageMob, findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack, recordItemHit]);
 
   // レイマーチングで照準先のブロックを検出
   useFrame((_, frameDelta) => {
@@ -463,6 +480,7 @@ export function BlockInteraction() {
             dropItem(blockId, found.x, found.y, found.z);
           }
           sendBlockBreak(found.x, found.y, found.z);
+          recordBlockBreakMastery(blockId);
           if (BLOCK_DEFS[blockId]?.explosive) {
             const cp = camera.position;
             triggerTntExplosion(found.x, found.y, found.z, [cp.x, cp.y - 1.6, cp.z]);
@@ -488,6 +506,7 @@ export function BlockInteraction() {
             }
             sendBlockBreak(found.x, found.y, found.z);
             playBlockBreakSound();
+            recordBlockBreakMastery(blockId);
             // ツール耐久値消費
             if (!isBuildMode) {
               usePlayerStore.getState().damageTool();
@@ -543,6 +562,7 @@ export function BlockInteraction() {
               if (breakBlock(t.x, t.y, t.z)) {
                 spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
                 sendBlockBreak(t.x, t.y, t.z);
+                recordBlockBreakMastery(targetBlockId);
                 const cp = camera.position;
                 triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
               }
@@ -551,6 +571,7 @@ export function BlockInteraction() {
               setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
               sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
               playBlockBreakSound();
+              recordBlockPlaceMastery(selectedBlock);
 
               // SPAWNERブロック設置時
               if (selectedBlock === BLOCK_IDS.SPAWNER) {
@@ -568,6 +589,7 @@ export function BlockInteraction() {
                     if (breakBlock(nx, ny, nz)) {
                       spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
                       sendBlockBreak(nx, ny, nz);
+                      recordBlockBreakMastery(neighborBlock);
                       const cp = camera.position;
                       triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
                     }
@@ -605,6 +627,7 @@ export function BlockInteraction() {
               }
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
+              recordBlockBreakMastery(blockId);
               if (BLOCK_DEFS[blockId]?.explosive) {
                 const cp = camera.position;
                 triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
@@ -623,6 +646,7 @@ export function BlockInteraction() {
             const selectedBlock = getSelectedBlock();
             setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
             sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+            recordBlockPlaceMastery(selectedBlock);
 
             // SPAWNERブロック設置時:アイアンゴーレムをスポーン
             if (selectedBlock === BLOCK_IDS.SPAWNER) {
@@ -641,6 +665,7 @@ export function BlockInteraction() {
                   if (breakBlock(nx, ny, nz)) {
                     spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
                     sendBlockBreak(nx, ny, nz);
+                    recordBlockBreakMastery(neighborBlock);
                     const cp = camera.position;
                     triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
                   }
@@ -677,6 +702,7 @@ export function BlockInteraction() {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
+              recordBlockBreakMastery(blockId);
               if (BLOCK_DEFS[blockId]?.explosive) {
                 const cp = camera.position;
                 triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
@@ -703,6 +729,7 @@ export function BlockInteraction() {
         if (breakBlock(t.x, t.y, t.z)) {
           spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
           sendBlockBreak(t.x, t.y, t.z);
+          recordBlockBreakMastery(targetBlockId);
           const cp = camera.position;
           triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
         }
@@ -715,6 +742,7 @@ export function BlockInteraction() {
       setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
       sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
       playBlockBreakSound();
+      recordBlockPlaceMastery(selectedBlock);
       lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
 
       // SPAWNERブロック設置時
@@ -733,6 +761,7 @@ export function BlockInteraction() {
             if (breakBlock(nx, ny, nz)) {
               spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
               sendBlockBreak(nx, ny, nz);
+              recordBlockBreakMastery(neighborBlock);
               const cp = camera.position;
               triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
             }
@@ -740,7 +769,7 @@ export function BlockInteraction() {
         }
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, dropItem, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode, camera]);
+  }, [breakBlock, setBlock, getSelectedBlock, getBlock, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode, camera, recordBlockBreakMastery, recordBlockPlaceMastery]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

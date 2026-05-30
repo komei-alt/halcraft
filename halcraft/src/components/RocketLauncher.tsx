@@ -10,6 +10,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { onRemoteRocketExplode, onRemoteRocketFire, useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
+import { useMasteryStore } from '../stores/useMasteryStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -394,6 +395,7 @@ export function RocketLauncher() {
   const applyExplosionDamage = useCallback((center: THREE.Vector3) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
+    let masteryHits = 0;
 
     playerCenter.current.set(camera.position.x, camera.position.y - 0.85, camera.position.z);
     const selfDistance = playerCenter.current.distanceTo(center);
@@ -411,6 +413,7 @@ export function RocketLauncher() {
       const distance = mobCenter.distanceTo(center);
       const damage = calculateExplosionDamage(distance);
       if (damage <= 0) continue;
+      masteryHits += 1;
 
       const dirX = mob.x - center.x;
       const dirZ = mob.z - center.z;
@@ -445,6 +448,7 @@ export function RocketLauncher() {
       const distance = playerBody.distanceTo(center);
       const damage = calculateExplosionDamage(distance);
       if (damage <= 0) continue;
+      masteryHits += 1;
 
       const dirX = player.position[0] - center.x;
       const dirZ = player.position[2] - center.z;
@@ -465,6 +469,14 @@ export function RocketLauncher() {
         false,
       );
       spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
+    }
+
+    if (masteryHits > 0) {
+      useMasteryStore.getState().recordItemHit('rocket_launcher', {
+        label: masteryHits >= 3 ? '大爆風ヒット' : '爆風ヒット',
+        amount: 10 + masteryHits * 5,
+        critical: masteryHits >= 3,
+      });
     }
   }, [camera, takeDamage]);
 
@@ -547,6 +559,7 @@ export function RocketLauncher() {
     muzzleFlashTimer.current = 0.11;
     backblastTimer.current = 0.15;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
+    useMasteryStore.getState().recordItemUse('rocket_launcher');
     multi.sendRocketFire(
       rocketId,
       [muzzleWorld.current.x, muzzleWorld.current.y, muzzleWorld.current.z],
@@ -732,6 +745,11 @@ export function RocketLauncher() {
         );
         if (vehicleHit) {
           useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
+          useMasteryStore.getState().recordItemHit('rocket_launcher', {
+            label: '直撃ヒット',
+            amount: 18,
+            critical: true,
+          });
           explosionsToSpawn.push({
             pos: projectile.pos.clone(),
             syncId: projectile.syncId,

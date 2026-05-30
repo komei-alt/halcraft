@@ -100,10 +100,15 @@ function WalkingControls() {
           <ControlRow keyName="左クリック / R" action="ロケット発射" keyColor="#ff9966" />
           <ControlRow keyName="大ばくはつ" action="広いはんいにダメージ" keyColor="#ff9966" />
         </>
-      ) : (
+      ) : equippedItem === 'machine_gun' ? (
         <>
           <ControlRow keyName="左クリック長押し" action="機関銃を連射" keyColor="#ffe28a" />
           <ControlRow keyName="右クリック長押し" action="スコープでねらう" keyColor="#ffe28a" />
+        </>
+      ) : (
+        <>
+          <ControlRow keyName="左クリック" action="コンボ斬り" keyColor="#c8b0ff" />
+          <ControlRow keyName="5段コンボ" action="連続で強くなる" keyColor="#c8b0ff" />
         </>
       )}
       <ControlRow keyName="V" action="武器切り替え" keyColor="#ffd56d" />

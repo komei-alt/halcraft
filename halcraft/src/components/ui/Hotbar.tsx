@@ -63,6 +63,7 @@ export function Hotbar() {
           { id: 'builder', icon: '⛏️', label: '建築' },
           { id: 'rocket_launcher', icon: '🚀', label: 'ロケット' },
           { id: 'machine_gun', icon: '🔫', label: '機関銃' },
+          { id: 'lightsaber', icon: '⚔️', label: '剣' },
         ] satisfies Array<{ id: EquippedItem; icon: string; label: string }>).map((item) => {
           const isSelected = equippedItem === item.id;
           return (
@@ -84,12 +85,14 @@ export function Hotbar() {
                     ? 'rgba(255, 145, 72, 0.22)'
                     : item.id === 'machine_gun'
                       ? 'rgba(255, 210, 90, 0.18)'
-                    : 'rgba(180, 220, 255, 0.14)'
+                      : item.id === 'lightsaber'
+                        ? 'rgba(170, 130, 255, 0.2)'
+                        : 'rgba(180, 220, 255, 0.14)'
                   : 'rgba(255,255,255,0.04)',
                 color: isSelected ? '#fff0d0' : 'rgba(255,255,255,0.65)',
                 fontSize: isTouch ? 12 : 11,
                 fontWeight: 700,
-                letterSpacing: '0.04em',
+                letterSpacing: 0,
                 cursor: 'pointer',
               }}
             >

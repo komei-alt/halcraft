@@ -1,2 +1,14 @@
 /* ハルクラ — アプリスタイル */
 /* App.css は必要に応じて追加 */
+
+@keyframes masteryPulse {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.98);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

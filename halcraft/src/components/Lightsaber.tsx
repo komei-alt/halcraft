@@ -10,6 +10,7 @@ import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
+import { useMasteryStore } from '../stores/useMasteryStore';
 
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
@@ -287,6 +288,11 @@ export function Lightsaber() {
           dir.x, dir.y, dir.z, step.damageMultiplier >= 1.5,
         );
         playLightsaberHit();
+        useMasteryStore.getState().recordItemHit('lightsaber', {
+          label: step.damageMultiplier >= 1.5 ? 'フィニッシュヒット' : 'セイバーヒット',
+          amount: step.damageMultiplier >= 1.5 ? 15 : 9,
+          critical: step.damageMultiplier >= 1.5,
+        });
         lightBoost.current = 1;
         hasHitThisSwing.current = true;
         return true;
@@ -335,6 +341,11 @@ export function Lightsaber() {
         dir.x, dir.y, dir.z, isCritical,
       );
       playLightsaberHit();
+      useMasteryStore.getState().recordItemHit('lightsaber', {
+        label: isCritical ? 'フィニッシュヒット' : 'セイバーヒット',
+        amount: isCritical ? 15 : 9,
+        critical: isCritical,
+      });
       lightBoost.current = 1;
       hasHitThisSwing.current = true;
       return true;
@@ -358,6 +369,7 @@ export function Lightsaber() {
     hasHitThisSwing.current = false;
     lastComboTime.current = now;
     playLightsaberSwing(comboIndex.current);
+    useMasteryStore.getState().recordItemUse('lightsaber', { label: 'コンボ開始', amount: 2 });
   }, []);
 
   // マウスイベント登録

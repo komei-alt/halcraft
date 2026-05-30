@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
 import { isTouchDevice } from '../../utils/device';
 
 const SHOW_DURATION_MS = 2200;
@@ -120,6 +121,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
 export function WeaponSwitchPopover() {
   const phase = useGameStore((s) => s.phase);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const masteryItems = useMasteryStore((s) => s.items);
   const isTouch = isTouchDevice();
   const prevItemRef = useRef<EquippedItem>(equippedItem);
   const dismissTimerRef = useRef<number | null>(null);
@@ -183,6 +185,9 @@ export function WeaponSwitchPopover() {
   if (!visible || phase !== 'playing') return null;
 
   const content = isTouch ? getMobileContent(displayItem) : CONTENT_BY_ITEM[displayItem];
+  const mastery = masteryItems[displayItem];
+  const masteryProgress = mastery ? getMasteryProgress(mastery) : 0;
+  const masteryTitle = mastery ? getMasteryTitle(displayItem, mastery.level) : '';
 
   return (
     <div
@@ -251,7 +256,7 @@ export function WeaponSwitchPopover() {
               style={{
                 fontSize: isTouch ? 15 : 16,
                 fontWeight: 800,
-                letterSpacing: '0.03em',
+                letterSpacing: 0,
                 color: content.accent,
               }}
             >
@@ -268,6 +273,56 @@ export function WeaponSwitchPopover() {
             </div>
           </div>
         </div>
+
+        {mastery && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: '7px 8px',
+              borderRadius: 7,
+              background: 'rgba(255,255,255,0.06)',
+              border: `1px solid ${content.accent}2f`,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 10,
+                color: 'rgba(255,255,255,0.84)',
+                fontSize: isTouch ? 10 : 11,
+                fontWeight: 900,
+                lineHeight: '13px',
+              }}
+            >
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Lv.{mastery.level} {masteryTitle}
+              </span>
+              <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+                {mastery.xp}/{mastery.xpToNextLevel}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 5,
+                height: 4,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.12)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${masteryProgress * 100}%`,
+                  height: '100%',
+                  borderRadius: 999,
+                  background: `linear-gradient(90deg, ${content.accent}, #ffffff)`,
+                  transition: 'width 0.25s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         <div
           style={{
