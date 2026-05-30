@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
+import { getMasteryPerkSummary } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
 const SHOW_DURATION_MS = 2200;
@@ -188,6 +189,7 @@ export function WeaponSwitchPopover() {
   const mastery = masteryItems[displayItem];
   const masteryProgress = mastery ? getMasteryProgress(mastery) : 0;
   const masteryTitle = mastery ? getMasteryTitle(displayItem, mastery.level) : '';
+  const masteryPerk = mastery ? getMasteryPerkSummary(displayItem, mastery.level) : '';
 
   return (
     <div
@@ -320,6 +322,20 @@ export function WeaponSwitchPopover() {
                   transition: 'width 0.25s ease',
                 }}
               />
+            </div>
+            <div
+              style={{
+                marginTop: 5,
+                color: content.accent,
+                fontSize: isTouch ? 9 : 10,
+                lineHeight: '13px',
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              特典: {masteryPerk}
             </div>
           </div>
         )}

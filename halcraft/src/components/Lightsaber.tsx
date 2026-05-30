@@ -13,6 +13,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { getMasteryBonus } from '../types/masteryPerks';
 
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
@@ -244,7 +245,12 @@ export function Lightsaber() {
   // ダメージ適用
   const applyDamage = useCallback((comboStep: number) => {
     const step = COMBO_STEPS[comboStep];
-    const damage = Math.max(1, Math.round(LIGHTSABER_BASE_DAMAGE * step.damageMultiplier));
+    const masteryLevel = useMasteryStore.getState().items.lightsaber?.level ?? 1;
+    const masteryBonus = getMasteryBonus('lightsaber', masteryLevel);
+    const attackReach = ATTACK_REACH + masteryBonus.lightsaberReachBonus;
+    const damage = Math.max(1, Math.round(
+      LIGHTSABER_BASE_DAMAGE * step.damageMultiplier * masteryBonus.lightsaberDamageMultiplier,
+    ));
 
     attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     tempOrigin.current.copy(camera.position);
@@ -254,7 +260,7 @@ export function Lightsaber() {
     // リモートプレイヤーへのヒット判定
     const multiState = useMultiplayerStore.getState();
     if (multiState.connected) {
-      let closestPlayerDist = ATTACK_REACH;
+      let closestPlayerDist = attackReach;
       let closestPlayerId: string | null = null;
       let closestPlayerPos: [number, number, number] | null = null;
 
@@ -265,7 +271,7 @@ export function Lightsaber() {
           player.position[2] - origin.z,
         );
         const projection = tempToTarget.current.dot(dir);
-        if (projection < 0 || projection > ATTACK_REACH) continue;
+        if (projection < 0 || projection > attackReach) continue;
 
         tempClosest.current.copy(origin).addScaledVector(dir, projection);
         const targetX = origin.x + tempToTarget.current.x;
@@ -305,7 +311,7 @@ export function Lightsaber() {
 
     // モブへのヒット判定
     const mobs = useMobStore.getState().mobs;
-    let closestMobDist = ATTACK_REACH;
+    let closestMobDist = attackReach;
     let closestMobId: string | null = null;
     let closestMobPos: { x: number; y: number; z: number; hitY: number } | null = null;
 

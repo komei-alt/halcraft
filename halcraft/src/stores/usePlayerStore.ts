@@ -8,7 +8,9 @@ import { useGameStore } from './useGameStore';
 import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
+import { getMasteryBonus } from '../types/masteryPerks';
 import { playToolBreakSound } from '../utils/sounds';
+import { useMasteryStore } from './useMasteryStore';
 
 /** localStorage のキー（スキン保存用） */
 const SKIN_STORAGE_KEY = 'halcraft-skin-id';
@@ -47,6 +49,10 @@ const SHAKE_DECAY = 8;
 const KNOCKBACK_SPEED = 6;
 /** 被ダメージ無敵時間（ミリ秒） */
 const DAMAGE_INVINCIBLE_MS = 500;
+
+function getMasteryLevel(item: EquippedItem): number {
+  return useMasteryStore.getState().items[item]?.level ?? 1;
+}
 
 interface PlayerState {
   /** 選択中のスキンID */
@@ -315,9 +321,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   fireRocket: () => {
     const state = get();
     if (state.rocketCooldown > 0 || state.isDead) return false;
+    const bonus = getMasteryBonus('rocket_launcher', getMasteryLevel('rocket_launcher'));
 
     set({
-      rocketCooldown: ROCKET_COOLDOWN,
+      rocketCooldown: ROCKET_COOLDOWN * bonus.rocketCooldownMultiplier,
       rocketCharge: 0,
       cameraShake: Math.max(state.cameraShake, 0.45),
     });

@@ -13,6 +13,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { getMasteryBonus } from '../types/masteryPerks';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
@@ -51,6 +52,11 @@ interface BulletProjectile {
 }
 
 let nextBulletId = 0;
+
+function getMachineGunMasteryBonus() {
+  const level = useMasteryStore.getState().items.machine_gun?.level ?? 1;
+  return getMasteryBonus('machine_gun', level);
+}
 
 export function PlayerMachineGun() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
@@ -161,7 +167,9 @@ export function PlayerMachineGun() {
       shootDir.current.normalize();
     }
 
-    const spread = isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD;
+    const masteryBonus = getMachineGunMasteryBonus();
+    const spread = (isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD)
+      * masteryBonus.machineGunSpreadMultiplier;
     shootDir.current.x += (Math.random() - 0.5) * spread;
     shootDir.current.y += (Math.random() - 0.5) * spread;
     shootDir.current.z += (Math.random() - 0.5) * spread;
@@ -248,6 +256,7 @@ export function PlayerMachineGun() {
     const getBlock = useWorldStore.getState().getBlock;
     const mobs = useMobStore.getState().mobs;
     const remotePlayers = useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>;
+    const bulletDamage = BULLET_DAMAGE + getMachineGunMasteryBonus().machineGunDamageBonus;
 
     setBullets((prev) => {
       const alive: BulletProjectile[] = [];
@@ -277,9 +286,9 @@ export function PlayerMachineGun() {
         if (hit.type === 'mob' && hit.targetId) {
           const mob = mobs.find((m) => m.id === hit.targetId);
           if (mob) {
-            useMultiplayerStore.getState().sendMobDamage(hit.targetId, BULLET_DAMAGE, moveDir.x * 1.5, moveDir.z * 1.5);
-            useMobStore.getState().damageMob(hit.targetId, BULLET_DAMAGE, moveDir.x, moveDir.z);
-            spawnDamagePopup(BULLET_DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+            useMultiplayerStore.getState().sendMobDamage(hit.targetId, bulletDamage, moveDir.x * 1.5, moveDir.z * 1.5);
+            useMobStore.getState().damageMob(hit.targetId, bulletDamage, moveDir.x, moveDir.z);
+            spawnDamagePopup(bulletDamage, mob.x, mob.y + 1.0, mob.z, false);
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
@@ -290,7 +299,7 @@ export function PlayerMachineGun() {
         }
 
         if (hit.type === 'player' && hit.targetId) {
-          useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, BULLET_DAMAGE, moveDir.x * 1.5, moveDir.z * 1.5);
+          useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, bulletDamage, moveDir.x * 1.5, moveDir.z * 1.5);
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '対戦ヒット', amount: 7 });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
@@ -301,9 +310,9 @@ export function PlayerMachineGun() {
         // 乗り物への弾丸ダメージ
         const vehicleHit = checkProjectileHitVehicle(bullet.pos.x, bullet.pos.y, bullet.pos.z);
         if (vehicleHit) {
-          useVehicleStore.getState().damageVehicle(vehicleHit.type, BULLET_DAMAGE);
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, bulletDamage);
           spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
-          spawnDamagePopup(BULLET_DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
+          spawnDamagePopup(bulletDamage, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
           playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '乗り物ヒット', amount: 7 });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');

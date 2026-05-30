@@ -18,6 +18,7 @@ import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
+import { getMasteryBonus } from '../types/masteryPerks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
@@ -97,6 +98,11 @@ const highlightMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.5,
   depthTest: false,
 });
+
+function getBuilderMasteryBonus() {
+  const level = useMasteryStore.getState().items.builder?.level ?? 1;
+  return getMasteryBonus('builder', level);
+}
 
 /** ブロック選択ハイライトの表示 */
 function BlockHighlight({ target }: { target: TargetBlock | null }) {
@@ -505,7 +511,8 @@ export function BlockInteraction() {
         breakProgressRef.current = { x: found.x, y: found.y, z: found.z, progress: 0, hardness };
       } else {
         // 進行度を加算（ツール速度倍率適用）
-        const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory);
+        const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory)
+          * getBuilderMasteryBonus().miningSpeedMultiplier;
         bp.progress += (dt * miningSpeed) / hardness;
 
         if (bp.progress >= 1) {
@@ -566,7 +573,8 @@ export function BlockInteraction() {
           } else {
           // 照準先が変わったら即座に設置（クールダウンリセット）
           const targetChanged = coordKey !== lastPlacedRef.current;
-          if (targetChanged || placeTimerRef.current >= PLACE_INTERVAL) {
+          const placeInterval = PLACE_INTERVAL * getBuilderMasteryBonus().placementIntervalMultiplier;
+          if (targetChanged || placeTimerRef.current >= placeInterval) {
             // TNT右クリック起爆チェック
             const targetBlockId = getBlock(t.x, t.y, t.z);
             if (BLOCK_DEFS[targetBlockId]?.explosive) {

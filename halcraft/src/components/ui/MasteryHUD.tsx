@@ -10,6 +10,7 @@ import {
   MASTERY_DEFS,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
+import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
 export function MasteryHUD() {
@@ -33,6 +34,8 @@ export function MasteryHUD() {
   const def = MASTERY_DEFS[equippedItem];
   const progress = getMasteryProgress(mastery);
   const title = getMasteryTitle(equippedItem, mastery.level);
+  const perkSummary = getMasteryPerkSummary(equippedItem, mastery.level);
+  const nextPerkSummary = getNextMasteryPerkSummary(equippedItem, mastery.level);
   const eventMatches = recentEvent?.item === equippedItem;
   const statLabel = equippedItem === 'builder'
     ? `${mastery.blocksChanged} ブロック`
@@ -160,6 +163,37 @@ export function MasteryHUD() {
         <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
           {mastery.xp}/{mastery.xpToNextLevel}
         </span>
+      </div>
+
+      <div
+        style={{
+          marginTop: 5,
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 8,
+          color: def.accent,
+          fontSize: isTouch ? 9 : 10,
+          lineHeight: '13px',
+          fontWeight: 900,
+        }}
+      >
+        <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          特典: {perkSummary}
+        </span>
+        {nextPerkSummary && (
+          <span
+            style={{
+              flex: '0 0 auto',
+              maxWidth: isTouch ? 78 : 96,
+              color: 'rgba(255,255,255,0.48)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            次 {nextPerkSummary}
+          </span>
+        )}
       </div>
 
       {eventMatches && (
