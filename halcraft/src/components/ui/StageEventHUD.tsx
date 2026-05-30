@@ -6,6 +6,7 @@ import { useStageEventStore } from '../../stores/useStageEventStore';
 import { getStageEvent } from '../../types/stageEvents';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 
 function formatCountdown(seconds: number): string {
   const safeSeconds = Math.max(0, Math.ceil(seconds));
@@ -49,7 +50,7 @@ export function StageEventHUD() {
       id="stage-event-hud"
       style={{
         position: 'fixed',
-        top: pressure ? 258 : 132,
+        top: pressure ? STAGE_RIGHT_RAIL_TOP.eventWithPressure : STAGE_RIGHT_RAIL_TOP.eventWithoutPressure,
         right: 16,
         zIndex: 96,
         width: 276,

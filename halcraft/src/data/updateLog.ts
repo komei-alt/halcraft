@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'improve', text: 'マップ環境・ステージ特性・時間イベント・モードHUDが重ならず読めるように整理したよ' },
       { type: 'improve', text: '武器が当たった時や敵をたおした時、照準近くにHITやDOWNが出て手ごたえが分かりやすくなったよ' },
       { type: 'improve', text: 'ロケット・機関銃・ライトセイバーで照準の色や形が変わり、今の装備がもっと分かりやすくなったよ' },
       { type: 'improve', text: '装備ごとの準備状態やマップ相性が熟練度HUDで見えて、切り替えた時の音も分かりやすくなったよ' },

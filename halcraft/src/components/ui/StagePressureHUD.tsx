@@ -6,6 +6,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useStagePressureStore } from '../../stores/useStagePressureStore';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 
 const SEVERITY_COLORS = {
   safe: '#8ff0d2',
@@ -41,7 +42,7 @@ export function StagePressureHUD() {
       id="stage-pressure-hud"
       style={{
         position: 'fixed',
-        top: isCompact ? 244 : 226,
+        top: isCompact ? 244 : STAGE_RIGHT_RAIL_TOP.pressure,
         right: isCompact ? 14 : 16,
         zIndex: 96,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,

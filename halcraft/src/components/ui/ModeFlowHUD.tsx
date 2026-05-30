@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
+import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 
 function formatSeconds(ms: number): string {
   return `${Math.max(0, Math.ceil(ms / 1000))}s`;
@@ -37,6 +39,7 @@ export function ModeFlowHUD() {
   }, [clearRecentActivation, recentActivation]);
 
   const rule = useMemo(() => getStageModeRule(stage?.id), [stage?.id]);
+  const pressure = useMemo(() => getStagePressure(stage?.id), [stage?.id]);
 
   if (phase !== 'playing' || !stage || !rule || isCompact) return null;
 
@@ -57,7 +60,11 @@ export function ModeFlowHUD() {
       id="mode-flow-hud"
       style={{
         position: 'fixed',
-        top: isCompact ? 358 : 354,
+        top: isCompact
+          ? 358
+          : pressure
+            ? STAGE_RIGHT_RAIL_TOP.modeWithPressure
+            : STAGE_RIGHT_RAIL_TOP.modeWithoutPressure,
         right: isCompact ? 14 : 16,
         zIndex: 95,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,
