@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'improve', text: '環境音がやさしく自然になって、ずっと鳴っても耳がつかれにくくなったよ' },
       { type: 'feature', text: 'マップごとに目的・支給アイテム・敵の出方が変わるようになったよ！' },
       { type: 'feature', text: 'ゲーム中にステージの目標と進みぐあいが見えるHUDを追加したよ' },
       { type: 'improve', text: '建築マップには制作広場、戦争マップには防衛コアができて、遊び始めがわかりやすくなったよ' },

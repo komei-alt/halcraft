@@ -5,19 +5,157 @@
 import { SEA_LEVEL } from '../types/blocks';
 import type { BiomeId } from '../types/stages';
 
+interface AmbientProfile {
+  windLevel: number;
+  windBodyCutoff: number;
+  windAirCutoff: number;
+  windRustleLevel: number;
+  waterLevel: number;
+  caveCutoff: number;
+  cavePitch: number;
+}
+
+const AMBIENT_VOLUME = 0.045;
+const PARAM_RESPONSE_SECONDS = 0.75;
+const MAX_STAGE_AMBIENT = 1.15;
+
+const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
+  forest: {
+    windLevel: 0.2,
+    windBodyCutoff: 560,
+    windAirCutoff: 1850,
+    windRustleLevel: 0.22,
+    waterLevel: 0.78,
+    caveCutoff: 120,
+    cavePitch: 46,
+  },
+  tropical: {
+    windLevel: 0.15,
+    windBodyCutoff: 480,
+    windAirCutoff: 1650,
+    windRustleLevel: 0.32,
+    waterLevel: 1,
+    caveCutoff: 110,
+    cavePitch: 42,
+  },
+  snow: {
+    windLevel: 0.3,
+    windBodyCutoff: 760,
+    windAirCutoff: 2700,
+    windRustleLevel: 0.1,
+    waterLevel: 0.62,
+    caveCutoff: 135,
+    cavePitch: 50,
+  },
+  desert: {
+    windLevel: 0.24,
+    windBodyCutoff: 680,
+    windAirCutoff: 2450,
+    windRustleLevel: 0.07,
+    waterLevel: 0.28,
+    caveCutoff: 95,
+    cavePitch: 44,
+  },
+};
+
 let audioCtx: AudioContext | null = null;
-let windNode: OscillatorNode | null = null;
-let windGain: GainNode | null = null;
-let windFilterNode: BiquadFilterNode | null = null;
-let waterGain: GainNode | null = null;
-let waterNode: AudioBufferSourceNode | null = null;
-let caveGain: GainNode | null = null;
-let caveNode: OscillatorNode | null = null;
-let caveFilterNode: BiquadFilterNode | null = null;
 let masterGain: GainNode | null = null;
+let windBodyGain: GainNode | null = null;
+let windAirGain: GainNode | null = null;
+let windRustleGain: GainNode | null = null;
+let waterGain: GainNode | null = null;
+let caveGain: GainNode | null = null;
+let windBodyFilterNode: BiquadFilterNode | null = null;
+let windAirFilterNode: BiquadFilterNode | null = null;
+let waterFilterNode: BiquadFilterNode | null = null;
+let caveFilterNode: BiquadFilterNode | null = null;
+let caveDroneNode: OscillatorNode | null = null;
+let activeSources: AudioScheduledSourceNode[] = [];
 let isRunning = false;
 
-const AMBIENT_VOLUME = 0.06;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function trackSource<T extends AudioScheduledSourceNode>(source: T): T {
+  activeSources.push(source);
+  return source;
+}
+
+function smoothParam(param: AudioParam, target: number, now: number, responseSeconds = PARAM_RESPONSE_SECONDS): void {
+  param.cancelScheduledValues(now);
+  param.setTargetAtTime(target, now, responseSeconds);
+}
+
+function softenLoopEdges(buffer: AudioBuffer, fadeSeconds: number): void {
+  const fadeSamples = Math.min(Math.floor(buffer.sampleRate * fadeSeconds), Math.floor(buffer.length / 2));
+  if (fadeSamples <= 0) return;
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < fadeSamples; i++) {
+      const t = i / fadeSamples;
+      const startIndex = i;
+      const endIndex = buffer.length - fadeSamples + i;
+      const blended = data[endIndex] * (1 - t) + data[startIndex] * t;
+      data[startIndex] = blended;
+      data[endIndex] = blended;
+    }
+  }
+}
+
+function createTexturedNoiseBuffer(ctx: AudioContext, seconds: number, smoothing: number, drive: number): AudioBuffer {
+  const length = Math.floor(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    let value = (Math.random() * 2 - 1) * 0.2;
+    let slowDrift = (Math.random() * 2 - 1) * 0.1;
+
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      const driftWhite = Math.random() * 2 - 1;
+      slowDrift = slowDrift * 0.9995 + driftWhite * 0.0005;
+      value = value * smoothing + white * (1 - smoothing);
+      data[i] = clamp((value + slowDrift * 0.45) * drive, -1, 1);
+    }
+  }
+
+  softenLoopEdges(buffer, 0.18);
+  return buffer;
+}
+
+function createWaterNoiseBuffer(ctx: AudioContext): AudioBuffer {
+  const length = Math.floor(ctx.sampleRate * 10);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    let wash = 0;
+    let bubble = 0;
+
+    for (let i = 0; i < length; i++) {
+      wash = wash * 0.94 + (Math.random() * 2 - 1) * 0.06;
+      if (Math.random() < 0.0018) {
+        bubble += Math.random() * 0.8;
+      }
+      bubble *= 0.985;
+      data[i] = clamp(wash * 1.35 + bubble * 0.28, -1, 1);
+    }
+  }
+
+  softenLoopEdges(buffer, 0.12);
+  return buffer;
+}
+
+function safeStop(source: AudioScheduledSourceNode): void {
+  try {
+    source.stop();
+  } catch {
+    // stop 済みのノードは無視する
+  }
+}
 
 /** 環境音システムの初期化 */
 export function initAmbientSounds(): void {
@@ -28,76 +166,131 @@ export function initAmbientSounds(): void {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
   }
+
   masterGain = audioCtx.createGain();
   masterGain.gain.value = AMBIENT_VOLUME;
   masterGain.connect(audioCtx.destination);
 
-  // --- 風音（フィルター付きホワイトノイズ） ---
-  windGain = audioCtx.createGain();
-  windGain.gain.value = 0;
-  windGain.connect(masterGain);
+  // --- 風音: 音程を持つオシレーターではなく、自然音に近い色付きノイズで構成 ---
+  const windSource = trackSource(audioCtx.createBufferSource());
+  windSource.buffer = createTexturedNoiseBuffer(audioCtx, 14, 0.985, 4.2);
+  windSource.loop = true;
 
-  const windOsc = audioCtx.createOscillator();
-  windOsc.type = 'sawtooth';
-  windOsc.frequency.value = 200;
-  const windFilter = audioCtx.createBiquadFilter();
-  windFilter.type = 'lowpass';
-  windFilter.frequency.value = 400;
-  windFilter.Q.value = 1;
-  windFilterNode = windFilter;
-  windOsc.connect(windFilter);
-  windFilter.connect(windGain);
-  windOsc.start();
-  windNode = windOsc;
+  const windBodyHighpass = audioCtx.createBiquadFilter();
+  windBodyHighpass.type = 'highpass';
+  windBodyHighpass.frequency.value = 85;
+  windBodyHighpass.Q.value = 0.35;
 
-  // 風のうねり（LFOでGainを揺らす）
-  const windLfo = audioCtx.createOscillator();
-  const windLfoGain = audioCtx.createGain();
-  windLfo.type = 'sine';
-  windLfo.frequency.value = 0.15;
-  windLfoGain.gain.value = 0.3;
-  windLfo.connect(windLfoGain);
-  windLfoGain.connect(windGain.gain);
-  windLfo.start();
+  const windBodyFilter = audioCtx.createBiquadFilter();
+  windBodyFilter.type = 'lowpass';
+  windBodyFilter.frequency.value = AMBIENT_PROFILES.forest.windBodyCutoff;
+  windBodyFilter.Q.value = 0.28;
+  windBodyFilterNode = windBodyFilter;
 
-  // --- 水音（ノイズバッファ + バンドパスフィルタ） ---
-  waterGain = audioCtx.createGain();
-  waterGain.gain.value = 0;
-  waterGain.connect(masterGain);
+  windBodyGain = audioCtx.createGain();
+  windBodyGain.gain.value = 0;
 
-  const waterBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
-  const waterData = waterBuffer.getChannelData(0);
-  for (let i = 0; i < waterData.length; i++) {
-    waterData[i] = (Math.random() * 2 - 1) * 0.5;
-  }
-  const waterSource = audioCtx.createBufferSource();
-  waterSource.buffer = waterBuffer;
+  const windAirFilter = audioCtx.createBiquadFilter();
+  windAirFilter.type = 'bandpass';
+  windAirFilter.frequency.value = AMBIENT_PROFILES.forest.windAirCutoff;
+  windAirFilter.Q.value = 0.55;
+  windAirFilterNode = windAirFilter;
+
+  windAirGain = audioCtx.createGain();
+  windAirGain.gain.value = 0;
+
+  windSource.connect(windBodyHighpass);
+  windBodyHighpass.connect(windBodyFilter);
+  windBodyFilter.connect(windBodyGain);
+  windBodyGain.connect(masterGain);
+
+  windSource.connect(windAirFilter);
+  windAirFilter.connect(windAirGain);
+  windAirGain.connect(masterGain);
+  windSource.start();
+
+  const rustleSource = trackSource(audioCtx.createBufferSource());
+  rustleSource.buffer = createTexturedNoiseBuffer(audioCtx, 9, 0.72, 0.95);
+  rustleSource.loop = true;
+
+  const rustleFilter = audioCtx.createBiquadFilter();
+  rustleFilter.type = 'bandpass';
+  rustleFilter.frequency.value = 2450;
+  rustleFilter.Q.value = 0.9;
+
+  windRustleGain = audioCtx.createGain();
+  windRustleGain.gain.value = 0;
+
+  rustleSource.connect(rustleFilter);
+  rustleFilter.connect(windRustleGain);
+  windRustleGain.connect(masterGain);
+  rustleSource.start();
+
+  // --- 水音: 低い水の揺れと小さな泡を混ぜたノイズ ---
+  const waterSource = trackSource(audioCtx.createBufferSource());
+  waterSource.buffer = createWaterNoiseBuffer(audioCtx);
   waterSource.loop = true;
+
+  const waterHighpass = audioCtx.createBiquadFilter();
+  waterHighpass.type = 'highpass';
+  waterHighpass.frequency.value = 120;
+  waterHighpass.Q.value = 0.4;
+
   const waterFilter = audioCtx.createBiquadFilter();
   waterFilter.type = 'bandpass';
-  waterFilter.frequency.value = 800;
-  waterFilter.Q.value = 0.8;
-  waterSource.connect(waterFilter);
-  waterFilter.connect(waterGain);
-  waterSource.start();
-  waterNode = waterSource;
+  waterFilter.frequency.value = 720;
+  waterFilter.Q.value = 0.75;
+  waterFilterNode = waterFilter;
 
-  // --- 洞窟音（低音ドローン） ---
+  waterGain = audioCtx.createGain();
+  waterGain.gain.value = 0;
+
+  waterSource.connect(waterHighpass);
+  waterHighpass.connect(waterFilter);
+  waterFilter.connect(waterGain);
+  waterGain.connect(masterGain);
+  waterSource.start();
+
+  // --- 洞窟音: 低く薄い共鳴 + 空気のゆらぎ ---
   caveGain = audioCtx.createGain();
   caveGain.gain.value = 0;
   caveGain.connect(masterGain);
 
-  const caveOsc = audioCtx.createOscillator();
-  caveOsc.type = 'sine';
-  caveOsc.frequency.value = 55;
+  const caveDrone = trackSource(audioCtx.createOscillator());
+  caveDrone.type = 'sine';
+  caveDrone.frequency.value = AMBIENT_PROFILES.forest.cavePitch;
+  caveDroneNode = caveDrone;
+
   const caveFilter = audioCtx.createBiquadFilter();
   caveFilter.type = 'lowpass';
-  caveFilter.frequency.value = 100;
+  caveFilter.frequency.value = AMBIENT_PROFILES.forest.caveCutoff;
+  caveFilter.Q.value = 0.45;
   caveFilterNode = caveFilter;
-  caveOsc.connect(caveFilter);
-  caveFilter.connect(caveGain);
-  caveOsc.start();
-  caveNode = caveOsc;
+
+  const caveToneGain = audioCtx.createGain();
+  caveToneGain.gain.value = 0.18;
+
+  const caveAirSource = trackSource(audioCtx.createBufferSource());
+  caveAirSource.buffer = createTexturedNoiseBuffer(audioCtx, 16, 0.996, 5.5);
+  caveAirSource.loop = true;
+
+  const caveAirFilter = audioCtx.createBiquadFilter();
+  caveAirFilter.type = 'lowpass';
+  caveAirFilter.frequency.value = 210;
+  caveAirFilter.Q.value = 0.35;
+
+  const caveAirGain = audioCtx.createGain();
+  caveAirGain.gain.value = 0.16;
+
+  caveDrone.connect(caveFilter);
+  caveFilter.connect(caveToneGain);
+  caveToneGain.connect(caveGain);
+  caveDrone.start();
+
+  caveAirSource.connect(caveAirFilter);
+  caveAirFilter.connect(caveAirGain);
+  caveAirGain.connect(caveGain);
+  caveAirSource.start();
 
   isRunning = true;
 }
@@ -118,33 +311,62 @@ export function updateAmbientSounds(
   isNight = false,
   stageAmbientIntensity = 1,
 ): void {
-  if (!audioCtx || !windGain || !waterGain || !caveGain) return;
+  if (
+    !audioCtx ||
+    !windBodyGain ||
+    !windAirGain ||
+    !windRustleGain ||
+    !waterGain ||
+    !caveGain
+  ) {
+    return;
+  }
 
   const now = audioCtx.currentTime;
-  const fadeTime = 1.5;
-  const nightBoost = isNight ? 1.18 : 1;
-  const biomeWind = biomeId === 'snow' ? 0.82 : biomeId === 'desert' ? 0.68 : biomeId === 'tropical' ? 0.42 : 0.5;
-  const biomeWater = biomeId === 'tropical' ? 1.0 : biomeId === 'desert' ? 0.28 : 0.75;
-  const windTone = biomeId === 'snow' ? 640 : biomeId === 'desert' ? 520 : biomeId === 'tropical' ? 360 : 420;
-  const caveTone = biomeId === 'desert' ? 78 : biomeId === 'snow' ? 120 : 100;
+  const profile = AMBIENT_PROFILES[biomeId];
+  const stageIntensity = clamp(stageAmbientIntensity, 0, MAX_STAGE_AMBIENT);
+  const nightBoost = isNight ? 1.08 : 1;
+  const gust =
+    0.78 +
+    Math.sin(now * 0.071 + 0.6) * 0.14 +
+    Math.sin(now * 0.023 + 2.4) * 0.08;
+  const windPresence = clamp(gust, 0.55, 1.02);
 
-  windFilterNode?.frequency.linearRampToValueAtTime(windTone, now + fadeTime);
-  caveFilterNode?.frequency.linearRampToValueAtTime(caveTone, now + fadeTime);
+  if (windBodyFilterNode) {
+    smoothParam(windBodyFilterNode.frequency, profile.windBodyCutoff * (isNight ? 0.92 : 1), now, 1.2);
+  }
+  if (windAirFilterNode) {
+    smoothParam(windAirFilterNode.frequency, profile.windAirCutoff, now, 1.2);
+  }
+  if (waterFilterNode) {
+    const waterTone = biomeId === 'tropical' ? 850 : biomeId === 'snow' ? 620 : 720;
+    smoothParam(waterFilterNode.frequency, waterTone, now, 1);
+  }
+  if (caveFilterNode) {
+    const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
+    smoothParam(caveFilterNode.frequency, profile.caveCutoff + caveDepth * 35, now, 1.1);
+  }
+  if (caveDroneNode) {
+    const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
+    smoothParam(caveDroneNode.frequency, profile.cavePitch + caveDepth * 8, now, 1.4);
+  }
 
-  // 風音: 屋外 + 地上
+  // 風音: 屋外 + 地上。音程感のない柔らかい風にして、常時の耳障りな持続音を避ける。
   const windTarget = isOutside && !isUnderwater && !isUnderground
-    ? biomeWind * nightBoost * stageAmbientIntensity
+    ? profile.windLevel * windPresence * nightBoost * stageIntensity
     : 0;
-  windGain.gain.linearRampToValueAtTime(windTarget, now + fadeTime);
+  smoothParam(windBodyGain.gain, windTarget, now);
+  smoothParam(windAirGain.gain, windTarget * 0.32, now);
+  smoothParam(windRustleGain.gain, windTarget * profile.windRustleLevel, now, 0.55);
 
   // 水音: 水中
-  const waterTarget = isUnderwater ? 0.8 * biomeWater * stageAmbientIntensity : 0;
-  waterGain.gain.linearRampToValueAtTime(waterTarget, now + fadeTime);
+  const waterTarget = isUnderwater ? 0.34 * profile.waterLevel * stageIntensity : 0;
+  smoothParam(waterGain.gain, waterTarget, now, 0.65);
 
-  // 洞窟音: 地下
+  // 洞窟音: 地下。深くなるほど少しだけ増えるが、圧迫感が出ない範囲に抑える。
   const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
-  const caveTarget = isUnderground && !isUnderwater ? (0.25 + caveDepth * 0.2) * stageAmbientIntensity : 0;
-  caveGain.gain.linearRampToValueAtTime(caveTarget, now + fadeTime);
+  const caveTarget = isUnderground && !isUnderwater ? (0.08 + caveDepth * 0.1) * stageIntensity : 0;
+  smoothParam(caveGain.gain, caveTarget, now, 0.9);
 }
 
 /** 環境音の停止 */
@@ -152,21 +374,24 @@ export function stopAmbientSounds(): void {
   if (!isRunning) return;
   isRunning = false;
 
-  windNode?.stop();
-  waterNode?.stop();
-  caveNode?.stop();
+  for (const source of activeSources) {
+    safeStop(source);
+  }
+  activeSources = [];
 
   setTimeout(() => {
     audioCtx?.close();
     audioCtx = null;
-    windNode = null;
-    waterNode = null;
-    caveNode = null;
-    windGain = null;
-    windFilterNode = null;
+    masterGain = null;
+    windBodyGain = null;
+    windAirGain = null;
+    windRustleGain = null;
     waterGain = null;
     caveGain = null;
+    windBodyFilterNode = null;
+    windAirFilterNode = null;
+    waterFilterNode = null;
     caveFilterNode = null;
-    masterGain = null;
+    caveDroneNode = null;
   }, 500);
 }
