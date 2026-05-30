@@ -7,6 +7,7 @@ import {
   MASTERY_DEFS,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { getStageChallengeMedalLabel, useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
@@ -34,6 +35,7 @@ export function ProgressCelebration() {
   const lastChallengeIdRef = useRef<string | null>(null);
   const lastConditionIdRef = useRef<string | null>(null);
   const lastStageEventIdRef = useRef<string | null>(null);
+  const lastBuildScoreIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
@@ -131,6 +133,23 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeBuildScore = useStageBuildScoreStore.subscribe((state, previous) => {
+      const milestone = state.recentMilestone;
+      if (useGameStore.getState().phase !== 'playing' || !milestone) return;
+      if (milestone.id === previous.recentMilestone?.id || lastBuildScoreIdRef.current === milestone.id) return;
+      lastBuildScoreIdRef.current = milestone.id;
+
+      addToast({
+        id: `build-score-${milestone.id}`,
+        icon: milestone.icon,
+        eyebrow: '作品評価アップ',
+        title: milestone.title,
+        detail: milestone.detail,
+        accent: milestone.accent,
+        glow: milestone.glow,
+      });
+    });
+
     const unsubscribeItemFeedback = useItemFeedbackStore.subscribe((state, previous) => {
       const feedback = state.recentFeedback;
       if (useGameStore.getState().phase !== 'playing' || !feedback) return;
@@ -153,6 +172,7 @@ export function ProgressCelebration() {
       unsubscribeChallenge();
       unsubscribeCondition();
       unsubscribeStageEvent();
+      unsubscribeBuildScore();
       unsubscribeItemFeedback();
     };
   }, [addToast]);

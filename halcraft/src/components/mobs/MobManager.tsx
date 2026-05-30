@@ -10,6 +10,7 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useDroppedItemStore } from '../../stores/useDroppedItemStore';
+import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { getTerrainHeight } from '../../utils/terrain/heightmap';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
@@ -29,6 +30,12 @@ import { useExperienceStore } from '../../stores/useExperienceStore';
 import { useMasteryStore } from '../../stores/useMasteryStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import {
+  formatStageBossReward,
+  getStageBossEncounter,
+  getStageBossEncounterById,
+  type StageBossEncounter,
+} from '../../types/stageBossEncounters';
 import {
   updateChickenAI, type ChickenState,
   updateSpiderAI, type SpiderState,
@@ -60,6 +67,32 @@ function getShortBlockName(blockId: BlockId): string {
     .replace('生の木', '原木')
     .replace('グロウストーン', '光る石')
     .replace('電気の', '電気');
+}
+
+function applyBossEncounterReward(encounter: StageBossEncounter): void {
+  const inventory = useInventoryStore.getState();
+  for (const reward of encounter.rewardBlocks) {
+    inventory.addItem(reward.blockId, reward.count);
+  }
+
+  const firstReward = encounter.rewardBlocks[0];
+  if (firstReward) {
+    useItemFeedbackStore.getState().emitFeedback(firstReward.blockId, {
+      icon: encounter.icon,
+      eyebrow: 'ボス撃破報酬',
+      title: `${encounter.title}を撃破`,
+      detail: formatStageBossReward(encounter),
+      accent: encounter.accent,
+      glow: `${encounter.accent}44`,
+      kind: 'utility',
+      soundKind: 'utility',
+    }, {
+      rateLimitKey: `boss-reward:${encounter.id}`,
+      rateLimitMs: 4000,
+    });
+  }
+
+  playStageRewardSound('war_supply');
 }
 
 export function MobManager() {
@@ -161,7 +194,7 @@ export function MobManager() {
       !gameState.bossSpawned &&
       gameState.enemiesDefeated >= enemyTuning.bossAfterDefeats
     ) {
-      useMobStore.getState().trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+      useMobStore.getState().trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z), gameState.currentStageId);
       useGameStore.getState().setBossSpawned(true);
     }
 
@@ -224,6 +257,7 @@ export function MobManager() {
       allMobs: currentMobs,
       corePosition: null,
       getBlock,
+      enemyTuning,
     };
 
     for (const mob of currentMobs) {
@@ -367,6 +401,13 @@ export function MobManager() {
           amount: event.type === 'boss_giant' ? 90 : 24,
           critical: event.type === 'boss_giant',
         });
+        if (event.type === 'boss_giant') {
+          const bossEncounter = getStageBossEncounterById(event.bossEncounterId)
+            ?? getStageBossEncounter(gameState.currentStageId);
+          if (bossEncounter) {
+            applyBossEncounterReward(bossEncounter);
+          }
+        }
         if (event.bonusDropBlockId && Math.random() < (event.bonusDropChance ?? 0)) {
           dropItem(event.bonusDropBlockId, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
           useItemFeedbackStore.getState().emitFeedback(event.bonusDropBlockId, {

@@ -5,6 +5,11 @@ import { create } from 'zustand';
 import type { StageEnemyTuning } from '../types/stages';
 import { getStageEnemyAccent, getStageEnemyModifier, type StageEnemyRole } from '../types/stageEnemyProfiles';
 import type { BlockId } from '../types/blocks';
+import {
+  getStageBossEncounter,
+  type StageBossEncounterId,
+  type StageBossSummonType,
+} from '../types/stageBossEncounters';
 
 /** モブの種類 */
 export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
@@ -50,6 +55,16 @@ export interface MobData {
   traitLabel?: string;
   /** 敵編成のアクセント色 */
   traitAccent?: string;
+  /** マップ別ボス定義ID */
+  bossEncounterId?: StageBossEncounterId;
+  /** ボスが召喚する取り巻き */
+  bossSummonType?: StageBossSummonType;
+  /** ボス召喚の表示名 */
+  bossSummonLabel?: string;
+  /** ボス召喚の最短間隔 */
+  bossSummonMinSeconds?: number;
+  /** ボス召喚の最長間隔 */
+  bossSummonMaxSeconds?: number;
 }
 
 /** モブ死亡イベント */
@@ -70,6 +85,8 @@ export interface MobDeathEvent {
   traitLabel?: string;
   /** 敵編成のアクセント色 */
   traitAccent?: string;
+  /** マップ別ボス定義ID */
+  bossEncounterId?: StageBossEncounterId;
 }
 
 /** 最大同時スポーン数 */
@@ -158,6 +175,42 @@ function getEnemySpawnData(type: MobType, tuning?: StageEnemyTuning): EnemySpawn
   };
 }
 
+function getBossSpawnData(type: MobType, stageId?: string | null): EnemySpawnData {
+  if (type !== 'boss_giant') {
+    return {
+      hpMultiplier: 1,
+      mobData: {},
+    };
+  }
+
+  const encounter = getStageBossEncounter(stageId);
+  if (!encounter) {
+    return {
+      hpMultiplier: 1,
+      mobData: {
+        traitLabel: '巨大ボス',
+        traitAccent: '#ff6b4a',
+      },
+    };
+  }
+
+  return {
+    hpMultiplier: encounter.hpMultiplier,
+    mobData: {
+      speedMultiplier: encounter.speedMultiplier,
+      attackMultiplier: encounter.attackMultiplier,
+      xpMultiplier: encounter.xpMultiplier,
+      traitLabel: encounter.title,
+      traitAccent: encounter.accent,
+      bossEncounterId: encounter.id,
+      bossSummonType: encounter.summonType,
+      bossSummonLabel: encounter.summonLabel,
+      bossSummonMinSeconds: encounter.summonMinSeconds,
+      bossSummonMaxSeconds: encounter.summonMaxSeconds,
+    },
+  };
+}
+
 interface MobState {
   /** 全モブ */
   mobs: MobData[];
@@ -169,7 +222,7 @@ interface MobState {
   lastProtoSpawnTime: number;
 
   /** モブを追加 */
-  spawnMob: (type: MobType, x: number, y: number, z: number, tuning?: StageEnemyTuning) => void;
+  spawnMob: (type: MobType, x: number, y: number, z: number, tuning?: StageEnemyTuning, stageId?: string | null) => void;
 
   /** モブにダメージ */
   damageMob: (id: string, amount: number, knockbackX: number, knockbackZ: number) => void;
@@ -202,7 +255,7 @@ interface MobState {
   trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
 
   /** 巨大ボスのスポーンロジック */
-  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, stageId?: string | null) => void;
 
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
@@ -226,7 +279,7 @@ export const useMobStore = create<MobState>((set, get) => ({
   _lastDarwinSpawnTime: 0,
   _deathEvents: [] as MobDeathEvent[],
 
-  spawnMob: (type, x, y, z, tuning) => {
+  spawnMob: (type, x, y, z, tuning, stageId) => {
     const hpMap: Record<MobType, number> = {
       zombie: ZOMBIE_HP,
       darwin: DARWIN_HP,
@@ -236,8 +289,11 @@ export const useMobStore = create<MobState>((set, get) => ({
       iron_golem: IRON_GOLEM_HP,
       boss_giant: BOSS_GIANT_HP,
     };
-    const spawnData = getEnemySpawnData(type, tuning);
-    const hp = Math.max(1, Math.round((hpMap[type] ?? ZOMBIE_HP) * spawnData.hpMultiplier));
+    const enemySpawnData = getEnemySpawnData(type, tuning);
+    const bossSpawnData = getBossSpawnData(type, stageId);
+    const hp = Math.max(1, Math.round(
+      (hpMap[type] ?? ZOMBIE_HP) * enemySpawnData.hpMultiplier * bossSpawnData.hpMultiplier,
+    ));
     const mob: MobData = {
       id: `mob_${nextMobId++}`,
       type,
@@ -251,7 +307,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
       angryAtPlayer: false,
       angryTimer: 0,
-      ...spawnData.mobData,
+      ...enemySpawnData.mobData,
+      ...bossSpawnData.mobData,
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -277,6 +334,7 @@ export const useMobStore = create<MobState>((set, get) => ({
               bonusDropChance: m.bonusDropChance,
               traitLabel: m.traitLabel,
               traitAccent: m.traitAccent,
+              bossEncounterId: m.bossEncounterId,
             });
             return null;
           }
@@ -424,7 +482,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ _lastDarwinSpawnTime: now } as Partial<MobState>);
   },
 
-  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => {
+  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, stageId) => {
     const state = get();
     // 既にボスが存在する場合はスポーンしない
     const hasBoss = state.mobs.some((m) => m.type === 'boss_giant');
@@ -437,7 +495,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
 
-    get().spawnMob('boss_giant', spawnX, spawnY, spawnZ);
+    get().spawnMob('boss_giant', spawnX, spawnY, spawnZ, undefined, stageId);
   },
 
   despawnFarMobs: (playerX, playerZ) => {

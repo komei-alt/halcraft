@@ -19,6 +19,8 @@ import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel
 import { getStageCondition } from '../../types/stageConditions';
 import { getStagePressure } from '../../types/stagePressures';
 import { getStageEvent } from '../../types/stageEvents';
+import { formatStageBossReward, getStageBossEncounter } from '../../types/stageBossEncounters';
+import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
 import {
   formatStageRunBonusLabel,
   getStageOpeningItemLabel,
@@ -164,6 +166,7 @@ function getChallengeTargetText(metric: string, target: number): string {
 function getEnemyPreview(stage: StageDefinition): string[] {
   const tuning = stage.rules.enemyTuning;
   const profile = getStageEnemyProfile(stage.id);
+  const bossEncounter = getStageBossEncounter(stage.id);
   if (!tuning) {
     return [
       '敵なし / 建築に集中',
@@ -180,7 +183,9 @@ function getEnemyPreview(stage: StageDefinition): string[] {
     profile ? `${profile.icon} ${formatStageEnemyProfile(profile)}` : '敵編成 標準',
     `敵上限 ${tuning.maxHostileMobs}体`,
     `ゾンビ${tuning.zombieIntervalSeconds.toFixed(1)}秒 / クモ${tuning.spiderIntervalSeconds.toFixed(1)}秒`,
-    `ボス ${tuning.bossAfterDefeats}体撃破で出現`,
+    bossEncounter
+      ? `ボス ${tuning.bossAfterDefeats}体で${bossEncounter.title}`
+      : `ボス ${tuning.bossAfterDefeats}体撃破で出現`,
     xpLabel,
   ];
 }
@@ -261,6 +266,19 @@ function getStageBriefingSections(
     });
   }
 
+  const buildStyle = getStageBuildStyle(stage.id);
+  if (buildStyle) {
+    sections.push({
+      title: '作品評価',
+      value: `${buildStyle.icon} ${buildStyle.title}`,
+      details: [
+        formatStageBuildFocus(buildStyle, compact ? 3 : 4),
+        buildStyle.detail,
+      ],
+      accent: buildStyle.accent,
+    });
+  }
+
   const combatStyle = getStageCombatStyle(stage.id);
   if (combatStyle) {
     sections.push({
@@ -284,6 +302,25 @@ function getStageBriefingSections(
         enemyProfile.detail,
       ],
       accent: enemyProfile.accent,
+    });
+  }
+
+  const bossEncounter = getStageBossEncounter(stage.id);
+  if (bossEncounter) {
+    sections.push({
+      title: 'ボス戦',
+      value: `${bossEncounter.icon} ${bossEncounter.title}`,
+      details: compact
+        ? [
+            bossEncounter.weakness,
+            bossEncounter.rewardLabel,
+          ]
+        : [
+            bossEncounter.detail,
+            `弱点: ${bossEncounter.weakness}`,
+            `報酬: ${formatStageBossReward(bossEncounter)}`,
+          ],
+      accent: bossEncounter.accent,
     });
   }
 

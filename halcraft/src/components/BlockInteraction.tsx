@@ -18,6 +18,7 @@ import { useExperienceStore } from '../stores/useExperienceStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useStageBuildScoreStore } from '../stores/useStageBuildScoreStore';
 import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
@@ -360,6 +361,7 @@ export function BlockInteraction() {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
     recordStageBlockPlace(blockId);
     recordConditionBlockPlace(blockId);
+    useStageBuildScoreStore.getState().recordBlockPlace(blockId);
   }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
   const detonateExplosiveBlock = useCallback((x: number, y: number, z: number): boolean => {

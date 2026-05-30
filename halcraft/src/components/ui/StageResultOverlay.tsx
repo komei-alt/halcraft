@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, type CSSProperties } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import {
   getStageChallengeMedal,
@@ -11,6 +12,12 @@ import {
   getStageChallengeProgress,
   getStageChallenges,
 } from '../../types/stageChallenges';
+import { formatStageBossReward, getStageBossEncounter } from '../../types/stageBossEncounters';
+import {
+  BUILD_SCORE_MILESTONES,
+  formatStageBuildFocus,
+  getStageBuildStyle,
+} from '../../types/stageBuildStyles';
 import { formatStageRunBonusLabel, getStageRunBonus } from '../../types/stageRunBonuses';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
@@ -30,6 +37,8 @@ function getMedalColor(medal: string): string {
   return 'rgba(255,255,255,0.7)';
 }
 
+const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
+
 export function StageResultOverlay() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -45,13 +54,20 @@ export function StageResultOverlay() {
   const completedIds = useStageChallengeStore((s) => s.completedIds);
   const resultDismissed = useStageChallengeStore((s) => s.resultDismissed);
   const dismissStageResult = useStageChallengeStore((s) => s.dismissStageResult);
+  const buildScore = useStageBuildScoreStore((s) => s.score);
+  const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const isTouch = isTouchDevice();
+  const isCompact = isTouch || window.innerWidth <= 560;
 
   const challenges = useMemo(() => getStageChallenges(stage?.id), [stage?.id]);
   const isGold = challenges.length > 0 && completedIds.length >= challenges.length;
+  const buildStyle = useMemo(() => getStageBuildStyle(stage?.id), [stage?.id]);
+  const bossEncounter = useMemo(() => getStageBossEncounter(stage?.id), [stage?.id]);
+  const buildScoreCleared = Boolean(buildStyle && buildScore >= FINAL_BUILD_SCORE);
   const stageCleared = Boolean(stage) && (
     isBuildMode
-      ? isGold
+      ? isGold || buildScoreCleared
       : stats.bossDefeated > 0
   );
 
@@ -93,7 +109,9 @@ export function StageResultOverlay() {
     ? 'チャレンジ制覇'
     : stage.category === 'war'
       ? 'ステージクリア'
-      : '制作完了';
+      : buildScoreCleared
+        ? '作品評価達成'
+        : '制作完了';
   const actionHint = incomplete
     ? `${incomplete.title} もねらえる`
     : stage.category === 'war'
@@ -101,9 +119,23 @@ export function StageResultOverlay() {
       : '別のマップでも作品を増やせる';
   const nextRunBonus = getStageRunBonus(stage.id, medal);
   const targetCount = stage.rules.objective.targetCount;
+  const buildBest = buildBestByStage[stage.id];
   const objectiveValue = targetCount
     ? `${Math.min(enemiesDefeated, targetCount)}/${targetCount}`
+    : buildStyle
+      ? `${buildScore}pt`
     : formatElapsed(stageElapsedSeconds);
+  const summaryStats = buildStyle
+    ? [
+        ['作品', `${buildScore}pt`],
+        ['節目', `${buildMilestones.length}/${BUILD_SCORE_MILESTONES.length}`],
+        ['時間', formatElapsed(stageElapsedSeconds)],
+      ]
+    : [
+        ['目標', objectiveValue],
+        ['ボス', stats.bossDefeated > 0 ? '撃破' : stage.category === 'war' ? '未撃破' : 'なし'],
+        ['時間', formatElapsed(stageElapsedSeconds)],
+      ];
 
   return (
     <div
@@ -115,7 +147,7 @@ export function StageResultOverlay() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: isTouch ? 14 : 24,
+        padding: isCompact ? 14 : 24,
         background: 'radial-gradient(circle at 50% 38%, rgba(255, 230, 120, 0.16), rgba(0, 0, 0, 0.78) 46%, rgba(0, 0, 0, 0.88) 100%)',
         backdropFilter: 'blur(7px)',
         WebkitBackdropFilter: 'blur(7px)',
@@ -132,7 +164,7 @@ export function StageResultOverlay() {
           border: `2px solid ${stage.color}aa`,
           background: 'rgba(7, 10, 15, 0.78)',
           boxShadow: `0 0 34px ${stage.color}44, 0 18px 56px rgba(0,0,0,0.58)`,
-          padding: isTouch ? 16 : 22,
+          padding: isCompact ? 16 : 22,
           boxSizing: 'border-box',
         }}
       >
@@ -140,20 +172,20 @@ export function StageResultOverlay() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: isTouch ? 10 : 14,
+            gap: isCompact ? 10 : 14,
             marginBottom: 14,
           }}
         >
           <div
             style={{
-              width: isTouch ? 52 : 64,
-              height: isTouch ? 52 : 64,
+              width: isCompact ? 52 : 64,
+              height: isCompact ? 52 : 64,
               borderRadius: 8,
               display: 'grid',
               placeItems: 'center',
               background: `${stage.color}33`,
               border: `1px solid ${stage.color}88`,
-              fontSize: isTouch ? 28 : 34,
+              fontSize: isCompact ? 28 : 34,
               boxShadow: `0 0 18px ${stage.color}44`,
               flex: '0 0 auto',
             }}
@@ -164,7 +196,7 @@ export function StageResultOverlay() {
             <div
               style={{
                 color: medalColor,
-                fontSize: isTouch ? 13 : 15,
+                fontSize: isCompact ? 13 : 15,
                 fontWeight: 900,
                 letterSpacing: 0,
               }}
@@ -174,8 +206,8 @@ export function StageResultOverlay() {
             <div
               style={{
                 color: '#fff',
-                fontSize: isTouch ? 24 : 34,
-                lineHeight: isTouch ? '30px' : '40px',
+                fontSize: isCompact ? 24 : 34,
+                lineHeight: isCompact ? '30px' : '40px',
                 fontWeight: 950,
                 overflowWrap: 'anywhere',
               }}
@@ -187,7 +219,7 @@ export function StageResultOverlay() {
             style={{
               flex: '0 0 auto',
               color: medalColor,
-              fontSize: isTouch ? 12 : 15,
+              fontSize: isCompact ? 12 : 15,
               fontWeight: 950,
               fontFamily: 'monospace',
               textAlign: 'right',
@@ -201,16 +233,12 @@ export function StageResultOverlay() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isTouch ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 8,
             marginBottom: 14,
           }}
         >
-          {[
-            ['目標', objectiveValue],
-            ['ボス', stats.bossDefeated > 0 ? '撃破' : stage.category === 'war' ? '未撃破' : 'なし'],
-            ['時間', formatElapsed(stageElapsedSeconds)],
-          ].map(([label, value]) => (
+          {summaryStats.map(([label, value]) => (
             <div
               key={label}
               style={{
@@ -230,6 +258,114 @@ export function StageResultOverlay() {
             </div>
           ))}
         </div>
+
+        {bossEncounter && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: '10px 11px',
+              borderRadius: 6,
+              background: `${bossEncounter.accent}1f`,
+              border: `1px solid ${bossEncounter.accent}55`,
+              boxShadow: `inset 0 0 18px ${bossEncounter.accent}14`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 20 }}>{bossEncounter.icon}</span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: bossEncounter.accent,
+                    fontSize: isCompact ? 10 : 11,
+                    fontWeight: 950,
+                  }}
+                >
+                  ボス戦: {bossEncounter.shortLabel}
+                </div>
+                <div
+                  style={{
+                    color: '#fff',
+                    fontSize: isCompact ? 14 : 16,
+                    fontWeight: 950,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {bossEncounter.title}
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 7,
+                color: 'rgba(255,255,255,0.76)',
+                fontSize: isCompact ? 11 : 12,
+                lineHeight: '17px',
+                fontWeight: 800,
+              }}
+            >
+              弱点: {bossEncounter.weakness} / 報酬: {formatStageBossReward(bossEncounter)}
+            </div>
+          </div>
+        )}
+
+        {buildStyle && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: '10px 11px',
+              borderRadius: 6,
+              background: `${buildStyle.accent}1f`,
+              border: `1px solid ${buildStyle.accent}55`,
+              boxShadow: `inset 0 0 18px ${buildStyle.glow}`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 20 }}>{buildStyle.icon}</span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: buildStyle.accent,
+                    fontSize: isCompact ? 10 : 11,
+                    fontWeight: 950,
+                  }}
+                >
+                  作品評価: {formatStageBuildFocus(buildStyle, 3)}
+                </div>
+                <div
+                  style={{
+                    color: '#fff',
+                    fontSize: isCompact ? 14 : 16,
+                    fontWeight: 950,
+                  }}
+                >
+                  {buildStyle.title} {buildScore}pt
+                </div>
+              </div>
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.72)',
+                  fontSize: isCompact ? 10 : 11,
+                  fontWeight: 900,
+                  textAlign: 'right',
+                  fontFamily: 'monospace',
+                }}
+              >
+                BEST {buildBest?.score ?? buildScore}pt
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 7,
+                color: 'rgba(255,255,255,0.76)',
+                fontSize: isCompact ? 11 : 12,
+                lineHeight: '17px',
+                fontWeight: 800,
+              }}
+            >
+              {buildStyle.detail}
+            </div>
+          </div>
+        )}
 
         <div
           style={{
@@ -261,7 +397,7 @@ export function StageResultOverlay() {
                   <div
                     style={{
                       color: completed ? '#fff4b8' : 'rgba(255,255,255,0.88)',
-                      fontSize: isTouch ? 12 : 13,
+                      fontSize: isCompact ? 12 : 13,
                       fontWeight: 900,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -294,7 +430,7 @@ export function StageResultOverlay() {
                 <span
                   style={{
                     color: completed ? '#fff1a8' : 'rgba(255,255,255,0.62)',
-                    fontSize: isTouch ? 11 : 12,
+                    fontSize: isCompact ? 11 : 12,
                     fontWeight: 950,
                     fontFamily: 'monospace',
                   }}
@@ -314,7 +450,7 @@ export function StageResultOverlay() {
             color: 'rgba(255,255,255,0.78)',
             background: `${stage.color}22`,
             border: `1px solid ${stage.color}44`,
-            fontSize: isTouch ? 12 : 13,
+            fontSize: isCompact ? 12 : 13,
             fontWeight: 800,
             lineHeight: '18px',
           }}
@@ -331,7 +467,7 @@ export function StageResultOverlay() {
               color: '#fff',
               background: `${nextRunBonus.accent}22`,
               border: `1px solid ${nextRunBonus.accent}55`,
-              fontSize: isTouch ? 11 : 12,
+              fontSize: isCompact ? 11 : 12,
               fontWeight: 850,
               lineHeight: '17px',
             }}
@@ -339,7 +475,7 @@ export function StageResultOverlay() {
             <div
               style={{
                 color: nextRunBonus.accent,
-                fontSize: isTouch ? 10 : 11,
+                fontSize: isCompact ? 10 : 11,
                 fontWeight: 950,
                 marginBottom: 2,
               }}
@@ -360,7 +496,7 @@ export function StageResultOverlay() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isTouch ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+            gridTemplateColumns: isCompact ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
             gap: 8,
           }}
         >
@@ -368,7 +504,10 @@ export function StageResultOverlay() {
             id="stage-result-continue"
             type="button"
             onClick={handleContinue}
-            style={resultButtonStyle('#4caf50')}
+            style={{
+              ...resultButtonStyle('#4caf50'),
+              ...(isCompact ? { gridColumn: '1 / -1' } : {}),
+            }}
           >
             ▶ 続ける
           </button>

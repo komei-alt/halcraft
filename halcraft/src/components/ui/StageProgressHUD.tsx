@@ -2,6 +2,7 @@
 // 選んだマップごとの目的・進行・ランドマークを常時見える状態にする
 
 import { useGameStore } from '../../stores/useGameStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import {
@@ -11,6 +12,12 @@ import {
 } from '../../types/stageChallenges';
 import { getStageCondition } from '../../types/stageConditions';
 import { getStageEnemyProfile } from '../../types/stageEnemyProfiles';
+import {
+  BUILD_SCORE_MILESTONES,
+  formatStageBuildFocus,
+  getNextStageBuildMilestone,
+  getStageBuildStyle,
+} from '../../types/stageBuildStyles';
 import type { StageDefinition } from '../../types/stages';
 import { isTouchDevice } from '../../utils/device';
 
@@ -28,6 +35,8 @@ interface StageGuidance {
   accent: string;
   progressText: string;
 }
+
+const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
 
 function getChallengeGuidance(
   stage: StageDefinition,
@@ -107,6 +116,28 @@ function getObjectiveGuidance(
   };
 }
 
+function getBuildScoreGuidance(
+  stage: StageDefinition,
+  score: number,
+  achievedMilestones: number[],
+): StageGuidance | null {
+  const style = getStageBuildStyle(stage.id);
+  if (!style) return null;
+
+  const nextMilestone = getNextStageBuildMilestone(score, achievedMilestones);
+  const progressText = nextMilestone
+    ? `あと${Math.max(0, nextMilestone - score)}pt`
+    : '完成度MAX';
+
+  return {
+    icon: style.icon,
+    label: `${style.shortLabel} ${score}pt`,
+    detail: `${formatStageBuildFocus(style, 3)}で作品評価アップ`,
+    accent: style.accent,
+    progressText,
+  };
+}
+
 function getStageGuidance(
   stage: StageDefinition,
   stats: StageChallengeStats,
@@ -114,16 +145,21 @@ function getStageGuidance(
   charge: number,
   enemiesDefeated: number,
   bossSpawned: boolean,
+  buildScore: number,
+  buildMilestones: number[],
 ): StageGuidance {
   const challengeGuidance = getChallengeGuidance(stage, stats, completedIds);
   const conditionGuidance = getConditionGuidance(stage, charge);
+  const buildScoreGuidance = getBuildScoreGuidance(stage, buildScore, buildMilestones);
   const condition = getStageCondition(stage.id);
   const conditionClose = Boolean(
     condition && charge > 0 && condition.target - charge <= Math.ceil(condition.target * 0.35),
   );
 
   if (conditionClose && conditionGuidance) return conditionGuidance;
-  if (stage.category === 'build') return challengeGuidance ?? conditionGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
+  if (stage.category === 'build') {
+    return buildScoreGuidance ?? challengeGuidance ?? conditionGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
+  }
   return challengeGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
 }
 
@@ -137,17 +173,27 @@ export function StageProgressHUD() {
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const conditionCharge = useStageConditionStore((s) => s.charge);
+  const buildScore = useStageBuildScoreStore((s) => s.score);
+  const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   if (phase !== 'playing' || !stage) return null;
 
   const target = stage.rules.objective.targetCount;
-  const progressRatio = target ? Math.min(1, enemiesDefeated / target) : 0;
+  const buildStyle = getStageBuildStyle(stage.id);
+  const hasProgressBar = Boolean(target) || Boolean(buildStyle);
+  const progressRatio = target
+    ? Math.min(1, enemiesDefeated / target)
+    : buildStyle
+      ? Math.min(1, buildScore / FINAL_BUILD_SCORE)
+      : 0;
   const objectiveState = target
     ? bossSpawned
       ? 'ボス出現'
       : `${enemiesDefeated}/${target}`
-    : formatElapsed(stageElapsedSeconds);
+    : buildStyle
+      ? `${buildScore}pt`
+      : formatElapsed(stageElapsedSeconds);
   const accent = stage.category === 'build' ? '#9bdcff' : '#ffb36d';
   const guidance = getStageGuidance(
     stage,
@@ -156,6 +202,8 @@ export function StageProgressHUD() {
     conditionCharge,
     enemiesDefeated,
     bossSpawned,
+    buildScore,
+    buildMilestones,
   );
   const enemyProfile = getStageEnemyProfile(stage.id);
 
@@ -313,7 +361,7 @@ export function StageProgressHUD() {
         </div>
       </div>
 
-      {target && (
+      {hasProgressBar && (
         <div
           style={{
             marginTop: 8,
@@ -370,6 +418,20 @@ export function StageProgressHUD() {
               }}
             >
               敵: {enemyProfile.shortLabel}
+            </span>
+          )}
+          {buildStyle && (
+            <span
+              style={{
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: `${buildStyle.accent}24`,
+                color: buildStyle.accent,
+                fontSize: 10,
+                fontWeight: 900,
+              }}
+            >
+              作品: {buildStyle.shortLabel} {buildScore}pt
             </span>
           )}
           {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (

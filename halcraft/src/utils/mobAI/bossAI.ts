@@ -42,6 +42,7 @@ export function updateBossAI(
   const dx = playerX - m.x;
   const dz = playerZ - m.z;
   const distXZ = Math.sqrt(dx * dx + dz * dz);
+  const speed = BOSS_SPEED * (m.speedMultiplier ?? 1);
 
   // プレイヤーに向かって移動
   if (distXZ > BOSS_STOP_RANGE) {
@@ -49,8 +50,8 @@ export function updateBossAI(
     if (m.hitTimer <= 0) {
       const nx = Math.sin(m.rotation);
       const nz = Math.cos(m.rotation);
-      m.vx = nx * BOSS_SPEED;
-      m.vz = nz * BOSS_SPEED;
+      m.vx = nx * speed;
+      m.vz = nz * speed;
     }
   } else {
     m.vx = 0;
@@ -100,7 +101,7 @@ export function updateBossAI(
 
   if (distXZ < BOSS_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
     attack = {
-      damage: BOSS_ATTACK_DAMAGE,
+      damage: Math.max(1, Math.round(BOSS_ATTACK_DAMAGE * (m.attackMultiplier ?? 1))),
       kbDirX: playerX - m.x,
       kbDirZ: playerZ - m.z,
     };
@@ -114,12 +115,14 @@ export function updateBossAI(
   // HPが減っているほど召喚頻度アップ (20秒〜5秒間隔)
   const hpRatio = m.hp / m.maxHp;
   if (state.summonCooldown <= 0) {
-    // 目の前に蜘蛛を召喚
+    // 目の前にマップ別の取り巻きを召喚
     const sx = m.x + Math.sin(m.rotation) * 2;
     const sz = m.z + Math.cos(m.rotation) * 2;
-    useMobStore.getState().spawnMob('spider', sx, m.y + 2, sz);
-    
-    state.summonCooldown = 5 + (hpRatio * 15);
+    useMobStore.getState().spawnMob(m.bossSummonType ?? 'spider', sx, m.y + 2, sz, ctx.enemyTuning);
+
+    const minSeconds = m.bossSummonMinSeconds ?? 5;
+    const maxSeconds = m.bossSummonMaxSeconds ?? 20;
+    state.summonCooldown = minSeconds + hpRatio * Math.max(0, maxSeconds - minSeconds);
   }
 
   return { alive: m.y >= -20, attack };

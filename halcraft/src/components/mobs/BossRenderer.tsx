@@ -13,11 +13,12 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
   const group = useRef<THREE.Group>(null);
 
   // 巨大スケール
-  const bossScale = 4.0; 
+  const bossScale = 4.0;
+  const accent = mob.traitAccent ?? '#ff6b4a';
 
   useFrame(() => {
     if (!group.current) return;
-    
+
     // 位置を補間してスムーズな移動
     group.current.position.lerp(new THREE.Vector3(mob.x, mob.y, mob.z), 0.3);
 
@@ -34,15 +35,30 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
 
   const materialParameters = useMemo(
     () => ({
-      color: mob.hitTimer > 0 ? '#ffcccc' : '#663333',
+      color: mob.hitTimer > 0 ? '#ffcccc' : '#4a3437',
+      emissive: accent,
+      emissiveIntensity: mob.hitTimer > 0 ? 0.55 : 0.18,
       roughness: 0.8,
       metalness: 0.2,
     }),
-    [mob.hitTimer],
+    [accent, mob.hitTimer],
   );
+  const auraOpacity = 0.18 + Math.sin(animTime * 3.2) * 0.05;
 
   return (
     <group ref={group} scale={[bossScale, bossScale, bossScale]}>
+      {/* マップ別ボスの威圧感を足元の色で見分ける */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.62, 0]}>
+        <ringGeometry args={[0.82, 1.2, 52]} />
+        <meshBasicMaterial
+          color={accent}
+          transparent
+          opacity={auraOpacity}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+
       {/* 胴体 */}
       <RoundedBox args={[0.8, 1.2, 0.4]} position={[0, 0.6, 0]} radius={0.05} smoothness={4}>
         <meshStandardMaterial {...materialParameters} />
@@ -56,11 +72,17 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
       {/* 目（赤く光る） */}
       <mesh position={[-0.15, 1.5, 0.26]}>
         <boxGeometry args={[0.1, 0.1, 0.1]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.4} />
       </mesh>
       <mesh position={[0.15, 1.5, 0.26]}>
         <boxGeometry args={[0.1, 0.1, 0.1]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.4} />
+      </mesh>
+
+      {/* 胸のコア */}
+      <mesh position={[0, 0.82, 0.24]}>
+        <octahedronGeometry args={[0.13, 0]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.6} roughness={0.45} />
       </mesh>
 
       {/* 腕 */}

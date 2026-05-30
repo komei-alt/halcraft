@@ -2,6 +2,7 @@
 // 全モブ種別で共有される物理定数とインターフェース
 
 import type { MobData } from '../../stores/useMobStore';
+import type { StageEnemyTuning } from '../../types/stages';
 
 // ─── 共通物理定数 ──────────────────────────────────────
 
@@ -81,6 +82,8 @@ export interface MobAIContext {
   corePosition?: { x: number; y: number; z: number } | null;
   /** ブロック取得関数 */
   getBlock?: (x: number, y: number, z: number) => number;
+  /** 現在ステージの敵チューニング */
+  enemyTuning?: StageEnemyTuning;
 }
 
 /**
