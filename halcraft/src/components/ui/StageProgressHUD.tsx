@@ -10,6 +10,7 @@ import {
   type StageChallengeStats,
 } from '../../types/stageChallenges';
 import { getStageCondition } from '../../types/stageConditions';
+import { getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import type { StageDefinition } from '../../types/stages';
 import { isTouchDevice } from '../../utils/device';
 
@@ -156,6 +157,7 @@ export function StageProgressHUD() {
     enemiesDefeated,
     bossSpawned,
   );
+  const enemyProfile = getStageEnemyProfile(stage.id);
 
   return (
     <div
@@ -356,6 +358,20 @@ export function StageProgressHUD() {
           >
             {stage.rules.landmarkName}
           </span>
+          {enemyProfile && (
+            <span
+              style={{
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: `${enemyProfile.accent}24`,
+                color: enemyProfile.accent,
+                fontSize: 10,
+                fontWeight: 900,
+              }}
+            >
+              敵: {enemyProfile.shortLabel}
+            </span>
+          )}
           {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (
             <span
               key={text}

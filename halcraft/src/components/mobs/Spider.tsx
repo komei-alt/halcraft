@@ -51,6 +51,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
   // HPバー
   const hpRatio = mob.hp / mob.maxHp;
   const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
+  const traitAccent = mob.traitAccent;
 
   // 脚を生成するヘルパー
   const renderLeg = (side: number, zOffset: number, swing: number) => {
@@ -78,6 +79,19 @@ export function Spider({ mob, animTime }: SpiderProps) {
       position={[mob.x, mob.y, mob.z]}
       rotation={[0, mob.rotation, 0]}
     >
+      {traitAccent && (
+        <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.44, 0.58, 28]} />
+          <meshBasicMaterial
+            color={traitAccent}
+            transparent
+            opacity={0.5}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
       <group rotation={[hitTilt, 0, hitTilt * 0.3]}>
         {/* 腹部（大きい後方の体） */}
         <mesh position={[0, 0.25, -0.15]} material={bodyMat}>

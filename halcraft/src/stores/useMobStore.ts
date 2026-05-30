@@ -3,6 +3,8 @@
 
 import { create } from 'zustand';
 import type { StageEnemyTuning } from '../types/stages';
+import { getStageEnemyAccent, getStageEnemyModifier, type StageEnemyRole } from '../types/stageEnemyProfiles';
+import type { BlockId } from '../types/blocks';
 
 /** モブの種類 */
 export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
@@ -34,6 +36,20 @@ export interface MobData {
   angryAtPlayer: boolean;
   /** 怒り状態の残り時間（秒） */
   angryTimer: number;
+  /** ステージ敵編成による速度補正 */
+  speedMultiplier?: number;
+  /** ステージ敵編成による攻撃補正 */
+  attackMultiplier?: number;
+  /** ステージ敵編成によるXP補正 */
+  xpMultiplier?: number;
+  /** ステージ敵編成の追加ドロップ */
+  bonusDropBlockId?: BlockId;
+  /** 追加ドロップ確率 */
+  bonusDropChance?: number;
+  /** 敵編成ラベル */
+  traitLabel?: string;
+  /** 敵編成のアクセント色 */
+  traitAccent?: string;
 }
 
 /** モブ死亡イベント */
@@ -44,6 +60,12 @@ export interface MobDeathEvent {
   x: number;
   y: number;
   z: number;
+  /** ステージ敵編成によるXP補正 */
+  xpMultiplier?: number;
+  /** ステージ敵編成の追加ドロップ */
+  bonusDropBlockId?: BlockId;
+  /** 追加ドロップ確率 */
+  bonusDropChance?: number;
 }
 
 /** 最大同時スポーン数 */
@@ -96,6 +118,42 @@ function getSpawnDistance(tuning?: StageEnemyTuning): number {
   return min + Math.random() * (max - min);
 }
 
+function getEnemyRole(type: MobType): StageEnemyRole | null {
+  if (type === 'zombie') return 'zombie';
+  if (type === 'spider') return 'spider';
+  if (type === 'darwin') return 'darwin';
+  return null;
+}
+
+interface EnemySpawnData {
+  hpMultiplier: number;
+  mobData: Partial<MobData>;
+}
+
+function getEnemySpawnData(type: MobType, tuning?: StageEnemyTuning): EnemySpawnData {
+  const role = getEnemyRole(type);
+  if (!role || !tuning?.threatProfileId) {
+    return {
+      hpMultiplier: 1,
+      mobData: {},
+    };
+  }
+
+  const modifier = getStageEnemyModifier(tuning.threatProfileId, role);
+  return {
+    hpMultiplier: modifier.hpMultiplier,
+    mobData: {
+      speedMultiplier: modifier.speedMultiplier,
+      attackMultiplier: modifier.attackMultiplier,
+      xpMultiplier: modifier.xpMultiplier,
+      bonusDropBlockId: modifier.dropBlockId,
+      bonusDropChance: modifier.dropChance,
+      traitLabel: modifier.roleLabel,
+      traitAccent: getStageEnemyAccent(tuning.threatProfileId),
+    },
+  };
+}
+
 interface MobState {
   /** 全モブ */
   mobs: MobData[];
@@ -107,7 +165,7 @@ interface MobState {
   lastProtoSpawnTime: number;
 
   /** モブを追加 */
-  spawnMob: (type: MobType, x: number, y: number, z: number) => void;
+  spawnMob: (type: MobType, x: number, y: number, z: number, tuning?: StageEnemyTuning) => void;
 
   /** モブにダメージ */
   damageMob: (id: string, amount: number, knockbackX: number, knockbackZ: number) => void;
@@ -164,7 +222,7 @@ export const useMobStore = create<MobState>((set, get) => ({
   _lastDarwinSpawnTime: 0,
   _deathEvents: [] as MobDeathEvent[],
 
-  spawnMob: (type, x, y, z) => {
+  spawnMob: (type, x, y, z, tuning) => {
     const hpMap: Record<MobType, number> = {
       zombie: ZOMBIE_HP,
       darwin: DARWIN_HP,
@@ -174,7 +232,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       iron_golem: IRON_GOLEM_HP,
       boss_giant: BOSS_GIANT_HP,
     };
-    const hp = hpMap[type] ?? ZOMBIE_HP;
+    const spawnData = getEnemySpawnData(type, tuning);
+    const hp = Math.max(1, Math.round((hpMap[type] ?? ZOMBIE_HP) * spawnData.hpMultiplier));
     const mob: MobData = {
       id: `mob_${nextMobId++}`,
       type,
@@ -188,6 +247,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
       angryAtPlayer: false,
       angryTimer: 0,
+      ...spawnData.mobData,
     };
     set((state) => ({
       mobs: [...state.mobs, mob],
@@ -203,7 +263,15 @@ export const useMobStore = create<MobState>((set, get) => ({
           const newHp = m.hp - amount;
           if (newHp <= 0) {
             // 死亡イベントを記録
-            newDeathEvents.push({ type: m.type, x: m.x, y: m.y, z: m.z });
+            newDeathEvents.push({
+              type: m.type,
+              x: m.x,
+              y: m.y,
+              z: m.z,
+              xpMultiplier: m.xpMultiplier,
+              bonusDropBlockId: m.bonusDropBlockId,
+              bonusDropChance: m.bonusDropChance,
+            });
             return null;
           }
           // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）
@@ -272,7 +340,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
 
-    get().spawnMob('zombie', spawnX, spawnY, spawnZ);
+    get().spawnMob('zombie', spawnX, spawnY, spawnZ, tuning);
     set({ lastSpawnTime: now });
   },
 
@@ -326,7 +394,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
 
-    get().spawnMob('spider', spawnX, spawnY, spawnZ);
+    get().spawnMob('spider', spawnX, spawnY, spawnZ, tuning);
     set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
   },
 
@@ -346,7 +414,7 @@ export const useMobStore = create<MobState>((set, get) => ({
     const spawnZ = playerZ + Math.sin(angle) * distance;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
 
-    get().spawnMob('darwin', spawnX, spawnY, spawnZ);
+    get().spawnMob('darwin', spawnX, spawnY, spawnZ, tuning);
     set({ _lastDarwinSpawnTime: now } as Partial<MobState>);
   },
 

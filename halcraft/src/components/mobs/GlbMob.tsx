@@ -121,9 +121,23 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const bob = isMoving
     ? Math.sin(animTime * (config.bobSpeed ?? 4)) * (config.bobAmount ?? 0.04)
     : 0;
+  const traitAccent = mob.traitAccent;
 
   return (
     <group position={[mob.x, mob.y + bob, mob.z]} rotation={[0, mob.rotation, 0]}>
+      {traitAccent && (
+        <mesh position={[0, 0.035 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.46, 0.6, 28]} />
+          <meshBasicMaterial
+            color={traitAccent}
+            transparent
+            opacity={0.48}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
       <primitive
         object={clonedScene}
         scale={[config.scale, config.scale, config.scale]}

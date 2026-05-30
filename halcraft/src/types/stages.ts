@@ -2,6 +2,7 @@
 // マップ選択、ゲームモード、初期支給、敵の出方、進行表示を同じ定義から動かす
 
 import { BLOCK_IDS, type BlockId } from './blocks';
+import type { StageEnemyProfileId } from './stageEnemyProfiles';
 import type { ToolId } from './tools';
 
 /** ステージカテゴリ */
@@ -32,6 +33,8 @@ export interface StageStarterKit {
 
 /** 敵スポーンとやり込み進行の差分 */
 export interface StageEnemyTuning {
+  /** 敵の硬さ・速さ・報酬を変える編成プロファイル */
+  threatProfileId: StageEnemyProfileId;
   /** 同時に残せる敵の数 */
   maxHostileMobs: number;
   /** 敵が湧く最短距離 */
@@ -328,6 +331,7 @@ export const STAGES: StageDefinition[] = [
       startTime: 0.46,
       ambientIntensity: 1.05,
       enemyTuning: {
+        threatProfileId: 'forest_siege',
         maxHostileMobs: 18,
         spawnDistanceMin: 28,
         spawnDistanceMax: 44,
@@ -368,6 +372,7 @@ export const STAGES: StageDefinition[] = [
       },
       extraTools: ['iron_sword'],
       enemyTuning: {
+        threatProfileId: 'tropical_swarm',
         maxHostileMobs: 24,
         spawnDistanceMin: 24,
         spawnDistanceMax: 38,
@@ -408,6 +413,7 @@ export const STAGES: StageDefinition[] = [
         [BLOCK_IDS.GLOWSTONE]: 8,
       },
       enemyTuning: {
+        threatProfileId: 'snow_armored',
         maxHostileMobs: 15,
         spawnDistanceMin: 34,
         spawnDistanceMax: 48,
@@ -449,6 +455,7 @@ export const STAGES: StageDefinition[] = [
       },
       extraTools: ['iron_pickaxe'],
       enemyTuning: {
+        threatProfileId: 'desert_raiders',
         maxHostileMobs: 20,
         spawnDistanceMin: 36,
         spawnDistanceMax: 55,

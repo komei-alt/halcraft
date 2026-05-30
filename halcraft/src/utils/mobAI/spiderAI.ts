@@ -36,6 +36,8 @@ export function updateSpiderAI(
   const dxS = playerX - m.x;
   const dzS = playerZ - m.z;
   const distS = Math.sqrt(dxS * dxS + dzS * dzS);
+  const speedMultiplier = m.speedMultiplier ?? 1;
+  const attackMultiplier = m.attackMultiplier ?? 1;
 
   if (distS > SPIDER_STOP_RANGE) {
     if (distS > 0.1) {
@@ -44,8 +46,8 @@ export function updateSpiderAI(
     if (m.hitTimer <= 0) {
       const nxS = dxS / distS;
       const nzS = dzS / distS;
-      m.vx = nxS * SPIDER_SPEED;
-      m.vz = nzS * SPIDER_SPEED;
+      m.vx = nxS * SPIDER_SPEED * speedMultiplier;
+      m.vz = nzS * SPIDER_SPEED * speedMultiplier;
     }
   } else {
     m.vx = 0;
@@ -94,7 +96,7 @@ export function updateSpiderAI(
   const yCloseS = Math.abs(playerDyS) < SPIDER_HEIGHT + 0.5;
   if (distS < SPIDER_ATTACK_RANGE && yCloseS && state.attackCooldown <= 0) {
     attack = {
-      damage: SPIDER_ATTACK_DAMAGE,
+      damage: Math.max(1, Math.round(SPIDER_ATTACK_DAMAGE * attackMultiplier)),
       kbDirX: playerX - m.x,
       kbDirZ: playerZ - m.z,
     };

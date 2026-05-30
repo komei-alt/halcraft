@@ -65,6 +65,8 @@ export function updateZombieAI(
   const dx = targetX - m.x;
   const dz = targetZ - m.z;
   const distXZ = Math.sqrt(dx * dx + dz * dz);
+  const speedMultiplier = m.speedMultiplier ?? 1;
+  const attackMultiplier = m.attackMultiplier ?? 1;
 
   // ゾンビ同士の分離
   let sepX = 0;
@@ -97,8 +99,8 @@ export function updateZombieAI(
     if (m.hitTimer <= 0) {
       const nx = Math.sin(moveAngle);
       const nz = Math.cos(moveAngle);
-      m.vx = (nx * ZOMBIE_SPEED) + sepX;
-      m.vz = (nz * ZOMBIE_SPEED) + sepZ;
+      m.vx = (nx * ZOMBIE_SPEED * speedMultiplier) + sepX;
+      m.vz = (nz * ZOMBIE_SPEED * speedMultiplier) + sepZ;
     }
   } else {
     m.vx = sepX;
@@ -155,11 +157,11 @@ export function updateZombieAI(
         x: corePosition.x,
         y: corePosition.y,
         z: corePosition.z,
-        damage: ZOMBIE_ATTACK_DAMAGE,
+        damage: Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier)),
       };
     } else {
       attack = {
-        damage: ZOMBIE_ATTACK_DAMAGE,
+        damage: Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier)),
         kbDirX: playerX - m.x,
         kbDirZ: playerZ - m.z,
       };

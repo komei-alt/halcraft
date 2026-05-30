@@ -15,6 +15,7 @@ import { useStageEventStore } from './useStageEventStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
 import { getStageOpeningItem, getStageRunBonus } from '../types/stageRunBonuses';
+import { getStageHotbarSlots } from '../types/stageHotbars';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
 import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
@@ -230,6 +231,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     for (const block of runBonus?.blocks ?? []) {
       starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
+    const stageHotbarSlots = getStageHotbarSlots(currentStage?.id, starterItems);
     useInventoryStore.setState({ items: starterItems });
     useMobStore.getState().clearAllMobs();
     useExperienceStore.getState().resetXp();
@@ -272,6 +274,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       knockbackVx: 0,
       knockbackVz: 0,
       cameraShake: 0,
+      selectedSlot: 0,
+      hotbarSlots: stageHotbarSlots,
       equippedItem: getStageOpeningItem(currentStage?.id),
       attackCooldown: 0,
       attackCharge: 1,

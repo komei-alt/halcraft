@@ -25,7 +25,9 @@ import {
   getStageRunBonus,
   type StageRunBonus,
 } from '../../types/stageRunBonuses';
+import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../../types/stageHotbars';
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
+import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -161,6 +163,7 @@ function getChallengeTargetText(metric: string, target: number): string {
 
 function getEnemyPreview(stage: StageDefinition): string[] {
   const tuning = stage.rules.enemyTuning;
+  const profile = getStageEnemyProfile(stage.id);
   if (!tuning) {
     return [
       '敵なし / 建築に集中',
@@ -174,6 +177,7 @@ function getEnemyPreview(stage: StageDefinition): string[] {
     : `XP +${Math.round((tuning.xpMultiplier - 1) * 100)}%`;
 
   return [
+    profile ? `${profile.icon} ${formatStageEnemyProfile(profile)}` : '敵編成 標準',
     `敵上限 ${tuning.maxHostileMobs}体`,
     `ゾンビ${tuning.zombieIntervalSeconds.toFixed(1)}秒 / クモ${tuning.spiderIntervalSeconds.toFixed(1)}秒`,
     `ボス ${tuning.bossAfterDefeats}体撃破で出現`,
@@ -198,6 +202,11 @@ function getStageBriefingSections(
     stage.rules.starterKit.tools,
     stage.rules.starterKit.equippedToolId,
     compact ? 1 : 2,
+  );
+  const hotbarPreview = formatStageHotbarPreview(
+    stage.id,
+    getStageStarterHotbarItemCounts(stage, runBonus),
+    compact ? 3 : 4,
   );
   const challengePreview = challenges
     .slice(0, compact ? 2 : 3)
@@ -265,12 +274,26 @@ function getStageBriefingSections(
     });
   }
 
+  const enemyProfile = getStageEnemyProfile(stage.id);
+  if (enemyProfile) {
+    sections.push({
+      title: '敵編成',
+      value: `${enemyProfile.icon} ${enemyProfile.title}`,
+      details: [
+        formatStageEnemyProfile(enemyProfile),
+        enemyProfile.detail,
+      ],
+      accent: enemyProfile.accent,
+    });
+  }
+
   sections.push(
     {
       title: '支給品',
       value: blockPreview.join(' / '),
       details: [
         `開始: ${getStageOpeningItemLabel(stage.id)}`,
+        `1-9: ${hotbarPreview}`,
         ...(toolPreview.length > 0 ? toolPreview : ['手ぶらで開始']),
       ],
       accent: 'rgba(255, 230, 128, 0.95)',

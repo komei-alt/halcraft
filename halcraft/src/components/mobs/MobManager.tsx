@@ -351,12 +351,15 @@ export function MobManager() {
         useStageConditionStore.getState().recordEnemyDefeat(event.type);
         // XP獲得（5-10 XP）
         const baseXp = event.type === 'boss_giant' ? 80 : 5 + Math.floor(Math.random() * 6);
-        useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier)));
+        useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier * (event.xpMultiplier ?? 1))));
         useMasteryStore.getState().recordItemDefeat(null, {
           label: event.type === 'boss_giant' ? 'ボス撃破' : '敵をたおした',
           amount: event.type === 'boss_giant' ? 90 : 24,
           critical: event.type === 'boss_giant',
         });
+        if (event.bonusDropBlockId && Math.random() < (event.bonusDropChance ?? 0)) {
+          dropItem(event.bonusDropBlockId, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
+        }
         const roll = Math.random();
         if (roll < 0.4) {
           dropItem(BLOCK_IDS.IRON, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
