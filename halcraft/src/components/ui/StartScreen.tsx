@@ -16,6 +16,7 @@ import { UpdateLog } from './UpdateLog';
 import { SkinSelector } from './SkinSelector';
 import { STAGES, type StageCategory } from '../../types/stages';
 import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel } from '../../types/stageChallenges';
+import { getStageCondition } from '../../types/stageConditions';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 
 /** localStorage のキー */
@@ -366,6 +367,7 @@ export function StartScreen() {
             const completedCount = bestByStage[stage.id]?.completedCount ?? 0;
             const medal = getStageChallengeMedal(completedCount, challengeCount);
             const medalLabel = getStageChallengeMedalLabel(medal);
+            const condition = getStageCondition(stage.id);
             return (
               <div
                 key={stage.id}
@@ -430,6 +432,21 @@ export function StartScreen() {
                 }}>
                   {players > 0 ? `🟢 ${players}人` : '○ 0人'}
                 </div>
+                {condition && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: condition.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 900,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {condition.icon} {condition.title}
+                  </div>
+                )}
                 <div
                   style={{
                     width: '100%',

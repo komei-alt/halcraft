@@ -12,6 +12,7 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
+import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -479,6 +480,7 @@ export function RocketLauncher() {
         critical: masteryHits >= 3,
       });
       useStageChallengeStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
+      useStageConditionStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
     }
   }, [camera, takeDamage]);
 
@@ -487,6 +489,7 @@ export function RocketLauncher() {
       destroyExplosionBlocks(pos);
       applyExplosionDamage(pos);
       useStageChallengeStore.getState().recordDetonation();
+      useStageConditionStore.getState().recordDetonation();
     }
     setExplosions((prev) => {
       const next = [...prev, createExplosion(pos)];
@@ -754,6 +757,7 @@ export function RocketLauncher() {
             critical: true,
           });
           useStageChallengeStore.getState().recordWeaponHit('rocket_launcher');
+          useStageConditionStore.getState().recordWeaponHit('rocket_launcher');
           explosionsToSpawn.push({
             pos: projectile.pos.clone(),
             syncId: projectile.syncId,

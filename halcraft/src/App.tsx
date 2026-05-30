@@ -23,6 +23,7 @@ import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from '
 import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
 import { WaterRenderer } from './components/WaterRenderer';
+import { StageConditionSystem } from './components/StageConditionSystem';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -56,6 +57,7 @@ import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StageProgressHUD } from './components/ui/StageProgressHUD';
 import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
+import { StageConditionHUD } from './components/ui/StageConditionHUD';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
 import { StartScreen } from './components/ui/StartScreen';
@@ -147,6 +149,7 @@ function GameCanvas() {
         <RailRenderer />
         <CoasterCart />
         <WaterRenderer />
+        <StageConditionSystem />
       </Suspense>
     </Canvas>
   );
@@ -275,6 +278,7 @@ export default function App() {
           <TimeDisplay />
           <StageProgressHUD />
           <StageChallengeHUD />
+          <StageConditionHUD />
           <StageResultOverlay />
           <MasteryHUD />
           <DamageOverlay />

@@ -12,6 +12,7 @@ import { useVehicleStore } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
+import { useStageConditionStore } from '../stores/useStageConditionStore';
 
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
@@ -295,6 +296,7 @@ export function Lightsaber() {
           critical: step.damageMultiplier >= 1.5,
         });
         useStageChallengeStore.getState().recordWeaponHit('lightsaber');
+        useStageConditionStore.getState().recordWeaponHit('lightsaber');
         lightBoost.current = 1;
         hasHitThisSwing.current = true;
         return true;
@@ -349,6 +351,7 @@ export function Lightsaber() {
         critical: isCritical,
       });
       useStageChallengeStore.getState().recordWeaponHit('lightsaber');
+      useStageConditionStore.getState().recordWeaponHit('lightsaber');
       lightBoost.current = 1;
       hasHitThisSwing.current = true;
       return true;

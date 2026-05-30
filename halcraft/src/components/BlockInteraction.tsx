@@ -16,6 +16,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useExperienceStore } from '../stores/useExperienceStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
+import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -154,6 +155,7 @@ export function BlockInteraction() {
   const recordItemHit = useMasteryStore((s) => s.recordItemHit);
   const recordStageBlockPlace = useStageChallengeStore((s) => s.recordBlockPlace);
   const recordStageBlockBreak = useStageChallengeStore((s) => s.recordBlockBreak);
+  const recordConditionBlockPlace = useStageConditionStore((s) => s.recordBlockPlace);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -324,7 +326,8 @@ export function BlockInteraction() {
   const recordBlockPlaceMastery = useCallback((blockId: BlockId) => {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
     recordStageBlockPlace(blockId);
-  }, [recordBuilderAction, recordStageBlockPlace]);
+    recordConditionBlockPlace(blockId);
+  }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
   const tryMeleeAttack = useCallback((): boolean => {
     const maxAttackDistance = getAttackDistanceLimit();
