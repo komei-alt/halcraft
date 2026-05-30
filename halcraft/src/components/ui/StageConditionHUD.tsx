@@ -6,7 +6,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { getStageCondition, getStageConditionProgress } from '../../types/stageConditions';
 import { isTouchDevice } from '../../utils/device';
-import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
+import { STAGE_MOBILE_RAIL_TOP, STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 
 export function StageConditionHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -44,7 +44,7 @@ export function StageConditionHUD() {
       id="stage-condition-hud"
       style={{
         position: 'fixed',
-        top: isCompact ? 334 : STAGE_RIGHT_RAIL_TOP.condition,
+        top: isCompact ? STAGE_MOBILE_RAIL_TOP.condition : STAGE_RIGHT_RAIL_TOP.condition,
         right: isCompact ? 14 : 16,
         zIndex: 97,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,

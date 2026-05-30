@@ -1,10 +1,12 @@
 // ステージ進行HUD
 // 選んだマップごとの目的・進行・ランドマークを常時見える状態にする
 
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { useStageEventStore } from '../../stores/useStageEventStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useMobStore } from '../../stores/useMobStore';
 import {
@@ -24,9 +26,11 @@ import {
   getNextStageBuildMilestone,
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
+import { getStageEvent } from '../../types/stageEvents';
 import type { StageDefinition } from '../../types/stages';
 import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
+import { getStageEventHudDisplay } from './stageEventDisplay';
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -185,7 +189,17 @@ export function StageProgressHUD() {
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
+  const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
+  const recentStageEvent = useStageEventStore((s) => s.recentEvent);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
+  const [eventNow, setEventNow] = useState(() => performance.now());
+
+  useEffect(() => {
+    if (phase !== 'playing' || !isCompact) return undefined;
+
+    const timer = window.setInterval(() => setEventNow(performance.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [isCompact, phase]);
 
   if (phase !== 'playing' || !stage) return null;
 
@@ -230,6 +244,16 @@ export function StageProgressHUD() {
         buildMilestones,
       );
   const enemyProfile = getStageEnemyProfile(stage.id);
+  const eventDefinition = getStageEvent(stage.id);
+  const compactStageEvent = isCompact && eventDefinition && nextStageEventAtSeconds !== null
+    ? getStageEventHudDisplay(
+        eventDefinition,
+        stageElapsedSeconds,
+        nextStageEventAtSeconds,
+        recentStageEvent,
+        eventNow,
+      )
+    : null;
 
   return (
     <div
@@ -408,6 +432,93 @@ export function StageProgressHUD() {
               transition: 'width 0.25s ease',
             }}
           />
+        </div>
+      )}
+
+      {compactStageEvent && (
+        <div
+          id="stage-event-mini-hud"
+          style={{
+            marginTop: 7,
+            padding: '5px 7px',
+            borderRadius: 6,
+            background: `${compactStageEvent.accent}16`,
+            border: `1px solid ${compactStageEvent.accent}44`,
+            boxShadow: compactStageEvent.active ? `0 0 14px ${compactStageEvent.accent}28` : 'none',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ flex: '0 0 auto', fontSize: 12 }}>
+              {compactStageEvent.icon}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: compactStageEvent.accent,
+                fontSize: 9,
+                lineHeight: '12px',
+                fontWeight: 900,
+              }}
+            >
+              {compactStageEvent.active ? 'イベント中' : 'イベント'}
+            </span>
+            <span
+              style={{
+                minWidth: 0,
+                flex: 1,
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: 10,
+                lineHeight: '13px',
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {compactStageEvent.title}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: compactStageEvent.active ? '#fff1a8' : 'rgba(255,255,255,0.66)',
+                fontSize: 9,
+                lineHeight: '12px',
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {compactStageEvent.timerLabel}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              height: 4,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.12)',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(compactStageEvent.progress * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: compactStageEvent.active
+                  ? `linear-gradient(90deg, #fff2a6, ${compactStageEvent.accent})`
+                  : `linear-gradient(90deg, ${stage.color}, ${compactStageEvent.accent})`,
+                transition: 'width 0.25s ease',
+              }}
+            />
+          </div>
         </div>
       )}
 

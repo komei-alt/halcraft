@@ -10,3 +10,8 @@ export const STAGE_RIGHT_RAIL_TOP = {
   modeWithPressure: 420,
 } as const;
 
+export const STAGE_MOBILE_RAIL_TOP = {
+  pressure: 256,
+  condition: 346,
+  challenge: 456,
+} as const;

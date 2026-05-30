@@ -10,6 +10,7 @@ import {
   getStageChallenges,
 } from '../../types/stageChallenges';
 import { isTouchDevice } from '../../utils/device';
+import { STAGE_MOBILE_RAIL_TOP } from './stageHudLayout';
 
 export function StageChallengeHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -41,7 +42,7 @@ export function StageChallengeHUD() {
       id="stage-challenge-hud"
       style={{
         position: 'fixed',
-        top: isCompact ? 444 : 252,
+        top: isCompact ? STAGE_MOBILE_RAIL_TOP.challenge : 252,
         left: isCompact ? 14 : 64,
         zIndex: 95,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,

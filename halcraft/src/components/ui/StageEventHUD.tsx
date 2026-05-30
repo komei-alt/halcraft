@@ -6,14 +6,8 @@ import { useStageEventStore } from '../../stores/useStageEventStore';
 import { getStageEvent } from '../../types/stageEvents';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { getStageEventHudDisplay } from './stageEventDisplay';
 import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
-
-function formatCountdown(seconds: number): string {
-  const safeSeconds = Math.max(0, Math.ceil(seconds));
-  const minutes = Math.floor(safeSeconds / 60);
-  const rest = safeSeconds % 60;
-  return minutes > 0 ? `${minutes}:${rest.toString().padStart(2, '0')}` : `${rest}s`;
-}
 
 export function StageEventHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -35,15 +29,7 @@ export function StageEventHUD() {
   if (!definition || nextTriggerAtSeconds === null) return null;
 
   const pressure = getStagePressure(stage.id);
-  const active = Boolean(recentEvent && recentEvent.activeUntil > now);
-  const remainingSeconds = Math.max(0, nextTriggerAtSeconds - elapsedSeconds);
-  const label = active ? recentEvent?.label ?? definition.label : `次まで ${formatCountdown(remainingSeconds)}`;
-  const title = active ? recentEvent?.title ?? definition.title : definition.title;
-  const detail = active ? recentEvent?.detail ?? definition.detail : definition.detail;
-  const accent = active ? recentEvent?.accent ?? definition.accent : definition.accent;
-  const progress = active && recentEvent
-    ? Math.max(0, Math.min(1, (recentEvent.activeUntil - now) / Math.max(1, recentEvent.activeUntil - recentEvent.createdAt)))
-    : 1 - Math.max(0, Math.min(1, remainingSeconds / definition.repeatEverySeconds));
+  const display = getStageEventHudDisplay(definition, elapsedSeconds, nextTriggerAtSeconds, recentEvent, now);
 
   return (
     <div
@@ -56,9 +42,9 @@ export function StageEventHUD() {
         width: 276,
         padding: '9px 11px',
         borderRadius: 8,
-        border: `1px solid ${accent}5f`,
+        border: `1px solid ${display.accent}5f`,
         background: 'rgba(8, 11, 16, 0.5)',
-        boxShadow: active ? `0 0 20px ${accent}44` : `0 0 12px ${accent}1f`,
+        boxShadow: display.active ? `0 0 20px ${display.accent}44` : `0 0 12px ${display.accent}1f`,
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         color: '#fff',
@@ -74,18 +60,18 @@ export function StageEventHUD() {
             borderRadius: 7,
             display: 'grid',
             placeItems: 'center',
-            background: `${accent}24`,
-            border: `1px solid ${accent}66`,
+            background: `${display.accent}24`,
+            border: `1px solid ${display.accent}66`,
             fontSize: 18,
             flex: '0 0 auto',
           }}
         >
-          {active ? recentEvent?.icon : definition.icon}
+          {display.icon}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
-              color: accent,
+              color: display.accent,
               fontSize: 10,
               lineHeight: '13px',
               fontWeight: 900,
@@ -94,7 +80,7 @@ export function StageEventHUD() {
               textOverflow: 'ellipsis',
             }}
           >
-            {active ? 'マップイベント発生中' : '次のマップイベント'}
+            {display.statusLabel}
           </div>
           <div
             style={{
@@ -107,13 +93,13 @@ export function StageEventHUD() {
               textOverflow: 'ellipsis',
             }}
           >
-            {title}
+            {display.title}
           </div>
         </div>
         <div
           style={{
             flex: '0 0 auto',
-            color: active ? '#fff1a8' : 'rgba(255,255,255,0.68)',
+            color: display.active ? '#fff1a8' : 'rgba(255,255,255,0.68)',
             fontSize: 10,
             lineHeight: '12px',
             fontWeight: 900,
@@ -121,7 +107,7 @@ export function StageEventHUD() {
             textAlign: 'right',
           }}
         >
-          {label}
+          {display.timerLabel}
         </div>
       </div>
       <div
@@ -136,7 +122,7 @@ export function StageEventHUD() {
           textOverflow: 'ellipsis',
         }}
       >
-        {detail}
+        {display.detail}
       </div>
       <div
         style={{
@@ -149,12 +135,12 @@ export function StageEventHUD() {
       >
         <div
           style={{
-            width: `${Math.round(progress * 100)}%`,
+            width: `${Math.round(display.progress * 100)}%`,
             height: '100%',
             borderRadius: 999,
-            background: active
-              ? `linear-gradient(90deg, #fff2a6, ${accent})`
-              : `linear-gradient(90deg, ${stage.color}, ${accent})`,
+            background: display.active
+              ? `linear-gradient(90deg, #fff2a6, ${display.accent})`
+              : `linear-gradient(90deg, ${stage.color}, ${display.accent})`,
             transition: 'width 0.25s ease',
           }}
         />
