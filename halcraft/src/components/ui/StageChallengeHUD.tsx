@@ -41,10 +41,12 @@ export function StageChallengeHUD() {
       id="stage-challenge-hud"
       style={{
         position: 'fixed',
-        top: isTouch ? 218 : 178,
+        top: isTouch ? 444 : 252,
         left: isTouch ? 14 : 64,
         zIndex: 95,
-        width: isTouch ? 248 : 310,
+        width: isTouch ? 'min(248px, calc(100vw - 28px))' : 310,
+        maxHeight: isTouch ? 'max(132px, calc(100vh - 548px))' : 'none',
+        overflow: 'hidden',
         padding: isTouch ? '8px 9px' : '10px 12px',
         borderRadius: 8,
         border: `1px solid ${stage.color}55`,

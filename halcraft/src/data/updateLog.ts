@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'improve', text: 'スマホでもステージ情報や熟練度の表示が重なりにくく、見やすくなったよ' },
       { type: 'improve', text: 'ステージ中に、次に何をすると目標やチャレンジが進むか分かるようになったよ' },
       { type: 'improve', text: '熟練度の特典が強くなった時、何が強くなったかお知らせと音で分かるようになったよ' },
       { type: 'feature', text: '熟練度が上がると、採掘・設置・武器の使い心地が少し強くなるようになったよ' },

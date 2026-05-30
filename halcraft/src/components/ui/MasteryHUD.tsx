@@ -47,7 +47,7 @@ export function MasteryHUD() {
       style={{
         position: 'fixed',
         left: isTouch ? 14 : 16,
-        top: isTouch ? 170 : 'auto',
+        top: isTouch ? 190 : 'auto',
         bottom: isTouch ? 'auto' : 116,
         zIndex: 101,
         width: isTouch ? 'min(238px, calc(100vw - 28px))' : 252,

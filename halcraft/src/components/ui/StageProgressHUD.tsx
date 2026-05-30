@@ -165,7 +165,7 @@ export function StageProgressHUD() {
         top: isTouch ? 54 : 14,
         left: isTouch ? 14 : 64,
         zIndex: 96,
-        width: isTouch ? 248 : 310,
+        width: isTouch ? 'min(248px, calc(100vw - 28px))' : 310,
         padding: isTouch ? '9px 10px' : '11px 13px',
         borderRadius: 8,
         border: `1px solid ${stage.color}77`,
@@ -221,16 +221,18 @@ export function StageProgressHUD() {
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 7,
-          color: 'rgba(255,255,255,0.68)',
-          fontSize: isTouch ? 10 : 11,
-          lineHeight: '15px',
-        }}
-      >
-        {stage.rules.objective.description}
-      </div>
+      {!isTouch && (
+        <div
+          style={{
+            marginTop: 7,
+            color: 'rgba(255,255,255,0.68)',
+            fontSize: 11,
+            lineHeight: '15px',
+          }}
+        >
+          {stage.rules.objective.description}
+        </div>
+      )}
 
       <div
         style={{
@@ -333,42 +335,44 @@ export function StageProgressHUD() {
         </div>
       )}
 
-      <div
-        style={{
-          marginTop: 8,
-          display: 'flex',
-          gap: 5,
-          flexWrap: 'wrap',
-        }}
-      >
-        <span
+      {!isTouch && (
+        <div
           style={{
-            padding: '2px 6px',
-            borderRadius: 4,
-            background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.75)',
-            fontSize: isTouch ? 9 : 10,
-            fontWeight: 800,
+            marginTop: 8,
+            display: 'flex',
+            gap: 5,
+            flexWrap: 'wrap',
           }}
         >
-          {stage.rules.landmarkName}
-        </span>
-        {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (
           <span
-            key={text}
             style={{
               padding: '2px 6px',
               borderRadius: 4,
-              background: `${stage.color}24`,
-              color: 'rgba(255,255,255,0.78)',
-              fontSize: isTouch ? 9 : 10,
+              background: 'rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.75)',
+              fontSize: 10,
               fontWeight: 800,
             }}
           >
-            {text}
+            {stage.rules.landmarkName}
           </span>
-        ))}
-      </div>
+          {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (
+            <span
+              key={text}
+              style={{
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: `${stage.color}24`,
+                color: 'rgba(255,255,255,0.78)',
+                fontSize: 10,
+                fontWeight: 800,
+              }}
+            >
+              {text}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

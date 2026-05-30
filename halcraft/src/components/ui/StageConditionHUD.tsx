@@ -43,7 +43,7 @@ export function StageConditionHUD() {
       id="stage-condition-hud"
       style={{
         position: 'fixed',
-        top: isTouch ? 54 : 14,
+        top: isTouch ? 334 : 14,
         right: isTouch ? 14 : 16,
         zIndex: 97,
         width: isTouch ? 'min(248px, calc(100vw - 28px))' : 276,
