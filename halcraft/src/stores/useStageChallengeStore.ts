@@ -15,6 +15,7 @@ import {
   type StageChallengeMedal,
   type StageChallengeStats,
 } from '../types/stageChallenges';
+import { getStageChallengeReward } from '../types/stageChallengeRewards';
 import { playLevelUpSound, playXPGainSound } from '../utils/sounds';
 
 export interface StageChallengeBest {
@@ -31,6 +32,8 @@ export interface StageChallengeCompletion {
   medal: StageChallengeMedal;
   completedCount: number;
   totalCount: number;
+  rewardLabel: string | null;
+  rewardAccent: string | null;
   createdAt: number;
 }
 
@@ -89,6 +92,7 @@ function getNewCompletion(
   const challenges = getStageChallenges(stageId);
   const challenge = challenges.find((item) => item.id === completedId);
   if (!challenge) return null;
+  const reward = getStageChallengeReward(stageId, nextCompletedIds.length, challenges.length);
 
   return {
     id: completedId,
@@ -97,6 +101,8 @@ function getNewCompletion(
     medal: getStageChallengeMedal(nextCompletedIds.length, challenges.length),
     completedCount: nextCompletedIds.length,
     totalCount: challenges.length,
+    rewardLabel: reward?.label ?? null,
+    rewardAccent: reward?.accent ?? null,
     createdAt: nowMs(),
   };
 }

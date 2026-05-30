@@ -26,6 +26,7 @@ import { WaterRenderer } from './components/WaterRenderer';
 import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageConditionSystem } from './components/StageConditionSystem';
+import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -284,6 +285,7 @@ export default function App() {
           <StageProgressHUD />
           <StageChallengeHUD />
           <StageConditionHUD />
+          <StageChallengeRewardSystem />
           <StageResultOverlay />
           <MasteryHUD />
           <ProgressCelebration />

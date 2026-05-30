@@ -8,6 +8,7 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
+import { useInventoryStore } from '../stores/useInventoryStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useMultiplayerStore } from '../stores/useMultiplayerStore';
@@ -22,7 +23,7 @@ import { getMasteryBonus } from '../types/masteryPerks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
-import { playHitSound, playBlockBreakSound } from '../utils/sounds';
+import { playHitSound, playBlockBreakSound, playBlockPlaceSound, playInventoryEmptySound } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
 
@@ -335,6 +336,72 @@ export function BlockInteraction() {
     recordConditionBlockPlace(blockId);
   }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
+  const detonateExplosiveBlock = useCallback((x: number, y: number, z: number): boolean => {
+    const blockId = getBlock(x, y, z);
+    if (!BLOCK_DEFS[blockId]?.explosive) return false;
+    if (!breakBlock(x, y, z)) return false;
+
+    spawnBlockBreakEffect(blockId, x, y, z);
+    sendBlockBreak(x, y, z);
+    recordBlockBreakMastery(blockId);
+    const cp = camera.position;
+    triggerTntExplosion(x, y, z, [cp.x, cp.y - 1.6, cp.z]);
+    return true;
+  }, [breakBlock, camera, getBlock, recordBlockBreakMastery, sendBlockBreak]);
+
+  const detonateAdjacentExplosives = useCallback((x: number, y: number, z: number): void => {
+    const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as const;
+    for (const [dx, dy, dz] of dirs) {
+      detonateExplosiveBlock(x + dx, y + dy, z + dz);
+    }
+  }, [detonateExplosiveBlock]);
+
+  const applySpecialPlacement = useCallback((blockId: BlockId, x: number, y: number, z: number): void => {
+    if (blockId === BLOCK_IDS.SPAWNER) {
+      spawnMob('iron_golem', x + 0.5, y + 2, z + 0.5);
+    }
+    if (blockId === BLOCK_IDS.LEVER) {
+      detonateAdjacentExplosives(x, y, z);
+    }
+  }, [detonateAdjacentExplosives, spawnMob]);
+
+  const tryPlaceSelectedBlock = useCallback((t: TargetBlock): boolean => {
+    if (!t.hasPlaceTarget) return false;
+    if (getBlock(t.placeX, t.placeY, t.placeZ) !== BLOCK_IDS.AIR) return false;
+    if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return false;
+
+    const selectedBlock = getSelectedBlock();
+    const inventory = useInventoryStore.getState();
+    if (!inventory.removeItem(selectedBlock, 1)) {
+      playInventoryEmptySound();
+      return false;
+    }
+
+    setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
+    sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
+    playBlockPlaceSound();
+    recordBlockPlaceMastery(selectedBlock);
+    applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
+    return true;
+  }, [
+    applySpecialPlacement,
+    getBlock,
+    getSelectedBlock,
+    recordBlockPlaceMastery,
+    sendBlockPlace,
+    setBlock,
+    wouldBlockOverlapPlayer,
+  ]);
+
+  const grantBrokenBlock = useCallback((blockId: BlockId, x: number, y: number, z: number): void => {
+    if (BLOCK_DEFS[blockId]?.explosive) return;
+    if (isBuildMode) {
+      useInventoryStore.getState().addItem(blockId, 1);
+      return;
+    }
+    dropItem(blockId, x, y, z);
+  }, [dropItem, isBuildMode]);
+
   const tryMeleeAttack = useCallback((): boolean => {
     const maxAttackDistance = getAttackDistanceLimit();
     if (maxAttackDistance <= 0) return false;
@@ -493,9 +560,7 @@ export function BlockInteraction() {
         // hardness <= 0 のブロック（TNT等）は即破壊
         if (breakBlock(found.x, found.y, found.z)) {
           spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
-          if (!isBuildMode) {
-            dropItem(blockId, found.x, found.y, found.z);
-          }
+          grantBrokenBlock(blockId, found.x, found.y, found.z);
           sendBlockBreak(found.x, found.y, found.z);
           recordBlockBreakMastery(blockId);
           if (BLOCK_DEFS[blockId]?.explosive) {
@@ -519,9 +584,7 @@ export function BlockInteraction() {
           // 破壊完了！
           if (breakBlock(found.x, found.y, found.z)) {
             spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
-            if (!isBuildMode) {
-              dropItem(blockId, found.x, found.y, found.z);
-            }
+            grantBrokenBlock(blockId, found.x, found.y, found.z);
             sendBlockBreak(found.x, found.y, found.z);
             playBlockBreakSound();
             recordBlockBreakMastery(blockId);
@@ -578,43 +641,8 @@ export function BlockInteraction() {
             // TNT右クリック起爆チェック
             const targetBlockId = getBlock(t.x, t.y, t.z);
             if (BLOCK_DEFS[targetBlockId]?.explosive) {
-              if (breakBlock(t.x, t.y, t.z)) {
-                spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
-                sendBlockBreak(t.x, t.y, t.z);
-                recordBlockBreakMastery(targetBlockId);
-                const cp = camera.position;
-                triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
-              }
-            } else if (!wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) {
-              const selectedBlock = getSelectedBlock();
-              setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
-              sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-              playBlockBreakSound();
-              recordBlockPlaceMastery(selectedBlock);
-
-              // SPAWNERブロック設置時
-              if (selectedBlock === BLOCK_IDS.SPAWNER) {
-                spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
-              }
-              // レバー設置時: 隣接TNT遠隔起爆
-              if (selectedBlock === BLOCK_IDS.LEVER) {
-                const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-                for (const [dx, dy, dz] of dirs) {
-                  const nx = t.placeX + dx;
-                  const ny = t.placeY + dy;
-                  const nz = t.placeZ + dz;
-                  const neighborBlock = getBlock(nx, ny, nz);
-                  if (BLOCK_DEFS[neighborBlock]?.explosive) {
-                    if (breakBlock(nx, ny, nz)) {
-                      spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
-                      sendBlockBreak(nx, ny, nz);
-                      recordBlockBreakMastery(neighborBlock);
-                      const cp = camera.position;
-                      triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
-                    }
-                  }
-                }
-              }
+              detonateExplosiveBlock(t.x, t.y, t.z);
+            } else if (tryPlaceSelectedBlock(t)) {
               lastPlacedRef.current = coordKey;
             }
             placeTimerRef.current = 0;
@@ -641,9 +669,7 @@ export function BlockInteraction() {
             if (breakBlock(t.x, t.y, t.z)) {
               // パーティクルエフェクト + ドロップアイテム
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
-              if (!isBuildMode) {
-                dropItem(blockId, t.x, t.y, t.z);
-              }
+              grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
               recordBlockBreakMastery(blockId);
@@ -659,39 +685,8 @@ export function BlockInteraction() {
       // 設置
       if (consumePlaceBlock()) {
         const t = targetRef.current;
-        if (t && t.hasPlaceTarget) {
-          // プレイヤーの体と重ならないかチェック
-          if (!wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) {
-            const selectedBlock = getSelectedBlock();
-            setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
-            sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-            recordBlockPlaceMastery(selectedBlock);
-
-            // SPAWNERブロック設置時:アイアンゴーレムをスポーン
-            if (selectedBlock === BLOCK_IDS.SPAWNER) {
-              spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
-            }
-
-            // レバー設置時: 隣接するTNTを遠隔起爆
-            if (selectedBlock === BLOCK_IDS.LEVER) {
-              const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-              for (const [dx, dy, dz] of dirs) {
-                const nx = t.placeX + dx;
-                const ny = t.placeY + dy;
-                const nz = t.placeZ + dz;
-                const neighborBlock = getBlock(nx, ny, nz);
-                if (BLOCK_DEFS[neighborBlock]?.explosive) {
-                  if (breakBlock(nx, ny, nz)) {
-                    spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
-                    sendBlockBreak(nx, ny, nz);
-                    recordBlockBreakMastery(neighborBlock);
-                    const cp = camera.position;
-                    triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
-                  }
-                }
-              }
-            }
-          }
+        if (t) {
+          tryPlaceSelectedBlock(t);
         }
       }
     }
@@ -719,6 +714,7 @@ export function BlockInteraction() {
             const blockId = getBlock(t.x, t.y, t.z);
             if (breakBlock(t.x, t.y, t.z)) {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
+              grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
               recordBlockBreakMastery(blockId);
@@ -745,50 +741,15 @@ export function BlockInteraction() {
       // TNTブロックを右クリックで遠隔起爆
       const targetBlockId = getBlock(t.x, t.y, t.z);
       if (BLOCK_DEFS[targetBlockId]?.explosive) {
-        if (breakBlock(t.x, t.y, t.z)) {
-          spawnBlockBreakEffect(targetBlockId, t.x, t.y, t.z);
-          sendBlockBreak(t.x, t.y, t.z);
-          recordBlockBreakMastery(targetBlockId);
-          const cp = camera.position;
-          triggerTntExplosion(t.x, t.y, t.z, [cp.x, cp.y - 1.6, cp.z]);
-        }
+        detonateExplosiveBlock(t.x, t.y, t.z);
         return;
       }
 
-      if (!t.hasPlaceTarget) return;
-      if (wouldBlockOverlapPlayer(t.placeX, t.placeY, t.placeZ)) return;
-      const selectedBlock = getSelectedBlock();
-      setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
-      sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-      playBlockBreakSound();
-      recordBlockPlaceMastery(selectedBlock);
-      lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
-
-      // SPAWNERブロック設置時
-      if (selectedBlock === BLOCK_IDS.SPAWNER) {
-        spawnMob('iron_golem', t.placeX + 0.5, t.placeY + 2, t.placeZ + 0.5);
-      }
-      // レバー設置時: 隣接TNT遠隔起爆
-      if (selectedBlock === BLOCK_IDS.LEVER) {
-        const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-        for (const [dx, dy, dz] of dirs) {
-          const nx = t.placeX + dx;
-          const ny = t.placeY + dy;
-          const nz = t.placeZ + dz;
-          const neighborBlock = getBlock(nx, ny, nz);
-          if (BLOCK_DEFS[neighborBlock]?.explosive) {
-            if (breakBlock(nx, ny, nz)) {
-              spawnBlockBreakEffect(neighborBlock, nx, ny, nz);
-              sendBlockBreak(nx, ny, nz);
-              recordBlockBreakMastery(neighborBlock);
-              const cp = camera.position;
-              triggerTntExplosion(nx, ny, nz, [cp.x, cp.y - 1.6, cp.z]);
-            }
-          }
-        }
+      if (tryPlaceSelectedBlock(t)) {
+        lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
       }
     }
-  }, [breakBlock, setBlock, getSelectedBlock, getBlock, spawnMob, tryMeleeAttack, sendBlockBreak, sendBlockPlace, wouldBlockOverlapPlayer, equippedItem, isBuildMode, camera, recordBlockBreakMastery, recordBlockPlaceMastery]);
+  }, [breakBlock, camera, detonateExplosiveBlock, equippedItem, getBlock, grantBrokenBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

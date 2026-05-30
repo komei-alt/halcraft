@@ -4,8 +4,30 @@
 
 import { useMemo } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
-import { BLOCK_DEFS } from '../../types/blocks';
+import { useInventoryStore } from '../../stores/useInventoryStore';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 import { isTouchDevice } from '../../utils/device';
+
+function getBlockUseHint(blockId: BlockId): string {
+  if (blockId === BLOCK_IDS.TNT) return '右クリックで起爆 / レバーで連鎖';
+  if (blockId === BLOCK_IDS.LEVER) return '隣のTNTを遠隔起爆';
+  if (blockId === BLOCK_IDS.SPAWNER) return '置くとゴーレム召喚';
+  if (blockId === BLOCK_IDS.TURRET) return '敵を自動射撃';
+  if (blockId === BLOCK_IDS.TORCH || blockId === BLOCK_IDS.CANDLE || blockId === BLOCK_IDS.CAMPFIRE) {
+    return '暗い場所を照らす';
+  }
+  if (
+    blockId === BLOCK_IDS.RAIL ||
+    blockId === BLOCK_IDS.RAIL_SLOPE ||
+    blockId === BLOCK_IDS.RAIL_BOOSTER ||
+    blockId === BLOCK_IDS.RAIL_LOOP ||
+    blockId === BLOCK_IDS.RAIL_CHAIN
+  ) {
+    return 'コースター用レール';
+  }
+  if (blockId === BLOCK_IDS.WATER || blockId === BLOCK_IDS.LAVA) return '流れる地形ブロック';
+  return '置くと1個消費';
+}
 
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
@@ -13,8 +35,12 @@ export function Hotbar() {
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
+  const items = useInventoryStore((s) => s.items);
 
   const isTouch = isTouchDevice();
+  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
+  const selectedDef = BLOCK_DEFS[selectedBlock];
+  const selectedCount = items[selectedBlock] ?? 0;
 
   // セルサイズ（モバイルではやや小さめ）
   const cellSize = isTouch ? 40 : 48;
@@ -48,6 +74,81 @@ export function Hotbar() {
         zIndex: isTouch ? 125 : 100,
       }}
     >
+      {equippedItem === 'builder' && selectedDef && (
+        <div
+          style={{
+            minWidth: isTouch ? 250 : 320,
+            maxWidth: 'calc(100vw - 32px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: isTouch ? '8px 12px' : '7px 12px',
+            borderRadius: 999,
+            border: selectedCount > 0
+              ? '1px solid rgba(255, 224, 150, 0.34)'
+              : '1px solid rgba(255, 105, 105, 0.55)',
+            background: selectedCount > 0
+              ? 'rgba(24, 20, 16, 0.68)'
+              : 'rgba(70, 18, 18, 0.72)',
+            color: '#fff',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
+            backdropFilter: 'blur(8px)',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              overflow: 'hidden',
+            }}
+          >
+            <span
+              style={{
+                fontSize: isTouch ? 12 : 13,
+                fontWeight: 900,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedDef.name}
+            </span>
+            <span
+              style={{
+                color: selectedCount > 0 ? 'rgba(255,255,255,0.66)' : '#ffc0c0',
+                fontSize: isTouch ? 10 : 11,
+                fontWeight: 700,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedCount > 0 ? getBlockUseHint(selectedBlock) : '素材なし / クラフト画面で補充'}
+            </span>
+          </span>
+          <span
+            style={{
+              flexShrink: 0,
+              minWidth: isTouch ? 52 : 60,
+              textAlign: 'center',
+              padding: '4px 9px',
+              borderRadius: 999,
+              background: selectedCount > 0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,0,0,0.16)',
+              color: selectedCount > 0 ? '#ffe8a8' : '#ffb3b3',
+              fontSize: isTouch ? 12 : 13,
+              fontWeight: 900,
+              fontFamily: 'monospace',
+            }}
+          >
+            x{selectedCount}
+          </span>
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',
@@ -126,6 +227,8 @@ export function Hotbar() {
           const def = BLOCK_DEFS[blockId];
           const isSelected = index === selectedSlot;
           const texUrl = textures.get(blockId);
+          const count = items[blockId] ?? 0;
+          const hasItem = count > 0;
 
           return (
             <div
@@ -148,6 +251,7 @@ export function Hotbar() {
                 background: isSelected
                   ? 'rgba(255,255,255,0.18)'
                   : 'rgba(0,0,0,0.3)',
+                opacity: hasItem ? 1 : 0.46,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -172,6 +276,25 @@ export function Hotbar() {
                   }}
                 />
               )}
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 3,
+                  bottom: 1,
+                  minWidth: 12,
+                  padding: '0 2px',
+                  borderRadius: 3,
+                  color: hasItem ? '#fff' : '#ff9c9c',
+                  fontSize: isTouch ? 9 : 10,
+                  fontFamily: 'monospace',
+                  fontWeight: 900,
+                  lineHeight: '12px',
+                  textAlign: 'right',
+                  textShadow: '1px 1px 2px #000',
+                }}
+              >
+                {count}
+              </span>
               {/* ショートカット番号（デスクトップのみ表示） */}
               {!isTouch && (
                 <span

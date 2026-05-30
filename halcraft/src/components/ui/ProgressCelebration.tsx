@@ -83,8 +83,10 @@ export function ProgressCelebration() {
         icon: completion.icon,
         eyebrow: 'チャレンジ達成',
         title: completion.title,
-        detail: `${completion.completedCount}/${completion.totalCount} ${getStageChallengeMedalLabel(completion.medal)}`,
-        accent: completion.medal === 'gold' ? '#ffe680' : '#9bdcff',
+        detail: completion.rewardLabel
+          ? `${completion.completedCount}/${completion.totalCount} ${getStageChallengeMedalLabel(completion.medal)} / 報酬 ${completion.rewardLabel}`
+          : `${completion.completedCount}/${completion.totalCount} ${getStageChallengeMedalLabel(completion.medal)}`,
+        accent: completion.rewardAccent ?? (completion.medal === 'gold' ? '#ffe680' : '#9bdcff'),
         glow: completion.medal === 'gold'
           ? 'rgba(255, 230, 120, 0.32)'
           : 'rgba(120, 210, 255, 0.24)',

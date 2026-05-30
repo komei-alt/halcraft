@@ -984,6 +984,66 @@ export function playBlockBreakSound(): void {
   thud.stop(now + 0.06);
 }
 
+/** ブロック設置SE — 置いた手応えが残る短い低音 */
+export function playBlockPlaceSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('blockPlace', 55)) return;
+  const now = ctx.currentTime;
+
+  const thud = ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(180 + Math.random() * 35, now);
+  thud.frequency.exponentialRampToValueAtTime(95, now + 0.07);
+
+  const thudGain = ctx.createGain();
+  thudGain.gain.setValueAtTime(0.11, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+  thud.connect(thudGain);
+  thudGain.connect(ctx.destination);
+  thud.start(now);
+  thud.stop(now + 0.09);
+
+  const tick = ctx.createBufferSource();
+  tick.buffer = getNoiseBuffer(ctx);
+
+  const tickFilter = ctx.createBiquadFilter();
+  tickFilter.type = 'bandpass';
+  tickFilter.frequency.setValueAtTime(700 + Math.random() * 280, now);
+  tickFilter.Q.setValueAtTime(1.2, now);
+
+  const tickGain = ctx.createGain();
+  tickGain.gain.setValueAtTime(0.06, now);
+  tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+  tick.connect(tickFilter);
+  tickFilter.connect(tickGain);
+  tickGain.connect(ctx.destination);
+  tick.start(now);
+  tick.stop(now + 0.045);
+}
+
+/** 素材不足SE — 置けないことを小さく知らせる */
+export function playInventoryEmptySound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('inventoryEmpty', 180)) return;
+  const now = ctx.currentTime;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(180, now);
+  osc.frequency.exponentialRampToValueAtTime(110, now + 0.12);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.045, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.13);
+}
+
 /** ツール破壊SE — 金属が砕ける音 */
 export function playToolBreakSound(): void {
   const ctx = getAudioContext();
@@ -1109,6 +1169,7 @@ export function playXPGainSound(): void {
 }
 
 type StageConditionSoundKind = 'resource' | 'regen' | 'rocket_ready';
+type StageRewardSoundKind = 'build_supply' | 'war_supply' | 'recovery' | 'rocket_ready';
 
 /** ステージ特性発動SE — 効果タイプごとに手触りを変える */
 export function playStageConditionSound(kind: StageConditionSoundKind): void {
@@ -1167,6 +1228,59 @@ export function playStageConditionSound(kind: StageConditionSoundKind): void {
   noiseGain.connect(ctx.destination);
   noise.start(now);
   noise.stop(now + 0.16);
+}
+
+/** チャレンジ報酬SE — 建築補給と戦闘補給で音色を分ける */
+export function playStageRewardSound(kind: StageRewardSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('stageReward', 420)) return;
+  const now = ctx.currentTime;
+  const notes = kind === 'rocket_ready'
+    ? [164.81, 329.63, 659.25]
+    : kind === 'recovery'
+      ? [349.23, 440, 523.25]
+      : kind === 'war_supply'
+        ? [220, 330, 440]
+        : [523.25, 659.25, 880];
+  const wave: OscillatorType = kind === 'build_supply' ? 'triangle' : 'square';
+
+  for (let i = 0; i < notes.length; i++) {
+    const t = now + i * 0.045;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(notes[i], t);
+    osc.frequency.exponentialRampToValueAtTime(notes[i] * 1.05, t + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'build_supply' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'build_supply' ? 2600 : 880, t);
+    filter.Q.setValueAtTime(kind === 'build_supply' ? 0.6 : 1.8, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'war_supply' ? 0.045 : 0.06, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  }
+
+  if (kind !== 'rocket_ready' && kind !== 'war_supply') return;
+
+  const tick = ctx.createOscillator();
+  tick.type = 'sawtooth';
+  tick.frequency.setValueAtTime(kind === 'rocket_ready' ? 1180 : 720, now + 0.11);
+
+  const tickGain = ctx.createGain();
+  tickGain.gain.setValueAtTime(0.035, now + 0.11);
+  tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+  tick.connect(tickGain);
+  tickGain.connect(ctx.destination);
+  tick.start(now + 0.11);
+  tick.stop(now + 0.22);
 }
 
 /** レベルアップSE — 上昇する和音 */

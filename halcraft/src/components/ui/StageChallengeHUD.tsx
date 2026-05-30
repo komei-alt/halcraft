@@ -175,17 +175,33 @@ export function StageChallengeHUD() {
             lineHeight: '14px',
             fontWeight: 900,
             display: 'flex',
-            justifyContent: 'space-between',
-            gap: 8,
+            flexDirection: 'column',
+            gap: 2,
             animation: 'masteryPulse 0.42s ease-out',
           }}
         >
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {recentCompletion.icon} {recentCompletion.title} 達成
-          </span>
-          <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
-            {recentCompletion.completedCount}/{recentCompletion.totalCount}
-          </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {recentCompletion.icon} {recentCompletion.title} 達成
+            </span>
+            <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+              {recentCompletion.completedCount}/{recentCompletion.totalCount}
+            </span>
+          </div>
+          {recentCompletion.rewardLabel && (
+            <div
+              style={{
+                color: recentCompletion.rewardAccent ?? '#fff2a6',
+                fontSize: isTouch ? 9 : 10,
+                lineHeight: '12px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              報酬 {recentCompletion.rewardLabel}
+            </div>
+          )}
         </div>
       )}
     </div>
