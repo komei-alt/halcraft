@@ -21,6 +21,7 @@ import {
 } from '../../types/stageBuildStyles';
 import { formatStageRunBonusLabel, getStageRunBonus } from '../../types/stageRunBonuses';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
+import { getStageMasterySummary } from '../../types/stageMastery';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -127,6 +128,12 @@ export function StageResultOverlay() {
   const nextRunBonus = getStageRunBonus(stage.id, medal);
   const targetCount = stage.rules.objective.targetCount;
   const buildBest = buildBestByStage[stage.id];
+  const mastery = getStageMasterySummary({
+    stage,
+    completedCount: completedIds.length,
+    challengeCount: challenges.length,
+    buildScore: buildBest?.score ?? buildScore,
+  });
   const objectiveValue = targetCount
     ? `${Math.min(enemiesDefeated, targetCount)}/${targetCount}`
     : buildStyle
@@ -264,6 +271,89 @@ export function StageResultOverlay() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div
+          style={{
+            marginBottom: 14,
+            padding: '10px 11px',
+            borderRadius: 6,
+            background: `${mastery.accent}1f`,
+            border: `1px solid ${mastery.accent}55`,
+            boxShadow: `0 0 18px ${mastery.glow}, inset 0 0 16px ${mastery.glow}`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: mastery.accent,
+                  fontSize: isCompact ? 10 : 11,
+                  fontWeight: 950,
+                }}
+              >
+                マップ熟練: {mastery.rankLabel}
+              </div>
+              <div
+                style={{
+                  color: '#fff',
+                  fontSize: isCompact ? 15 : 17,
+                  fontWeight: 950,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {mastery.title}
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '0 0 auto',
+                color: mastery.accent,
+                fontSize: isCompact ? 18 : 22,
+                fontWeight: 950,
+                fontFamily: 'monospace',
+              }}
+            >
+              {mastery.score}%
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              height: 6,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.13)',
+            }}
+          >
+            <div
+              style={{
+                width: `${mastery.score}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${mastery.accent}, ${stage.color})`,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 7,
+              color: 'rgba(255,255,255,0.74)',
+              fontSize: isCompact ? 11 : 12,
+              lineHeight: '16px',
+              fontWeight: 850,
+            }}
+          >
+            次: {mastery.nextLabel} / チャレンジ {mastery.challengeScore}pt
+            {stage.category === 'build' ? ` / 作品 ${mastery.buildScore}pt` : ''}
+          </div>
         </div>
 
         {bossEncounter && (

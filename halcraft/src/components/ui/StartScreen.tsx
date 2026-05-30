@@ -22,6 +22,10 @@ import { getStageEvent } from '../../types/stageEvents';
 import { formatStageBossReward, getStageBossEncounter } from '../../types/stageBossEncounters';
 import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
 import {
+  getStageMasterySummary,
+  type StageMasterySummary,
+} from '../../types/stageMastery';
+import {
   formatStageRunBonusLabel,
   getStageOpeningItemLabel,
   getStageRunBonus,
@@ -32,6 +36,7 @@ import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCo
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
 
@@ -200,6 +205,7 @@ function getStageBriefingSections(
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
+  mastery: StageMasterySummary,
   compact: boolean,
 ): StageBriefingSection[] {
   const blockPreview = getStarterBlockPreview(stage, compact ? 3 : 4)
@@ -368,6 +374,16 @@ function getStageBriefingSections(
     });
   }
 
+  sections.push({
+    title: 'マップ熟練',
+    value: `${mastery.rankLabel} ${mastery.score}/100`,
+    details: [
+      mastery.title,
+      mastery.nextLabel,
+    ],
+    accent: mastery.accent,
+  });
+
   sections.push(
     {
       title: stage.rules.enemyTuning ? '敵とやり込み' : 'やり込み',
@@ -392,6 +408,7 @@ export function StartScreen() {
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
   const bestByStage = useStageChallengeStore((s) => s.bestByStage);
+  const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
 
   const [name, setName] = useState(() => {
     try { return localStorage.getItem(PLAYER_NAME_KEY) || ''; } catch { return ''; }
@@ -458,6 +475,35 @@ export function StartScreen() {
   const activeCompletedCount = bestByStage[activeStage.id]?.completedCount ?? 0;
   const activeMedal = getStageChallengeMedal(activeCompletedCount, activeChallengeCount);
   const activeMedalLabel = getStageChallengeMedalLabel(activeMedal);
+  const stageMasteries = useMemo<Record<string, StageMasterySummary>>(
+    () => Object.fromEntries(STAGES.map((stage) => {
+      const challenges = getStageChallenges(stage.id);
+      const best = bestByStage[stage.id];
+      const buildBest = buildBestByStage[stage.id];
+      return [
+        stage.id,
+        getStageMasterySummary({
+          stage,
+          completedCount: best?.completedCount ?? 0,
+          challengeCount: challenges.length,
+          buildScore: buildBest?.score ?? 0,
+        }),
+      ];
+    })),
+    [bestByStage, buildBestByStage],
+  );
+  const activeMastery = stageMasteries[activeStage.id]
+    ?? getStageMasterySummary({
+      stage: activeStage,
+      completedCount: activeCompletedCount,
+      challengeCount: activeChallengeCount,
+      buildScore: buildBestByStage[activeStage.id]?.score ?? 0,
+    });
+  const categoryMasteries = filteredStages.map((stage) => stageMasteries[stage.id]).filter(Boolean);
+  const categoryAverageMastery = categoryMasteries.length > 0
+    ? Math.round(categoryMasteries.reduce((sum, mastery) => sum + mastery.score, 0) / categoryMasteries.length)
+    : 0;
+  const categoryMasteredCount = categoryMasteries.filter((mastery) => mastery.mastered).length;
   const activeRunBonus = useMemo(
     () => getStageRunBonus(activeStage.id, activeMedal),
     [activeStage.id, activeMedal],
@@ -472,6 +518,7 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
+      activeMastery,
       compactLayout,
     ),
     [
@@ -483,6 +530,7 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
+      activeMastery,
       compactLayout,
     ],
   );
@@ -712,6 +760,25 @@ export function StartScreen() {
             maxWidth: isTouch ? 340 : 820,
           }}
         >
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: isTouch ? 9 : 10,
+              fontWeight: 900,
+              marginBottom: 2,
+            }}
+          >
+            <span style={{ color: selectedCategory === 'build' ? '#9bdcff' : '#ffb36d' }}>
+              {selectedCategory === 'build' ? '建築' : '戦争'}熟練 {categoryAverageMastery}/100
+            </span>
+            <span>MASTER {categoryMasteredCount}/{filteredStages.length}</span>
+            <span>選んだマップ: {activeMastery.rankLabel}</span>
+          </div>
           {filteredStages.map((stage) => {
             const isSelected = activeStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
@@ -721,6 +788,13 @@ export function StartScreen() {
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
             const runBonus = getStageRunBonus(stage.id, medal);
+            const mastery = stageMasteries[stage.id]
+              ?? getStageMasterySummary({
+                stage,
+                completedCount,
+                challengeCount,
+                buildScore: buildBestByStage[stage.id]?.score ?? 0,
+              });
             return (
               <div
                 key={stage.id}
@@ -818,6 +892,45 @@ export function StartScreen() {
                 <div
                   style={{
                     width: '100%',
+                    marginTop: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 5,
+                      color: mastery.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 950,
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    <span>熟練</span>
+                    <span>{mastery.rankLabel} {mastery.score}%</span>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 3,
+                      height: 4,
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      background: 'rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${mastery.score}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background: `linear-gradient(90deg, ${mastery.accent}, ${stage.color})`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <div
+                  style={{
+                    width: '100%',
                     display: 'flex',
                     justifyContent: 'center',
                     gap: 5,
@@ -892,17 +1005,43 @@ export function StartScreen() {
             <div
               style={{
                 flexShrink: 0,
-                padding: isTouch ? '4px 6px' : '5px 8px',
-                borderRadius: 6,
-                border: `1px solid ${activeMedal === 'gold' ? 'rgba(255,230,128,0.75)' : 'rgba(255,255,255,0.2)'}`,
-                color: activeMedal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.72)',
-                background: activeMedal === 'gold' ? 'rgba(255,200,60,0.14)' : 'rgba(255,255,255,0.08)',
-                fontSize: isTouch ? 8 : 10,
-                fontWeight: 900,
-                fontFamily: 'monospace',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                alignItems: 'stretch',
               }}
             >
-              {activeMedalLabel}
+              <div
+                style={{
+                  padding: isTouch ? '4px 6px' : '5px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${activeMastery.mastered ? 'rgba(166,255,207,0.75)' : 'rgba(255,255,255,0.2)'}`,
+                  color: activeMastery.accent,
+                  background: activeMastery.mastered ? 'rgba(90,220,150,0.14)' : 'rgba(255,255,255,0.08)',
+                  fontSize: isTouch ? 8 : 10,
+                  fontWeight: 900,
+                  fontFamily: 'monospace',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                熟練 {activeMastery.score}%
+              </div>
+              <div
+                style={{
+                  padding: isTouch ? '4px 6px' : '5px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${activeMedal === 'gold' ? 'rgba(255,230,128,0.75)' : 'rgba(255,255,255,0.2)'}`,
+                  color: activeMedal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.72)',
+                  background: activeMedal === 'gold' ? 'rgba(255,200,60,0.14)' : 'rgba(255,255,255,0.08)',
+                  fontSize: isTouch ? 8 : 10,
+                  fontWeight: 900,
+                  fontFamily: 'monospace',
+                  textAlign: 'center',
+                }}
+              >
+                {activeMedalLabel}
+              </div>
             </div>
           </div>
 
@@ -1008,7 +1147,7 @@ export function StartScreen() {
               placeholder="ハル"
               maxLength={8}
               autoComplete="off"
-              autoFocus={!isTouch}
+              autoFocus={!isTouch && !showUpdateLog}
               style={{
                 width: isTouch ? 180 : 240,
                 padding: isTouch ? '10px 14px' : '12px 16px',
