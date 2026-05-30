@@ -22,6 +22,11 @@ export interface StageChallengeBest {
   completedCount: number;
   completedIds: string[];
   medal: StageChallengeMedal;
+  clearCount?: number;
+  bestClearSeconds?: number;
+  bestModeFlowRank?: number;
+  bestModeActivations?: number;
+  bestStreak?: number;
   updatedAt: number;
 }
 
@@ -42,6 +47,13 @@ interface BlockBreakOptions {
   isExplosive?: boolean;
 }
 
+interface StageClearRecordInput {
+  elapsedSeconds: number;
+  modeFlowRank: number;
+  modeActivations: number;
+  bestStreak: number;
+}
+
 interface StageChallengeState {
   currentStageId: string | null;
   stats: StageChallengeStats;
@@ -55,6 +67,7 @@ interface StageChallengeState {
   recordEnemyDefeat: (mobType: MobType) => void;
   recordWeaponHit: (item: EquippedItem, amount?: number) => void;
   recordDetonation: (amount?: number) => void;
+  recordStageClear: (record: StageClearRecordInput) => void;
   clearRecentCompletion: () => void;
   dismissStageResult: () => void;
 }
@@ -75,9 +88,20 @@ function createBest(completedIds: string[], totalCount: number): StageChallengeB
   const medal = getStageChallengeMedal(completedIds.length, totalCount);
   return {
     completedCount: completedIds.length,
-    completedIds,
+    completedIds: [...completedIds],
     medal,
     updatedAt: Date.now(),
+  };
+}
+
+function withChallengeBest(
+  currentBest: StageChallengeBest | undefined,
+  completedIds: string[],
+  totalCount: number,
+): StageChallengeBest {
+  return {
+    ...currentBest,
+    ...createBest(completedIds, totalCount),
   };
 }
 
@@ -122,7 +146,11 @@ export const useStageChallengeStore = create<StageChallengeState>()(
         const nextBestByStage = { ...state.bestByStage };
 
         if (!currentBest || nextCompletedIds.length > currentBest.completedCount) {
-          nextBestByStage[state.currentStageId] = createBest(nextCompletedIds, challenges.length);
+          nextBestByStage[state.currentStageId] = withChallengeBest(
+            currentBest,
+            nextCompletedIds,
+            challenges.length,
+          );
         }
 
         set({
@@ -203,6 +231,38 @@ export const useStageChallengeStore = create<StageChallengeState>()(
             ...stats,
             detonations: stats.detonations + delta,
           }));
+        },
+
+        recordStageClear: (record) => {
+          const state = get();
+          const stageId = state.currentStageId;
+          if (!stageId) return;
+
+          const challenges = getStageChallenges(stageId);
+          const currentBest = state.bestByStage[stageId];
+          const challengeBest = !currentBest || state.completedIds.length > currentBest.completedCount
+            ? withChallengeBest(currentBest, state.completedIds, challenges.length)
+            : currentBest;
+          const elapsedSeconds = Math.max(0, Math.floor(record.elapsedSeconds));
+          const bestClearSeconds = typeof currentBest?.bestClearSeconds === 'number'
+            ? Math.min(currentBest.bestClearSeconds, elapsedSeconds)
+            : elapsedSeconds;
+          const nextBest: StageChallengeBest = {
+            ...challengeBest,
+            clearCount: (currentBest?.clearCount ?? 0) + 1,
+            bestClearSeconds,
+            bestModeFlowRank: Math.max(currentBest?.bestModeFlowRank ?? 0, Math.floor(record.modeFlowRank)),
+            bestModeActivations: Math.max(currentBest?.bestModeActivations ?? 0, Math.floor(record.modeActivations)),
+            bestStreak: Math.max(currentBest?.bestStreak ?? 0, Math.floor(record.bestStreak)),
+            updatedAt: Date.now(),
+          };
+
+          set({
+            bestByStage: {
+              ...state.bestByStage,
+              [stageId]: nextBest,
+            },
+          });
         },
 
         clearRecentCompletion: () => set({ recentCompletion: null }),

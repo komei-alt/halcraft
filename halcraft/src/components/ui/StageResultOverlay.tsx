@@ -1,7 +1,7 @@
 // ステージ結果画面
 // ステージを遊び切った瞬間に評価・次アクション・リプレイ導線をまとめて出す
 
-import { useCallback, useEffect, useMemo, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
@@ -48,6 +48,7 @@ export function StageResultOverlay() {
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const enemiesDefeated = useGameStore((s) => s.enemiesDefeated);
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
+  const runId = useGameStore((s) => s.runId);
   const completeStage = useGameStore((s) => s.completeStage);
   const continueAfterStageClear = useGameStore((s) => s.continueAfterStageClear);
   const startGame = useGameStore((s) => s.startGame);
@@ -55,7 +56,9 @@ export function StageResultOverlay() {
   const leave = useMultiplayerStore((s) => s.leave);
   const stats = useStageChallengeStore((s) => s.stats);
   const completedIds = useStageChallengeStore((s) => s.completedIds);
+  const bestByStage = useStageChallengeStore((s) => s.bestByStage);
   const resultDismissed = useStageChallengeStore((s) => s.resultDismissed);
+  const recordStageClear = useStageChallengeStore((s) => s.recordStageClear);
   const dismissStageResult = useStageChallengeStore((s) => s.dismissStageResult);
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
@@ -64,6 +67,7 @@ export function StageResultOverlay() {
   const modeActivations = useModeFlowStore((s) => s.activationCount);
   const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
+  const recordedClearRunRef = useRef<number | null>(null);
   const isTouch = isTouchDevice();
   const isCompact = isTouch || window.innerWidth <= 560;
 
@@ -82,9 +86,29 @@ export function StageResultOverlay() {
   useEffect(() => {
     if (phase !== 'playing' || !stageCleared || resultDismissed) return;
     document.exitPointerLock?.();
+    if (recordedClearRunRef.current !== runId) {
+      recordStageClear({
+        elapsedSeconds: stageElapsedSeconds,
+        modeFlowRank,
+        modeActivations,
+        bestStreak: modeBestStreak,
+      });
+      recordedClearRunRef.current = runId;
+    }
     completeStage();
     playLevelUpSound();
-  }, [completeStage, phase, resultDismissed, stageCleared]);
+  }, [
+    completeStage,
+    modeActivations,
+    modeBestStreak,
+    modeFlowRank,
+    phase,
+    recordStageClear,
+    resultDismissed,
+    runId,
+    stageCleared,
+    stageElapsedSeconds,
+  ]);
 
   const handleContinue = useCallback(() => {
     dismissStageResult();
@@ -127,6 +151,7 @@ export function StageResultOverlay() {
       : '別のマップでも作品を増やせる';
   const nextRunBonus = getStageRunBonus(stage.id, medal);
   const targetCount = stage.rules.objective.targetCount;
+  const runBest = bestByStage[stage.id];
   const buildBest = buildBestByStage[stage.id];
   const mastery = getStageMasterySummary({
     stage,
@@ -150,6 +175,15 @@ export function StageResultOverlay() {
         ['ボス', stats.bossDefeated > 0 ? '撃破' : stage.category === 'war' ? '未撃破' : 'なし'],
         ['時間', formatElapsed(stageElapsedSeconds)],
       ];
+  const bestClearSeconds = runBest?.bestClearSeconds ?? stageElapsedSeconds;
+  const bestModeRank = Math.max(runBest?.bestModeFlowRank ?? 0, modeFlowRank);
+  const bestModeActivationCount = Math.max(runBest?.bestModeActivations ?? 0, modeActivations);
+  const bestModeStreak = Math.max(runBest?.bestStreak ?? 0, modeBestStreak);
+  const recordDetail = modeRule
+    ? modeRule.category === 'war'
+      ? `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 連続 x${bestModeStreak}`
+      : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt`
+    : 'このマップのクリア記録を保存中';
 
   return (
     <div
@@ -271,6 +305,103 @@ export function StageResultOverlay() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div
+          style={{
+            marginBottom: 14,
+            padding: '10px 11px',
+            borderRadius: 6,
+            background: 'rgba(168, 255, 205, 0.10)',
+            border: '1px solid rgba(168, 255, 205, 0.34)',
+            boxShadow: 'inset 0 0 18px rgba(168,255,205,0.10)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: 'rgba(168,255,205,0.95)',
+                  fontSize: isCompact ? 10 : 11,
+                  fontWeight: 950,
+                }}
+              >
+                ラン記録
+              </div>
+              <div
+                style={{
+                  color: '#fff',
+                  fontSize: isCompact ? 14 : 16,
+                  fontWeight: 950,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                このマップのBESTを更新できる
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '0 0 auto',
+                color: 'rgba(168,255,205,0.95)',
+                fontSize: isCompact ? 12 : 13,
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                textAlign: 'right',
+              }}
+            >
+              {runBest?.clearCount ?? 1}回 CLEAR
+            </div>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: 7,
+            }}
+          >
+            {[
+              ['今回', formatElapsed(stageElapsedSeconds)],
+              ['BEST', formatElapsed(bestClearSeconds)],
+              ['差', bestClearSeconds >= stageElapsedSeconds ? 'NEW' : `あと${formatElapsed(stageElapsedSeconds - bestClearSeconds)}`],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  minWidth: 0,
+                  padding: '7px 8px',
+                  borderRadius: 5,
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.09)',
+                }}
+              >
+                <div style={{ color: 'rgba(255,255,255,0.52)', fontSize: 9, fontWeight: 850 }}>
+                  {label}
+                </div>
+                <div style={{ color: '#fff', fontSize: isCompact ? 13 : 15, fontWeight: 950, marginTop: 2 }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
+              marginTop: 7,
+              color: 'rgba(255,255,255,0.74)',
+              fontSize: isCompact ? 11 : 12,
+              lineHeight: '16px',
+              fontWeight: 850,
+            }}
+          >
+            最高: {recordDetail}
+          </div>
         </div>
 
         <div
@@ -657,9 +788,17 @@ export function StageResultOverlay() {
 
         <div
           style={{
+            position: 'sticky',
+            bottom: -1,
+            zIndex: 2,
             display: 'grid',
             gridTemplateColumns: isCompact ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
             gap: 8,
+            margin: '0 -2px -2px',
+            padding: '9px 2px 2px',
+            background: 'linear-gradient(to top, rgba(7, 10, 15, 0.97), rgba(7, 10, 15, 0.84) 72%, rgba(7, 10, 15, 0))',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
           }}
         >
           <button

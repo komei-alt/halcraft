@@ -35,7 +35,8 @@ import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../..
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
-import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
+import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -126,6 +127,32 @@ function getShortBlockName(blockId: BlockId): string {
     .replace('電気の', '電気');
 }
 
+function formatRunTime(seconds?: number): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '未記録';
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${rest.toString().padStart(2, '0')}`;
+}
+
+function getStageRunRecordDetails(
+  stage: StageDefinition,
+  best: StageChallengeBest | undefined,
+  compact: boolean,
+): string[] {
+  if (!best?.clearCount) return ['クリアするとBESTが残る'];
+
+  const rankLabel = getModeFlowRankLabel(stage.category, best.bestModeFlowRank ?? 0);
+  const activationLabel = `発動最多 ${best.bestModeActivations ?? 0}回`;
+  const streakLabel = stage.category === 'war'
+    ? `連続 x${best.bestStreak ?? 0}`
+    : 'テーマ行動で更新';
+
+  return compact
+    ? [rankLabel, activationLabel]
+    : [rankLabel, activationLabel, streakLabel];
+}
+
 function getStarterBlockPreview(stage: StageDefinition, limit: number): StarterBlockPreview[] {
   return Object.entries(stage.rules.starterKit.blocks)
     .map(([rawBlockId, rawCount]) => ({
@@ -206,6 +233,7 @@ function getStageBriefingSections(
   completedCount: number,
   challengeCount: number,
   mastery: StageMasterySummary,
+  best: StageChallengeBest | undefined,
   compact: boolean,
 ): StageBriefingSection[] {
   const blockPreview = getStarterBlockPreview(stage, compact ? 3 : 4)
@@ -384,6 +412,15 @@ function getStageBriefingSections(
     accent: mastery.accent,
   });
 
+  if (best?.clearCount) {
+    sections.push({
+      title: 'ベスト記録',
+      value: `BEST ${formatRunTime(best.bestClearSeconds)} / ${best.clearCount}回`,
+      details: getStageRunRecordDetails(stage, best, compact),
+      accent: 'rgba(168, 255, 205, 0.95)',
+    });
+  }
+
   sections.push(
     {
       title: stage.rules.enemyTuning ? '敵とやり込み' : 'やり込み',
@@ -473,6 +510,7 @@ export function StartScreen() {
   const activeChallenges = useMemo(() => getStageChallenges(activeStage.id), [activeStage.id]);
   const activeChallengeCount = activeChallenges.length;
   const activeCompletedCount = bestByStage[activeStage.id]?.completedCount ?? 0;
+  const activeRunBest = bestByStage[activeStage.id];
   const activeMedal = getStageChallengeMedal(activeCompletedCount, activeChallengeCount);
   const activeMedalLabel = getStageChallengeMedalLabel(activeMedal);
   const stageMasteries = useMemo<Record<string, StageMasterySummary>>(
@@ -519,6 +557,7 @@ export function StartScreen() {
       activeCompletedCount,
       activeChallengeCount,
       activeMastery,
+      activeRunBest,
       compactLayout,
     ),
     [
@@ -531,6 +570,7 @@ export function StartScreen() {
       activeCompletedCount,
       activeChallengeCount,
       activeMastery,
+      activeRunBest,
       compactLayout,
     ],
   );
@@ -783,7 +823,8 @@ export function StartScreen() {
             const isSelected = activeStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
             const challengeCount = getStageChallenges(stage.id).length;
-            const completedCount = bestByStage[stage.id]?.completedCount ?? 0;
+            const best = bestByStage[stage.id];
+            const completedCount = best?.completedCount ?? 0;
             const medal = getStageChallengeMedal(completedCount, challengeCount);
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
@@ -801,7 +842,7 @@ export function StartScreen() {
                 onClick={() => setSelectedStageId(stage.id)}
                 style={{
                   width: isTouch ? 154 : 188,
-                  minHeight: isTouch ? 122 : 138,
+                  minHeight: isTouch ? 132 : 150,
                   padding: isTouch ? '8px 9px' : '10px 12px',
                   background: isSelected ? `${stage.color}55` : 'rgba(0,0,0,0.5)',
                   backdropFilter: 'blur(8px)',
@@ -872,6 +913,22 @@ export function StartScreen() {
                     }}
                   >
                     {condition.icon} {condition.triggerLabel}→{condition.effect.label}
+                  </div>
+                )}
+                {best?.clearCount && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: 'rgba(168,255,205,0.92)',
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 950,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    BEST {formatRunTime(best.bestClearSeconds)} / {best.clearCount}回
                   </div>
                 )}
                 {runBonus && (
