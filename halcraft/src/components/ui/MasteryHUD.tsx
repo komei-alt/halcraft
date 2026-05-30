@@ -3,24 +3,129 @@
 
 import { useEffect } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { usePlayerStore } from '../../stores/usePlayerStore';
+import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
+import { useInventoryStore } from '../../stores/useInventoryStore';
 import {
   getMasteryProgress,
   getMasteryTitle,
   MASTERY_DEFS,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
+import { BLOCK_DEFS, HOTBAR_BLOCKS, type BlockId } from '../../types/blocks';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
-import { formatStageCombatBonus, getStageCombatStyleForItem } from '../../types/stageCombatStyles';
+import {
+  formatStageCombatBonus,
+  getStageCombatStyleForItem,
+  type StageCombatStyle,
+} from '../../types/stageCombatStyles';
+import { getBlockUseHint } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
+
+interface ItemActionStatus {
+  label: string;
+  detail: string;
+  meterLabel: string;
+  meterText: string;
+  meterRatio: number;
+  meterColor: string;
+}
+
+interface ItemActionStatusOptions {
+  equippedItem: EquippedItem;
+  selectedBlock: BlockId;
+  selectedBlockName: string;
+  selectedCount: number;
+  currentStageId: string | null;
+  isPlaceMode: boolean;
+  rocketCharge: number;
+  rocketCooldown: number;
+  attackCharge: number;
+  stageStyle: StageCombatStyle | null;
+}
+
+function clampRatio(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function formatCooldown(seconds: number): string {
+  if (seconds <= 0) return '0s';
+  return seconds < 1 ? `${seconds.toFixed(1)}s` : `${Math.ceil(seconds)}s`;
+}
+
+function getItemActionStatus({
+  equippedItem,
+  selectedBlock,
+  selectedBlockName,
+  selectedCount,
+  currentStageId,
+  isPlaceMode,
+  rocketCharge,
+  rocketCooldown,
+  attackCharge,
+  stageStyle,
+}: ItemActionStatusOptions): ItemActionStatus {
+  if (equippedItem === 'builder') {
+    const hasStock = selectedCount > 0;
+    return {
+      label: isPlaceMode ? '設置準備' : '建築操作',
+      detail: hasStock
+        ? `${selectedBlockName}: ${getBlockUseHint(selectedBlock, currentStageId)}`
+        : `${selectedBlockName}: 素材なし / クラフトで補充`,
+      meterLabel: '素材',
+      meterText: `x${selectedCount}`,
+      meterRatio: hasStock ? clampRatio(selectedCount / 24) : 0,
+      meterColor: hasStock ? '#9bdcff' : '#ff9a9a',
+    };
+  }
+
+  if (equippedItem === 'rocket_launcher') {
+    const ready = rocketCharge >= 1;
+    return {
+      label: ready ? '爆風準備OK' : '再装填中',
+      detail: stageStyle ? formatStageCombatBonus(stageStyle) : '群れや大型敵に合わせて撃つ',
+      meterLabel: 'RKT',
+      meterText: ready ? 'READY' : formatCooldown(rocketCooldown),
+      meterRatio: clampRatio(rocketCharge),
+      meterColor: ready ? '#ffc06d' : '#ff7a4f',
+    };
+  }
+
+  if (equippedItem === 'machine_gun') {
+    return {
+      label: stageStyle ? 'マップ相性発動' : '制圧射撃',
+      detail: stageStyle ? formatStageCombatBonus(stageStyle) : '長押しで足止め / 右クリックでスコープ',
+      meterLabel: 'BURST',
+      meterText: stageStyle ? 'BOOST' : 'READY',
+      meterRatio: stageStyle ? 1 : 0.76,
+      meterColor: '#ffe28a',
+    };
+  }
+
+  const ready = attackCharge >= 1;
+  return {
+    label: stageStyle ? 'コンボ相性発動' : ready ? '斬撃準備OK' : '斬撃リカバー',
+    detail: stageStyle ? formatStageCombatBonus(stageStyle) : '近距離で5段コンボをつなぐ',
+    meterLabel: 'COMBO',
+    meterText: ready ? 'READY' : `${Math.round(clampRatio(attackCharge) * 100)}%`,
+    meterRatio: clampRatio(attackCharge),
+    meterColor: '#c8b0ff',
+  };
+}
 
 export function MasteryHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
+  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const isPlaceMode = usePlayerStore((s) => s.isPlaceMode);
+  const rocketCharge = usePlayerStore((s) => s.rocketCharge);
+  const rocketCooldown = usePlayerStore((s) => s.rocketCooldown);
+  const attackCharge = usePlayerStore((s) => s.attackCharge);
   const mastery = useMasteryStore((s) => s.items[equippedItem]);
   const recentEvent = useMasteryStore((s) => s.recentEvent);
   const clearRecentEvent = useMasteryStore((s) => s.clearRecentEvent);
+  const items = useInventoryStore((s) => s.items);
   const isTouch = isTouchDevice();
 
   useEffect(() => {
@@ -43,18 +148,34 @@ export function MasteryHUD() {
   const statLabel = equippedItem === 'builder'
     ? `${mastery.blocksChanged} ブロック`
     : `${mastery.hits} HIT / ${mastery.defeats} DOWN`;
+  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? HOTBAR_BLOCKS[0];
+  const selectedDef = BLOCK_DEFS[selectedBlock];
+  const selectedCount = items[selectedBlock] ?? 0;
+  const actionStatus = getItemActionStatus({
+    equippedItem,
+    selectedBlock,
+    selectedBlockName: selectedDef?.name ?? 'ブロック',
+    selectedCount,
+    currentStageId,
+    isPlaceMode,
+    rocketCharge,
+    rocketCooldown,
+    attackCharge,
+    stageStyle,
+  });
 
   return (
     <div
       id="mastery-hud"
       style={{
         position: 'fixed',
-        left: isTouch ? 14 : 16,
-        top: isTouch ? 190 : 'auto',
-        bottom: isTouch ? 'auto' : 116,
+        left: isTouch ? 'calc(50% + 43px)' : 16,
+        top: 'auto',
+        bottom: isTouch ? 'calc(132px + env(safe-area-inset-bottom))' : 116,
+        transform: isTouch ? 'translateX(-50%)' : 'none',
         zIndex: 101,
-        width: isTouch ? 'min(238px, calc(100vw - 28px))' : 252,
-        padding: isTouch ? '9px 10px' : '10px 12px',
+        width: isTouch ? 'max(136px, min(166px, calc(100vw - 224px)))' : 252,
+        padding: isTouch ? '7px 8px' : '10px 12px',
         borderRadius: 8,
         border: `1px solid ${def.accent}66`,
         background: 'rgba(9, 12, 18, 0.58)',
@@ -115,6 +236,7 @@ export function MasteryHUD() {
         <div
           style={{
             minWidth: 46,
+            display: isTouch ? 'none' : 'block',
             textAlign: 'right',
             color: 'rgba(255,255,255,0.74)',
             fontSize: isTouch ? 9 : 10,
@@ -170,8 +292,89 @@ export function MasteryHUD() {
 
       <div
         style={{
+          marginTop: 7,
+          padding: isTouch ? '6px 7px' : '7px 8px',
+          borderRadius: 6,
+          background: `${actionStatus.meterColor}14`,
+          border: `1px solid ${actionStatus.meterColor}42`,
+          boxShadow: `inset 0 0 12px ${actionStatus.meterColor}10`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              color: 'rgba(255,255,255,0.9)',
+              fontSize: isTouch ? 10 : 11,
+              lineHeight: '13px',
+              fontWeight: 950,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {actionStatus.label}
+          </span>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: actionStatus.meterColor,
+              fontSize: isTouch ? 9 : 10,
+              lineHeight: '12px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+            }}
+          >
+            {actionStatus.meterLabel} {actionStatus.meterText}
+          </span>
+        </div>
+        <div
+          style={{
+            marginTop: 5,
+            height: 4,
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.12)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(actionStatus.meterRatio * 100)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${actionStatus.meterColor}, #ffffff)`,
+              boxShadow: `0 0 9px ${actionStatus.meterColor}55`,
+              transition: 'width 0.2s ease',
+            }}
+          />
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            color: 'rgba(255,255,255,0.54)',
+            fontSize: isTouch ? 9 : 10,
+            lineHeight: '12px',
+            fontWeight: 750,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {actionStatus.detail}
+        </div>
+      </div>
+
+      <div
+        style={{
           marginTop: 5,
-          display: 'flex',
+          display: isTouch ? 'none' : 'flex',
           flexDirection: 'column',
           gap: 2,
           color: def.accent,

@@ -10,7 +10,7 @@ import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getStageCombatModifier } from '../types/stageCombatStyles';
-import { playToolBreakSound } from '../utils/sounds';
+import { playItemSwitchSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
 
 /** localStorage のキー（スキン保存用） */
@@ -258,10 +258,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setEquippedItem: (item) => {
+    const current = get().equippedItem;
+    if (current === item) return;
     set({ equippedItem: item });
+    playItemSwitchSound(item);
   },
 
   cycleEquippedItem: () => {
+    let switchedTo: EquippedItem = get().equippedItem;
     set((state) => {
       const next: Record<EquippedItem, EquippedItem> = {
         builder: 'rocket_launcher',
@@ -269,8 +273,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         machine_gun: 'lightsaber',
         lightsaber: 'builder',
       };
-      return { equippedItem: next[state.equippedItem] };
+      switchedTo = next[state.equippedItem];
+      return { equippedItem: switchedTo };
     });
+    playItemSwitchSound(switchedTo);
   },
 
   assignHotbarSlot: (slot, blockId) => {

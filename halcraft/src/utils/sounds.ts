@@ -1113,6 +1113,71 @@ export function playInventoryEmptySound(): void {
   osc.stop(now + 0.13);
 }
 
+type ItemSwitchSoundKind = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+
+/** 装備切替SE — アイテムごとの役割が耳でも分かる短い合図 */
+export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('itemSwitch', 90)) return;
+  const now = ctx.currentTime;
+  const config: Record<ItemSwitchSoundKind, {
+    notes: number[];
+    wave: OscillatorType;
+    color: 'click' | 'blast' | 'burst' | 'sweep';
+  }> = {
+    builder: { notes: [220, 330], wave: 'square', color: 'click' },
+    rocket_launcher: { notes: [180, 360, 540], wave: 'sawtooth', color: 'blast' },
+    machine_gun: { notes: [520, 660, 520], wave: 'square', color: 'burst' },
+    lightsaber: { notes: [440, 880], wave: 'triangle', color: 'sweep' },
+  };
+  const current = config[kind];
+
+  current.notes.forEach((note, index) => {
+    const t = now + index * 0.035;
+    const osc = ctx.createOscillator();
+    osc.type = current.wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (current.color === 'blast' ? 1.22 : 1.05), t + 0.12);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = current.color === 'blast' ? 'bandpass' : 'lowpass';
+    filter.frequency.setValueAtTime(
+      current.color === 'sweep' ? 1800 : current.color === 'burst' ? 1400 : 850,
+      t,
+    );
+    filter.Q.setValueAtTime(current.color === 'blast' ? 2.1 : 0.8, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(current.color === 'burst' ? 0.034 : 0.05, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  });
+
+  if (current.color === 'blast' || current.color === 'sweep') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = current.color === 'blast' ? 'lowpass' : 'highpass';
+    noiseFilter.frequency.setValueAtTime(current.color === 'blast' ? 420 : 2200, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(current.color === 'blast' ? 0.026 : 0.018, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.16);
+  }
+}
+
 /** ツール破壊SE — 金属が砕ける音 */
 export function playToolBreakSound(): void {
   const ctx = getAudioContext();
