@@ -61,6 +61,7 @@ import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
 import { StageConditionHUD } from './components/ui/StageConditionHUD';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
+import { ProgressCelebration } from './components/ui/ProgressCelebration';
 import { StartScreen } from './components/ui/StartScreen';
 import { PauseScreen } from './components/ui/PauseScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
@@ -283,6 +284,7 @@ export default function App() {
           <StageConditionHUD />
           <StageResultOverlay />
           <MasteryHUD />
+          <ProgressCelebration />
           <DamageOverlay />
           <AttackIndicator />
           <RocketCooldownIndicator />
