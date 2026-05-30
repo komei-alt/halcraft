@@ -363,6 +363,9 @@ export function ControlsGuide() {
 
   if (!showControlsGuide) return null;
 
+  // モバイルはジョイスティックと操作ボタンが画面上に出るため、常時ガイドは重ねない。
+  if (isTouch) return null;
+
   const mySeat = activeVehicle === 'helicopter'
     ? helicopterSeat
     : activeVehicle === 'tank'
