@@ -44,6 +44,7 @@ export interface MasteryEvent {
   xp: number;
   level: number;
   leveledUp: boolean;
+  critical: boolean;
   streak: number;
   createdAt: number;
 }
@@ -251,6 +252,7 @@ export const useMasteryStore = create<MasteryState>()(
           xp: gainedXp,
           level: nextLevel,
           leveledUp,
+          critical: Boolean(options?.critical),
           streak,
           createdAt: now,
         };

@@ -1178,6 +1178,44 @@ export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
   }
 }
 
+type CombatFeedbackSoundKind = 'hit' | 'critical' | 'defeat';
+
+/** 命中確認SE — クロスヘア付近の短いフィードバックと同期する */
+export function playCombatFeedbackSound(kind: CombatFeedbackSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`combatFeedback:${kind}`, kind === 'hit' ? 95 : 180)) return;
+  const now = ctx.currentTime;
+  const notes: Record<CombatFeedbackSoundKind, number[]> = {
+    hit: [740],
+    critical: [660, 990],
+    defeat: [520, 780, 1040],
+  };
+  const wave: OscillatorType = kind === 'hit' ? 'triangle' : 'square';
+
+  notes[kind].forEach((note, index) => {
+    const t = now + index * 0.045;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * 1.08, t + 0.12);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'defeat' ? 1200 : 1700, t);
+    filter.Q.setValueAtTime(kind === 'hit' ? 1.4 : 2.0, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'hit' ? 0.026 : 0.044, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.14);
+  });
+}
+
 /** ツール破壊SE — 金属が砕ける音 */
 export function playToolBreakSound(): void {
   const ctx = getAudioContext();

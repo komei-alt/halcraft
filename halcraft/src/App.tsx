@@ -71,6 +71,7 @@ import { BossEncounterHUD } from './components/ui/BossEncounterHUD';
 import { ModeFlowHUD } from './components/ui/ModeFlowHUD';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
+import { CombatFeedbackHUD } from './components/ui/CombatFeedbackHUD';
 import { ProgressCelebration } from './components/ui/ProgressCelebration';
 import { StartScreen } from './components/ui/StartScreen';
 import { PauseScreen } from './components/ui/PauseScreen';
@@ -304,6 +305,7 @@ export default function App() {
           <StageChallengeRewardSystem />
           <StageResultOverlay />
           <MasteryHUD />
+          <CombatFeedbackHUD />
           <ProgressCelebration />
           <DamageOverlay />
           <AttackIndicator />

@@ -71,6 +71,28 @@
   }
 }
 
+@keyframes combatFeedbackPop {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.9);
+  }
+
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1.04);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
 #hotbar::-webkit-scrollbar {
   display: none;
 }
