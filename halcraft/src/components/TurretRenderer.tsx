@@ -152,6 +152,8 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
   const [projectiles, setProjectiles] = useState<TurretProjectile[]>([]);
   const [impacts, setImpacts] = useState<TurretImpact[]>([]);
+  const projectilesRef = useRef<TurretProjectile[]>([]);
+  const impactsRef = useRef<TurretImpact[]>([]);
 
   // マテリアル
   const barrelMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -210,14 +212,17 @@ function SingleTurret({ position }: { position: TurretPos }) {
         size: 0.04 + Math.random() * 0.08,
       });
     }
-    setImpacts((prev) => [...prev, {
+    const nextImpact: TurretImpact = {
       id: nextTurretProjId++,
       pos: pos.clone(),
       normal: normal.clone(),
       type,
       createdAt: performance.now() / 1000,
       particles,
-    }]);
+    };
+    const nextImpacts = [...impactsRef.current, nextImpact];
+    impactsRef.current = nextImpacts;
+    setImpacts(nextImpacts);
 
     // 着弾音再生
     playBulletImpactSound(pos.distanceTo(camera.position), type);
@@ -327,14 +332,17 @@ function SingleTurret({ position }: { position: TurretPos }) {
       shootDir.current.normalize();
 
       const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
-      setProjectiles((prev) => [...prev, {
+      const nextProjectile: TurretProjectile = {
         id: nextTurretProjId++,
         pos: muzzleWorld.current.clone(),
         vel,
         createdAt: now,
         prevPos: muzzleWorld.current.clone(),
         dead: false,
-      }]);
+      };
+      const nextProjectiles = [...projectilesRef.current, nextProjectile];
+      projectilesRef.current = nextProjectiles;
+      setProjectiles(nextProjectiles);
 
       // マズルフラッシュ + バレル回転
       flashTimer.current = 0.06;
@@ -354,9 +362,10 @@ function SingleTurret({ position }: { position: TurretPos }) {
     }
 
     // --- 弾丸更新 ---
-    setProjectiles((prev) => {
+    const currentProjectiles = projectilesRef.current;
+    if (currentProjectiles.length > 0) {
       const alive: TurretProjectile[] = [];
-      for (const proj of prev) {
+      for (const proj of currentProjectiles) {
         if (proj.dead) continue;
         const age = now - proj.createdAt;
         if (age > BULLET_MAX_AGE) continue;
@@ -393,15 +402,19 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
         if (!proj.dead) alive.push(proj);
       }
-      return alive;
-    });
+
+      if (alive.length !== currentProjectiles.length) {
+        projectilesRef.current = alive;
+        setProjectiles(alive);
+      }
+    }
 
     // --- インパクトエフェクト期限切れ除去 ---
-    setImpacts((prev) => {
-      const filtered = prev.filter((e) => now - e.createdAt < IMPACT_LIFETIME);
-      if (filtered.length === prev.length) return prev;
-      return filtered;
-    });
+    const filteredImpacts = impactsRef.current.filter((e) => now - e.createdAt < IMPACT_LIFETIME);
+    if (filteredImpacts.length !== impactsRef.current.length) {
+      impactsRef.current = filteredImpacts;
+      setImpacts(filteredImpacts);
+    }
   });
 
   return (
