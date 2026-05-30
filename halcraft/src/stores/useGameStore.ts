@@ -18,7 +18,7 @@ import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
 import { resetNoiseForBiome } from '../utils/terrain/noise';
 import { clearHeightCache } from '../utils/terrain/heightmap';
 
-type GamePhase = 'menu' | 'playing' | 'paused' | 'gameover';
+type GamePhase = 'menu' | 'playing' | 'paused' | 'stageclear' | 'gameover';
 
 /** 昼夜サイクルの定数 */
 // 基本サイクル: リアル20分 = ゲーム内1日 (1200秒)
@@ -125,6 +125,12 @@ interface GameState {
 
   /** ボス出現済みにする */
   setBossSpawned: (value: boolean) => void;
+
+  /** ステージクリア画面へ移行 */
+  completeStage: () => void;
+
+  /** ステージクリア後もそのまま遊ぶ */
+  continueAfterStageClear: () => void;
 
   /** クリエイティブ飛行状態を変更 */
   setCreativeFlying: (flying: boolean) => void;
@@ -265,6 +271,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setBossSpawned: (value) => set({ bossSpawned: value }),
+  completeStage: () => {
+    if (get().phase === 'playing') set({ phase: 'stageclear' });
+  },
+  continueAfterStageClear: () => {
+    if (get().phase === 'stageclear') set({ phase: 'playing' });
+  },
 
   setCreativeFlying: (creativeFlying) => set({ creativeFlying }),
 

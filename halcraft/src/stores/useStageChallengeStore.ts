@@ -45,6 +45,7 @@ interface StageChallengeState {
   completedIds: string[];
   bestByStage: Record<string, StageChallengeBest>;
   recentCompletion: StageChallengeCompletion | null;
+  resultDismissed: boolean;
   startRun: (stageId: string | null) => void;
   recordBlockPlace: (blockId: BlockId) => void;
   recordBlockBreak: (blockId: BlockId, options?: BlockBreakOptions) => void;
@@ -52,6 +53,7 @@ interface StageChallengeState {
   recordWeaponHit: (item: EquippedItem, amount?: number) => void;
   recordDetonation: (amount?: number) => void;
   clearRecentCompletion: () => void;
+  dismissStageResult: () => void;
 }
 
 function createEmptyStats(): StageChallengeStats {
@@ -139,6 +141,7 @@ export const useStageChallengeStore = create<StageChallengeState>()(
         completedIds: [],
         bestByStage: {},
         recentCompletion: null,
+        resultDismissed: false,
 
         startRun: (stageId) => {
           set({
@@ -146,6 +149,7 @@ export const useStageChallengeStore = create<StageChallengeState>()(
             stats: createEmptyStats(),
             completedIds: [],
             recentCompletion: null,
+            resultDismissed: false,
           });
         },
 
@@ -196,6 +200,7 @@ export const useStageChallengeStore = create<StageChallengeState>()(
         },
 
         clearRecentCompletion: () => set({ recentCompletion: null }),
+        dismissStageResult: () => set({ resultDismissed: true, recentCompletion: null }),
       };
     },
     {

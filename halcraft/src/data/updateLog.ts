@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'feature', text: 'ステージをクリアすると結果画面が出て、メダルと次の目標が見えるようになったよ！' },
+      { type: 'feature', text: 'クリア後にそのまま続ける、もう一度遊ぶ、タイトルへ戻るを選べるようになったよ' },
       { type: 'feature', text: 'マップごとに3つのチャレンジが出て、達成メダルを集められるようになったよ！' },
       { type: 'feature', text: 'ステージ選択で、そのマップのチャレンジ達成数が見えるようになったよ' },
       { type: 'feature', text: '武器や建築を使いこむと熟練度が上がるようになったよ！' },
