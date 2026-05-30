@@ -23,6 +23,7 @@ import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from '
 import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
 import { WaterRenderer } from './components/WaterRenderer';
+import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
@@ -112,6 +113,7 @@ function GameCanvas() {
     >
       <Suspense fallback={null}>
         <Environment />
+        <StageAtmosphereFX />
         <World />
         <TorchRenderer />
         <BedRenderer />
