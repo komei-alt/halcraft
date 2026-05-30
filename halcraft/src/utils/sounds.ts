@@ -1512,6 +1512,60 @@ export function playStageRewardSound(kind: StageRewardSoundKind): void {
   tick.stop(now + 0.22);
 }
 
+/** モードフロー高ランクSE — 発動を重ねた時だけ一段強い合図を足す */
+export function playModeFlowSurgeSound(kind: StageStartSoundKind, rank: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`modeFlowSurge:${kind}`, 520)) return;
+  const now = ctx.currentTime;
+  const safeRank = Math.max(2, Math.min(3, Math.round(rank)));
+  const notes = kind === 'build'
+    ? [659.25, 783.99, 987.77, 1174.66]
+    : [196, 246.94, 392, 523.25];
+  const wave: OscillatorType = kind === 'build' ? 'triangle' : 'sawtooth';
+
+  notes.forEach((note, index) => {
+    const t = now + index * 0.038;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'build' ? 1.12 : 0.88), t + 0.22);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'build' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'build' ? 3200 : 920, t);
+    filter.Q.setValueAtTime(kind === 'build' ? 0.75 : 2.2, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.028 + safeRank * 0.01, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  });
+
+  if (kind !== 'war') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(1200, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.018 + safeRank * 0.008, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.17);
+}
+
 /** ボス出現SE — 決戦開始を画面外からでも気づける重い合図 */
 export function playBossSpawnSound(): void {
   const ctx = getAudioContext();

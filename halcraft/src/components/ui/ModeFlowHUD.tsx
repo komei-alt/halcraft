@@ -3,8 +3,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { useModeFlowStore } from '../../stores/useModeFlowStore';
-import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
+import {
+  getModeFlowRank,
+  getModeFlowRankLabel,
+  getScaledStageModeReward,
+  useModeFlowStore,
+} from '../../stores/useModeFlowStore';
+import { formatStageModeRewardDetail, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
 import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
@@ -21,6 +26,7 @@ export function ModeFlowHUD() {
   const streak = useModeFlowStore((s) => s.streak);
   const bestStreak = useModeFlowStore((s) => s.bestStreak);
   const streakExpiresAt = useModeFlowStore((s) => s.streakExpiresAt);
+  const flowRank = useModeFlowStore((s) => s.flowRank);
   const activationCount = useModeFlowStore((s) => s.activationCount);
   const recentActivation = useModeFlowStore((s) => s.recentActivation);
   const clearRecentActivation = useModeFlowStore((s) => s.clearRecentActivation);
@@ -46,6 +52,12 @@ export function ModeFlowHUD() {
   const progress = Math.max(0, Math.min(1, meter / rule.threshold));
   const streakRemainingMs = rule.category === 'war' ? Math.max(0, streakExpiresAt - now) : 0;
   const activeTitle = recentActivation?.stageId === stage.id ? recentActivation.title : rule.title;
+  const visibleRank = recentActivation?.stageId === stage.id ? recentActivation.flowRank : flowRank;
+  const nextRank = getModeFlowRank(activationCount + 1) || 1;
+  const previewReward = getScaledStageModeReward(rule, Math.max(visibleRank, nextRank, 1));
+  const rankLabel = visibleRank > 0
+    ? getModeFlowRankLabel(rule.category, visibleRank)
+    : `次${getModeFlowRankLabel(rule.category, nextRank)}`;
   const activeDetail = recentActivation?.stageId === stage.id
     ? recentActivation.detail
     : rule.category === 'build'
@@ -134,9 +146,11 @@ export function ModeFlowHUD() {
             fontWeight: 950,
             fontFamily: 'monospace',
             textAlign: 'right',
+            lineHeight: '14px',
           }}
         >
-          {meterText}
+          <div>{rankLabel}</div>
+          <div>{meterText}</div>
         </div>
       </div>
 
@@ -194,7 +208,7 @@ export function ModeFlowHUD() {
             textOverflow: 'ellipsis',
           }}
         >
-          発動: {formatStageModeReward(rule)}
+          次発動: {getModeFlowRankLabel(rule.category, nextRank)} / {formatStageModeRewardDetail(previewReward)}
         </div>
       )}
     </div>

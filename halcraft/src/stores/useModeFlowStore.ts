@@ -4,24 +4,31 @@
 import { create } from 'zustand';
 import type { BlockId } from '../types/blocks';
 import {
-  formatStageModeReward,
+  formatStageModeRewardDetail,
   getStageModeBuildGain,
   getStageModeEnemyGain,
   getStageModeRule,
+  type StageModeReward,
   type StageModeRule,
 } from '../types/stageModeRules';
-import { playStageRewardSound } from '../utils/sounds';
+import type { StageCategory } from '../types/stages';
+import { playModeFlowSurgeSound, playStageRewardSound } from '../utils/sounds';
 import { useInventoryStore } from './useInventoryStore';
 import type { MobType } from './useMobStore';
 import { usePlayerStore } from './usePlayerStore';
 
+const MODE_FLOW_MAX_RANK = 3;
+
 export interface ModeFlowActivation {
   id: string;
   stageId: string;
+  category: StageCategory;
   icon: string;
   eyebrow: string;
   title: string;
   detail: string;
+  flowRank: number;
+  rankLabel: string;
   accent: string;
   glow: string;
   createdAt: number;
@@ -35,6 +42,7 @@ interface ModeFlowState {
   streak: number;
   bestStreak: number;
   streakExpiresAt: number;
+  flowRank: number;
   activationCount: number;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
@@ -48,30 +56,74 @@ function nowMs(): number {
   return Date.now();
 }
 
-function applyModeReward(rule: StageModeRule): void {
+export function getModeFlowRank(activationCount: number): number {
+  if (activationCount <= 0) return 0;
+  return Math.min(MODE_FLOW_MAX_RANK, 1 + Math.floor(Math.max(0, activationCount - 1) / 2));
+}
+
+export function getModeFlowRankLabel(category: StageCategory, rank: number): string {
+  const safeRank = Math.max(0, Math.min(MODE_FLOW_MAX_RANK, Math.floor(rank)));
+  if (safeRank <= 0) return category === 'build' ? '未着想' : '未点火';
+  const labels: Record<StageCategory, Record<number, string>> = {
+    build: {
+      1: 'ひらめきLv.1',
+      2: 'ひらめきLv.2',
+      3: '大ひらめき',
+    },
+    war: {
+      1: '戦意Lv.1',
+      2: '戦意Lv.2',
+      3: '大戦意',
+    },
+  };
+  return labels[category][safeRank];
+}
+
+function getRewardMultiplier(rank: number): number {
+  if (rank >= 3) return 2;
+  if (rank === 2) return 1.5;
+  return 1;
+}
+
+export function getScaledStageModeReward(rule: StageModeRule, rank: number): StageModeReward {
+  const safeRank = Math.max(1, Math.min(MODE_FLOW_MAX_RANK, Math.floor(rank)));
+  const multiplier = getRewardMultiplier(safeRank);
+  return {
+    blocks: rule.reward.blocks.map((block) => ({
+      blockId: block.blockId,
+      count: Math.max(1, Math.round(block.count * multiplier)),
+    })),
+    heal: rule.reward.heal > 0 ? rule.reward.heal + safeRank - 1 : 0,
+    hunger: rule.reward.hunger > 0 ? rule.reward.hunger + safeRank - 1 : 0,
+    shieldMs: rule.reward.shieldMs > 0 ? rule.reward.shieldMs + (safeRank - 1) * 1200 : 0,
+    rocketReady: rule.reward.rocketReady,
+  };
+}
+
+function applyModeReward(reward: StageModeReward, category: StageCategory): void {
   const inventory = useInventoryStore.getState();
-  for (const block of rule.reward.blocks) {
+  for (const block of reward.blocks) {
     inventory.addItem(block.blockId, block.count);
   }
 
-  if (rule.reward.heal > 0) {
-    usePlayerStore.getState().heal(rule.reward.heal);
+  if (reward.heal > 0) {
+    usePlayerStore.getState().heal(reward.heal);
   }
 
-  if (rule.reward.hunger > 0) {
+  if (reward.hunger > 0) {
     usePlayerStore.setState((state) => ({
-      hunger: Math.min(20, state.hunger + rule.reward.hunger),
-      hungerExhaustion: Math.max(0, state.hungerExhaustion - rule.reward.hunger * 0.28),
+      hunger: Math.min(20, state.hunger + reward.hunger),
+      hungerExhaustion: Math.max(0, state.hungerExhaustion - reward.hunger * 0.28),
     }));
   }
 
-  if (rule.reward.shieldMs > 0) {
+  if (reward.shieldMs > 0) {
     usePlayerStore.setState((state) => ({
-      invincibleUntil: Math.max(state.invincibleUntil, Date.now() + rule.reward.shieldMs),
+      invincibleUntil: Math.max(state.invincibleUntil, Date.now() + reward.shieldMs),
     }));
   }
 
-  if (rule.reward.rocketReady) {
+  if (reward.rocketReady) {
     usePlayerStore.setState({
       rocketCooldown: 0,
       rocketCharge: 1,
@@ -79,28 +131,41 @@ function applyModeReward(rule: StageModeRule): void {
   }
 
   usePlayerStore.setState((state) => ({
-    cameraShake: Math.max(state.cameraShake, rule.category === 'war' ? 0.36 : 0.2),
+    cameraShake: Math.max(state.cameraShake, category === 'war' ? 0.36 : 0.2),
   }));
 }
 
-function createActivation(rule: StageModeRule, createdAt: number): ModeFlowActivation {
+function createActivation(
+  rule: StageModeRule,
+  reward: StageModeReward,
+  flowRank: number,
+  createdAt: number,
+): ModeFlowActivation {
+  const rankLabel = getModeFlowRankLabel(rule.category, flowRank);
   return {
     id: `${rule.stageId}-${rule.category}-${Math.round(createdAt)}`,
     stageId: rule.stageId,
+    category: rule.category,
     icon: rule.icon,
     eyebrow: rule.category === 'build' ? '建築モード発動' : '戦争モード発動',
     title: rule.title,
-    detail: formatStageModeReward(rule),
+    detail: `${rankLabel} / ${formatStageModeRewardDetail(reward)}`,
+    flowRank,
+    rankLabel,
     accent: rule.accent,
     glow: rule.glow,
     createdAt,
   };
 }
 
-function triggerRule(rule: StageModeRule, createdAt: number): ModeFlowActivation {
-  applyModeReward(rule);
+function triggerRule(rule: StageModeRule, flowRank: number, createdAt: number): ModeFlowActivation {
+  const reward = getScaledStageModeReward(rule, flowRank);
+  applyModeReward(reward, rule.category);
   playStageRewardSound(rule.category === 'build' ? 'build_supply' : 'war_supply');
-  return createActivation(rule, createdAt);
+  if (flowRank >= 2) {
+    playModeFlowSurgeSound(rule.category, flowRank);
+  }
+  return createActivation(rule, reward, flowRank, createdAt);
 }
 
 export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
@@ -111,6 +176,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   streak: 0,
   bestStreak: 0,
   streakExpiresAt: 0,
+  flowRank: 0,
   activationCount: 0,
   recentActivation: null,
 
@@ -124,6 +190,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       streak: 0,
       bestStreak: 0,
       streakExpiresAt: 0,
+      flowRank: 0,
       activationCount: 0,
       recentActivation: null,
     });
@@ -140,15 +207,18 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
 
     const nextRawMeter = state.meter + gain;
     const reached = nextRawMeter >= rule.threshold;
+    const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
+    const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
-    const activation = reached ? triggerRule(rule, createdAt) : state.recentActivation;
+    const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `+${gain} ${rule.meterLabel}`,
       recentActivation: activation,
-      activationCount: reached ? state.activationCount + 1 : state.activationCount,
+      flowRank,
+      activationCount: nextActivationCount,
     });
   },
 
@@ -166,7 +236,9 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
 
     const nextRawMeter = state.meter + gain;
     const reached = nextRawMeter >= rule.threshold;
-    const activation = reached ? triggerRule(rule, createdAt) : state.recentActivation;
+    const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
+    const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
+    const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -176,7 +248,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       bestStreak: Math.max(state.bestStreak, nextStreak),
       streakExpiresAt: createdAt + streakWindow,
       recentActivation: activation,
-      activationCount: reached ? state.activationCount + 1 : state.activationCount,
+      flowRank,
+      activationCount: nextActivationCount,
     });
   },
 

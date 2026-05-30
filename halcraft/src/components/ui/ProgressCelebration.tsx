@@ -178,7 +178,7 @@ export function ProgressCelebration() {
       addToast({
         id: `mode-flow-${activation.id}`,
         icon: activation.icon,
-        eyebrow: activation.eyebrow,
+        eyebrow: `${activation.eyebrow} / ${activation.rankLabel}`,
         title: activation.title,
         detail: activation.detail,
         accent: activation.accent,

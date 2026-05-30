@@ -239,18 +239,22 @@ export function getStageModeEnemyGain(stageId: string | null | undefined, mobTyp
   return 22 + streakBonus;
 }
 
-export function formatStageModeReward(rule: StageModeRule): string {
-  const blockLabel = rule.reward.blocks
+export function formatStageModeRewardDetail(reward: StageModeReward): string {
+  const blockLabel = reward.blocks
     .filter((block) => block.count > 0)
     .map((block) => `${shortBlockName(block.blockId)} +${block.count}`)
     .join(' / ');
   const parts = [
     blockLabel,
-    rule.reward.heal > 0 ? `HP +${rule.reward.heal}` : '',
-    rule.reward.hunger > 0 ? `満腹 +${rule.reward.hunger}` : '',
-    rule.reward.shieldMs > 0 ? `安全 +${Math.round(rule.reward.shieldMs / 1000)}s` : '',
-    rule.reward.rocketReady ? 'ロケット即応' : '',
+    reward.heal > 0 ? `HP +${reward.heal}` : '',
+    reward.hunger > 0 ? `満腹 +${reward.hunger}` : '',
+    reward.shieldMs > 0 ? `安全 +${Math.round(reward.shieldMs / 1000)}s` : '',
+    reward.rocketReady ? 'ロケット即応' : '',
   ].filter(Boolean);
 
   return parts.join(' / ');
+}
+
+export function formatStageModeReward(rule: StageModeRule): string {
+  return formatStageModeRewardDetail(rule.reward);
 }

@@ -7,7 +7,11 @@ import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
-import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import {
+  getModeFlowRank,
+  getModeFlowRankLabel,
+  useModeFlowStore,
+} from '../../stores/useModeFlowStore';
 import { useMobStore } from '../../stores/useMobStore';
 import {
   getStageBossEncounter,
@@ -189,6 +193,8 @@ export function StageProgressHUD() {
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
+  const modeFlowRank = useModeFlowStore((s) => s.flowRank);
+  const modeActivationCount = useModeFlowStore((s) => s.activationCount);
   const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
   const recentStageEvent = useStageEventStore((s) => s.recentEvent);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
@@ -254,6 +260,12 @@ export function StageProgressHUD() {
         eventNow,
       )
     : null;
+  const compactNextModeRank = modeRule ? getModeFlowRank(modeActivationCount + 1) || 1 : 1;
+  const compactModeRankLabel = modeRule
+    ? modeFlowRank > 0
+      ? getModeFlowRankLabel(modeRule.category, modeFlowRank)
+      : `次${getModeFlowRankLabel(modeRule.category, compactNextModeRank)}`
+    : '';
 
   return (
     <div
@@ -545,7 +557,7 @@ export function StageProgressHUD() {
               whiteSpace: 'nowrap',
             }}
           >
-            {modeRule.icon} {modeRule.meterLabel}: {modeRule.shortLabel}
+            {modeRule.icon} {compactModeRankLabel}: {modeRule.shortLabel}
           </span>
           <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
             {Math.floor(modeMeter)}/{modeRule.threshold}

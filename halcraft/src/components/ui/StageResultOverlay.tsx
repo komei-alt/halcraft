@@ -6,7 +6,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
-import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import { getModeFlowRankLabel, useModeFlowStore } from '../../stores/useModeFlowStore';
 import {
   getStageChallengeMedal,
   getStageChallengeMedalLabel,
@@ -62,6 +62,7 @@ export function StageResultOverlay() {
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeActivations = useModeFlowStore((s) => s.activationCount);
   const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
+  const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const isTouch = isTouchDevice();
   const isCompact = isTouch || window.innerWidth <= 560;
 
@@ -433,7 +434,7 @@ export function StageResultOverlay() {
                 fontWeight: 800,
               }}
             >
-              {modeRule.actionLabel} / 発動: {formatStageModeReward(modeRule)}
+              {modeRule.actionLabel} / 到達: {getModeFlowRankLabel(modeRule.category, modeFlowRank)} / 発動: {formatStageModeReward(modeRule)}
             </div>
           </div>
         )}

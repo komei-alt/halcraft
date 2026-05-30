@@ -27,6 +27,7 @@ import { WaterRenderer } from './components/WaterRenderer';
 import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
+import { StageModeFlowFX } from './components/StageModeFlowFX';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
 import { StageEventSystem } from './components/StageEventSystem';
@@ -129,6 +130,7 @@ function GameCanvas() {
         <StageAtmosphereFX />
         <StageConditionFX />
         <StageEventFX />
+        <StageModeFlowFX />
         <World />
         <TorchRenderer />
         <BedRenderer />
