@@ -5,6 +5,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useMobStore } from '../../stores/useMobStore';
 import {
   getStageBossEncounter,
@@ -24,6 +25,7 @@ import {
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
 import type { StageDefinition } from '../../types/stages';
+import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 
 function formatElapsed(seconds: number): string {
@@ -181,6 +183,8 @@ export function StageProgressHUD() {
   const conditionCharge = useStageConditionStore((s) => s.charge);
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const modeMeter = useModeFlowStore((s) => s.meter);
+  const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   if (phase !== 'playing' || !stage) return null;
@@ -188,6 +192,7 @@ export function StageProgressHUD() {
   const target = stage.rules.objective.targetCount;
   const buildStyle = getStageBuildStyle(stage.id);
   const bossEncounter = getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(stage.id);
+  const modeRule = getStageModeRule(stage.id);
   const bossHpRatio = boss ? Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp))) : null;
   const bossHpPercent = bossHpRatio === null ? null : Math.ceil(bossHpRatio * 100);
   const hasProgressBar = Boolean(target) || Boolean(buildStyle);
@@ -403,6 +408,38 @@ export function StageProgressHUD() {
               transition: 'width 0.25s ease',
             }}
           />
+        </div>
+      )}
+
+      {isCompact && modeRule && (
+        <div
+          style={{
+            marginTop: 7,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: 9,
+            lineHeight: '12px',
+            fontWeight: 900,
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              color: modeRule.accent,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {modeRule.icon} {modeRule.meterLabel}: {modeRule.shortLabel}
+          </span>
+          <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+            {Math.floor(modeMeter)}/{modeRule.threshold}
+            {modeLastGainLabel ? ` ${modeLastGainLabel}` : ''}
+          </span>
         </div>
       )}
 

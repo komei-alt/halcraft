@@ -666,7 +666,8 @@ export function Helicopter() {
             <Text
               position={[0, -0.22, 0.01]}
               fontSize={0.18}
-              color="rgba(255, 255, 255, 0.7)"
+              color="#ffffff"
+              fillOpacity={0.7}
               anchorX="center"
               anchorY="middle"
               font={undefined}

@@ -30,6 +30,7 @@ import { useExperienceStore } from '../../stores/useExperienceStore';
 import { useMasteryStore } from '../../stores/useMasteryStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import {
   formatStageBossReward,
   getStageBossEncounter,
@@ -393,6 +394,7 @@ export function MobManager() {
         useGameStore.getState().registerEnemyDefeat();
         useStageChallengeStore.getState().recordEnemyDefeat(event.type);
         useStageConditionStore.getState().recordEnemyDefeat(event.type);
+        useModeFlowStore.getState().recordEnemyDefeat(event.type);
         // XP獲得（5-10 XP）
         const baseXp = event.type === 'boss_giant' ? 80 : 5 + Math.floor(Math.random() * 6);
         useExperienceStore.getState().addXp(Math.max(1, Math.round(baseXp * xpMultiplier * (event.xpMultiplier ?? 1))));

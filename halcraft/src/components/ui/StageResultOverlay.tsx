@@ -6,6 +6,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import {
   getStageChallengeMedal,
   getStageChallengeMedalLabel,
@@ -19,6 +20,7 @@ import {
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
 import { formatStageRunBonusLabel, getStageRunBonus } from '../../types/stageRunBonuses';
+import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -57,6 +59,9 @@ export function StageResultOverlay() {
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
+  const modeMeter = useModeFlowStore((s) => s.meter);
+  const modeActivations = useModeFlowStore((s) => s.activationCount);
+  const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
   const isTouch = isTouchDevice();
   const isCompact = isTouch || window.innerWidth <= 560;
 
@@ -64,6 +69,7 @@ export function StageResultOverlay() {
   const isGold = challenges.length > 0 && completedIds.length >= challenges.length;
   const buildStyle = useMemo(() => getStageBuildStyle(stage?.id), [stage?.id]);
   const bossEncounter = useMemo(() => getStageBossEncounter(stage?.id), [stage?.id]);
+  const modeRule = useMemo(() => getStageModeRule(stage?.id), [stage?.id]);
   const buildScoreCleared = Boolean(buildStyle && buildScore >= FINAL_BUILD_SCORE);
   const stageCleared = Boolean(stage) && (
     isBuildMode
@@ -363,6 +369,71 @@ export function StageResultOverlay() {
               }}
             >
               {buildStyle.detail}
+            </div>
+          </div>
+        )}
+
+        {modeRule && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: '10px 11px',
+              borderRadius: 6,
+              background: `${modeRule.accent}1f`,
+              border: `1px solid ${modeRule.accent}55`,
+              boxShadow: `inset 0 0 18px ${modeRule.glow}`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 20 }}>{modeRule.icon}</span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: modeRule.accent,
+                    fontSize: isCompact ? 10 : 11,
+                    fontWeight: 950,
+                  }}
+                >
+                  {modeRule.category === 'build' ? '建築モード' : '戦争モード'}: {modeRule.meterLabel}
+                </div>
+                <div
+                  style={{
+                    color: '#fff',
+                    fontSize: isCompact ? 14 : 16,
+                    fontWeight: 950,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {modeRule.title}
+                </div>
+              </div>
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.72)',
+                  fontSize: isCompact ? 10 : 11,
+                  fontWeight: 900,
+                  textAlign: 'right',
+                  fontFamily: 'monospace',
+                }}
+              >
+                <div>発動 {modeActivations}回</div>
+                <div>
+                  {modeRule.category === 'war'
+                    ? `BEST x${modeBestStreak}`
+                    : `${Math.floor(modeMeter)}/${modeRule.threshold}`}
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 7,
+                color: 'rgba(255,255,255,0.76)',
+                fontSize: isCompact ? 11 : 12,
+                lineHeight: '17px',
+                fontWeight: 800,
+              }}
+            >
+              {modeRule.actionLabel} / 発動: {formatStageModeReward(modeRule)}
             </div>
           </div>
         )}

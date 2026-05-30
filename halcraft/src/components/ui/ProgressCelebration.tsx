@@ -12,6 +12,7 @@ import { getStageChallengeMedalLabel, useStageChallengeStore } from '../../store
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
@@ -37,6 +38,7 @@ export function ProgressCelebration() {
   const lastStageEventIdRef = useRef<string | null>(null);
   const lastBuildScoreIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
+  const lastModeFlowIdRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
@@ -167,6 +169,23 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeModeFlow = useModeFlowStore.subscribe((state, previous) => {
+      const activation = state.recentActivation;
+      if (useGameStore.getState().phase !== 'playing' || !activation) return;
+      if (activation.id === previous.recentActivation?.id || lastModeFlowIdRef.current === activation.id) return;
+      lastModeFlowIdRef.current = activation.id;
+
+      addToast({
+        id: `mode-flow-${activation.id}`,
+        icon: activation.icon,
+        eyebrow: activation.eyebrow,
+        title: activation.title,
+        detail: activation.detail,
+        accent: activation.accent,
+        glow: activation.glow,
+      });
+    });
+
     return () => {
       unsubscribeMastery();
       unsubscribeChallenge();
@@ -174,6 +193,7 @@ export function ProgressCelebration() {
       unsubscribeStageEvent();
       unsubscribeBuildScore();
       unsubscribeItemFeedback();
+      unsubscribeModeFlow();
     };
   }, [addToast]);
 

@@ -30,6 +30,7 @@ import {
 import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../../types/stageHotbars';
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
+import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -267,6 +268,24 @@ function getStageBriefingSections(
   }
 
   const buildStyle = getStageBuildStyle(stage.id);
+  const modeRule = getStageModeRule(stage.id);
+  if (modeRule) {
+    sections.push({
+      title: 'モードルール',
+      value: `${modeRule.icon} ${modeRule.shortLabel}`,
+      details: compact
+        ? [
+            modeRule.actionLabel,
+            formatStageModeReward(modeRule),
+          ]
+        : [
+            modeRule.detail,
+            `発動: ${formatStageModeReward(modeRule)}`,
+          ],
+      accent: modeRule.accent,
+    });
+  }
+
   if (buildStyle) {
     sections.push({
       title: '作品評価',
