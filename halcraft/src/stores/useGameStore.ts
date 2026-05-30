@@ -90,6 +90,9 @@ interface GameState {
   /** ステージ開始からの経過秒数 */
   stageElapsedSeconds: number;
 
+  /** ステージ実行ごとのID */
+  runId: number;
+
   /** このステージで倒した敵の数 */
   enemiesDefeated: number;
 
@@ -173,6 +176,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentCategory: null,
   isBuildMode: false,
   stageElapsedSeconds: 0,
+  runId: 0,
   enemiesDefeated: 0,
   bossSpawned: false,
   gameTime: 0.0, // 朝スタート
@@ -260,6 +264,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       phase: 'playing',
       creativeFlying: false,
+      runId: get().runId + 1,
       gameTime: rules?.startTime ?? 0.0,
       dayCount: 1,
       isNight: (rules?.startTime ?? 0.0) >= 0.5,

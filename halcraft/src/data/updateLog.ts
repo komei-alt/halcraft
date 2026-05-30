@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-05-30',
     items: [
+      { type: 'improve', text: 'ステージ開始時に、そのマップで何をすると楽しいか作戦カードと音で分かるようになったよ' },
       { type: 'improve', text: 'スマホでも次のマップイベントや発動中の補給が見えて、マップのちがいが分かりやすくなったよ' },
       { type: 'improve', text: 'マップ環境・ステージ特性・時間イベント・モードHUDが重ならず読めるように整理したよ' },
       { type: 'improve', text: '武器が当たった時や敵をたおした時、照準近くにHITやDOWNが出て手ごたえが分かりやすくなったよ' },

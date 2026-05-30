@@ -69,6 +69,7 @@ import { StageEventHUD } from './components/ui/StageEventHUD';
 import { StagePressureHUD } from './components/ui/StagePressureHUD';
 import { BossEncounterHUD } from './components/ui/BossEncounterHUD';
 import { ModeFlowHUD } from './components/ui/ModeFlowHUD';
+import { StageOpeningBriefing } from './components/ui/StageOpeningBriefing';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
 import { CombatFeedbackHUD } from './components/ui/CombatFeedbackHUD';
@@ -300,6 +301,7 @@ export default function App() {
           <StageConditionHUD />
           <StageEventHUD />
           <StagePressureHUD />
+          <StageOpeningBriefing />
           <BossEncounterHUD />
           <ModeFlowHUD />
           <StageChallengeRewardSystem />

@@ -1345,6 +1345,60 @@ type StageRewardSoundKind = 'build_supply' | 'war_supply' | 'recovery' | 'rocket
 type StageEventSoundKind = 'forest' | 'tropical' | 'snow' | 'desert' | 'war' | 'rocket';
 type StagePressureSoundKind = 'ambush' | 'humidity' | 'cold' | 'heat';
 type StagePressureSoundSeverity = 'danger' | 'critical';
+type StageStartSoundKind = 'build' | 'war';
+
+/** ステージ開始SE — 建築と戦争でスタートの気分を変える */
+export function playStageStartSound(kind: StageStartSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('stageStart', 900)) return;
+  const now = ctx.currentTime;
+  const notes = kind === 'build'
+    ? [392, 523.25, 659.25, 783.99]
+    : [146.83, 220, 293.66, 440];
+  const wave: OscillatorType = kind === 'build' ? 'triangle' : 'sawtooth';
+
+  notes.forEach((note, index) => {
+    const t = now + index * 0.055;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'build' ? 1.08 : 0.92), t + 0.22);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'build' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'build' ? 2600 : 760, t);
+    filter.Q.setValueAtTime(kind === 'build' ? 0.7 : 1.9, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'build' ? 0.052 : 0.058, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.28);
+  });
+
+  if (kind !== 'war') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(900, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.03, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.2);
+}
 
 /** ステージ特性発動SE — 効果タイプごとに手触りを変える */
 export function playStageConditionSound(kind: StageConditionSoundKind): void {
