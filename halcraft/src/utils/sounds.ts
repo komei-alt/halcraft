@@ -1248,6 +1248,49 @@ export function playCombatFeedbackSound(kind: CombatFeedbackSoundKind): void {
   });
 }
 
+export type CombatTechniqueSoundKind = 'chain' | 'finish' | 'blast' | 'ready';
+
+/** 武器ごとの技が決まった時の短いアクセントSE */
+export function playCombatTechniqueSound(kind: CombatTechniqueSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`combatTechnique:${kind}`, kind === 'chain' ? 420 : 620)) return;
+  const now = ctx.currentTime;
+  const notes: Record<CombatTechniqueSoundKind, number[]> = {
+    chain: [620, 780],
+    finish: [440, 880, 1320],
+    blast: [180, 260, 520],
+    ready: [392, 587.33, 783.99],
+  };
+  const wave: OscillatorType = kind === 'blast' ? 'sawtooth' : kind === 'ready' ? 'triangle' : 'square';
+
+  notes[kind].forEach((note, index) => {
+    const t = now + index * 0.04;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'blast' ? 0.78 : 1.08), t + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'blast' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'blast' ? 900 : 1900, t);
+    filter.Q.setValueAtTime(kind === 'blast' ? 1.1 : 2.1, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'ready' ? 0.032 : 0.046, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
+}
+
+export function playRocketReadySound(): void {
+  playCombatTechniqueSound('ready');
+}
+
 /** ツール破壊SE — 金属が砕ける音 */
 export function playToolBreakSound(): void {
   const ctx = getAudioContext();

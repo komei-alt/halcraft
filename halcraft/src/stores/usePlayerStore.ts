@@ -10,7 +10,7 @@ import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
-import { playItemSwitchSound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
+import { playItemSwitchSound, playRocketReadySound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
 
 /** localStorage のキー（スキン保存用） */
@@ -105,6 +105,9 @@ interface PlayerState {
 
   /** ロケットランチャーのリチャージ率（0-1、1=発射可能） */
   rocketCharge: number;
+
+  /** ロケット再装填完了の短いHUD表示期限 */
+  rocketReadyPulseUntil: number;
 
   /** カメラシェイク強度（0-1） */
   cameraShake: number;
@@ -238,6 +241,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   rocketCooldown: 0,
   rocketCooldownDuration: ROCKET_COOLDOWN,
   rocketCharge: 1,
+  rocketReadyPulseUntil: 0,
   cameraShake: 0,
   lastDamageTime: 0,
   knockbackVx: 0,
@@ -321,19 +325,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const rocketDuration = Math.max(0.1, state.rocketCooldownDuration || ROCKET_COOLDOWN);
     const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / rocketDuration);
     const newShake = Math.max(0, state.cameraShake - SHAKE_DECAY * dt);
+    const rocketJustReady = state.equippedItem === 'rocket_launcher'
+      && state.rocketCooldown > 0
+      && newRocketCooldown <= 0;
+    const rocketReadyPulseUntil = rocketJustReady ? performance.now() + 820 : state.rocketReadyPulseUntil;
     // 変更がある場合のみ更新
     if (
       newCooldown !== state.attackCooldown ||
       newRocketCooldown !== state.rocketCooldown ||
-      newShake !== state.cameraShake
+      newShake !== state.cameraShake ||
+      rocketJustReady
     ) {
       set({
         attackCooldown: newCooldown,
         attackCharge: newCharge,
         rocketCooldown: newRocketCooldown,
         rocketCharge: newRocketCharge,
+        rocketReadyPulseUntil,
         cameraShake: newShake,
       });
+
+      if (rocketJustReady) {
+        playRocketReadySound();
+        window.setTimeout(() => {
+          if (get().rocketReadyPulseUntil === rocketReadyPulseUntil) {
+            set({ rocketReadyPulseUntil: 0 });
+          }
+        }, 820);
+      }
     }
   },
 
@@ -348,6 +367,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       rocketCooldown: cooldownDuration,
       rocketCooldownDuration: cooldownDuration,
       rocketCharge: 0,
+      rocketReadyPulseUntil: 0,
       cameraShake: Math.max(state.cameraShake, 0.45),
     });
     return true;
@@ -454,6 +474,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       rocketCooldown: 0,
       rocketCooldownDuration: ROCKET_COOLDOWN,
       rocketCharge: 1,
+      rocketReadyPulseUntil: 0,
       invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
       hunger: 20,
       hungerExhaustion: 0,

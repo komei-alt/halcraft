@@ -293,6 +293,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       rocketCooldown: 0,
       rocketCooldownDuration: 2.8,
       rocketCharge: 1,
+      rocketReadyPulseUntil: 0,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,
       hunger: Math.min(20, (starterKit?.hunger ?? 20) + (runBonus?.hunger ?? 0)),

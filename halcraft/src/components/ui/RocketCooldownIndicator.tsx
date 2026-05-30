@@ -5,9 +5,11 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 
 export function RocketCooldownIndicator() {
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
+  const rocketReadyPulseUntil = usePlayerStore((s) => s.rocketReadyPulseUntil);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
 
-  if (equippedItem !== 'rocket_launcher' || rocketCharge >= 1) return null;
+  const isReadyPulse = rocketCharge >= 1 && rocketReadyPulseUntil > 0;
+  if (equippedItem !== 'rocket_launcher' || (rocketCharge >= 1 && !isReadyPulse)) return null;
 
   return (
     <div
@@ -17,7 +19,7 @@ export function RocketCooldownIndicator() {
         left: '50%',
         top: '50%',
         transform: 'translate(-50%, 28px)',
-        width: 52,
+        width: isReadyPulse ? 76 : 52,
         zIndex: 110,
         pointerEvents: 'none',
       }}
@@ -34,14 +36,18 @@ export function RocketCooldownIndicator() {
       >
         <div
           style={{
-            width: `${rocketCharge * 100}%`,
+            width: `${(isReadyPulse ? 1 : rocketCharge) * 100}%`,
             height: '100%',
-            background: rocketCharge > 0.8
+            background: isReadyPulse
+              ? '#fff2a6'
+              : rocketCharge > 0.8
               ? '#ffd27a'
               : rocketCharge > 0.4
                 ? '#ff9c4a'
                 : '#ff5f3a',
-            boxShadow: '0 0 8px rgba(255, 150, 90, 0.45)',
+            boxShadow: isReadyPulse
+              ? '0 0 12px rgba(255, 242, 166, 0.72)'
+              : '0 0 8px rgba(255, 150, 90, 0.45)',
             transition: 'background 0.1s',
           }}
         />
@@ -54,11 +60,13 @@ export function RocketCooldownIndicator() {
           opacity: 0.8,
           lineHeight: 1,
           letterSpacing: '0.14em',
-          color: 'rgba(255, 225, 200, 0.9)',
+          color: isReadyPulse ? '#fff2a6' : 'rgba(255, 225, 200, 0.9)',
           textTransform: 'uppercase',
+          fontWeight: 900,
+          textShadow: isReadyPulse ? '0 0 8px rgba(255, 210, 120, 0.8)' : 'none',
         }}
       >
-        RKT
+        {isReadyPulse ? 'READY' : 'RKT'}
       </div>
     </div>
   );

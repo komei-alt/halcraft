@@ -10,7 +10,11 @@ import {
 } from '../../stores/useMasteryStore';
 import type { EquippedItem } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
-import { playCombatFeedbackSound } from '../../utils/sounds';
+import {
+  playCombatFeedbackSound,
+  playCombatTechniqueSound,
+  type CombatTechniqueSoundKind,
+} from '../../utils/sounds';
 
 interface CombatFeedback {
   id: number;
@@ -21,7 +25,17 @@ interface CombatFeedback {
   streak: number;
 }
 
-const DISPLAY_MS = 760;
+interface TechniqueFeedback {
+  eyebrow: string;
+  label: string;
+  detail: string;
+  meterLabel: string;
+  meterText: string;
+  ratio: number;
+  soundKind: CombatTechniqueSoundKind | null;
+}
+
+const DISPLAY_MS = 1120;
 
 function isCombatFeedbackEvent(event: MasteryEvent): boolean {
   return event.kind === 'hit' || event.kind === 'defeat';
@@ -36,6 +50,120 @@ function getFeedbackLabel(feedback: CombatFeedback): string {
   if (feedback.kind === 'defeat') return 'DOWN';
   if (feedback.kind === 'critical') return 'CRIT';
   return 'HIT';
+}
+
+function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
+  if (feedback.item === 'rocket_launcher') {
+    if (feedback.kind === 'critical') {
+      return {
+        eyebrow: 'ロケット技',
+        label: '巻き込み成功',
+        detail: '密集へ撃つとチャレンジと熟練が伸びる',
+        meterLabel: 'BLAST',
+        meterText: 'AREA',
+        ratio: 1,
+        soundKind: 'blast',
+      };
+    }
+    if (feedback.kind === 'defeat') {
+      return {
+        eyebrow: 'ロケット技',
+        label: '爆風で撃破',
+        detail: '再装填後に次の群れへ向ける',
+        meterLabel: 'BLAST',
+        meterText: 'DOWN',
+        ratio: 0.88,
+        soundKind: 'finish',
+      };
+    }
+    return {
+      eyebrow: 'ロケット技',
+      label: '爆風確認',
+      detail: '直撃より少し奥を狙うと巻き込める',
+      meterLabel: 'BLAST',
+      meterText: '+HIT',
+      ratio: 0.66,
+      soundKind: null,
+    };
+  }
+
+  if (feedback.item === 'machine_gun') {
+    if (feedback.streak >= 8) {
+      return {
+        eyebrow: '制圧技',
+        label: '弾幕チェーン',
+        detail: '照準を保つほど敵を押し返せる',
+        meterLabel: 'BURST',
+        meterText: `x${feedback.streak}`,
+        ratio: 1,
+        soundKind: 'chain',
+      };
+    }
+    if (feedback.kind === 'defeat') {
+      return {
+        eyebrow: '制圧技',
+        label: '押し切り撃破',
+        detail: 'スコープで集弾、腰撃ちで足止め',
+        meterLabel: 'BURST',
+        meterText: 'DOWN',
+        ratio: 0.86,
+        soundKind: 'finish',
+      };
+    }
+    return {
+      eyebrow: '制圧技',
+      label: feedback.streak >= 3 ? '照準維持' : '命中確認',
+      detail: '連続ヒットで制圧チェーンへ',
+      meterLabel: 'BURST',
+      meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'HOLD',
+      ratio: Math.min(1, feedback.streak / 8),
+      soundKind: feedback.streak >= 5 ? 'chain' : null,
+    };
+  }
+
+  if (feedback.item === 'lightsaber') {
+    if (feedback.kind === 'critical') {
+      return {
+        eyebrow: 'セイバー技',
+        label: 'フィニッシュ斬り',
+        detail: '5段目を当てると大きく熟練が伸びる',
+        meterLabel: 'COMBO',
+        meterText: 'FIN',
+        ratio: 1,
+        soundKind: 'finish',
+      };
+    }
+    if (feedback.streak >= 5) {
+      return {
+        eyebrow: 'セイバー技',
+        label: 'コンボ継続',
+        detail: '次の斬撃まで間を空けすぎない',
+        meterLabel: 'COMBO',
+        meterText: `x${feedback.streak}`,
+        ratio: 0.92,
+        soundKind: 'chain',
+      };
+    }
+    return {
+      eyebrow: 'セイバー技',
+      label: '斬撃ヒット',
+      detail: '近距離でつなぐとフィニッシュへ',
+      meterLabel: 'COMBO',
+      meterText: `${Math.min(5, Math.max(1, feedback.streak))}/5`,
+      ratio: Math.min(1, feedback.streak / 5),
+      soundKind: null,
+    };
+  }
+
+  return {
+    eyebrow: 'ビルダー技',
+    label: feedback.kind === 'critical' ? '会心ヒット' : '近接確認',
+    detail: '道具を整えると採掘も戦闘も安定する',
+    meterLabel: 'BUILD',
+    meterText: feedback.kind === 'defeat' ? 'DOWN' : 'HIT',
+    ratio: feedback.kind === 'defeat' ? 1 : 0.58,
+    soundKind: feedback.kind === 'defeat' ? 'finish' : null,
+  };
 }
 
 export function CombatFeedbackHUD() {
@@ -59,15 +187,20 @@ export function CombatFeedbackHUD() {
       lastEventIdRef.current = event.id;
 
       const kind = getFeedbackKind(event);
-      setFeedback({
+      const nextFeedback = {
         id: event.id,
         item: event.item,
         kind,
         label: event.label,
         xp: event.xp,
         streak: event.streak,
-      });
+      };
+      setFeedback(nextFeedback);
       playCombatFeedbackSound(kind);
+      const technique = getTechniqueFeedback(nextFeedback);
+      if (technique.soundKind) {
+        playCombatTechniqueSound(technique.soundKind);
+      }
 
       clearTimer();
       clearTimerRef.current = window.setTimeout(() => {
@@ -88,6 +221,7 @@ export function CombatFeedbackHUD() {
   const isDefeat = feedback.kind === 'defeat';
   const isCritical = feedback.kind === 'critical';
   const label = getFeedbackLabel(feedback);
+  const technique = getTechniqueFeedback(feedback);
 
   return (
     <div
@@ -105,8 +239,7 @@ export function CombatFeedbackHUD() {
     >
       <div
         style={{
-          minWidth: isCompact ? 96 : 126,
-          maxWidth: isCompact ? 138 : 180,
+          width: isCompact ? 'min(236px, calc(100vw - 32px))' : 222,
           padding: isCompact ? '5px 7px' : '6px 9px',
           borderRadius: 6,
           border: `1px solid ${def.accent}66`,
@@ -176,6 +309,78 @@ export function CombatFeedbackHUD() {
           >
             +{feedback.xp}
           </span>
+        </div>
+        <div
+          style={{
+            marginTop: 6,
+            padding: isCompact ? '5px 6px' : '6px 7px',
+            borderRadius: 5,
+            background: `${def.accent}14`,
+            border: `1px solid ${def.accent}38`,
+            boxShadow: `inset 0 0 12px ${def.glow}`,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span
+              style={{
+                minWidth: 0,
+                color: def.accent,
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {technique.eyebrow}: {technique.label}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: 'rgba(255,255,255,0.72)',
+                fontSize: isCompact ? 8 : 9,
+                lineHeight: '12px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+              }}
+            >
+              {technique.meterLabel} {technique.meterText}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              height: 3,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.12)',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(technique.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${def.accent}, #ffffff)`,
+                boxShadow: `0 0 8px ${def.glow}`,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              color: 'rgba(255,255,255,0.58)',
+              fontSize: isCompact ? 8 : 9,
+              lineHeight: '11px',
+              fontWeight: 760,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {technique.detail}
+          </div>
         </div>
       </div>
     </div>
