@@ -30,6 +30,10 @@ function getLevelLabel(level: number): string {
   return `Lv.${Math.max(1, Math.floor(level))}`;
 }
 
+function getNormalizedLevel(level: number): number {
+  return Math.max(1, Math.floor(level));
+}
+
 export function getMasteryBonus(item: EquippedItem, level: number): MasteryBonus {
   const step = getPerkStep(level);
 
@@ -89,7 +93,19 @@ export function getMasteryPerkSummary(item: EquippedItem, level: number): string
 }
 
 export function getNextMasteryPerkSummary(item: EquippedItem, level: number): string | null {
-  const nextLevel = [3, 6, 10].find((candidate) => candidate > level);
-  if (!nextLevel) return null;
-  return `${getLevelLabel(nextLevel)} ${getMasteryPerkSummary(item, nextLevel)}`;
+  const currentLevel = getNormalizedLevel(level);
+  const currentSummary = getMasteryPerkSummary(item, currentLevel);
+  for (let candidate = currentLevel + 1; candidate <= 12; candidate++) {
+    const candidateSummary = getMasteryPerkSummary(item, candidate);
+    if (candidateSummary !== currentSummary) {
+      return `${getLevelLabel(candidate)} ${candidateSummary}`;
+    }
+  }
+  return null;
+}
+
+export function isMasteryPerkUpgradeLevel(item: EquippedItem, level: number): boolean {
+  const currentLevel = getNormalizedLevel(level);
+  if (currentLevel <= 1) return false;
+  return getMasteryPerkSummary(item, currentLevel) !== getMasteryPerkSummary(item, currentLevel - 1);
 }

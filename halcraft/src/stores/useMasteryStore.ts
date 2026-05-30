@@ -4,7 +4,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { EquippedItem } from './usePlayerStore';
-import { playLevelUpSound, playXPGainSound } from '../utils/sounds';
+import { isMasteryPerkUpgradeLevel } from '../types/masteryPerks';
+import { playLevelUpSound, playPerkUnlockSound, playXPGainSound } from '../utils/sounds';
 
 export type MasteryEventKind =
   | 'use'
@@ -270,7 +271,11 @@ export const useMasteryStore = create<MasteryState>()(
         });
 
         if (leveledUp) {
-          playLevelUpSound();
+          if (isMasteryPerkUpgradeLevel(item, nextLevel)) {
+            playPerkUnlockSound();
+          } else {
+            playLevelUpSound();
+          }
         } else if (kind === 'defeat' || streak >= 3) {
           playXPGainSound();
         }

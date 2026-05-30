@@ -1131,3 +1131,46 @@ export function playLevelUpSound(): void {
     osc.stop(t + 0.3);
   }
 }
+
+/** 熟練度特典強化SE — きらっと伸びる成功音 */
+export function playPerkUnlockSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('perkUnlock', 250)) return;
+  const now = ctx.currentTime;
+
+  const notes = [659.25, 880, 1318.51]; // E5, A5, E6
+  for (let i = 0; i < notes.length; i++) {
+    const t = now + i * 0.055;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(notes[i], t);
+    osc.frequency.exponentialRampToValueAtTime(notes[i] * 1.06, t + 0.18);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.07, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(420, t);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  }
+
+  const chime = ctx.createOscillator();
+  chime.type = 'sine';
+  chime.frequency.setValueAtTime(1760, now + 0.14);
+
+  const chimeGain = ctx.createGain();
+  chimeGain.gain.setValueAtTime(0.045, now + 0.14);
+  chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+
+  chime.connect(chimeGain);
+  chimeGain.connect(ctx.destination);
+  chime.start(now + 0.14);
+  chime.stop(now + 0.42);
+}

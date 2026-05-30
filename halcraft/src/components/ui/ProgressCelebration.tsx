@@ -9,6 +9,7 @@ import {
 } from '../../stores/useMasteryStore';
 import { getStageChallengeMedalLabel, useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
 interface CelebrationToast {
@@ -57,12 +58,15 @@ export function ProgressCelebration() {
       lastMasteryIdRef.current = event.id;
 
       const def = MASTERY_DEFS[event.item];
+      const perkUpgraded = isMasteryPerkUpgradeLevel(event.item, event.level);
       addToast({
         id: `mastery-${event.id}`,
         icon: def.icon,
-        eyebrow: 'レベルアップ',
+        eyebrow: perkUpgraded ? '特典強化' : 'レベルアップ',
         title: `${def.shortLabel} Lv.${event.level}`,
-        detail: getMasteryTitle(event.item, event.level),
+        detail: perkUpgraded
+          ? getMasteryPerkSummary(event.item, event.level)
+          : getMasteryTitle(event.item, event.level),
         accent: def.accent,
         glow: def.glow,
       });

@@ -169,8 +169,8 @@ export function MasteryHUD() {
         style={{
           marginTop: 5,
           display: 'flex',
-          justifyContent: 'space-between',
-          gap: 8,
+          flexDirection: 'column',
+          gap: 2,
           color: def.accent,
           fontSize: isTouch ? 9 : 10,
           lineHeight: '13px',
@@ -183,15 +183,13 @@ export function MasteryHUD() {
         {nextPerkSummary && (
           <span
             style={{
-              flex: '0 0 auto',
-              maxWidth: isTouch ? 78 : 96,
               color: 'rgba(255,255,255,0.48)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}
           >
-            次 {nextPerkSummary}
+            次: {nextPerkSummary}
           </span>
         )}
       </div>
