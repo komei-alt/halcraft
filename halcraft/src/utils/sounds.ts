@@ -1355,6 +1355,101 @@ export function playStageRewardSound(kind: StageRewardSoundKind): void {
   tick.stop(now + 0.22);
 }
 
+/** ボス出現SE — 決戦開始を画面外からでも気づける重い合図 */
+export function playBossSpawnSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bossSpawn', 1800)) return;
+  const now = ctx.currentTime;
+
+  const rumble = ctx.createOscillator();
+  rumble.type = 'sawtooth';
+  rumble.frequency.setValueAtTime(58, now);
+  rumble.frequency.exponentialRampToValueAtTime(34, now + 0.42);
+
+  const rumbleFilter = ctx.createBiquadFilter();
+  rumbleFilter.type = 'lowpass';
+  rumbleFilter.frequency.setValueAtTime(340, now);
+
+  const rumbleGain = ctx.createGain();
+  rumbleGain.gain.setValueAtTime(0.16, now);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+  rumble.connect(rumbleFilter);
+  rumbleFilter.connect(rumbleGain);
+  rumbleGain.connect(ctx.destination);
+  rumble.start(now);
+  rumble.stop(now + 0.5);
+
+  for (let i = 0; i < 3; i++) {
+    const t = now + 0.06 + i * 0.105;
+    const horn = ctx.createOscillator();
+    horn.type = 'square';
+    horn.frequency.setValueAtTime([196, 164.81, 130.81][i], t);
+
+    const hornFilter = ctx.createBiquadFilter();
+    hornFilter.type = 'bandpass';
+    hornFilter.frequency.setValueAtTime(520, t);
+    hornFilter.Q.setValueAtTime(1.5, t);
+
+    const hornGain = ctx.createGain();
+    hornGain.gain.setValueAtTime(0.055, t);
+    hornGain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    horn.connect(hornFilter);
+    hornFilter.connect(hornGain);
+    hornGain.connect(ctx.destination);
+    horn.start(t);
+    horn.stop(t + 0.24);
+  }
+}
+
+/** ボス召喚SE — 取り巻きが増えた瞬間の短い警告 */
+export function playBossSummonSound(distance: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bossSummon', 950)) return;
+  const maxDist = 48;
+  if (distance > maxDist) return;
+  const volume = Math.max(0.018, 0.09 * (1 - distance / maxDist));
+  const now = ctx.currentTime;
+
+  const pulse = ctx.createOscillator();
+  pulse.type = 'triangle';
+  pulse.frequency.setValueAtTime(420, now);
+  pulse.frequency.exponentialRampToValueAtTime(180, now + 0.22);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(640, now);
+  filter.Q.setValueAtTime(2.1, now);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+  pulse.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  pulse.start(now);
+  pulse.stop(now + 0.26);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(1200, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(volume * 0.55, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.18);
+}
+
 /** ステージ環境プレッシャー警告SE — マップごとの消耗に気づける短い注意音 */
 export function playStagePressureSound(
   kind: StagePressureSoundKind,

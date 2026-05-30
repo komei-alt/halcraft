@@ -4,6 +4,8 @@
 
 import type { MobData } from '../../stores/useMobStore';
 import { useMobStore } from '../../stores/useMobStore';
+import { spawnBlockUseEffect } from '../effectTriggers';
+import { playBossSummonSound } from '../sounds';
 import {
   applyMobGravityAndYCollision,
   type MobAIContext,
@@ -119,6 +121,8 @@ export function updateBossAI(
     const sx = m.x + Math.sin(m.rotation) * 2;
     const sz = m.z + Math.cos(m.rotation) * 2;
     useMobStore.getState().spawnMob(m.bossSummonType ?? 'spider', sx, m.y + 2, sz, ctx.enemyTuning);
+    spawnBlockUseEffect('summon', Math.floor(sx), Math.floor(m.y), Math.floor(sz), m.traitAccent ?? '#ffdd66');
+    playBossSummonSound(Math.sqrt((ctx.playerX - sx) ** 2 + (ctx.playerZ - sz) ** 2));
 
     const minSeconds = m.bossSummonMinSeconds ?? 5;
     const maxSeconds = m.bossSummonMaxSeconds ?? 20;

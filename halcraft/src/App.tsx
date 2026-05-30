@@ -67,6 +67,7 @@ import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
 import { StageConditionHUD } from './components/ui/StageConditionHUD';
 import { StageEventHUD } from './components/ui/StageEventHUD';
 import { StagePressureHUD } from './components/ui/StagePressureHUD';
+import { BossEncounterHUD } from './components/ui/BossEncounterHUD';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
 import { ProgressCelebration } from './components/ui/ProgressCelebration';
@@ -297,6 +298,7 @@ export default function App() {
           <StageConditionHUD />
           <StageEventHUD />
           <StagePressureHUD />
+          <BossEncounterHUD />
           <StageChallengeRewardSystem />
           <StageResultOverlay />
           <MasteryHUD />

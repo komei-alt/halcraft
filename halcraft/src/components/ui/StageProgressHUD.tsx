@@ -5,6 +5,11 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { useMobStore } from '../../stores/useMobStore';
+import {
+  getStageBossEncounter,
+  getStageBossEncounterById,
+} from '../../types/stageBossEncounters';
 import {
   getStageChallengeProgress,
   getStageChallenges,
@@ -170,6 +175,7 @@ export function StageProgressHUD() {
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
   const bossSpawned = useGameStore((s) => s.bossSpawned);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
+  const boss = useMobStore((s) => s.mobs.find((mob) => mob.type === 'boss_giant') ?? null);
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const conditionCharge = useStageConditionStore((s) => s.charge);
@@ -181,30 +187,43 @@ export function StageProgressHUD() {
 
   const target = stage.rules.objective.targetCount;
   const buildStyle = getStageBuildStyle(stage.id);
+  const bossEncounter = getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(stage.id);
+  const bossHpRatio = boss ? Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp))) : null;
+  const bossHpPercent = bossHpRatio === null ? null : Math.ceil(bossHpRatio * 100);
   const hasProgressBar = Boolean(target) || Boolean(buildStyle);
   const progressRatio = target
-    ? Math.min(1, enemiesDefeated / target)
+    ? bossHpRatio ?? Math.min(1, enemiesDefeated / target)
     : buildStyle
       ? Math.min(1, buildScore / FINAL_BUILD_SCORE)
       : 0;
   const objectiveState = target
-    ? bossSpawned
-      ? 'ボス出現'
+    ? bossHpPercent !== null
+      ? `ボス${bossHpPercent}%`
+      : bossSpawned
+        ? 'ボス出現'
       : `${enemiesDefeated}/${target}`
     : buildStyle
       ? `${buildScore}pt`
       : formatElapsed(stageElapsedSeconds);
   const accent = stage.category === 'build' ? '#9bdcff' : '#ffb36d';
-  const guidance = getStageGuidance(
-    stage,
-    challengeStats,
-    completedChallengeIds,
-    conditionCharge,
-    enemiesDefeated,
-    bossSpawned,
-    buildScore,
-    buildMilestones,
-  );
+  const guidance: StageGuidance = boss && bossEncounter
+    ? {
+        icon: bossEncounter.icon,
+        label: bossEncounter.title,
+        detail: `弱点: ${bossEncounter.weakness}`,
+        accent: bossEncounter.accent,
+        progressText: bossHpPercent === null ? '決戦' : `${bossHpPercent}%`,
+      }
+    : getStageGuidance(
+        stage,
+        challengeStats,
+        completedChallengeIds,
+        conditionCharge,
+        enemiesDefeated,
+        bossSpawned,
+        buildScore,
+        buildMilestones,
+      );
   const enemyProfile = getStageEnemyProfile(stage.id);
 
   return (
@@ -376,9 +395,11 @@ export function StageProgressHUD() {
               width: `${progressRatio * 100}%`,
               height: '100%',
               borderRadius: 999,
-              background: bossSpawned
-                ? 'linear-gradient(90deg, #ffdd66, #ff6b4a)'
-                : `linear-gradient(90deg, ${stage.color}, #ffdd66)`,
+              background: bossHpRatio !== null
+                ? `linear-gradient(90deg, ${bossEncounter?.accent ?? '#ffdd66'}, #ff6b4a)`
+                : bossSpawned
+                  ? 'linear-gradient(90deg, #ffdd66, #ff6b4a)'
+                  : `linear-gradient(90deg, ${stage.color}, #ffdd66)`,
               transition: 'width 0.25s ease',
             }}
           />
