@@ -10,8 +10,9 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useDroppedItemStore } from '../../stores/useDroppedItemStore';
+import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { getTerrainHeight } from '../../utils/terrain/heightmap';
-import { BLOCK_IDS } from '../../types/blocks';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 import { checkAABBCollision } from '../../utils/collision';
 import { Zombie } from './Zombie';
 import { Darwin } from './Darwin';
@@ -20,7 +21,7 @@ import { Chicken } from './Chicken';
 import { Spider } from './Spider';
 import { IronGolem } from './IronGolem';
 import { BossRenderer } from './BossRenderer';
-import { playHurtSound, playMobDeathSound } from '../../utils/sounds';
+import { playHurtSound, playMobDeathSound, playStageRewardSound } from '../../utils/sounds';
 import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTriggers';
 import { useEffectStore } from '../../stores/useEffectStore';
 import { getRegenRate } from '../../types/potions';
@@ -50,6 +51,15 @@ function pruneMobStates<T>(states: Map<string, T>, activeIds: Set<string>): void
   for (const id of states.keys()) {
     if (!activeIds.has(id)) states.delete(id);
   }
+}
+
+function getShortBlockName(blockId: BlockId): string {
+  return (BLOCK_DEFS[blockId]?.name ?? '素材')
+    .replace('ブロック', '')
+    .replace('草付き土', '草')
+    .replace('生の木', '原木')
+    .replace('グロウストーン', '光る石')
+    .replace('電気の', '電気');
 }
 
 export function MobManager() {
@@ -359,6 +369,20 @@ export function MobManager() {
         });
         if (event.bonusDropBlockId && Math.random() < (event.bonusDropChance ?? 0)) {
           dropItem(event.bonusDropBlockId, Math.floor(event.x), Math.floor(event.y), Math.floor(event.z));
+          useItemFeedbackStore.getState().emitFeedback(event.bonusDropBlockId, {
+            icon: '🎁',
+            eyebrow: '戦利品補給',
+            title: `${getShortBlockName(event.bonusDropBlockId)}ドロップ`,
+            detail: event.traitLabel ? `${event.traitLabel}から入手` : 'マップ敵編成の追加補給',
+            accent: event.traitAccent ?? '#ffe28a',
+            glow: `${event.traitAccent ?? '#ffe28a'}44`,
+            kind: 'utility',
+            soundKind: 'utility',
+          }, {
+            rateLimitKey: `enemy-loot:${event.bonusDropBlockId}:${event.traitLabel ?? event.type}`,
+            rateLimitMs: 1200,
+          });
+          playStageRewardSound('war_supply');
         }
         const roll = Math.random();
         if (roll < 0.4) {

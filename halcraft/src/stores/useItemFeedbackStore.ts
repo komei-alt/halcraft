@@ -14,12 +14,22 @@ export interface ItemFeedbackEvent extends BlockUseFeedbackContent {
   createdAt: number;
 }
 
+interface EmitFeedbackOptions {
+  rateLimitKey?: string;
+  rateLimitMs?: number;
+}
+
 interface ItemFeedbackState {
   recentFeedback: ItemFeedbackEvent | null;
   emitBlockUseFeedback: (
     blockId: BlockId,
     stageId: string | null,
     context?: BlockUseFeedbackContext,
+  ) => ItemFeedbackEvent | null;
+  emitFeedback: (
+    blockId: BlockId,
+    feedback: BlockUseFeedbackContent,
+    options?: EmitFeedbackOptions,
   ) => ItemFeedbackEvent | null;
   clearRecentFeedback: (id?: string) => void;
 }
@@ -33,17 +43,16 @@ function getRateLimitMs(feedback: BlockUseFeedbackContent): number {
   return 950;
 }
 
-export const useItemFeedbackStore = create<ItemFeedbackState>((set) => ({
-  recentFeedback: null,
-
-  emitBlockUseFeedback: (blockId, stageId, context = {}) => {
-    const feedback = getBlockUseFeedback(blockId, stageId, context);
-    if (!feedback) return null;
-
+export const useItemFeedbackStore = create<ItemFeedbackState>((set) => {
+  const emitFeedback = (
+    blockId: BlockId,
+    feedback: BlockUseFeedbackContent,
+    options: EmitFeedbackOptions = {},
+  ): ItemFeedbackEvent | null => {
     const now = performance.now();
-    const key = `${stageId ?? 'none'}:${blockId}:${feedback.kind}:${feedback.title}`;
+    const key = options.rateLimitKey ?? `custom:${blockId}:${feedback.kind}:${feedback.title}`;
     const lastAt = lastFeedbackAt.get(key) ?? 0;
-    if (now - lastAt < getRateLimitMs(feedback)) return null;
+    if (now - lastAt < (options.rateLimitMs ?? getRateLimitMs(feedback))) return null;
     lastFeedbackAt.set(key, now);
 
     const event: ItemFeedbackEvent = {
@@ -54,12 +63,27 @@ export const useItemFeedbackStore = create<ItemFeedbackState>((set) => ({
     };
     set({ recentFeedback: event });
     return event;
-  },
+  };
 
-  clearRecentFeedback: (id) => {
-    set((state) => {
-      if (id && state.recentFeedback?.id !== id) return state;
-      return { recentFeedback: null };
-    });
-  },
-}));
+  return {
+    recentFeedback: null,
+
+    emitFeedback,
+
+    emitBlockUseFeedback: (blockId, stageId, context = {}) => {
+      const feedback = getBlockUseFeedback(blockId, stageId, context);
+      if (!feedback) return null;
+
+      return emitFeedback(blockId, feedback, {
+        rateLimitKey: `${stageId ?? 'none'}:${blockId}:${feedback.kind}:${feedback.title}`,
+      });
+    },
+
+    clearRecentFeedback: (id) => {
+      set((state) => {
+        if (id && state.recentFeedback?.id !== id) return state;
+        return { recentFeedback: null };
+      });
+    },
+  };
+});

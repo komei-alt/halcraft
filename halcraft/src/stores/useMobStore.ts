@@ -66,6 +66,10 @@ export interface MobDeathEvent {
   bonusDropBlockId?: BlockId;
   /** 追加ドロップ確率 */
   bonusDropChance?: number;
+  /** 敵編成ラベル */
+  traitLabel?: string;
+  /** 敵編成のアクセント色 */
+  traitAccent?: string;
 }
 
 /** 最大同時スポーン数 */
@@ -271,6 +275,8 @@ export const useMobStore = create<MobState>((set, get) => ({
               xpMultiplier: m.xpMultiplier,
               bonusDropBlockId: m.bonusDropBlockId,
               bonusDropChance: m.bonusDropChance,
+              traitLabel: m.traitLabel,
+              traitAccent: m.traitAccent,
             });
             return null;
           }
