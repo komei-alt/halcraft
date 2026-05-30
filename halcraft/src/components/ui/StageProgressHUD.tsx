@@ -136,7 +136,7 @@ export function StageProgressHUD() {
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const conditionCharge = useStageConditionStore((s) => s.charge);
-  const isTouch = isTouchDevice();
+  const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   if (phase !== 'playing' || !stage) return null;
 
@@ -162,11 +162,11 @@ export function StageProgressHUD() {
       id="stage-progress-hud"
       style={{
         position: 'fixed',
-        top: isTouch ? 54 : 14,
-        left: isTouch ? 14 : 64,
+        top: isCompact ? 54 : 14,
+        left: isCompact ? 14 : 64,
         zIndex: 96,
-        width: isTouch ? 'min(248px, calc(100vw - 28px))' : 310,
-        padding: isTouch ? '9px 10px' : '11px 13px',
+        width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
+        padding: isCompact ? '9px 10px' : '11px 13px',
         borderRadius: 8,
         border: `1px solid ${stage.color}77`,
         background: 'rgba(0,0,0,0.46)',
@@ -179,12 +179,12 @@ export function StageProgressHUD() {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <span style={{ fontSize: isTouch ? 18 : 20 }}>{stage.icon}</span>
+        <span style={{ fontSize: isCompact ? 18 : 20 }}>{stage.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
               color: accent,
-              fontSize: isTouch ? 10 : 11,
+              fontSize: isCompact ? 10 : 11,
               fontWeight: 900,
               letterSpacing: 0,
               whiteSpace: 'nowrap',
@@ -197,7 +197,7 @@ export function StageProgressHUD() {
           <div
             style={{
               color: 'rgba(255,255,255,0.92)',
-              fontSize: isTouch ? 13 : 15,
+              fontSize: isCompact ? 13 : 15,
               fontWeight: 900,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -209,10 +209,10 @@ export function StageProgressHUD() {
         </div>
         <div
           style={{
-            minWidth: isTouch ? 52 : 62,
+            minWidth: isCompact ? 52 : 62,
             textAlign: 'right',
             color: target && enemiesDefeated >= target ? '#ffdd66' : '#fff',
-            fontSize: isTouch ? 12 : 13,
+            fontSize: isCompact ? 12 : 13,
             fontWeight: 900,
             fontFamily: 'monospace',
           }}
@@ -221,7 +221,7 @@ export function StageProgressHUD() {
         </div>
       </div>
 
-      {!isTouch && (
+      {!isCompact && (
         <div
           style={{
             marginTop: 7,
@@ -252,14 +252,14 @@ export function StageProgressHUD() {
             minWidth: 0,
           }}
         >
-          <span style={{ flex: '0 0 auto', fontSize: isTouch ? 12 : 13 }}>
+          <span style={{ flex: '0 0 auto', fontSize: isCompact ? 12 : 13 }}>
             {guidance.icon}
           </span>
           <span
             style={{
               flex: '0 0 auto',
               color: guidance.accent,
-              fontSize: isTouch ? 9 : 10,
+              fontSize: isCompact ? 9 : 10,
               lineHeight: '12px',
               fontWeight: 900,
             }}
@@ -271,7 +271,7 @@ export function StageProgressHUD() {
               minWidth: 0,
               flex: 1,
               color: 'rgba(255,255,255,0.9)',
-              fontSize: isTouch ? 10 : 11,
+              fontSize: isCompact ? 10 : 11,
               lineHeight: '13px',
               fontWeight: 900,
               whiteSpace: 'nowrap',
@@ -285,7 +285,7 @@ export function StageProgressHUD() {
             style={{
               flex: '0 0 auto',
               color: 'rgba(255,255,255,0.64)',
-              fontSize: isTouch ? 9 : 10,
+              fontSize: isCompact ? 9 : 10,
               lineHeight: '12px',
               fontWeight: 900,
               fontFamily: 'monospace',
@@ -299,7 +299,7 @@ export function StageProgressHUD() {
           style={{
             marginTop: 4,
             color: 'rgba(255,255,255,0.55)',
-            fontSize: isTouch ? 9 : 10,
+            fontSize: isCompact ? 9 : 10,
             lineHeight: '13px',
             fontWeight: 750,
             whiteSpace: 'nowrap',
@@ -335,7 +335,7 @@ export function StageProgressHUD() {
         </div>
       )}
 
-      {!isTouch && (
+      {!isCompact && (
         <div
           style={{
             marginTop: 8,

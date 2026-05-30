@@ -9,6 +9,7 @@ import {
 } from '../../stores/useMasteryStore';
 import { getStageChallengeMedalLabel, useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
+import { useStageEventStore } from '../../stores/useStageEventStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
@@ -31,6 +32,7 @@ export function ProgressCelebration() {
   const lastMasteryIdRef = useRef<number | null>(null);
   const lastChallengeIdRef = useRef<string | null>(null);
   const lastConditionIdRef = useRef<string | null>(null);
+  const lastStageEventIdRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
@@ -110,10 +112,28 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeStageEvent = useStageEventStore.subscribe((state, previous) => {
+      const event = state.recentEvent;
+      if (useGameStore.getState().phase !== 'playing' || !event) return;
+      if (event.id === previous.recentEvent?.id || lastStageEventIdRef.current === event.id) return;
+      lastStageEventIdRef.current = event.id;
+
+      addToast({
+        id: `stage-event-${event.id}`,
+        icon: event.icon,
+        eyebrow: 'マップイベント',
+        title: event.title,
+        detail: event.label,
+        accent: event.accent,
+        glow: `${event.accent}40`,
+      });
+    });
+
     return () => {
       unsubscribeMastery();
       unsubscribeChallenge();
       unsubscribeCondition();
+      unsubscribeStageEvent();
     };
   }, [addToast]);
 

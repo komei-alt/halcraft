@@ -18,7 +18,7 @@ export function StageChallengeHUD() {
   const completedIds = useStageChallengeStore((s) => s.completedIds);
   const recentCompletion = useStageChallengeStore((s) => s.recentCompletion);
   const clearRecentCompletion = useStageChallengeStore((s) => s.clearRecentCompletion);
-  const isTouch = isTouchDevice();
+  const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   useEffect(() => {
     if (!recentCompletion) return undefined;
@@ -41,13 +41,13 @@ export function StageChallengeHUD() {
       id="stage-challenge-hud"
       style={{
         position: 'fixed',
-        top: isTouch ? 444 : 252,
-        left: isTouch ? 14 : 64,
+        top: isCompact ? 444 : 252,
+        left: isCompact ? 14 : 64,
         zIndex: 95,
-        width: isTouch ? 'min(248px, calc(100vw - 28px))' : 310,
-        maxHeight: isTouch ? 'max(132px, calc(100vh - 548px))' : 'none',
+        width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
+        maxHeight: isCompact ? 'max(132px, calc(100vh - 548px))' : 'none',
         overflow: 'hidden',
-        padding: isTouch ? '8px 9px' : '10px 12px',
+        padding: isCompact ? '8px 9px' : '10px 12px',
         borderRadius: 8,
         border: `1px solid ${stage.color}55`,
         background: 'rgba(5, 8, 13, 0.52)',
@@ -71,7 +71,7 @@ export function StageChallengeHUD() {
         <div
           style={{
             color: 'rgba(255,255,255,0.88)',
-            fontSize: isTouch ? 11 : 12,
+            fontSize: isCompact ? 11 : 12,
             fontWeight: 900,
             whiteSpace: 'nowrap',
           }}
@@ -81,7 +81,7 @@ export function StageChallengeHUD() {
         <div
           style={{
             color: medal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.65)',
-            fontSize: isTouch ? 9 : 10,
+            fontSize: isCompact ? 9 : 10,
             fontWeight: 900,
             fontFamily: 'monospace',
             whiteSpace: 'nowrap',
@@ -106,7 +106,7 @@ export function StageChallengeHUD() {
                   color: isCompleted ? '#fff5b5' : 'rgba(255,255,255,0.82)',
                 }}
               >
-                <span style={{ flex: '0 0 auto', fontSize: isTouch ? 12 : 13 }}>
+                <span style={{ flex: '0 0 auto', fontSize: isCompact ? 12 : 13 }}>
                   {isCompleted ? '✓' : challenge.icon}
                 </span>
                 <span
@@ -116,7 +116,7 @@ export function StageChallengeHUD() {
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    fontSize: isTouch ? 10 : 11,
+                    fontSize: isCompact ? 10 : 11,
                     fontWeight: 850,
                     lineHeight: '14px',
                   }}
@@ -126,7 +126,7 @@ export function StageChallengeHUD() {
                 <span
                   style={{
                     flex: '0 0 auto',
-                    fontSize: isTouch ? 9 : 10,
+                    fontSize: isCompact ? 9 : 10,
                     fontWeight: 900,
                     fontFamily: 'monospace',
                     color: isCompleted ? '#fff1a8' : 'rgba(255,255,255,0.58)',
@@ -171,7 +171,7 @@ export function StageChallengeHUD() {
             background: 'rgba(255, 230, 120, 0.18)',
             border: '1px solid rgba(255, 230, 120, 0.22)',
             color: '#fff2a6',
-            fontSize: isTouch ? 10 : 11,
+            fontSize: isCompact ? 10 : 11,
             lineHeight: '14px',
             fontWeight: 900,
             display: 'flex',
@@ -192,7 +192,7 @@ export function StageChallengeHUD() {
             <div
               style={{
                 color: recentCompletion.rewardAccent ?? '#fff2a6',
-                fontSize: isTouch ? 9 : 10,
+                fontSize: isCompact ? 9 : 10,
                 lineHeight: '12px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',

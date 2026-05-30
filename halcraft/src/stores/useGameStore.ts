@@ -11,6 +11,7 @@ import { useExperienceStore } from './useExperienceStore';
 import { useMasteryStore } from './useMasteryStore';
 import { useStageChallengeStore } from './useStageChallengeStore';
 import { useStageConditionStore } from './useStageConditionStore';
+import { useStageEventStore } from './useStageEventStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
@@ -227,6 +228,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     useMasteryStore.getState().resetRuntime();
     useStageChallengeStore.getState().startRun(currentStage?.id ?? null);
     useStageConditionStore.getState().startRun(currentStage?.id ?? null);
+    useStageEventStore.getState().startRun(currentStage?.id ?? null);
 
     const startingTools: Record<string, number> = {};
     for (const toolId of starterKit?.tools ?? []) {

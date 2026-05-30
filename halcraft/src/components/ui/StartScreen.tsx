@@ -17,6 +17,8 @@ import { SkinSelector } from './SkinSelector';
 import { STAGES, type StageCategory, type StageDefinition } from '../../types/stages';
 import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel } from '../../types/stageChallenges';
 import { getStageCondition } from '../../types/stageConditions';
+import { getStagePressure } from '../../types/stagePressures';
+import { getStageEvent } from '../../types/stageEvents';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -175,6 +177,8 @@ function getEnemyPreview(stage: StageDefinition): string[] {
 function getStageBriefingSections(
   stage: StageDefinition,
   condition: ReturnType<typeof getStageCondition>,
+  pressure: ReturnType<typeof getStagePressure>,
+  event: ReturnType<typeof getStageEvent>,
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
@@ -191,7 +195,7 @@ function getStageBriefingSections(
     .slice(0, compact ? 2 : 3)
     .map((challenge) => `${challenge.icon} ${challenge.title} ${getChallengeTargetText(challenge.metric, challenge.target)}`);
 
-  return [
+  const sections: StageBriefingSection[] = [
     {
       title: '目的',
       value: stage.rules.objective.title,
@@ -214,6 +218,33 @@ function getStageBriefingSections(
         : [stage.rules.shortPitch],
       accent: condition?.accent ?? stage.color,
     },
+  ];
+
+  if (pressure) {
+    sections.push({
+      title: '環境',
+      value: `${pressure.icon} ${pressure.title}`,
+      details: [
+        pressure.dangerLabel,
+        pressure.protectLabel,
+      ],
+      accent: pressure.accent,
+    });
+  }
+
+  if (event) {
+    sections.push({
+      title: 'イベント',
+      value: `${event.icon} ${event.title}`,
+      details: [
+        `${event.firstTriggerSeconds}秒後 / ${event.repeatEverySeconds}秒ごと`,
+        event.label,
+      ],
+      accent: event.accent,
+    });
+  }
+
+  sections.push(
     {
       title: '支給品',
       value: blockPreview.join(' / '),
@@ -231,7 +262,9 @@ function getStageBriefingSections(
         : challengePreview,
       accent: stage.rules.enemyTuning ? 'rgba(255, 154, 102, 0.95)' : 'rgba(150, 230, 255, 0.95)',
     },
-  ];
+  );
+
+  return sections;
 }
 
 export function StartScreen() {
@@ -300,6 +333,8 @@ export function StartScreen() {
       ? 'min(760px, calc(100vw - 420px))'
       : 'min(820px, calc(100vw - 48px))';
   const activeCondition = useMemo(() => getStageCondition(activeStage.id), [activeStage.id]);
+  const activePressure = useMemo(() => getStagePressure(activeStage.id), [activeStage.id]);
+  const activeEvent = useMemo(() => getStageEvent(activeStage.id), [activeStage.id]);
   const activeChallenges = useMemo(() => getStageChallenges(activeStage.id), [activeStage.id]);
   const activeChallengeCount = activeChallenges.length;
   const activeCompletedCount = bestByStage[activeStage.id]?.completedCount ?? 0;
@@ -309,12 +344,14 @@ export function StartScreen() {
     () => getStageBriefingSections(
       activeStage,
       activeCondition,
+      activePressure,
+      activeEvent,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
       compactLayout,
     ),
-    [activeStage, activeCondition, activeChallenges, activeCompletedCount, activeChallengeCount, compactLayout],
+    [activeStage, activeCondition, activePressure, activeEvent, activeChallenges, activeCompletedCount, activeChallengeCount, compactLayout],
   );
 
   // 定期的にステージのプレイヤー数を取得
@@ -550,6 +587,8 @@ export function StartScreen() {
             const medal = getStageChallengeMedal(completedCount, challengeCount);
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
+            const stageEvent = getStageEvent(stage.id);
+            const pressure = getStagePressure(stage.id);
             return (
               <div
                 key={stage.id}
@@ -627,6 +666,36 @@ export function StartScreen() {
                     }}
                   >
                     {condition.icon} {condition.triggerLabel}→{condition.effect.label}
+                  </div>
+                )}
+                {pressure && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: pressure.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 900,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {pressure.icon} {pressure.title}: {pressure.protectLabel}
+                  </div>
+                )}
+                {stageEvent && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: stageEvent.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 900,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {stageEvent.icon} {stageEvent.title}: {stageEvent.label}
                   </div>
                 )}
                 <div

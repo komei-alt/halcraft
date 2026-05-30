@@ -15,7 +15,7 @@ export function StageConditionHUD() {
   const recentActivation = useStageConditionStore((s) => s.recentActivation);
   const clearRecentActivation = useStageConditionStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
-  const isTouch = isTouchDevice();
+  const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   const condition = useMemo(() => getStageCondition(stage?.id), [stage?.id]);
 
@@ -43,11 +43,11 @@ export function StageConditionHUD() {
       id="stage-condition-hud"
       style={{
         position: 'fixed',
-        top: isTouch ? 334 : 14,
-        right: isTouch ? 14 : 16,
+        top: isCompact ? 334 : 14,
+        right: isCompact ? 14 : 16,
         zIndex: 97,
-        width: isTouch ? 'min(248px, calc(100vw - 28px))' : 276,
-        padding: isTouch ? '9px 10px' : '10px 12px',
+        width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,
+        padding: isCompact ? '9px 10px' : '10px 12px',
         borderRadius: 8,
         border: `1px solid ${condition.accent}66`,
         background: 'rgba(8, 11, 16, 0.58)',
@@ -64,14 +64,14 @@ export function StageConditionHUD() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div
           style={{
-            width: isTouch ? 30 : 34,
-            height: isTouch ? 30 : 34,
+            width: isCompact ? 30 : 34,
+            height: isCompact ? 30 : 34,
             borderRadius: 7,
             display: 'grid',
             placeItems: 'center',
             background: `${condition.accent}24`,
             border: `1px solid ${condition.accent}66`,
-            fontSize: isTouch ? 17 : 19,
+            fontSize: isCompact ? 17 : 19,
             flex: '0 0 auto',
           }}
         >
@@ -81,7 +81,7 @@ export function StageConditionHUD() {
           <div
             style={{
               color: condition.accent,
-              fontSize: isTouch ? 10 : 11,
+              fontSize: isCompact ? 10 : 11,
               lineHeight: '13px',
               fontWeight: 900,
               whiteSpace: 'nowrap',
@@ -94,7 +94,7 @@ export function StageConditionHUD() {
           <div
             style={{
               color: 'rgba(255,255,255,0.94)',
-              fontSize: isTouch ? 12 : 13,
+              fontSize: isCompact ? 12 : 13,
               lineHeight: '16px',
               fontWeight: 900,
               whiteSpace: 'nowrap',
@@ -110,7 +110,7 @@ export function StageConditionHUD() {
             minWidth: 54,
             textAlign: 'right',
             color: active ? '#fff1a8' : 'rgba(255,255,255,0.68)',
-            fontSize: isTouch ? 9 : 10,
+            fontSize: isCompact ? 9 : 10,
             lineHeight: '12px',
             fontWeight: 900,
             fontFamily: 'monospace',
@@ -124,7 +124,7 @@ export function StageConditionHUD() {
         style={{
           marginTop: 7,
           color: 'rgba(255,255,255,0.62)',
-          fontSize: isTouch ? 9 : 10,
+          fontSize: isCompact ? 9 : 10,
           lineHeight: '13px',
           fontWeight: 800,
           display: 'flex',
@@ -172,7 +172,7 @@ export function StageConditionHUD() {
             background: 'rgba(255, 230, 120, 0.18)',
             border: '1px solid rgba(255, 230, 120, 0.22)',
             color: '#fff2a6',
-            fontSize: isTouch ? 10 : 11,
+            fontSize: isCompact ? 10 : 11,
             lineHeight: '14px',
             fontWeight: 900,
             display: 'flex',

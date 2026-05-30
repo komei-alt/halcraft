@@ -25,8 +25,11 @@ import { CoasterCart } from './components/CoasterCart';
 import { WaterRenderer } from './components/WaterRenderer';
 import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageConditionFX } from './components/StageConditionFX';
+import { StageEventFX } from './components/StageEventFX';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
+import { StageEventSystem } from './components/StageEventSystem';
+import { StagePressureSystem } from './components/StagePressureSystem';
 import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
@@ -61,6 +64,8 @@ import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StageProgressHUD } from './components/ui/StageProgressHUD';
 import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
 import { StageConditionHUD } from './components/ui/StageConditionHUD';
+import { StageEventHUD } from './components/ui/StageEventHUD';
+import { StagePressureHUD } from './components/ui/StagePressureHUD';
 import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
 import { ProgressCelebration } from './components/ui/ProgressCelebration';
@@ -118,6 +123,7 @@ function GameCanvas() {
         <Environment />
         <StageAtmosphereFX />
         <StageConditionFX />
+        <StageEventFX />
         <World />
         <TorchRenderer />
         <BedRenderer />
@@ -156,6 +162,8 @@ function GameCanvas() {
         <CoasterCart />
         <WaterRenderer />
         <StageConditionSystem />
+        <StageEventSystem />
+        <StagePressureSystem />
       </Suspense>
     </Canvas>
   );
@@ -285,6 +293,8 @@ export default function App() {
           <StageProgressHUD />
           <StageChallengeHUD />
           <StageConditionHUD />
+          <StageEventHUD />
+          <StagePressureHUD />
           <StageChallengeRewardSystem />
           <StageResultOverlay />
           <MasteryHUD />

@@ -1170,6 +1170,9 @@ export function playXPGainSound(): void {
 
 type StageConditionSoundKind = 'resource' | 'regen' | 'rocket_ready';
 type StageRewardSoundKind = 'build_supply' | 'war_supply' | 'recovery' | 'rocket_ready';
+type StageEventSoundKind = 'forest' | 'tropical' | 'snow' | 'desert' | 'war' | 'rocket';
+type StagePressureSoundKind = 'ambush' | 'humidity' | 'cold' | 'heat';
+type StagePressureSoundSeverity = 'danger' | 'critical';
 
 /** ステージ特性発動SE — 効果タイプごとに手触りを変える */
 export function playStageConditionSound(kind: StageConditionSoundKind): void {
@@ -1281,6 +1284,122 @@ export function playStageRewardSound(kind: StageRewardSoundKind): void {
   tickGain.connect(ctx.destination);
   tick.start(now + 0.11);
   tick.stop(now + 0.22);
+}
+
+/** ステージ環境プレッシャー警告SE — マップごとの消耗に気づける短い注意音 */
+export function playStagePressureSound(
+  kind: StagePressureSoundKind,
+  severity: StagePressureSoundSeverity,
+): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`stagePressure-${kind}`, severity === 'critical' ? 1600 : 2200)) return;
+  const now = ctx.currentTime;
+  const baseFrequency = kind === 'cold'
+    ? 420
+    : kind === 'heat'
+      ? 190
+      : kind === 'humidity'
+        ? 260
+        : 140;
+  const highFrequency = severity === 'critical' ? baseFrequency * 2.6 : baseFrequency * 1.8;
+
+  const osc = ctx.createOscillator();
+  osc.type = kind === 'ambush' ? 'sawtooth' : 'triangle';
+  osc.frequency.setValueAtTime(baseFrequency, now);
+  osc.frequency.exponentialRampToValueAtTime(highFrequency, now + 0.18);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = kind === 'cold' ? 'highpass' : 'bandpass';
+  filter.frequency.setValueAtTime(kind === 'cold' ? 520 : 720, now);
+  filter.Q.setValueAtTime(severity === 'critical' ? 2.2 : 1.2, now);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(severity === 'critical' ? 0.07 : 0.045, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.28);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = kind === 'heat' ? 'lowpass' : 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'heat' ? 520 : 1600, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(severity === 'critical' ? 0.045 : 0.025, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.22);
+}
+
+/** ステージ時間イベントSE — 補給やチャンスタイムの発生をマップ別に鳴らす */
+export function playStageEventSound(kind: StageEventSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('stageEvent', 650)) return;
+  const now = ctx.currentTime;
+  const notes = kind === 'rocket'
+    ? [196, 392, 784]
+    : kind === 'war'
+      ? [220, 293.66, 440]
+      : kind === 'snow'
+        ? [659.25, 880, 1174.66]
+        : kind === 'desert'
+          ? [261.63, 392, 523.25]
+          : kind === 'tropical'
+            ? [523.25, 698.46, 880]
+            : [392, 523.25, 783.99];
+  const wave: OscillatorType = kind === 'rocket' || kind === 'war' ? 'sawtooth' : 'triangle';
+
+  for (let i = 0; i < notes.length; i++) {
+    const t = now + i * 0.052;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(notes[i], t);
+    osc.frequency.exponentialRampToValueAtTime(notes[i] * 1.07, t + 0.2);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'rocket' || kind === 'war' ? 'bandpass' : 'lowpass';
+    filter.frequency.setValueAtTime(kind === 'rocket' ? 960 : 2200, t);
+    filter.Q.setValueAtTime(kind === 'rocket' || kind === 'war' ? 1.8 : 0.7, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'rocket' ? 0.062 : 0.055, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.28);
+  }
+
+  if (kind !== 'rocket' && kind !== 'war') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'rocket' ? 1800 : 900, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(kind === 'rocket' ? 0.04 : 0.026, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.18);
 }
 
 /** レベルアップSE — 上昇する和音 */
