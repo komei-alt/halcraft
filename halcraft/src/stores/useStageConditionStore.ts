@@ -9,7 +9,7 @@ import {
   getStageCondition,
   type StageConditionDefinition,
 } from '../types/stageConditions';
-import { playXPGainSound } from '../utils/sounds';
+import { playStageConditionSound } from '../utils/sounds';
 
 export interface StageConditionActivation {
   id: string;
@@ -75,7 +75,7 @@ export const useStageConditionStore = create<StageConditionState>()((set, get) =
         createdAt,
       },
     });
-    playXPGainSound();
+    playStageConditionSound(condition.effect.kind);
   };
 
   return {

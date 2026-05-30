@@ -14,10 +14,12 @@ import { initPushIfPWA } from '../../utils/pushNotifications';
 import { InstallBanner } from './mobile/InstallBanner';
 import { UpdateLog } from './UpdateLog';
 import { SkinSelector } from './SkinSelector';
-import { STAGES, type StageCategory } from '../../types/stages';
+import { STAGES, type StageCategory, type StageDefinition } from '../../types/stages';
 import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel } from '../../types/stageChallenges';
 import { getStageCondition } from '../../types/stageConditions';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
+import { TOOL_DEFS, type ToolId } from '../../types/tools';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
@@ -51,6 +53,18 @@ const CATEGORIES: Array<{
   },
 ];
 
+interface StarterBlockPreview {
+  blockId: BlockId;
+  count: number;
+}
+
+interface StageBriefingSection {
+  title: string;
+  value: string;
+  details: string[];
+  accent: string;
+}
+
 function loadCategory(): StageCategory {
   try {
     const saved = localStorage.getItem(SELECTED_CATEGORY_KEY);
@@ -82,6 +96,142 @@ function extractStagePlayerCounts(payload: unknown): Record<string, number> | nu
   }
 
   return counts;
+}
+
+function getShortBlockName(blockId: BlockId): string {
+  return (BLOCK_DEFS[blockId]?.name ?? `ID${blockId}`)
+    .replace('ブロック', '')
+    .replace('草付き土', '草')
+    .replace('生の木', '原木')
+    .replace('グロウストーン', '光る石')
+    .replace('電気の', '電気');
+}
+
+function getStarterBlockPreview(stage: StageDefinition, limit: number): StarterBlockPreview[] {
+  return Object.entries(stage.rules.starterKit.blocks)
+    .map(([rawBlockId, rawCount]) => ({
+      blockId: Number(rawBlockId) as BlockId,
+      count: rawCount ?? 0,
+    }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+function getStarterToolLabels(tools: ToolId[], equippedToolId: ToolId | null, limit: number): string[] {
+  return [...tools]
+    .sort((a, b) => {
+      if (a === equippedToolId) return -1;
+      if (b === equippedToolId) return 1;
+      return a.localeCompare(b);
+    })
+    .slice(0, limit)
+    .map((toolId) => {
+      const tool = TOOL_DEFS[toolId];
+      if (!tool) return toolId;
+      return toolId === equippedToolId ? `${tool.emoji} ${tool.name}装備` : `${tool.emoji} ${tool.name}`;
+    });
+}
+
+function getChallengeTargetText(metric: string, target: number): string {
+  switch (metric) {
+    case 'enemies_defeated':
+      return `${target}体`;
+    case 'boss_defeated':
+      return 'ボス';
+    case 'machine_gun_hits':
+    case 'rocket_hits':
+    case 'lightsaber_hits':
+      return `${target}hit`;
+    case 'detonations':
+      return `${target}回`;
+    default:
+      return `${target}個`;
+  }
+}
+
+function getEnemyPreview(stage: StageDefinition): string[] {
+  const tuning = stage.rules.enemyTuning;
+  if (!tuning) {
+    return [
+      '敵なし / 建築に集中',
+      `昼の長さ ${Math.round(stage.rules.dayDurationSeconds / 60)}分`,
+      `目印: ${stage.rules.landmarkName}`,
+    ];
+  }
+
+  const xpLabel = tuning.xpMultiplier === 1
+    ? 'XP 標準'
+    : `XP +${Math.round((tuning.xpMultiplier - 1) * 100)}%`;
+
+  return [
+    `敵上限 ${tuning.maxHostileMobs}体`,
+    `ゾンビ${tuning.zombieIntervalSeconds.toFixed(1)}秒 / クモ${tuning.spiderIntervalSeconds.toFixed(1)}秒`,
+    `ボス ${tuning.bossAfterDefeats}体撃破で出現`,
+    xpLabel,
+  ];
+}
+
+function getStageBriefingSections(
+  stage: StageDefinition,
+  condition: ReturnType<typeof getStageCondition>,
+  challenges: ReturnType<typeof getStageChallenges>,
+  completedCount: number,
+  challengeCount: number,
+  compact: boolean,
+): StageBriefingSection[] {
+  const blockPreview = getStarterBlockPreview(stage, compact ? 3 : 4)
+    .map((entry) => `${getShortBlockName(entry.blockId)}x${entry.count}`);
+  const toolPreview = getStarterToolLabels(
+    stage.rules.starterKit.tools,
+    stage.rules.starterKit.equippedToolId,
+    compact ? 1 : 2,
+  );
+  const challengePreview = challenges
+    .slice(0, compact ? 2 : 3)
+    .map((challenge) => `${challenge.icon} ${challenge.title} ${getChallengeTargetText(challenge.metric, challenge.target)}`);
+
+  return [
+    {
+      title: '目的',
+      value: stage.rules.objective.title,
+      details: [
+        stage.rules.objective.targetCount
+          ? `${stage.rules.objective.targetCount}体撃破でクリア`
+          : '自由建築 / つくるほど成長',
+        stage.rules.objective.prompts.slice(0, compact ? 2 : 3).join('・'),
+      ],
+      accent: stage.color,
+    },
+    {
+      title: 'マップ特性',
+      value: condition ? condition.title : stage.rules.landmarkName,
+      details: condition
+        ? [
+            `${condition.triggerLabel}を${condition.target}回`,
+            `${condition.effect.label} / ${Math.round(condition.activeDurationMs / 1000)}秒`,
+          ]
+        : [stage.rules.shortPitch],
+      accent: condition?.accent ?? stage.color,
+    },
+    {
+      title: '支給品',
+      value: blockPreview.join(' / '),
+      details: toolPreview.length > 0 ? toolPreview : ['手ぶらで開始'],
+      accent: 'rgba(255, 230, 128, 0.95)',
+    },
+    {
+      title: stage.rules.enemyTuning ? '敵とやり込み' : 'やり込み',
+      value: `${completedCount}/${challengeCount} チャレンジ`,
+      details: stage.rules.enemyTuning
+        ? [
+            ...getEnemyPreview(stage).slice(0, compact ? 1 : 2),
+            ...challengePreview.slice(0, 1),
+          ]
+        : challengePreview,
+      accent: stage.rules.enemyTuning ? 'rgba(255, 154, 102, 0.95)' : 'rgba(150, 230, 255, 0.95)',
+    },
+  ];
 }
 
 export function StartScreen() {
@@ -117,6 +267,11 @@ export function StartScreen() {
     return filteredStages[0]?.id ?? selectedStageId;
   }, [filteredStages, selectedStageId]);
 
+  const activeStage = useMemo(
+    () => filteredStages.find((stage) => stage.id === activeStageId) ?? filteredStages[0] ?? STAGES[0],
+    [activeStageId, filteredStages],
+  );
+
   // ビューポートサイズを追跡（UpdateLog 表示判定＋レイアウト切り替え用）
   const [viewportSize, setViewportSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -134,6 +289,33 @@ export function StartScreen() {
   // 横画面かどうか（高さが極端に低い）
   const isLandscapeMobile = viewportSize.h < 500 && viewportSize.w > viewportSize.h;
   const compactLayout = isTouch || viewportSize.w < 560;
+  const briefingColumns = viewportSize.w < 380
+    ? '1fr'
+    : compactLayout || (showUpdateLog && viewportSize.w < 1100)
+      ? 'repeat(2, minmax(0, 1fr))'
+      : 'repeat(4, minmax(0, 1fr))';
+  const briefingPanelWidth = isTouch
+    ? 'min(100%, 340px)'
+    : showUpdateLog
+      ? 'min(760px, calc(100vw - 420px))'
+      : 'min(820px, calc(100vw - 48px))';
+  const activeCondition = useMemo(() => getStageCondition(activeStage.id), [activeStage.id]);
+  const activeChallenges = useMemo(() => getStageChallenges(activeStage.id), [activeStage.id]);
+  const activeChallengeCount = activeChallenges.length;
+  const activeCompletedCount = bestByStage[activeStage.id]?.completedCount ?? 0;
+  const activeMedal = getStageChallengeMedal(activeCompletedCount, activeChallengeCount);
+  const activeMedalLabel = getStageChallengeMedalLabel(activeMedal);
+  const activeBriefingSections = useMemo(
+    () => getStageBriefingSections(
+      activeStage,
+      activeCondition,
+      activeChallenges,
+      activeCompletedCount,
+      activeChallengeCount,
+      compactLayout,
+    ),
+    [activeStage, activeCondition, activeChallenges, activeCompletedCount, activeChallengeCount, compactLayout],
+  );
 
   // 定期的にステージのプレイヤー数を取得
   useEffect(() => {
@@ -444,7 +626,7 @@ export function StartScreen() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {condition.icon} {condition.title}
+                    {condition.icon} {condition.triggerLabel}→{condition.effect.label}
                   </div>
                 )}
                 <div
@@ -465,6 +647,142 @@ export function StartScreen() {
               </div>
             );
           })}
+        </div>
+
+        {/* 選択中ステージの差分ブリーフィング */}
+        <div
+          id="stage-briefing-panel"
+          style={{
+            width: briefingPanelWidth,
+            marginBottom: isTouch ? 12 : 16,
+            padding: isTouch ? '9px 10px' : '12px 14px',
+            background: 'rgba(0,0,0,0.56)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 8,
+            color: '#fff',
+            boxShadow: `0 0 22px ${activeStage.color}33`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: isTouch ? 8 : 10,
+              marginBottom: isTouch ? 8 : 10,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ fontSize: isTouch ? 18 : 22, flexShrink: 0 }}>{activeStage.icon}</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  color: activeStage.color,
+                  fontSize: isTouch ? 11 : 13,
+                  fontWeight: 900,
+                  lineHeight: '16px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {activeStage.rules.modeLabel}
+              </div>
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.82)',
+                  fontSize: isTouch ? 10 : 12,
+                  lineHeight: isTouch ? '14px' : '16px',
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: compactLayout ? 2 : 1,
+                  WebkitBoxOrient: 'vertical',
+                }}
+              >
+                {activeStage.rules.objective.description}
+              </div>
+            </div>
+            <div
+              style={{
+                flexShrink: 0,
+                padding: isTouch ? '4px 6px' : '5px 8px',
+                borderRadius: 6,
+                border: `1px solid ${activeMedal === 'gold' ? 'rgba(255,230,128,0.75)' : 'rgba(255,255,255,0.2)'}`,
+                color: activeMedal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.72)',
+                background: activeMedal === 'gold' ? 'rgba(255,200,60,0.14)' : 'rgba(255,255,255,0.08)',
+                fontSize: isTouch ? 8 : 10,
+                fontWeight: 900,
+                fontFamily: 'monospace',
+              }}
+            >
+              {activeMedalLabel}
+            </div>
+          </div>
+
+          <div
+            className="stage-briefing-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: briefingColumns,
+              gap: isTouch ? 6 : 8,
+            }}
+          >
+            {activeBriefingSections.map((section) => (
+              <div
+                key={section.title}
+                style={{
+                  minWidth: 0,
+                  padding: isTouch ? '7px 7px' : '8px 9px',
+                  borderLeft: `3px solid ${section.accent}`,
+                  background: 'rgba(255,255,255,0.07)',
+                  borderRadius: 5,
+                }}
+              >
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: isTouch ? 8 : 9,
+                    fontWeight: 900,
+                    letterSpacing: 1,
+                    marginBottom: 3,
+                  }}
+                >
+                  {section.title}
+                </div>
+                <div
+                  style={{
+                    color: '#fff',
+                    fontSize: isTouch ? 9 : 10,
+                    fontWeight: 900,
+                    lineHeight: isTouch ? '13px' : '14px',
+                    minHeight: isTouch ? 25 : 28,
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                  }}
+                >
+                  {section.value}
+                </div>
+                {section.details.map((detail) => (
+                  <div
+                    key={detail}
+                    style={{
+                      color: 'rgba(255,255,255,0.68)',
+                      fontSize: isTouch ? 8 : 9,
+                      lineHeight: isTouch ? '12px' : '13px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {detail}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* 名前入力 */}

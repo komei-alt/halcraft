@@ -1108,6 +1108,67 @@ export function playXPGainSound(): void {
   osc.stop(now + 0.08);
 }
 
+type StageConditionSoundKind = 'resource' | 'regen' | 'rocket_ready';
+
+/** ステージ特性発動SE — 効果タイプごとに手触りを変える */
+export function playStageConditionSound(kind: StageConditionSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('stageCondition', 450)) return;
+  const now = ctx.currentTime;
+  const notes = kind === 'rocket_ready'
+    ? [196, 392, 784]
+    : kind === 'regen'
+      ? [392, 523.25, 659.25]
+      : [523.25, 783.99, 1046.5];
+  const wave: OscillatorType = kind === 'rocket_ready'
+    ? 'sawtooth'
+    : kind === 'regen'
+      ? 'sine'
+      : 'triangle';
+
+  for (let i = 0; i < notes.length; i++) {
+    const t = now + i * 0.055;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(notes[i], t);
+    osc.frequency.exponentialRampToValueAtTime(notes[i] * 1.08, t + 0.18);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'rocket_ready' ? 'bandpass' : 'lowpass';
+    filter.frequency.setValueAtTime(kind === 'rocket_ready' ? 900 : 2400, t);
+    filter.Q.setValueAtTime(kind === 'rocket_ready' ? 2.4 : 0.7, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'rocket_ready' ? 0.055 : 0.07, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.28);
+  }
+
+  if (kind !== 'rocket_ready') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(1800, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.05, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.16);
+}
+
 /** レベルアップSE — 上昇する和音 */
 export function playLevelUpSound(): void {
   const ctx = getAudioContext();

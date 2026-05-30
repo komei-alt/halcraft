@@ -199,4 +199,16 @@ body {
     width: 110px !important;
     flex-shrink: 0 !important;
   }
+
+  #stage-briefing-panel {
+    width: 320px !important;
+    max-height: 178px !important;
+    overflow-y: auto !important;
+    flex-shrink: 0 !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #stage-briefing-panel .stage-briefing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
