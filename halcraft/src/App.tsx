@@ -10,6 +10,7 @@ import { World } from './components/World';
 import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
 import { BlockBreakEffect } from './components/BlockBreakEffect';
+import { BlockUseEffect } from './components/BlockUseEffect';
 import { DamagePopup } from './components/DamagePopup';
 import { HitImpactEffect } from './components/HitImpactEffect';
 import { MobDeathEffect } from './components/MobDeathEffect';
@@ -136,6 +137,7 @@ function GameCanvas() {
         <Player />
         <BlockInteraction />
         <BlockBreakEffect />
+        <BlockUseEffect />
         <DamagePopup />
         <HitImpactEffect />
         <MobDeathEffect />

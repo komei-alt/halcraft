@@ -10,6 +10,7 @@ import {
 import { getStageChallengeMedalLabel, useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
+import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
 import { isTouchDevice } from '../../utils/device';
 
@@ -33,6 +34,7 @@ export function ProgressCelebration() {
   const lastChallengeIdRef = useRef<string | null>(null);
   const lastConditionIdRef = useRef<string | null>(null);
   const lastStageEventIdRef = useRef<string | null>(null);
+  const lastItemFeedbackIdRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
@@ -129,11 +131,29 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeItemFeedback = useItemFeedbackStore.subscribe((state, previous) => {
+      const feedback = state.recentFeedback;
+      if (useGameStore.getState().phase !== 'playing' || !feedback) return;
+      if (feedback.id === previous.recentFeedback?.id || lastItemFeedbackIdRef.current === feedback.id) return;
+      lastItemFeedbackIdRef.current = feedback.id;
+
+      addToast({
+        id: feedback.id,
+        icon: feedback.icon,
+        eyebrow: feedback.eyebrow,
+        title: feedback.title,
+        detail: feedback.detail,
+        accent: feedback.accent,
+        glow: feedback.glow,
+      });
+    });
+
     return () => {
       unsubscribeMastery();
       unsubscribeChallenge();
       unsubscribeCondition();
       unsubscribeStageEvent();
+      unsubscribeItemFeedback();
     };
   }, [addToast]);
 

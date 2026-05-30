@@ -18,14 +18,16 @@ import { useExperienceStore } from '../stores/useExperienceStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { isTouchDevice } from '../utils/device';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
-import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
-import { playHitSound, playBlockBreakSound, playBlockPlaceSound, playInventoryEmptySound } from '../utils/sounds';
+import { spawnBlockBreakEffect, spawnBlockUseEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
+import { playHitSound, playBlockBreakSound, playBlockPlaceSound, playInventoryEmptySound, playBlockUseFeedbackSound } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
+import type { BlockUseFeedbackContext } from '../utils/blockUseFeedback';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -88,6 +90,11 @@ interface TargetMob {
   z: number;
   hitY: number;
   distance: number;
+}
+
+interface SpecialPlacementResult extends BlockUseFeedbackContext {
+  detonatedCount?: number;
+  spawnedIronGolem?: boolean;
 }
 
 /** ブロック選択ハイライト用の共有ジオメトリ */
@@ -163,6 +170,7 @@ export function BlockInteraction() {
   const recordStageBlockPlace = useStageChallengeStore((s) => s.recordBlockPlace);
   const recordStageBlockBreak = useStageChallengeStore((s) => s.recordBlockBreak);
   const recordConditionBlockPlace = useStageConditionStore((s) => s.recordBlockPlace);
+  const recordConditionDetonation = useStageConditionStore((s) => s.recordDetonation);
 
   // 設置先ブロックがプレイヤーの体と重なるかチェック
   // マージン0.1を追加して浮動小数点の境界ケースを確実にガード
@@ -318,17 +326,35 @@ export function BlockInteraction() {
     return closestMob;
   }, [camera]);
 
+  const emitBlockUseFeedback = useCallback((
+    blockId: BlockId,
+    x: number,
+    y: number,
+    z: number,
+    context: BlockUseFeedbackContext = {},
+  ) => {
+    const feedback = useItemFeedbackStore.getState().emitBlockUseFeedback(
+      blockId,
+      useGameStore.getState().currentStageId,
+      context,
+    );
+    if (!feedback) return;
+    spawnBlockUseEffect(feedback.kind, x, y, z, feedback.accent);
+    playBlockUseFeedbackSound(feedback.soundKind);
+  }, []);
+
   const recordBlockBreakMastery = useCallback((blockId: BlockId) => {
     const def = BLOCK_DEFS[blockId];
     recordBuilderAction(def?.blockCategory === 'ore' ? 'mine_ore' : 'block_break');
     if (def?.explosive) {
       recordBuilderAction('detonate');
+      recordConditionDetonation();
     }
     recordStageBlockBreak(blockId, {
       isOre: def?.blockCategory === 'ore',
       isExplosive: Boolean(def?.explosive),
     });
-  }, [recordBuilderAction, recordStageBlockBreak]);
+  }, [recordBuilderAction, recordConditionDetonation, recordStageBlockBreak]);
 
   const recordBlockPlaceMastery = useCallback((blockId: BlockId) => {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
@@ -346,23 +372,31 @@ export function BlockInteraction() {
     recordBlockBreakMastery(blockId);
     const cp = camera.position;
     triggerTntExplosion(x, y, z, [cp.x, cp.y - 1.6, cp.z]);
+    emitBlockUseFeedback(blockId, x, y, z, { detonatedCount: 1 });
     return true;
-  }, [breakBlock, camera, getBlock, recordBlockBreakMastery, sendBlockBreak]);
+  }, [breakBlock, camera, emitBlockUseFeedback, getBlock, recordBlockBreakMastery, sendBlockBreak]);
 
-  const detonateAdjacentExplosives = useCallback((x: number, y: number, z: number): void => {
+  const detonateAdjacentExplosives = useCallback((x: number, y: number, z: number): number => {
     const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as const;
+    let detonatedCount = 0;
     for (const [dx, dy, dz] of dirs) {
-      detonateExplosiveBlock(x + dx, y + dy, z + dz);
+      if (detonateExplosiveBlock(x + dx, y + dy, z + dz)) {
+        detonatedCount++;
+      }
     }
+    return detonatedCount;
   }, [detonateExplosiveBlock]);
 
-  const applySpecialPlacement = useCallback((blockId: BlockId, x: number, y: number, z: number): void => {
+  const applySpecialPlacement = useCallback((blockId: BlockId, x: number, y: number, z: number): SpecialPlacementResult => {
+    const result: SpecialPlacementResult = {};
     if (blockId === BLOCK_IDS.SPAWNER) {
       spawnMob('iron_golem', x + 0.5, y + 2, z + 0.5);
+      result.spawnedIronGolem = true;
     }
     if (blockId === BLOCK_IDS.LEVER) {
-      detonateAdjacentExplosives(x, y, z);
+      result.detonatedCount = detonateAdjacentExplosives(x, y, z);
     }
+    return result;
   }, [detonateAdjacentExplosives, spawnMob]);
 
   const tryPlaceSelectedBlock = useCallback((t: TargetBlock): boolean => {
@@ -381,10 +415,12 @@ export function BlockInteraction() {
     sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     playBlockPlaceSound();
     recordBlockPlaceMastery(selectedBlock);
-    applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
+    const specialPlacement = applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
+    emitBlockUseFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ, specialPlacement);
     return true;
   }, [
     applySpecialPlacement,
+    emitBlockUseFeedback,
     getBlock,
     getSelectedBlock,
     recordBlockPlaceMastery,

@@ -14,6 +14,7 @@ import { useStageConditionStore } from './useStageConditionStore';
 import { useStageEventStore } from './useStageEventStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
+import { getStageOpeningItem, getStageRunBonus } from '../types/stageRunBonuses';
 import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
 import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
@@ -217,10 +218,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { isBuildMode, currentStage } = get();
     const rules = currentStage?.rules;
     const starterKit = rules?.starterKit;
+    const bestMedal = currentStage
+      ? useStageChallengeStore.getState().bestByStage[currentStage.id]?.medal ?? 'none'
+      : 'none';
+    const runBonus = getStageRunBonus(currentStage?.id, bestMedal);
 
     const starterItems: Record<number, number> = {};
     for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {
       if (count && count > 0) starterItems[Number(blockId)] = count;
+    }
+    for (const block of runBonus?.blocks ?? []) {
+      starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
     useInventoryStore.setState({ items: starterItems });
     useMobStore.getState().clearAllMobs();
@@ -235,6 +243,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       const def = TOOL_DEFS[toolId];
       if (def) startingTools[toolId] = def.maxDurability;
     }
+    for (const toolId of runBonus?.tools ?? []) {
+      const def = TOOL_DEFS[toolId];
+      if (def) startingTools[toolId] = def.maxDurability;
+    }
+    const openingInvincibleUntil = isBuildMode
+      ? Number.POSITIVE_INFINITY
+      : Date.now() + 5000 + (runBonus?.shieldMs ?? 0);
 
     set({
       phase: 'playing',
@@ -257,16 +272,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       knockbackVx: 0,
       knockbackVz: 0,
       cameraShake: 0,
-      equippedItem: 'builder',
+      equippedItem: getStageOpeningItem(currentStage?.id),
+      attackCooldown: 0,
+      attackCharge: 1,
+      rocketCooldown: 0,
+      rocketCharge: 1,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,
-      hunger: starterKit?.hunger ?? 20,
+      hunger: Math.min(20, (starterKit?.hunger ?? 20) + (runBonus?.hunger ?? 0)),
       hungerExhaustion: 0,
       airSupply: 15,
       isSubmerged: false,
       isInWater: false,
       // 建築カテゴリは無敵（クリエイティブ的）
-      invincibleUntil: isBuildMode ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+      invincibleUntil: openingInvincibleUntil,
     });
   },
 

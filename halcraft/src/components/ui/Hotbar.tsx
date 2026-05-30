@@ -5,29 +5,10 @@
 import { useMemo } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
-import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
+import { useGameStore } from '../../stores/useGameStore';
+import { BLOCK_DEFS } from '../../types/blocks';
+import { getBlockUseHint } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
-
-function getBlockUseHint(blockId: BlockId): string {
-  if (blockId === BLOCK_IDS.TNT) return '右クリックで起爆 / レバーで連鎖';
-  if (blockId === BLOCK_IDS.LEVER) return '隣のTNTを遠隔起爆';
-  if (blockId === BLOCK_IDS.SPAWNER) return '置くとゴーレム召喚';
-  if (blockId === BLOCK_IDS.TURRET) return '敵を自動射撃';
-  if (blockId === BLOCK_IDS.TORCH || blockId === BLOCK_IDS.CANDLE || blockId === BLOCK_IDS.CAMPFIRE) {
-    return '暗い場所を照らす';
-  }
-  if (
-    blockId === BLOCK_IDS.RAIL ||
-    blockId === BLOCK_IDS.RAIL_SLOPE ||
-    blockId === BLOCK_IDS.RAIL_BOOSTER ||
-    blockId === BLOCK_IDS.RAIL_LOOP ||
-    blockId === BLOCK_IDS.RAIL_CHAIN
-  ) {
-    return 'コースター用レール';
-  }
-  if (blockId === BLOCK_IDS.WATER || blockId === BLOCK_IDS.LAVA) return '流れる地形ブロック';
-  return '置くと1個消費';
-}
 
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
@@ -36,6 +17,7 @@ export function Hotbar() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
   const items = useInventoryStore((s) => s.items);
+  const currentStageId = useGameStore((s) => s.currentStageId);
 
   const isTouch = isTouchDevice();
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
@@ -127,7 +109,7 @@ export function Hotbar() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {selectedCount > 0 ? getBlockUseHint(selectedBlock) : '素材なし / クラフト画面で補充'}
+              {selectedCount > 0 ? getBlockUseHint(selectedBlock, currentStageId) : '素材なし / クラフト画面で補充'}
             </span>
           </span>
           <span
@@ -232,7 +214,7 @@ export function Hotbar() {
 
           return (
             <div
-              key={blockId}
+              key={`${blockId}-${index}`}
               onClick={() => selectSlot(index)}
               onTouchStart={(e) => {
                 // モバイルではタッチで選択

@@ -11,6 +11,7 @@ import {
   getStageChallengeProgress,
   getStageChallenges,
 } from '../../types/stageChallenges';
+import { formatStageRunBonusLabel, getStageRunBonus } from '../../types/stageRunBonuses';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -98,6 +99,7 @@ export function StageResultOverlay() {
     : stage.category === 'war'
       ? '別の戦場でも金メダルをねらえる'
       : '別のマップでも作品を増やせる';
+  const nextRunBonus = getStageRunBonus(stage.id, medal);
   const targetCount = stage.rules.objective.targetCount;
   const objectiveValue = targetCount
     ? `${Math.min(enemiesDefeated, targetCount)}/${targetCount}`
@@ -319,6 +321,41 @@ export function StageResultOverlay() {
         >
           次: {actionHint}
         </div>
+
+        {nextRunBonus && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '9px 10px',
+              borderRadius: 6,
+              color: '#fff',
+              background: `${nextRunBonus.accent}22`,
+              border: `1px solid ${nextRunBonus.accent}55`,
+              fontSize: isTouch ? 11 : 12,
+              fontWeight: 850,
+              lineHeight: '17px',
+            }}
+          >
+            <div
+              style={{
+                color: nextRunBonus.accent,
+                fontSize: isTouch ? 10 : 11,
+                fontWeight: 950,
+                marginBottom: 2,
+              }}
+            >
+              次回開始特典: {nextRunBonus.icon} {nextRunBonus.shortLabel}
+            </div>
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.78)',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {formatStageRunBonusLabel(nextRunBonus)}
+            </div>
+          </div>
+        )}
 
         <div
           style={{

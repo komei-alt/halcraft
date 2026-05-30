@@ -19,6 +19,12 @@ import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel
 import { getStageCondition } from '../../types/stageConditions';
 import { getStagePressure } from '../../types/stagePressures';
 import { getStageEvent } from '../../types/stageEvents';
+import {
+  formatStageRunBonusLabel,
+  getStageOpeningItemLabel,
+  getStageRunBonus,
+  type StageRunBonus,
+} from '../../types/stageRunBonuses';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -179,6 +185,7 @@ function getStageBriefingSections(
   condition: ReturnType<typeof getStageCondition>,
   pressure: ReturnType<typeof getStagePressure>,
   event: ReturnType<typeof getStageEvent>,
+  runBonus: StageRunBonus | null,
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
@@ -248,9 +255,27 @@ function getStageBriefingSections(
     {
       title: '支給品',
       value: blockPreview.join(' / '),
-      details: toolPreview.length > 0 ? toolPreview : ['手ぶらで開始'],
+      details: [
+        `開始: ${getStageOpeningItemLabel(stage.id)}`,
+        ...(toolPreview.length > 0 ? toolPreview : ['手ぶらで開始']),
+      ],
       accent: 'rgba(255, 230, 128, 0.95)',
     },
+  );
+
+  if (runBonus) {
+    sections.push({
+      title: 'メダル特典',
+      value: `${runBonus.icon} ${runBonus.title}`,
+      details: [
+        runBonus.shortLabel,
+        formatStageRunBonusLabel(runBonus),
+      ],
+      accent: runBonus.accent,
+    });
+  }
+
+  sections.push(
     {
       title: stage.rules.enemyTuning ? '敵とやり込み' : 'やり込み',
       value: `${completedCount}/${challengeCount} チャレンジ`,
@@ -340,18 +365,33 @@ export function StartScreen() {
   const activeCompletedCount = bestByStage[activeStage.id]?.completedCount ?? 0;
   const activeMedal = getStageChallengeMedal(activeCompletedCount, activeChallengeCount);
   const activeMedalLabel = getStageChallengeMedalLabel(activeMedal);
+  const activeRunBonus = useMemo(
+    () => getStageRunBonus(activeStage.id, activeMedal),
+    [activeStage.id, activeMedal],
+  );
   const activeBriefingSections = useMemo(
     () => getStageBriefingSections(
       activeStage,
       activeCondition,
       activePressure,
       activeEvent,
+      activeRunBonus,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
       compactLayout,
     ),
-    [activeStage, activeCondition, activePressure, activeEvent, activeChallenges, activeCompletedCount, activeChallengeCount, compactLayout],
+    [
+      activeStage,
+      activeCondition,
+      activePressure,
+      activeEvent,
+      activeRunBonus,
+      activeChallenges,
+      activeCompletedCount,
+      activeChallengeCount,
+      compactLayout,
+    ],
   );
 
   // 定期的にステージのプレイヤー数を取得
@@ -589,13 +629,14 @@ export function StartScreen() {
             const condition = getStageCondition(stage.id);
             const stageEvent = getStageEvent(stage.id);
             const pressure = getStagePressure(stage.id);
+            const runBonus = getStageRunBonus(stage.id, medal);
             return (
               <div
                 key={stage.id}
                 onClick={() => setSelectedStageId(stage.id)}
                 style={{
                   width: isTouch ? 154 : 188,
-                  minHeight: isTouch ? 124 : 142,
+                  minHeight: isTouch ? 134 : 154,
                   padding: isTouch ? '8px 9px' : '10px 12px',
                   background: isSelected ? `${stage.color}55` : 'rgba(0,0,0,0.5)',
                   backdropFilter: 'blur(8px)',
@@ -696,6 +737,21 @@ export function StartScreen() {
                     }}
                   >
                     {stageEvent.icon} {stageEvent.title}: {stageEvent.label}
+                  </div>
+                )}
+                {runBonus && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: runBonus.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 900,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {runBonus.icon} {runBonus.shortLabel}: {formatStageRunBonusLabel(runBonus)}
                   </div>
                 )}
                 <div

@@ -4,6 +4,7 @@
 
 import type { BlockId } from '../types/blocks';
 import type { MobType } from '../stores/useMobStore';
+import type { BlockUseFeedbackKind } from './blockUseFeedback';
 
 // ========== DamagePopup ==========
 let _spawnDamagePopupFn: (damage: number, x: number, y: number, z: number, isCritical: boolean) => void = () => {};
@@ -63,6 +64,29 @@ export function spawnBlockBreakEffect(blockId: BlockId, x: number, y: number, z:
 
 export function registerBlockBreakEffectSpawner(fn: typeof _spawnBlockBreakEffectFn): void {
   _spawnBlockBreakEffectFn = fn;
+}
+
+// ========== BlockUseEffect ==========
+let _spawnBlockUseEffectFn: (
+  kind: BlockUseFeedbackKind,
+  x: number,
+  y: number,
+  z: number,
+  accent: string,
+) => void = () => {};
+
+export function spawnBlockUseEffect(
+  kind: BlockUseFeedbackKind,
+  x: number,
+  y: number,
+  z: number,
+  accent: string,
+): void {
+  _spawnBlockUseEffectFn(kind, x, y, z, accent);
+}
+
+export function registerBlockUseEffectSpawner(fn: typeof _spawnBlockUseEffectFn): void {
+  _spawnBlockUseEffectFn = fn;
 }
 
 // ========== VehicleExplosionEffect ==========

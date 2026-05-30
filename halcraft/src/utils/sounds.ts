@@ -2,6 +2,8 @@
 // Web Audio API でプロシージャル生成する効果音ユーティリティ
 // 外部音声ファイル不要 — コードで合成
 
+import type { BlockUseFeedbackSoundKind } from './blockUseFeedback';
+
 /** AudioContext のシングルトン */
 let audioCtx: AudioContext | null = null;
 
@@ -1021,6 +1023,73 @@ export function playBlockPlaceSound(): void {
   tickGain.connect(ctx.destination);
   tick.start(now);
   tick.stop(now + 0.045);
+}
+
+/** 特殊ブロック使用SE — 置いたブロックの役割ごとに音色を変える */
+export function playBlockUseFeedbackSound(kind: BlockUseFeedbackSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`blockUse:${kind}`, kind === 'condition' ? 320 : 140)) return;
+  const now = ctx.currentTime;
+
+  const notes: Record<BlockUseFeedbackSoundKind, number[]> = {
+    condition: [523.25, 659.25, 880],
+    defense: [196, 293.66, 392],
+    explosive: [110, 82.41, 55],
+    light: [659.25, 880, 1318.51],
+    liquid: [349.23, 261.63, 220],
+    rail: [392, 493.88, 587.33],
+    summon: [220, 440, 659.25],
+    switch: [330, 660],
+    utility: [440, 554.37],
+  };
+
+  const wave: OscillatorType = kind === 'explosive'
+    ? 'sawtooth'
+    : kind === 'defense' || kind === 'switch'
+      ? 'square'
+      : 'triangle';
+
+  notes[kind].forEach((frequency, index) => {
+    const t = now + index * 0.045;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(frequency, t);
+    osc.frequency.exponentialRampToValueAtTime(frequency * (kind === 'explosive' ? 0.72 : 1.08), t + 0.14);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'light' || kind === 'condition' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'explosive' ? 360 : kind === 'liquid' ? 620 : 1400, t);
+    filter.Q.setValueAtTime(kind === 'switch' ? 3.2 : 1.3, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'explosive' ? 0.052 : 0.042, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
+
+  if (kind !== 'explosive' && kind !== 'liquid' && kind !== 'defense') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = kind === 'liquid' ? 'lowpass' : 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'liquid' ? 680 : 1800, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(kind === 'explosive' ? 0.045 : 0.025, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.16);
 }
 
 /** 素材不足SE — 置けないことを小さく知らせる */
