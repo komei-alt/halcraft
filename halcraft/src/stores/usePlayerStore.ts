@@ -9,6 +9,7 @@ import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getStageCombatModifier } from '../types/stageCombatStyles';
 import { playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
 
@@ -91,6 +92,9 @@ interface PlayerState {
 
   /** ロケットランチャーのクールダウン残り時間（秒） */
   rocketCooldown: number;
+
+  /** 今回のロケット再発射に使う総クールダウン時間（秒） */
+  rocketCooldownDuration: number;
 
   /** ロケットランチャーのリチャージ率（0-1、1=発射可能） */
   rocketCharge: number;
@@ -225,6 +229,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   attackCooldown: 0,
   attackCharge: 1,
   rocketCooldown: 0,
+  rocketCooldownDuration: ROCKET_COOLDOWN,
   rocketCharge: 1,
   cameraShake: 0,
   lastDamageTime: 0,
@@ -300,7 +305,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const newCooldown = Math.max(0, state.attackCooldown - dt);
     const newCharge = newCooldown <= 0 ? 1 : Math.min(1, 1 - newCooldown / ATTACK_COOLDOWN);
     const newRocketCooldown = Math.max(0, state.rocketCooldown - dt);
-    const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / ROCKET_COOLDOWN);
+    const rocketDuration = Math.max(0.1, state.rocketCooldownDuration || ROCKET_COOLDOWN);
+    const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / rocketDuration);
     const newShake = Math.max(0, state.cameraShake - SHAKE_DECAY * dt);
     // 変更がある場合のみ更新
     if (
@@ -322,9 +328,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     if (state.rocketCooldown > 0 || state.isDead) return false;
     const bonus = getMasteryBonus('rocket_launcher', getMasteryLevel('rocket_launcher'));
+    const style = getStageCombatModifier(useGameStore.getState().currentStageId, 'rocket_launcher');
+    const cooldownDuration = ROCKET_COOLDOWN * bonus.rocketCooldownMultiplier * style.rocketCooldownMultiplier;
 
     set({
-      rocketCooldown: ROCKET_COOLDOWN * bonus.rocketCooldownMultiplier,
+      rocketCooldown: cooldownDuration,
+      rocketCooldownDuration: cooldownDuration,
       rocketCharge: 0,
       cameraShake: Math.max(state.cameraShake, 0.45),
     });
@@ -430,6 +439,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       attackCharge: 1,
       equippedItem: 'builder',
       rocketCooldown: 0,
+      rocketCooldownDuration: ROCKET_COOLDOWN,
       rocketCharge: 1,
       invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
       hunger: 20,

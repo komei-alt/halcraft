@@ -5,6 +5,7 @@ import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
 import { getMasteryPerkSummary } from '../../types/masteryPerks';
+import { formatStageCombatBonus, getStageCombatStyleForItem } from '../../types/stageCombatStyles';
 import { isTouchDevice } from '../../utils/device';
 
 const SHOW_DURATION_MS = 2200;
@@ -121,6 +122,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
 
 export function WeaponSwitchPopover() {
   const phase = useGameStore((s) => s.phase);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const masteryItems = useMasteryStore((s) => s.items);
   const isTouch = isTouchDevice();
@@ -190,6 +192,7 @@ export function WeaponSwitchPopover() {
   const masteryProgress = mastery ? getMasteryProgress(mastery) : 0;
   const masteryTitle = mastery ? getMasteryTitle(displayItem, mastery.level) : '';
   const masteryPerk = mastery ? getMasteryPerkSummary(displayItem, mastery.level) : '';
+  const stageStyle = getStageCombatStyleForItem(currentStageId, displayItem);
 
   return (
     <div
@@ -336,6 +339,44 @@ export function WeaponSwitchPopover() {
               }}
             >
               特典: {masteryPerk}
+            </div>
+          </div>
+        )}
+
+        {stageStyle && (
+          <div
+            style={{
+              marginTop: 9,
+              padding: '7px 8px',
+              borderRadius: 7,
+              background: `${stageStyle.accent}16`,
+              border: `1px solid ${stageStyle.accent}44`,
+              color: 'rgba(255,255,255,0.84)',
+              fontSize: isTouch ? 10 : 11,
+              lineHeight: '14px',
+              fontWeight: 850,
+            }}
+          >
+            <div
+              style={{
+                color: stageStyle.accent,
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {stageStyle.icon} {stageStyle.title}
+            </div>
+            <div
+              style={{
+                marginTop: 2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {formatStageCombatBonus(stageStyle)}
             </div>
           </div>
         )}

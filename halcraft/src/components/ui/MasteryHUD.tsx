@@ -11,10 +11,12 @@ import {
   useMasteryStore,
 } from '../../stores/useMasteryStore';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
+import { formatStageCombatBonus, getStageCombatStyleForItem } from '../../types/stageCombatStyles';
 import { isTouchDevice } from '../../utils/device';
 
 export function MasteryHUD() {
   const phase = useGameStore((s) => s.phase);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const mastery = useMasteryStore((s) => s.items[equippedItem]);
   const recentEvent = useMasteryStore((s) => s.recentEvent);
@@ -36,6 +38,7 @@ export function MasteryHUD() {
   const title = getMasteryTitle(equippedItem, mastery.level);
   const perkSummary = getMasteryPerkSummary(equippedItem, mastery.level);
   const nextPerkSummary = getNextMasteryPerkSummary(equippedItem, mastery.level);
+  const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const eventMatches = recentEvent?.item === equippedItem;
   const statLabel = equippedItem === 'builder'
     ? `${mastery.blocksChanged} ブロック`
@@ -190,6 +193,18 @@ export function MasteryHUD() {
             }}
           >
             次: {nextPerkSummary}
+          </span>
+        )}
+        {stageStyle && (
+          <span
+            style={{
+              color: stageStyle.accent,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            マップ: {stageStyle.shortLabel} / {formatStageCombatBonus(stageStyle)}
           </span>
         )}
       </div>

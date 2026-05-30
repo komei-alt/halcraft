@@ -14,6 +14,7 @@ import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getStageCombatModifier } from '../types/stageCombatStyles';
 
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
@@ -247,9 +248,13 @@ export function Lightsaber() {
     const step = COMBO_STEPS[comboStep];
     const masteryLevel = useMasteryStore.getState().items.lightsaber?.level ?? 1;
     const masteryBonus = getMasteryBonus('lightsaber', masteryLevel);
-    const attackReach = ATTACK_REACH + masteryBonus.lightsaberReachBonus;
+    const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
+    const attackReach = ATTACK_REACH + masteryBonus.lightsaberReachBonus + styleBonus.lightsaberReachBonus;
     const damage = Math.max(1, Math.round(
-      LIGHTSABER_BASE_DAMAGE * step.damageMultiplier * masteryBonus.lightsaberDamageMultiplier,
+      LIGHTSABER_BASE_DAMAGE
+      * step.damageMultiplier
+      * masteryBonus.lightsaberDamageMultiplier
+      * styleBonus.lightsaberDamageMultiplier,
     ));
 
     attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -370,9 +375,11 @@ export function Lightsaber() {
   const startSwing = useCallback(() => {
     if (isSwinging.current) return;
     const now = performance.now() / 1000;
+    const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
+    const comboResetTime = COMBO_RESET_TIME * styleBonus.lightsaberComboWindowMultiplier;
 
     // コンボリセット判定
-    if (now - lastComboTime.current > COMBO_RESET_TIME) {
+    if (now - lastComboTime.current > comboResetTime) {
       comboIndex.current = 0;
     }
 

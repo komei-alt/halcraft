@@ -276,6 +276,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       attackCooldown: 0,
       attackCharge: 1,
       rocketCooldown: 0,
+      rocketCooldownDuration: 2.8,
       rocketCharge: 1,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,

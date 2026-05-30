@@ -13,7 +13,9 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useGameStore } from '../stores/useGameStore';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getStageCombatModifier } from '../types/stageCombatStyles';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
@@ -124,7 +126,9 @@ export function PlayerMachineGun() {
 
   const fire = useCallback(() => {
     const now = performance.now() / 1000;
-    if (now - lastFireTime.current < FIRE_COOLDOWN) return;
+    const stageStyle = getStageCombatModifier(useGameStore.getState().currentStageId, 'machine_gun');
+    const fireCooldown = FIRE_COOLDOWN * stageStyle.machineGunCooldownMultiplier;
+    if (now - lastFireTime.current < fireCooldown) return;
     if (useVehicleStore.getState().isInVehicle()) return;
     lastFireTime.current = now;
 
@@ -169,7 +173,8 @@ export function PlayerMachineGun() {
 
     const masteryBonus = getMachineGunMasteryBonus();
     const spread = (isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD)
-      * masteryBonus.machineGunSpreadMultiplier;
+      * masteryBonus.machineGunSpreadMultiplier
+      * stageStyle.machineGunSpreadMultiplier;
     shootDir.current.x += (Math.random() - 0.5) * spread;
     shootDir.current.y += (Math.random() - 0.5) * spread;
     shootDir.current.z += (Math.random() - 0.5) * spread;

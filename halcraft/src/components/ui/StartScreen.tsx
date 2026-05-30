@@ -25,6 +25,7 @@ import {
   getStageRunBonus,
   type StageRunBonus,
 } from '../../types/stageRunBonuses';
+import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -248,6 +249,19 @@ function getStageBriefingSections(
         event.label,
       ],
       accent: event.accent,
+    });
+  }
+
+  const combatStyle = getStageCombatStyle(stage.id);
+  if (combatStyle) {
+    sections.push({
+      title: '戦闘スタイル',
+      value: `${combatStyle.icon} ${combatStyle.title}`,
+      details: [
+        formatStageCombatBonus(combatStyle),
+        combatStyle.detail,
+      ],
+      accent: combatStyle.accent,
     });
   }
 
@@ -627,8 +641,6 @@ export function StartScreen() {
             const medal = getStageChallengeMedal(completedCount, challengeCount);
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
-            const stageEvent = getStageEvent(stage.id);
-            const pressure = getStagePressure(stage.id);
             const runBonus = getStageRunBonus(stage.id, medal);
             return (
               <div
@@ -636,7 +648,7 @@ export function StartScreen() {
                 onClick={() => setSelectedStageId(stage.id)}
                 style={{
                   width: isTouch ? 154 : 188,
-                  minHeight: isTouch ? 134 : 154,
+                  minHeight: isTouch ? 122 : 138,
                   padding: isTouch ? '8px 9px' : '10px 12px',
                   background: isSelected ? `${stage.color}55` : 'rgba(0,0,0,0.5)',
                   backdropFilter: 'blur(8px)',
@@ -707,36 +719,6 @@ export function StartScreen() {
                     }}
                   >
                     {condition.icon} {condition.triggerLabel}→{condition.effect.label}
-                  </div>
-                )}
-                {pressure && (
-                  <div
-                    style={{
-                      width: '100%',
-                      color: pressure.accent,
-                      fontSize: isTouch ? 8 : 9,
-                      fontWeight: 900,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {pressure.icon} {pressure.title}: {pressure.protectLabel}
-                  </div>
-                )}
-                {stageEvent && (
-                  <div
-                    style={{
-                      width: '100%',
-                      color: stageEvent.accent,
-                      fontSize: isTouch ? 8 : 9,
-                      fontWeight: 900,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {stageEvent.icon} {stageEvent.title}: {stageEvent.label}
                   </div>
                 )}
                 {runBonus && (
@@ -929,40 +911,81 @@ export function StartScreen() {
           >
             なまえを入力してね
           </label>
-          <input
-            id="player-name-input"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value.slice(0, 8))}
-            onKeyDown={handleKeyDown}
-            placeholder="ハル"
-            maxLength={8}
-            autoComplete="off"
-            autoFocus={!isTouch}
+          <div
             style={{
-              width: isTouch ? 180 : 240,
-              padding: isTouch ? '10px 14px' : '12px 16px',
-              fontSize: isTouch ? 16 : 22,
-              fontWeight: 700,
-              textAlign: 'center',
-              background: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              border: '2px solid',
-              borderColor: isValidName
-                ? 'rgba(100, 220, 100, 0.7)'
-                : 'rgba(255,255,255,0.2)',
-              borderRadius: 10,
-              color: '#fff',
-              outline: 'none',
-              letterSpacing: 4,
-              transition: 'border-color 0.3s, box-shadow 0.3s',
-              boxShadow: isValidName
-                ? '0 0 20px rgba(100, 220, 100, 0.3)'
-                : 'none',
-              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+              display: 'flex',
+              flexDirection: compactLayout ? 'column' : 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: compactLayout ? 7 : 10,
             }}
-          />
+          >
+            <input
+              id="player-name-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 8))}
+              onKeyDown={handleKeyDown}
+              placeholder="ハル"
+              maxLength={8}
+              autoComplete="off"
+              autoFocus={!isTouch}
+              style={{
+                width: isTouch ? 180 : 240,
+                padding: isTouch ? '10px 14px' : '12px 16px',
+                fontSize: isTouch ? 16 : 22,
+                fontWeight: 700,
+                textAlign: 'center',
+                background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '2px solid',
+                borderColor: isValidName
+                  ? 'rgba(100, 220, 100, 0.7)'
+                  : 'rgba(255,255,255,0.2)',
+                borderRadius: 10,
+                color: '#fff',
+                outline: 'none',
+                letterSpacing: 4,
+                transition: 'border-color 0.3s, box-shadow 0.3s',
+                boxShadow: isValidName
+                  ? '0 0 20px rgba(100, 220, 100, 0.3)'
+                  : 'none',
+                fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+              }}
+            />
+
+            <div
+              id="start-game-button"
+              onClick={handleStart}
+              style={{
+                minWidth: isTouch ? 180 : 210,
+                padding: isTouch ? '10px 24px' : '13px 28px',
+                background: isValidName
+                  ? 'rgba(50, 180, 50, 0.35)'
+                  : 'rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(4px)',
+                border: '2px solid',
+                borderColor: isValidName
+                  ? 'rgba(100, 220, 100, 0.6)'
+                  : 'rgba(255,255,255,0.1)',
+                borderRadius: 10,
+                color: isValidName ? '#fff' : 'rgba(255,255,255,0.3)',
+                fontSize: isTouch ? 14 : 18,
+                fontWeight: 800,
+                letterSpacing: 2,
+                animation: isValidName ? 'pulse 2s ease-in-out infinite' : 'none',
+                transition: 'all 0.3s',
+                pointerEvents: isValidName ? 'auto' : 'none',
+                textShadow: isValidName ? '0 1px 4px rgba(0,0,0,0.6)' : 'none',
+                cursor: isValidName ? 'pointer' : 'default',
+                textAlign: 'center',
+                boxSizing: 'border-box',
+              }}
+            >
+              {isJoining ? '接続中...' : (isTouch ? 'タップでスタート' : 'クリックでスタート')}
+            </div>
+          </div>
           <span
             style={{
               color: 'rgba(255,255,255,0.4)',
@@ -997,35 +1020,6 @@ export function StartScreen() {
             サーバーが満員です（最大10人）
           </div>
         )}
-
-        {/* 開始ボタン */}
-        <div
-          onClick={handleStart}
-          style={{
-            marginTop: isTouch ? 14 : 20,
-            padding: isTouch ? '12px 32px' : '16px 48px',
-            background: isValidName
-              ? 'rgba(50, 180, 50, 0.35)'
-              : 'rgba(255,255,255,0.05)',
-            backdropFilter: 'blur(4px)',
-            border: '2px solid',
-            borderColor: isValidName
-              ? 'rgba(100, 220, 100, 0.6)'
-              : 'rgba(255,255,255,0.1)',
-            borderRadius: 10,
-            color: isValidName ? '#fff' : 'rgba(255,255,255,0.3)',
-            fontSize: isTouch ? 15 : 20,
-            fontWeight: 700,
-            letterSpacing: 3,
-            animation: isValidName ? 'pulse 2s ease-in-out infinite' : 'none',
-            transition: 'all 0.3s',
-            pointerEvents: isValidName ? 'auto' : 'none',
-            textShadow: isValidName ? '0 1px 4px rgba(0,0,0,0.6)' : 'none',
-            cursor: isValidName ? 'pointer' : 'default',
-          }}
-        >
-          {isJoining ? '接続中...' : (isTouch ? 'タップでスタート' : 'クリックでスタート')}
-        </div>
 
         {/* 操作説明 */}
         <div
