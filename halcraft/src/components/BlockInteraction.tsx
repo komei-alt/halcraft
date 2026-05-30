@@ -21,15 +21,17 @@ import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useStageBuildScoreStore } from '../stores/useStageBuildScoreStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
+import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { isTouchDevice } from '../utils/device';
+import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnBlockUseEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playHitSound, playBlockBreakSound, playBlockPlaceSound, playInventoryEmptySound, playBlockUseFeedbackSound } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
-import type { BlockUseFeedbackContext } from '../utils/blockUseFeedback';
+import type { BlockUseFeedbackContent, BlockUseFeedbackContext } from '../utils/blockUseFeedback';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -99,6 +101,17 @@ interface SpecialPlacementResult extends BlockUseFeedbackContext {
   spawnedIronGolem?: boolean;
 }
 
+interface ChestLootItem {
+  blockId: BlockId;
+  count: number;
+}
+
+interface SmeltResult {
+  sourceBlockId: BlockId;
+  resultBlockId: BlockId;
+  count: number;
+}
+
 /** ブロック選択ハイライト用の共有ジオメトリ */
 const highlightGeometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
 const highlightMaterial = new THREE.MeshBasicMaterial({
@@ -108,6 +121,65 @@ const highlightMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.5,
   depthTest: false,
 });
+
+const INTERACTIVE_PASS_THROUGH_BLOCKS = new Set<BlockId>([
+  BLOCK_IDS.BED,
+  BLOCK_IDS.DOOR,
+  BLOCK_IDS.LEVER,
+  BLOCK_IDS.NETHER_PORTAL,
+]);
+
+function getChestLoot(stageId: string | null, isBuildModeStage: boolean): ChestLootItem[] {
+  if (stageId === 'build-forest') {
+    return [
+      { blockId: BLOCK_IDS.WOOD, count: 14 },
+      { blockId: BLOCK_IDS.LEAVES, count: 10 },
+      { blockId: BLOCK_IDS.TORCH, count: 4 },
+    ];
+  }
+  if (stageId === 'build-tropical') {
+    return [
+      { blockId: BLOCK_IDS.GLASS, count: 10 },
+      { blockId: BLOCK_IDS.WATER, count: 4 },
+      { blockId: BLOCK_IDS.ELECTRIC, count: 2 },
+    ];
+  }
+  if (stageId === 'build-snow') {
+    return [
+      { blockId: BLOCK_IDS.SNOW, count: 14 },
+      { blockId: BLOCK_IDS.GLASS, count: 8 },
+      { blockId: BLOCK_IDS.GLOWSTONE, count: 2 },
+    ];
+  }
+  if (stageId === 'build-desert') {
+    return [
+      { blockId: BLOCK_IDS.SAND, count: 18 },
+      { blockId: BLOCK_IDS.STONE, count: 8 },
+      { blockId: BLOCK_IDS.WATER, count: 3 },
+    ];
+  }
+  if (isBuildModeStage) {
+    return [
+      { blockId: BLOCK_IDS.WOOD, count: 10 },
+      { blockId: BLOCK_IDS.GLASS, count: 6 },
+      { blockId: BLOCK_IDS.TORCH, count: 4 },
+    ];
+  }
+  return [
+    { blockId: BLOCK_IDS.TNT, count: 2 },
+    { blockId: BLOCK_IDS.IRON_INGOT, count: 4 },
+    { blockId: BLOCK_IDS.TORCH, count: 5 },
+  ];
+}
+
+function formatBlockList(items: ChestLootItem[] | SmeltResult[]): string {
+  return items
+    .map((item) => {
+      const blockId = 'blockId' in item ? item.blockId : item.resultBlockId;
+      return `${BLOCK_DEFS[blockId]?.name ?? '素材'} x${item.count}`;
+    })
+    .join(' / ');
+}
 
 function getBuilderMasteryBonus() {
   const level = useMasteryStore.getState().items.builder?.level ?? 1;
@@ -345,6 +417,23 @@ export function BlockInteraction() {
     playBlockUseFeedbackSound(feedback.soundKind);
   }, []);
 
+  const emitFunctionalFeedback = useCallback((
+    blockId: BlockId,
+    x: number,
+    y: number,
+    z: number,
+    feedback: BlockUseFeedbackContent,
+    rateLimitMs = 500,
+  ) => {
+    const emitted = useItemFeedbackStore.getState().emitFeedback(blockId, feedback, {
+      rateLimitKey: `functional:${x},${y},${z}:${feedback.kind}:${feedback.title}`,
+      rateLimitMs,
+    });
+    if (!emitted) return;
+    spawnBlockUseEffect(emitted.kind, x, y, z, emitted.accent);
+    playBlockUseFeedbackSound(emitted.soundKind);
+  }, []);
+
   const recordBlockBreakMastery = useCallback((blockId: BlockId) => {
     const def = BLOCK_DEFS[blockId];
     recordBuilderAction(def?.blockCategory === 'ore' ? 'mine_ore' : 'block_break');
@@ -402,6 +491,185 @@ export function BlockInteraction() {
     }
     return result;
   }, [detonateAdjacentExplosives, spawnMob]);
+
+  const openChestBlock = useCallback((x: number, y: number, z: number): boolean => {
+    const game = useGameStore.getState();
+    const loot = getChestLoot(game.currentStageId, game.isBuildMode);
+    const inventory = useInventoryStore.getState();
+    for (const item of loot) {
+      inventory.addItem(item.blockId, item.count);
+    }
+
+    setBlock(x, y, z, BLOCK_IDS.AIR);
+    sendBlockBreak(x, y, z);
+    spawnBlockBreakEffect(BLOCK_IDS.CHEST, x, y, z);
+    emitFunctionalFeedback(BLOCK_IDS.CHEST, x, y, z, {
+      icon: '📦',
+      eyebrow: '補給箱オープン',
+      title: 'マップ補給を入手',
+      detail: formatBlockList(loot),
+      accent: '#ffd166',
+      glow: 'rgba(255, 209, 102, 0.36)',
+      kind: 'condition',
+      soundKind: 'condition',
+    });
+    return true;
+  }, [emitFunctionalFeedback, sendBlockBreak, setBlock]);
+
+  const smeltWithFurnace = useCallback((x: number, y: number, z: number): boolean => {
+    const inventory = useInventoryStore.getState();
+    const recipes: Array<{ sourceBlockId: BlockId; resultBlockId: BlockId }> = [
+      { sourceBlockId: BLOCK_IDS.IRON_ORE, resultBlockId: BLOCK_IDS.IRON_INGOT },
+      { sourceBlockId: BLOCK_IDS.GOLD_ORE, resultBlockId: BLOCK_IDS.GOLD_INGOT },
+      { sourceBlockId: BLOCK_IDS.DIAMOND_ORE, resultBlockId: BLOCK_IDS.DIAMOND_GEM },
+    ];
+    const results: SmeltResult[] = [];
+
+    for (const recipe of recipes) {
+      const count = inventory.getItemCount(recipe.sourceBlockId);
+      if (count <= 0) continue;
+      if (inventory.removeItem(recipe.sourceBlockId, count)) {
+        inventory.addItem(recipe.resultBlockId, count);
+        results.push({ ...recipe, count });
+      }
+    }
+
+    if (results.length === 0) {
+      emitFunctionalFeedback(BLOCK_IDS.FURNACE, x, y, z, {
+        icon: '🔥',
+        eyebrow: '精錬待ち',
+        title: '鉱石がない',
+        detail: '鉄・金・ダイヤ鉱石を持ってくると一括精錬できる',
+        accent: '#ffad66',
+        glow: 'rgba(255, 150, 80, 0.3)',
+        kind: 'utility',
+        soundKind: 'switch',
+      }, 900);
+      return true;
+    }
+
+    emitFunctionalFeedback(BLOCK_IDS.FURNACE, x, y, z, {
+      icon: '🔥',
+      eyebrow: '一括精錬',
+      title: 'かまど稼働',
+      detail: formatBlockList(results),
+      accent: '#ffad66',
+      glow: 'rgba(255, 150, 80, 0.34)',
+      kind: 'light',
+      soundKind: 'light',
+    });
+    return true;
+  }, [emitFunctionalFeedback]);
+
+  const restAtBed = useCallback((x: number, y: number, z: number): boolean => {
+    const game = useGameStore.getState();
+    const player = usePlayerStore.getState();
+    const beforeHp = player.hp;
+    if (!game.isBuildMode) {
+      player.heal(8);
+      usePlayerStore.setState((state) => ({
+        invincibleUntil: Math.max(state.invincibleUntil, Date.now() + 3000),
+      }));
+    }
+    if (game.isNight) {
+      useGameStore.setState({
+        gameTime: 0.08,
+        dayCount: game.dayCount + 1,
+        isNight: false,
+      });
+    }
+    const healed = Math.max(0, Math.round(usePlayerStore.getState().hp - beforeHp));
+    const detail = [
+      healed > 0 ? `HP +${healed}` : '体勢を立て直した',
+      game.isNight ? '朝になった' : '少し安全時間を確保',
+    ].join(' / ');
+
+    emitFunctionalFeedback(BLOCK_IDS.BED, x, y, z, {
+      icon: '🛏️',
+      eyebrow: '休憩完了',
+      title: 'ベッドで休んだ',
+      detail,
+      accent: '#ff9fb3',
+      glow: 'rgba(255, 130, 160, 0.32)',
+      kind: 'utility',
+      soundKind: 'condition',
+    }, 900);
+    return true;
+  }, [emitFunctionalFeedback]);
+
+  const toggleDoorBlock = useCallback((x: number, y: number, z: number): boolean => {
+    const open = useFunctionalBlockStore.getState().toggleDoor(x, y, z);
+    emitFunctionalFeedback(BLOCK_IDS.DOOR, x, y, z, {
+      icon: open ? '🚪' : '🔒',
+      eyebrow: open ? 'ドア開放' : 'ドア閉鎖',
+      title: open ? '入口を開いた' : '入口を閉じた',
+      detail: open ? 'ドアが横に開いて通路が見える' : '拠点の入口を閉じた',
+      accent: '#d49a59',
+      glow: 'rgba(200, 130, 70, 0.3)',
+      kind: 'switch',
+      soundKind: 'switch',
+    }, 240);
+    return true;
+  }, [emitFunctionalFeedback]);
+
+  const travelWithPortal = useCallback((x: number, y: number, z: number): boolean => {
+    const game = useGameStore.getState();
+    const goingToNether = game.dimension === 'overworld';
+    if (goingToNether) {
+      game.travelToNether();
+    } else {
+      game.travelToOverworld();
+    }
+    emitFunctionalFeedback(BLOCK_IDS.NETHER_PORTAL, x, y, z, {
+      icon: '🌀',
+      eyebrow: '次元移動',
+      title: goingToNether ? 'ネザーへ移動' : '地上へ帰還',
+      detail: goingToNether ? '空と霧がネザーの色に変わる' : 'いつもの世界へ戻った',
+      accent: '#9c6bff',
+      glow: 'rgba(130, 80, 255, 0.38)',
+      kind: 'condition',
+      soundKind: 'condition',
+    }, 900);
+    return true;
+  }, [emitFunctionalFeedback]);
+
+  const interactWithTargetBlock = useCallback((t: TargetBlock): boolean => {
+    const targetBlockId = getBlock(t.x, t.y, t.z);
+    if (BLOCK_DEFS[targetBlockId]?.explosive) {
+      return detonateExplosiveBlock(t.x, t.y, t.z);
+    }
+    if (targetBlockId === BLOCK_IDS.LEVER) {
+      const detonatedCount = detonateAdjacentExplosives(t.x, t.y, t.z);
+      emitBlockUseFeedback(BLOCK_IDS.LEVER, t.x, t.y, t.z, { detonatedCount });
+      return true;
+    }
+    if (targetBlockId === BLOCK_IDS.CHEST) {
+      return openChestBlock(t.x, t.y, t.z);
+    }
+    if (targetBlockId === BLOCK_IDS.FURNACE) {
+      return smeltWithFurnace(t.x, t.y, t.z);
+    }
+    if (targetBlockId === BLOCK_IDS.BED) {
+      return restAtBed(t.x, t.y, t.z);
+    }
+    if (targetBlockId === BLOCK_IDS.DOOR) {
+      return toggleDoorBlock(t.x, t.y, t.z);
+    }
+    if (targetBlockId === BLOCK_IDS.NETHER_PORTAL) {
+      return travelWithPortal(t.x, t.y, t.z);
+    }
+    return false;
+  }, [
+    detonateAdjacentExplosives,
+    detonateExplosiveBlock,
+    emitBlockUseFeedback,
+    getBlock,
+    openChestBlock,
+    restAtBed,
+    smeltWithFurnace,
+    toggleDoorBlock,
+    travelWithPortal,
+  ]);
 
   const tryPlaceSelectedBlock = useCallback((t: TargetBlock): boolean => {
     if (!t.hasPlaceTarget) return false;
@@ -540,6 +808,17 @@ export function BlockInteraction() {
         // 液体ブロックは破壊対象外（通過）
         const def = BLOCK_DEFS[block];
         if (def?.isLiquid || def?.noCollision) {
+          if (INTERACTIVE_PASS_THROUGH_BLOCKS.has(block)) {
+            found = {
+              x: bx, y: by, z: bz,
+              placeX: lastAirX,
+              placeY: lastAirY,
+              placeZ: lastAirZ,
+              hasPlaceTarget: false,
+              distance: t,
+            };
+            break;
+          }
           // 液体・非実体ブロックは空気と同じ扱い
           lastAirX = bx;
           lastAirY = by;
@@ -662,7 +941,7 @@ export function BlockInteraction() {
       if (!usePlayerStore.getState().isDead
         && !useVehicleStore.getState().isInVehicle()
         && equippedItem === 'builder'
-        && document.pointerLockElement
+        && isDesktopGameplayInputActive()
       ) {
         placeTimerRef.current += dt;
         const t = targetRef.current;
@@ -726,7 +1005,9 @@ export function BlockInteraction() {
       if (consumePlaceBlock()) {
         const t = targetRef.current;
         if (t) {
-          tryPlaceSelectedBlock(t);
+          if (!interactWithTargetBlock(t)) {
+            tryPlaceSelectedBlock(t);
+          }
         }
       }
     }
@@ -736,8 +1017,8 @@ export function BlockInteraction() {
   const handleMouseDown = useCallback((e: MouseEvent) => {
     // タッチデバイスではマウスクリックは使わない
     if (isTouch.current) return;
-    // PointerLock中でなければ無視
-    if (!document.pointerLockElement) return;
+    // PointerLockが取れない環境でも、canvasがアクティブなら操作を受ける
+    if (!isDesktopGameplayInputActive()) return;
     // 死亡中は操作不可
     if (usePlayerStore.getState().isDead) return;
     // ヘリコプター搭乗中はブロック操作を無効化
@@ -778,10 +1059,9 @@ export function BlockInteraction() {
       const t = targetRef.current;
       if (!t) return;
 
-      // TNTブロックを右クリックで遠隔起爆
-      const targetBlockId = getBlock(t.x, t.y, t.z);
-      if (BLOCK_DEFS[targetBlockId]?.explosive) {
-        detonateExplosiveBlock(t.x, t.y, t.z);
+      // 機能ブロックは設置より先に使う
+      if (interactWithTargetBlock(t)) {
+        isPlacingRef.current = false;
         return;
       }
 
@@ -789,7 +1069,7 @@ export function BlockInteraction() {
         lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
       }
     }
-  }, [breakBlock, camera, detonateExplosiveBlock, equippedItem, getBlock, grantBrokenBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
+  }, [breakBlock, camera, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

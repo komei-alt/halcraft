@@ -14,6 +14,7 @@ import { useStageConditionStore } from './useStageConditionStore';
 import { useStageEventStore } from './useStageEventStore';
 import { useStageBuildScoreStore } from './useStageBuildScoreStore';
 import { useModeFlowStore } from './useModeFlowStore';
+import { useFunctionalBlockStore } from './useFunctionalBlockStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
 import { getStageOpeningItem, getStageRunBonus } from '../types/stageRunBonuses';
@@ -247,6 +248,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     useStageEventStore.getState().startRun(currentStage?.id ?? null);
     useStageBuildScoreStore.getState().startRun(currentStage?.id ?? null);
     useModeFlowStore.getState().startRun(currentStage?.id ?? null);
+    useFunctionalBlockStore.getState().clearFunctionalBlocks();
 
     const startingTools: Record<string, number> = {};
     for (const toolId of starterKit?.tools ?? []) {

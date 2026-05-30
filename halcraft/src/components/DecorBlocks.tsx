@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 
 function usePlacedBlockPositions(blockId: BlockId) {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
@@ -93,23 +94,57 @@ const wickGeom = new THREE.BoxGeometry(0.02, 0.08, 0.02);
 
 export function DoorRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.DOOR);
+  const openDoors = useFunctionalBlockStore((s) => s.openDoors);
 
   if (positions.length === 0) return null;
 
   return (
     <group>
       {positions.map((pos) => (
-        <group key={`door-${pos.x}-${pos.y}-${pos.z}`} position={[pos.x + 0.5, pos.y, pos.z + 0.5]}>
-          <mesh position={[0, 0.5, 0.42]} geometry={doorGeom} material={doorBodyMat} />
-          <mesh position={[-0.25, 0.76, 0.455]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[0.25, 0.76, 0.455]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[-0.25, 0.48, 0.455]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[0.25, 0.48, 0.455]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[-0.25, 0.17, 0.455]} geometry={doorInsetGeom} material={doorInsetMat} />
-          <mesh position={[0.25, 0.17, 0.455]} geometry={doorInsetGeom} material={doorInsetMat} />
-          <mesh position={[0.32, 0.36, 0.47]} geometry={doorKnobGeom} material={knobMat} />
-        </group>
+        <DoorModel
+          key={`door-${pos.x}-${pos.y}-${pos.z}`}
+          position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
+          open={Boolean(openDoors[`${pos.x},${pos.y},${pos.z}`])}
+        />
       ))}
+    </group>
+  );
+}
+
+function DoorModel({
+  position,
+  open,
+}: {
+  position: [number, number, number];
+  open: boolean;
+}) {
+  const panelRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (!panelRef.current) return;
+    const targetRotation = open ? -Math.PI * 0.58 : 0;
+    panelRef.current.rotation.y = THREE.MathUtils.damp(
+      panelRef.current.rotation.y,
+      targetRotation,
+      12,
+      delta,
+    );
+  });
+
+  return (
+    <group position={position}>
+      <group ref={panelRef} position={[-0.46, 0, 0.42]}>
+        <group position={[0.46, 0, 0]}>
+          <mesh position={[0, 0.5, 0]} geometry={doorGeom} material={doorBodyMat} />
+          <mesh position={[-0.25, 0.76, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
+          <mesh position={[0.25, 0.76, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
+          <mesh position={[-0.25, 0.48, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
+          <mesh position={[0.25, 0.48, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
+          <mesh position={[-0.25, 0.17, 0.035]} geometry={doorInsetGeom} material={doorInsetMat} />
+          <mesh position={[0.25, 0.17, 0.035]} geometry={doorInsetGeom} material={doorInsetMat} />
+          <mesh position={[0.32, 0.36, 0.05]} geometry={doorKnobGeom} material={knobMat} />
+        </group>
+      </group>
     </group>
   );
 }

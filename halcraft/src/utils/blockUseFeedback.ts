@@ -171,7 +171,7 @@ const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
   [BLOCK_IDS.BED]: {
     icon: '🛏️',
     eyebrow: '休憩ポイント',
-    detail: '部屋やベースに生活感を足せる',
+    detail: '右クリックで休憩してHPと朝を整えられる',
     accent: '#ff9fb3',
     glow: 'rgba(255, 130, 160, 0.3)',
     kind: 'utility',
@@ -198,7 +198,7 @@ const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
   [BLOCK_IDS.DOOR]: {
     icon: '🚪',
     eyebrow: '入口づくり',
-    detail: '家や基地に入れる場所を作る',
+    detail: '右クリックで開閉できる入口を作る',
     accent: '#d49a59',
     glow: 'rgba(200, 130, 70, 0.3)',
     kind: 'utility',
@@ -279,7 +279,7 @@ const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
   [BLOCK_IDS.CHEST]: {
     icon: '📦',
     eyebrow: '保管ポイント',
-    detail: '拠点や部屋に倉庫らしさを足せる',
+    detail: '右クリックでマップ補給を開けられる',
     accent: '#d79b52',
     glow: 'rgba(210, 145, 70, 0.28)',
     kind: 'utility',
@@ -288,7 +288,7 @@ const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
   [BLOCK_IDS.FURNACE]: {
     icon: '🔥',
     eyebrow: '作業設備',
-    detail: '工房や基地の生産エリアに置きたい',
+    detail: '右クリックで鉱石を一括精錬できる',
     accent: '#ffad66',
     glow: 'rgba(255, 150, 80, 0.3)',
     kind: 'utility',
@@ -369,7 +369,7 @@ const BLOCK_PURPOSES: Partial<Record<BlockId, BlockPurposeDefinition>> = {
   [BLOCK_IDS.NETHER_PORTAL]: {
     icon: '🌀',
     eyebrow: 'ポータル演出',
-    detail: '別世界への入口として目立つ',
+    detail: '触れるか右クリックで別世界へ移動できる',
     accent: '#9c6bff',
     glow: 'rgba(130, 80, 255, 0.34)',
     kind: 'condition',
