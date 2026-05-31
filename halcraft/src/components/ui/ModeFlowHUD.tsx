@@ -29,6 +29,7 @@ export function ModeFlowHUD() {
   const streakExpiresAt = useModeFlowStore((s) => s.streakExpiresAt);
   const flowRank = useModeFlowStore((s) => s.flowRank);
   const activationCount = useModeFlowStore((s) => s.activationCount);
+  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const recentActivation = useModeFlowStore((s) => s.recentActivation);
   const clearRecentActivation = useModeFlowStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
@@ -52,6 +53,8 @@ export function ModeFlowHUD() {
 
   const progress = Math.max(0, Math.min(1, meter / rule.threshold));
   const streakRemainingMs = rule.category === 'war' ? Math.max(0, streakExpiresAt - now) : 0;
+  const buildFocusRemainingMs = rule.category === 'build' ? Math.max(0, buildFocusUntil - now) : 0;
+  const buildFocusActive = buildFocusRemainingMs > 0;
   const activeTitle = recentActivation?.stageId === stage.id ? recentActivation.title : rule.title;
   const visibleRank = recentActivation?.stageId === stage.id ? recentActivation.flowRank : flowRank;
   const nextRank = getModeFlowRank(activationCount + 1) || 1;
@@ -62,7 +65,9 @@ export function ModeFlowHUD() {
   const activeDetail = recentActivation?.stageId === stage.id
     ? recentActivation.detail
     : rule.category === 'build'
-      ? rule.actionLabel
+      ? buildFocusActive
+        ? `高速建築中 / 残り${formatSeconds(buildFocusRemainingMs)}`
+        : rule.actionLabel
       : streak > 0
         ? `連続${streak}体 / 残り${formatSeconds(streakRemainingMs)}`
         : rule.actionLabel;
@@ -163,7 +168,9 @@ export function ModeFlowHUD() {
           {activeDetail}
         </span>
         <span style={{ flex: '0 0 auto', color: rule.accent, fontFamily: 'monospace', fontWeight: 950 }}>
-          {lastGainLabel ?? (rule.category === 'war' && bestStreak > 0 ? `BEST x${bestStreak}` : `${activationCount}回`)}
+          {buildFocusActive
+            ? 'BUILD x1.32'
+            : lastGainLabel ?? (rule.category === 'war' && bestStreak > 0 ? `BEST x${bestStreak}` : `${activationCount}回`)}
         </span>
       </div>
 

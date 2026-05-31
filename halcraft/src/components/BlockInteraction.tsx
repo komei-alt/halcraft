@@ -19,7 +19,11 @@ import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useStageBuildScoreStore } from '../stores/useStageBuildScoreStore';
-import { useModeFlowStore } from '../stores/useModeFlowStore';
+import {
+  getBuildFocusMiningSpeedMultiplier,
+  getBuildFocusPlacementIntervalMultiplier,
+  useModeFlowStore,
+} from '../stores/useModeFlowStore';
 import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
 import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
@@ -990,7 +994,8 @@ export function BlockInteraction() {
         // 進行度を加算（ツール速度倍率適用）
         const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory)
           * getBuilderMasteryBonus().miningSpeedMultiplier
-          * getBuilderTechniqueBonus().builderMiningSpeedMultiplier;
+          * getBuilderTechniqueBonus().builderMiningSpeedMultiplier
+          * getBuildFocusMiningSpeedMultiplier();
         bp.progress += (dt * miningSpeed) / hardness;
 
         if (bp.progress >= 1) {
@@ -1053,8 +1058,11 @@ export function BlockInteraction() {
             // 照準変化による即時連射はせず常に間隔ベースで判定する（自分方向への暴発防止）。
             const placeInterval = PLACE_INTERVAL
               * getBuilderMasteryBonus().placementIntervalMultiplier
-              * getBuilderTechniqueBonus().builderPlacementIntervalMultiplier;
-            const requiredDelay = placeRepeatStartedRef.current ? placeInterval : PLACE_INITIAL_DELAY;
+              * getBuilderTechniqueBonus().builderPlacementIntervalMultiplier
+              * getBuildFocusPlacementIntervalMultiplier();
+            const requiredDelay = placeRepeatStartedRef.current
+              ? placeInterval
+              : PLACE_INITIAL_DELAY * getBuildFocusPlacementIntervalMultiplier();
             if (placeTimerRef.current >= requiredDelay) {
               // TNT右クリック起爆チェック
               const targetBlockId = getBlock(t.x, t.y, t.z);

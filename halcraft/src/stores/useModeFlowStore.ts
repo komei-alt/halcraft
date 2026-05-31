@@ -19,6 +19,8 @@ import type { MobType } from './useMobStore';
 import { usePlayerStore, type EquippedItem } from './usePlayerStore';
 
 const MODE_FLOW_MAX_RANK = 3;
+const BUILD_FOCUS_MINING_SPEED_MULTIPLIER = 1.32;
+const BUILD_FOCUS_PLACEMENT_INTERVAL_MULTIPLIER = 0.68;
 
 export interface ModeFlowActivation {
   id: string;
@@ -45,6 +47,7 @@ interface ModeFlowState {
   streakExpiresAt: number;
   flowRank: number;
   activationCount: number;
+  buildFocusUntil: number;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
   recordBuildBlockPlace: (blockId: BlockId) => void;
@@ -88,6 +91,18 @@ function getRewardMultiplier(rank: number): number {
   return 1;
 }
 
+export function getBuildFocusRemainingMs(now = nowMs()): number {
+  return Math.max(0, useModeFlowStore.getState().buildFocusUntil - now);
+}
+
+export function getBuildFocusMiningSpeedMultiplier(now = nowMs()): number {
+  return getBuildFocusRemainingMs(now) > 0 ? BUILD_FOCUS_MINING_SPEED_MULTIPLIER : 1;
+}
+
+export function getBuildFocusPlacementIntervalMultiplier(now = nowMs()): number {
+  return getBuildFocusRemainingMs(now) > 0 ? BUILD_FOCUS_PLACEMENT_INTERVAL_MULTIPLIER : 1;
+}
+
 function getCombatStyleHitGain(item: EquippedItem, amount: number, critical: boolean): number {
   const safeAmount = Math.max(1, Math.round(amount));
   if (item === 'machine_gun') return Math.min(18, safeAmount * 5 + (critical ? 4 : 0));
@@ -108,6 +123,7 @@ export function getScaledStageModeReward(rule: StageModeRule, rank: number): Sta
     hunger: rule.reward.hunger > 0 ? rule.reward.hunger + safeRank - 1 : 0,
     shieldMs: rule.reward.shieldMs > 0 ? rule.reward.shieldMs + (safeRank - 1) * 1200 : 0,
     rocketReady: rule.reward.rocketReady,
+    buildFocusMs: rule.reward.buildFocusMs > 0 ? rule.reward.buildFocusMs + (safeRank - 1) * 1600 : 0,
   };
 }
 
@@ -189,6 +205,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   streakExpiresAt: 0,
   flowRank: 0,
   activationCount: 0,
+  buildFocusUntil: 0,
   recentActivation: null,
 
   startRun: (stageId) => {
@@ -203,6 +220,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       streakExpiresAt: 0,
       flowRank: 0,
       activationCount: 0,
+      buildFocusUntil: 0,
       recentActivation: null,
     });
   },
@@ -222,6 +240,12 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const buildFocusUntil = reached
+      ? Math.max(
+          state.buildFocusUntil,
+          createdAt + getScaledStageModeReward(rule, Math.max(1, flowRank)).buildFocusMs,
+        )
+      : state.buildFocusUntil;
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -230,6 +254,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      buildFocusUntil,
     });
   },
 
