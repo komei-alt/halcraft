@@ -2,14 +2,93 @@
 // ESCキーでゲームを一時停止し、「再開」と「タイトルに戻る」を表示
 // マルチプレイ接続中はタイトルに戻る際にサーバーから切断する
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, type CSSProperties } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice } from '../../utils/device';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
+import { SG } from './startScreenTheme';
 
 interface PauseScreenProps {
   onOpenSettings: () => void;
+}
+
+/** ポーズメニューの共通ボタン（アクセント色・ホバーで持ち上がる） */
+function PauseButton({
+  id,
+  icon,
+  label,
+  accent,
+  onClick,
+  touch,
+}: {
+  id: string;
+  icon: string;
+  label: string;
+  accent: string;
+  onClick: () => void;
+  touch: boolean;
+}) {
+  const base: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    padding: touch ? '13px 18px' : '15px 22px',
+    fontSize: touch ? 16 : 18,
+    fontWeight: 800,
+    color: '#fff',
+    background: `linear-gradient(160deg, ${accent}30 0%, ${accent}12 100%)`,
+    border: `2px solid ${accent}66`,
+    borderRadius: 14,
+    cursor: 'pointer',
+    fontFamily: SG.font,
+    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.28)',
+    transition: 'all 0.2s cubic-bezier(0.22,1,0.36,1)',
+    letterSpacing: 1,
+    boxSizing: 'border-box',
+  };
+  return (
+    <button
+      id={id}
+      type="button"
+      onClick={onClick}
+      style={base}
+      onMouseEnter={(e) => {
+        const btn = e.currentTarget;
+        btn.style.background = `linear-gradient(160deg, ${accent}48 0%, ${accent}1f 100%)`;
+        btn.style.borderColor = accent;
+        btn.style.boxShadow = `0 8px 26px ${accent}40`;
+        btn.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        const btn = e.currentTarget;
+        btn.style.background = `linear-gradient(160deg, ${accent}30 0%, ${accent}12 100%)`;
+        btn.style.borderColor = `${accent}66`;
+        btn.style.boxShadow = '0 4px 16px rgba(0,0,0,0.28)';
+        btn.style.transform = 'translateY(0)';
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: touch ? 30 : 34,
+          height: touch ? 30 : 34,
+          borderRadius: 10,
+          background: `${accent}26`,
+          border: `1px solid ${accent}55`,
+          fontSize: touch ? 15 : 17,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </span>
+      <span>{label}</span>
+    </button>
+  );
 }
 
 export function PauseScreen({ onOpenSettings }: PauseScreenProps) {
@@ -73,167 +152,91 @@ export function PauseScreen({ onOpenSettings }: PauseScreenProps) {
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 250,
-        background: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        background: 'rgba(4, 7, 12, 0.68)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         animation: 'pauseFadeIn 0.2s ease-out',
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        fontFamily: SG.font,
       }}
     >
-      {/* タイトル */}
+      {/* 中央パネル */}
       <div
         style={{
-          fontSize: isTouch ? 32 : 42,
-          fontWeight: 900,
-          color: '#fff',
-          letterSpacing: 8,
-          textShadow: '0 0 24px rgba(100, 200, 255, 0.4), 2px 2px 4px rgba(0,0,0,0.8)',
-          marginBottom: isTouch ? 28 : 40,
+          width: isTouch ? 280 : 340,
+          maxWidth: 'calc(100vw - 32px)',
+          padding: isTouch ? '22px 20px 18px' : '28px 26px 22px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          background: 'rgba(11,15,23,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255,255,255,0.14)',
+          borderRadius: 22,
+          boxShadow: 'var(--sg-shadow)',
           animation: 'pauseSlideIn 0.3s ease-out',
         }}
       >
-        ⏸ ポーズ
-      </div>
-
-      {/* メニューボタン群 */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: isTouch ? 12 : 16,
-          width: isTouch ? 220 : 280,
-          animation: 'pauseSlideIn 0.35s ease-out',
-        }}
-      >
-        {/* 再開ボタン */}
-        <button
-          id="pause-resume-btn"
-          type="button"
-          onClick={handleResume}
+        {/* タイトル */}
+        <div
           style={{
-            padding: isTouch ? '14px 24px' : '16px 32px',
-            fontSize: isTouch ? 16 : 20,
-            fontWeight: 700,
+            fontSize: isTouch ? 26 : 32,
+            fontWeight: 900,
             color: '#fff',
-            background: 'linear-gradient(145deg, rgba(60, 180, 80, 0.5), rgba(40, 140, 60, 0.5))',
-            border: '2px solid rgba(100, 220, 120, 0.6)',
-            borderRadius: 10,
-            cursor: 'pointer',
-            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-            textShadow: '1px 1px 3px rgba(0,0,0,0.5)',
-            boxShadow: '0 4px 16px rgba(60, 180, 80, 0.2)',
-            transition: 'all 0.2s ease',
-            letterSpacing: 3,
-            backdropFilter: 'blur(4px)',
-          }}
-          onMouseEnter={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(80, 200, 100, 0.6), rgba(60, 160, 80, 0.6))';
-            btn.style.borderColor = 'rgba(130, 240, 150, 0.8)';
-            btn.style.boxShadow = '0 6px 24px rgba(60, 180, 80, 0.35)';
-            btn.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(60, 180, 80, 0.5), rgba(40, 140, 60, 0.5))';
-            btn.style.borderColor = 'rgba(100, 220, 120, 0.6)';
-            btn.style.boxShadow = '0 4px 16px rgba(60, 180, 80, 0.2)';
-            btn.style.transform = 'translateY(0)';
+            letterSpacing: 4,
+            textShadow: '0 0 22px rgba(100, 200, 255, 0.4), 0 2px 5px rgba(0,0,0,0.7)',
           }}
         >
-          ▶ 再開
-        </button>
-
-        <button
-          id="pause-settings-btn"
-          type="button"
-          onClick={onOpenSettings}
+          ⏸ ポーズ中
+        </div>
+        <div
           style={{
-            padding: isTouch ? '14px 24px' : '16px 32px',
-            fontSize: isTouch ? 16 : 20,
+            color: SG.textFaint,
+            fontSize: isTouch ? 10 : 11,
             fontWeight: 700,
-            color: '#fff',
-            background: 'linear-gradient(145deg, rgba(70, 140, 210, 0.5), rgba(40, 100, 170, 0.5))',
-            border: '2px solid rgba(120, 200, 255, 0.58)',
-            borderRadius: 10,
-            cursor: 'pointer',
-            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-            textShadow: '1px 1px 3px rgba(0,0,0,0.5)',
-            boxShadow: '0 4px 16px rgba(70, 140, 210, 0.2)',
-            transition: 'all 0.2s ease',
-            letterSpacing: 3,
-            backdropFilter: 'blur(4px)',
-          }}
-          onMouseEnter={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(90, 165, 235, 0.6), rgba(55, 120, 190, 0.6))';
-            btn.style.borderColor = 'rgba(150, 220, 255, 0.8)';
-            btn.style.boxShadow = '0 6px 24px rgba(70, 140, 210, 0.35)';
-            btn.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(70, 140, 210, 0.5), rgba(40, 100, 170, 0.5))';
-            btn.style.borderColor = 'rgba(120, 200, 255, 0.58)';
-            btn.style.boxShadow = '0 4px 16px rgba(70, 140, 210, 0.2)';
-            btn.style.transform = 'translateY(0)';
+            letterSpacing: 5,
+            marginTop: 4,
           }}
         >
-          ⚙ 設定
-        </button>
+          HALCRAFT
+        </div>
 
-        {/* タイトルに戻るボタン */}
-        <button
-          id="pause-return-btn"
-          type="button"
-          onClick={handleReturnToMenu}
+        {/* 区切り線 */}
+        <div
           style={{
-            padding: isTouch ? '14px 24px' : '16px 32px',
-            fontSize: isTouch ? 16 : 20,
-            fontWeight: 700,
-            color: 'rgba(255, 255, 255, 0.85)',
-            background: 'linear-gradient(145deg, rgba(100, 100, 120, 0.45), rgba(70, 70, 90, 0.45))',
-            border: '2px solid rgba(150, 150, 170, 0.4)',
-            borderRadius: 10,
-            cursor: 'pointer',
-            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-            textShadow: '1px 1px 3px rgba(0,0,0,0.5)',
-            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
-            transition: 'all 0.2s ease',
-            letterSpacing: 3,
-            backdropFilter: 'blur(4px)',
+            width: '100%',
+            height: 1,
+            margin: isTouch ? '16px 0 16px' : '20px 0 20px',
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
           }}
-          onMouseEnter={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(120, 120, 140, 0.55), rgba(90, 90, 110, 0.55))';
-            btn.style.borderColor = 'rgba(180, 180, 200, 0.6)';
-            btn.style.boxShadow = '0 6px 24px rgba(0, 0, 0, 0.25)';
-            btn.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={(e) => {
-            const btn = e.currentTarget;
-            btn.style.background = 'linear-gradient(145deg, rgba(100, 100, 120, 0.45), rgba(70, 70, 90, 0.45))';
-            btn.style.borderColor = 'rgba(150, 150, 170, 0.4)';
-            btn.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.15)';
-            btn.style.transform = 'translateY(0)';
+        />
+
+        {/* メニューボタン群 */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: isTouch ? 10 : 12,
+            width: '100%',
           }}
         >
-          🏠 タイトルに戻る
-        </button>
-      </div>
+          <PauseButton id="pause-resume-btn" icon="▶" label="再開する" accent={SG.emerald} onClick={handleResume} touch={isTouch} />
+          <PauseButton id="pause-settings-btn" icon="⚙" label="設定" accent={SG.build} onClick={onOpenSettings} touch={isTouch} />
+          <PauseButton id="pause-return-btn" icon="🏠" label="タイトルに戻る" accent="#8a93a6" onClick={handleReturnToMenu} touch={isTouch} />
+        </div>
 
-      {/* 操作ヒント */}
-      <div
-        style={{
-          marginTop: isTouch ? 24 : 36,
-          color: 'rgba(255, 255, 255, 0.35)',
-          fontSize: isTouch ? 11 : 13,
-          letterSpacing: 1,
-          textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-          animation: 'pauseSlideIn 0.45s ease-out',
-        }}
-      >
-        {isTouch ? 'タップで選択' : 'ESC で再開'}
+        {/* 操作ヒント */}
+        <div
+          style={{
+            marginTop: isTouch ? 16 : 20,
+            color: 'rgba(255, 255, 255, 0.34)',
+            fontSize: isTouch ? 11 : 12,
+            letterSpacing: 1,
+            fontWeight: 600,
+          }}
+        >
+          {isTouch ? 'タップでえらぶ' : 'ESC キーでも再開できるよ'}
+        </div>
       </div>
     </div>
   );

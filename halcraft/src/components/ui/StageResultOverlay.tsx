@@ -25,6 +25,7 @@ import { getStageMasterySummary } from '../../types/stageMastery';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
+import { SG } from './startScreenTheme';
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -196,11 +197,11 @@ export function StageResultOverlay() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: isCompact ? 14 : 24,
-        background: 'radial-gradient(circle at 50% 38%, rgba(255, 230, 120, 0.16), rgba(0, 0, 0, 0.78) 46%, rgba(0, 0, 0, 0.88) 100%)',
-        backdropFilter: 'blur(7px)',
-        WebkitBackdropFilter: 'blur(7px)',
+        background: 'radial-gradient(circle at 50% 38%, rgba(255, 230, 120, 0.16), rgba(2, 4, 8, 0.82) 46%, rgba(2, 4, 8, 0.92) 100%)',
+        backdropFilter: 'blur(9px)',
+        WebkitBackdropFilter: 'blur(9px)',
         color: '#fff',
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        fontFamily: SG.font,
       }}
     >
       <div
@@ -208,11 +209,11 @@ export function StageResultOverlay() {
           width: 'min(620px, calc(100vw - 28px))',
           maxHeight: 'calc(100vh - 28px)',
           overflowY: 'auto',
-          borderRadius: 8,
-          border: `2px solid ${stage.color}aa`,
-          background: 'rgba(7, 10, 15, 0.78)',
-          boxShadow: `0 0 34px ${stage.color}44, 0 18px 56px rgba(0,0,0,0.58)`,
-          padding: isCompact ? 16 : 22,
+          borderRadius: 22,
+          border: `1px solid ${stage.color}88`,
+          background: 'rgba(9, 13, 20, 0.82)',
+          boxShadow: `0 0 40px ${stage.color}3a, var(--sg-shadow)`,
+          padding: isCompact ? 16 : 24,
           boxSizing: 'border-box',
         }}
       >
@@ -241,23 +242,31 @@ export function StageResultOverlay() {
             {stage.icon}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div
+            <span
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
                 color: medalColor,
-                fontSize: isCompact ? 13 : 15,
+                fontSize: isCompact ? 12 : 14,
                 fontWeight: 900,
-                letterSpacing: 0,
+                letterSpacing: 1,
+                padding: isCompact ? '2px 9px' : '3px 11px',
+                borderRadius: 999,
+                background: `${medalColor}1f`,
+                border: `1px solid ${medalColor}66`,
+                marginBottom: 5,
               }}
             >
               {resultTitle}
-            </div>
+            </span>
             <div
               style={{
                 color: '#fff',
-                fontSize: isCompact ? 24 : 34,
-                lineHeight: isCompact ? '30px' : '40px',
-                fontWeight: 950,
+                fontSize: isCompact ? 25 : 36,
+                lineHeight: isCompact ? '30px' : '42px',
+                fontWeight: 900,
                 overflowWrap: 'anywhere',
+                textShadow: `0 2px 14px ${stage.color}55`,
               }}
             >
               {stage.name}
@@ -292,7 +301,7 @@ export function StageResultOverlay() {
               style={{
                 minWidth: 0,
                 padding: '9px 10px',
-                borderRadius: 6,
+                borderRadius: 11,
                 background: 'rgba(255,255,255,0.07)',
                 border: '1px solid rgba(255,255,255,0.10)',
               }}
@@ -311,7 +320,7 @@ export function StageResultOverlay() {
           style={{
             marginBottom: 14,
             padding: '10px 11px',
-            borderRadius: 6,
+            borderRadius: 11,
             background: 'rgba(168, 255, 205, 0.10)',
             border: '1px solid rgba(168, 255, 205, 0.34)',
             boxShadow: 'inset 0 0 18px rgba(168,255,205,0.10)',
@@ -377,7 +386,7 @@ export function StageResultOverlay() {
                 style={{
                   minWidth: 0,
                   padding: '7px 8px',
-                  borderRadius: 5,
+                  borderRadius: 9,
                   background: 'rgba(255,255,255,0.07)',
                   border: '1px solid rgba(255,255,255,0.09)',
                 }}
@@ -408,7 +417,7 @@ export function StageResultOverlay() {
           style={{
             marginBottom: 14,
             padding: '10px 11px',
-            borderRadius: 6,
+            borderRadius: 11,
             background: `${mastery.accent}1f`,
             border: `1px solid ${mastery.accent}55`,
             boxShadow: `0 0 18px ${mastery.glow}, inset 0 0 16px ${mastery.glow}`,
@@ -492,7 +501,7 @@ export function StageResultOverlay() {
             style={{
               marginBottom: 14,
               padding: '10px 11px',
-              borderRadius: 6,
+              borderRadius: 11,
               background: `${bossEncounter.accent}1f`,
               border: `1px solid ${bossEncounter.accent}55`,
               boxShadow: `inset 0 0 18px ${bossEncounter.accent}14`,
@@ -541,7 +550,7 @@ export function StageResultOverlay() {
             style={{
               marginBottom: 14,
               padding: '10px 11px',
-              borderRadius: 6,
+              borderRadius: 11,
               background: `${buildStyle.accent}1f`,
               border: `1px solid ${buildStyle.accent}55`,
               boxShadow: `inset 0 0 18px ${buildStyle.glow}`,
@@ -600,7 +609,7 @@ export function StageResultOverlay() {
             style={{
               marginBottom: 14,
               padding: '10px 11px',
-              borderRadius: 6,
+              borderRadius: 11,
               background: `${modeRule.accent}1f`,
               border: `1px solid ${modeRule.accent}55`,
               boxShadow: `inset 0 0 18px ${modeRule.glow}`,
@@ -680,7 +689,7 @@ export function StageResultOverlay() {
                   alignItems: 'center',
                   gap: 8,
                   padding: '8px 9px',
-                  borderRadius: 6,
+                  borderRadius: 11,
                   background: completed ? 'rgba(255, 230, 120, 0.13)' : 'rgba(255,255,255,0.055)',
                   border: completed ? '1px solid rgba(255, 230, 120, 0.22)' : '1px solid rgba(255,255,255,0.08)',
                 }}
@@ -739,7 +748,7 @@ export function StageResultOverlay() {
           style={{
             marginBottom: 16,
             padding: '9px 10px',
-            borderRadius: 6,
+            borderRadius: 11,
             color: 'rgba(255,255,255,0.78)',
             background: `${stage.color}22`,
             border: `1px solid ${stage.color}44`,
@@ -756,7 +765,7 @@ export function StageResultOverlay() {
             style={{
               marginBottom: 16,
               padding: '9px 10px',
-              borderRadius: 6,
+              borderRadius: 11,
               color: '#fff',
               background: `${nextRunBonus.accent}22`,
               border: `1px solid ${nextRunBonus.accent}55`,
@@ -836,16 +845,17 @@ export function StageResultOverlay() {
 
 function resultButtonStyle(color: string): CSSProperties {
   return {
-    padding: '12px 10px',
-    borderRadius: 7,
-    border: `2px solid ${color}aa`,
-    background: `${color}44`,
+    padding: '13px 12px',
+    borderRadius: 13,
+    border: `2px solid ${color}88`,
+    background: `linear-gradient(160deg, ${color}3a 0%, ${color}18 100%)`,
     color: '#fff',
     cursor: 'pointer',
     fontSize: 15,
     fontWeight: 900,
-    fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-    letterSpacing: 0,
-    boxShadow: `0 4px 14px ${color}22`,
+    fontFamily: SG.font,
+    letterSpacing: 0.5,
+    boxShadow: `0 5px 18px ${color}2e, var(--sg-inset-hi)`,
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 }
