@@ -18,6 +18,17 @@ export interface MasteryTechniqueBonus {
   builderPlacementIntervalMultiplier: number;
 }
 
+export interface MasteryTechniqueProgress {
+  currentValue: number;
+  currentTier: number;
+  nextTier: number | null;
+  nextThreshold: number | null;
+  finalThreshold: number;
+  ratio: number;
+  valueText: string;
+  nextTargetText: string;
+}
+
 const BASE_TECHNIQUE_BONUS: MasteryTechniqueBonus = {
   tier: 0,
   tierLabel: 'TECH 0',
@@ -44,6 +55,10 @@ function clampMultiplier(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function clampRatio(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function getTier(value: number, thresholds: readonly [number, number, number]): number {
   if (value >= thresholds[2]) return 3;
   if (value >= thresholds[1]) return 2;
@@ -55,6 +70,40 @@ function getTechniqueValue(item: EquippedItem, mastery: MasteryItemState | undef
   if (!mastery) return 0;
   if (item === 'rocket_launcher') return mastery.bestTechniqueScore ?? 0;
   return mastery.bestTechniqueStreak ?? 0;
+}
+
+export function formatMasteryTechniqueValue(item: EquippedItem, value: number): string {
+  if (item === 'rocket_launcher') return `BLAST ${value}`;
+  if (item === 'machine_gun') return `BURST x${value}`;
+  if (item === 'lightsaber') return `COMBO x${value}`;
+  return `CHAIN x${value}`;
+}
+
+export function getMasteryTechniqueProgress(
+  item: EquippedItem,
+  mastery: MasteryItemState | undefined,
+): MasteryTechniqueProgress {
+  const thresholds = TECHNIQUE_THRESHOLDS[item];
+  const currentValue = getTechniqueValue(item, mastery);
+  const currentTier = getTier(currentValue, thresholds);
+  const nextTier = currentTier >= 3 ? null : currentTier + 1;
+  const nextThreshold = nextTier ? thresholds[nextTier - 1] : null;
+  const floor = currentTier <= 0 ? 0 : thresholds[currentTier - 1];
+  const ceiling = nextThreshold ?? thresholds[2];
+  const ratio = nextThreshold === null ? 1 : clampRatio((currentValue - floor) / Math.max(1, ceiling - floor));
+
+  return {
+    currentValue,
+    currentTier,
+    nextTier,
+    nextThreshold,
+    finalThreshold: thresholds[2],
+    ratio,
+    valueText: currentValue > 0 ? formatMasteryTechniqueValue(item, currentValue) : 'START',
+    nextTargetText: nextThreshold === null
+      ? 'TECH MAX'
+      : `次 TECH ${nextTier}: ${formatMasteryTechniqueValue(item, nextThreshold)}`,
+  };
 }
 
 export function getMasteryTechniqueBonus(

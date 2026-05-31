@@ -20,6 +20,11 @@ import {
   getStageCombatStyleForItem,
   getStageCombatWeaponLabel,
 } from '../../types/stageCombatStyles';
+import {
+  formatMasteryTechniqueBonus,
+  getMasteryTechniqueBonus,
+  getMasteryTechniqueProgress,
+} from '../../types/masteryTechniquePerks';
 import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 
@@ -226,7 +231,6 @@ export function WeaponSwitchPopover() {
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const isTouch = isTouchDevice();
-  const prevItemRef = useRef<EquippedItem>(equippedItem);
   const dismissTimerRef = useRef<number | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const [visible, setVisible] = useState(false);
@@ -253,35 +257,33 @@ export function WeaponSwitchPopover() {
     }, TRANSITION_MS);
   }, [clearTimers]);
 
-  useEffect(() => {
-    if (phase !== 'playing') {
-      prevItemRef.current = equippedItem;
-      clearTimers();
-      const frame = window.requestAnimationFrame(() => {
-        setEntered(false);
-        setVisible(false);
-      });
-      return () => window.cancelAnimationFrame(frame);
-    }
-
-    if (prevItemRef.current === equippedItem) {
-      return;
-    }
-    prevItemRef.current = equippedItem;
+  const showItemPopover = useCallback((item: EquippedItem) => {
     clearTimers();
 
-    const frame = window.requestAnimationFrame(() => {
-      setDisplayItem(equippedItem);
-      setVisible(true);
-      setEntered(true);
-      dismissTimerRef.current = window.setTimeout(() => {
-        dismissTimerRef.current = null;
-        hidePopover();
-      }, SHOW_DURATION_MS);
-    });
+    setDisplayItem(item);
+    setVisible(true);
+    setEntered(true);
+    dismissTimerRef.current = window.setTimeout(() => {
+      dismissTimerRef.current = null;
+      hidePopover();
+    }, SHOW_DURATION_MS);
+  }, [clearTimers, hidePopover]);
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [clearTimers, equippedItem, hidePopover, phase]);
+  useEffect(() => {
+    if (phase !== 'playing') {
+      clearTimers();
+      const timer = window.setTimeout(() => {
+        setEntered(false);
+        setVisible(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    return usePlayerStore.subscribe((state, previous) => {
+      if (state.equippedItem === previous.equippedItem) return;
+      showItemPopover(state.equippedItem);
+    });
+  }, [clearTimers, phase, showItemPopover]);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
@@ -292,6 +294,8 @@ export function WeaponSwitchPopover() {
   const masteryProgress = mastery ? getMasteryProgress(mastery) : 0;
   const masteryTitle = mastery ? getMasteryTitle(displayItem, mastery.level) : '';
   const masteryPerk = mastery ? getMasteryPerkSummary(displayItem, mastery.level) : '';
+  const techniqueBonus = mastery ? getMasteryTechniqueBonus(displayItem, mastery) : null;
+  const techniqueProgress = mastery ? getMasteryTechniqueProgress(displayItem, mastery) : null;
   const stageStyle = getStageCombatStyleForItem(currentStageId, displayItem);
   const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const tacticStyle = stageStyle ?? recommendedStageStyle;
@@ -448,6 +452,65 @@ export function WeaponSwitchPopover() {
             >
               特典: {masteryPerk}
             </div>
+            {techniqueBonus && techniqueProgress && (
+              <div
+                style={{
+                  marginTop: 5,
+                  display: 'grid',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    color: 'rgba(255,255,255,0.76)',
+                    fontSize: isTouch ? 9 : 10,
+                    lineHeight: '12px',
+                    fontWeight: 900,
+                  }}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    技: {techniqueBonus.tierLabel} {formatMasteryTechniqueBonus(displayItem, techniqueBonus)}
+                  </span>
+                  <span style={{ flex: '0 0 auto', color: content.accent, fontFamily: 'monospace' }}>
+                    {techniqueProgress.valueText}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 3,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.12)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round(techniqueProgress.ratio * 100)}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: `linear-gradient(90deg, ${content.accent}, #ffffff)`,
+                      transition: 'width 0.2s ease',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: isTouch ? 9 : 10,
+                    lineHeight: '12px',
+                    fontWeight: 800,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {techniqueProgress.nextTargetText}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

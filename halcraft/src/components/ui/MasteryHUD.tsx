@@ -13,7 +13,11 @@ import {
 } from '../../stores/useMasteryStore';
 import { BLOCK_DEFS, HOTBAR_BLOCKS, type BlockId } from '../../types/blocks';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
-import { formatMasteryTechniqueBonus, getMasteryTechniqueBonus } from '../../types/masteryTechniquePerks';
+import {
+  formatMasteryTechniqueBonus,
+  getMasteryTechniqueBonus,
+  getMasteryTechniqueProgress,
+} from '../../types/masteryTechniquePerks';
 import {
   formatStageCombatBonus,
   getStageCombatStyle,
@@ -72,8 +76,9 @@ function formatTechniqueDetail(
   baseDetail: string,
   equippedItem: EquippedItem,
   bonus: ReturnType<typeof getMasteryTechniqueBonus>,
+  nextTargetText: string,
 ): string {
-  return `${baseDetail} / ${bonus.title}: ${bonus.tierLabel} ${formatMasteryTechniqueBonus(equippedItem, bonus)}`;
+  return `${baseDetail} / ${bonus.title}: ${bonus.tierLabel} ${formatMasteryTechniqueBonus(equippedItem, bonus)} / ${nextTargetText}`;
 }
 
 function getItemTechniqueRecord(
@@ -86,6 +91,7 @@ function getItemTechniqueRecord(
   const techniqueCount = mastery.techniqueActivations ?? 0;
   const bestLabel = mastery.bestTechniqueLabel || 'まだ記録なし';
   const techniqueBonus = getMasteryTechniqueBonus(equippedItem, mastery);
+  const techniqueProgress = getMasteryTechniqueProgress(equippedItem, mastery);
 
   if (equippedItem === 'builder') {
     const detail = techniqueCount > 0
@@ -94,10 +100,10 @@ function getItemTechniqueRecord(
     return {
       icon: '🏗️',
       label: bestStreak >= 8 ? '制作連鎖記録' : '制作連鎖を作ろう',
-      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus, techniqueProgress.nextTargetText),
       meterLabel: 'CHAIN',
-      meterText: bestStreak > 0 ? `x${bestStreak}` : 'START',
-      ratio: clampRatio(bestStreak / 12),
+      meterText: bestStreak > 0 ? `x${bestStreak}` : techniqueProgress.valueText,
+      ratio: techniqueProgress.ratio,
       accent: def.accent,
     };
   }
@@ -109,10 +115,10 @@ function getItemTechniqueRecord(
     return {
       icon: '💥',
       label: bestScore > 0 ? '爆風ベスト' : '爆風ベストを作ろう',
-      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus, techniqueProgress.nextTargetText),
       meterLabel: 'BLAST',
       meterText: bestScore > 0 ? `${bestScore}` : 'AREA',
-      ratio: clampRatio(bestScore / 90),
+      ratio: techniqueProgress.ratio,
       accent: def.accent,
     };
   }
@@ -124,10 +130,10 @@ function getItemTechniqueRecord(
     return {
       icon: '🎯',
       label: bestStreak >= 5 ? '弾幕チェーン記録' : '弾幕チェーンを作ろう',
-      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus, techniqueProgress.nextTargetText),
       meterLabel: 'BURST',
       meterText: bestStreak > 0 ? `x${bestStreak}` : 'HOLD',
-      ratio: clampRatio(bestStreak / 12),
+      ratio: techniqueProgress.ratio,
       accent: def.accent,
     };
   }
@@ -138,10 +144,10 @@ function getItemTechniqueRecord(
   return {
     icon: '✨',
     label: bestStreak >= 5 ? 'コンボ記録' : 'コンボ記録を作ろう',
-    detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
+    detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus, techniqueProgress.nextTargetText),
     meterLabel: 'COMBO',
     meterText: bestStreak > 0 ? `x${bestStreak}` : '5段',
-    ratio: clampRatio(bestStreak / 8),
+    ratio: techniqueProgress.ratio,
     accent: def.accent,
   };
 }

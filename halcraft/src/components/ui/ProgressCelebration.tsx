@@ -15,7 +15,11 @@ import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useVehicleFirepowerStore } from '../../stores/useVehicleFirepowerStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
-import { formatMasteryTechniqueBonus, getMasteryTechniqueBonus } from '../../types/masteryTechniquePerks';
+import {
+  formatMasteryTechniqueBonus,
+  getMasteryTechniqueBonus,
+  getMasteryTechniqueProgress,
+} from '../../types/masteryTechniquePerks';
 import { getStageChallenges } from '../../types/stageChallenges';
 import { formatStageMasteryPerkLabel, getStageMasteryPerkForProgress } from '../../types/stageMastery';
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
@@ -151,6 +155,7 @@ export function ProgressCelebration() {
       if (event.techniqueRecordUpdated && lastTechniqueRecordIdRef.current !== event.id) {
         lastTechniqueRecordIdRef.current = event.id;
         const techniqueBonus = getMasteryTechniqueBonus(event.item, itemState);
+        const techniqueProgress = getMasteryTechniqueProgress(event.item, itemState);
         const recordValue = getTechniqueRecordValue(
           event.item,
           itemState.bestTechniqueStreak ?? event.streak,
@@ -162,7 +167,7 @@ export function ProgressCelebration() {
           icon: def.icon,
           eyebrow: '技記録更新',
           title: `${def.shortLabel} ${recordValue}`,
-          detail: `${event.label} / ${techniqueBonus.title}: ${techniqueBonus.tierLabel} ${formatMasteryTechniqueBonus(event.item, techniqueBonus)}`,
+          detail: `${event.label} / ${techniqueBonus.title}: ${techniqueBonus.tierLabel} ${formatMasteryTechniqueBonus(event.item, techniqueBonus)} / ${techniqueProgress.nextTargetText}`,
           accent: def.accent,
           glow: def.glow,
         });
