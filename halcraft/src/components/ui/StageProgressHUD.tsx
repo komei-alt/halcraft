@@ -47,7 +47,11 @@ import {
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStageSignatureAward, type StageSignatureAward } from '../../types/stageSignatureAwards';
 import { isTouchDevice } from '../../utils/device';
-import { playStageOpportunitySound, type StageOpportunitySoundKind } from '../../utils/sounds';
+import {
+  playPerkUnlockSound,
+  playStageOpportunitySound,
+  type StageOpportunitySoundKind,
+} from '../../utils/sounds';
 import { getStageEventHudDisplay } from './stageEventDisplay';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
@@ -108,9 +112,17 @@ interface StageOpportunityMoment {
   visibleUntil: number;
 }
 
+interface StageSignatureMoment {
+  key: string;
+  award: StageSignatureAward;
+  stageName: string;
+  visibleUntil: number;
+}
+
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
 const OPPORTUNITY_RATIO = 0.68;
 const STAGE_OPPORTUNITY_MOMENT_MS = 2800;
+const STAGE_SIGNATURE_MOMENT_MS = 4400;
 
 function isCloseToTarget(current: number, target: number): boolean {
   if (target <= 0 || current <= 0) return false;
@@ -830,6 +842,203 @@ function StageOpportunityMomentAnnouncer({
   );
 }
 
+function StageSignatureMomentAnnouncer({
+  award,
+  stageName,
+  runKey,
+  isCompact,
+}: {
+  award: StageSignatureAward;
+  stageName: string;
+  runKey: string;
+  isCompact: boolean;
+}) {
+  const [now, setNow] = useState(() => performance.now());
+  const [moment, setMoment] = useState<StageSignatureMoment | null>(null);
+  const baselineRef = useRef<{
+    runKey: string;
+    unlocked: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (baselineRef.current?.runKey !== runKey) {
+      baselineRef.current = {
+        runKey,
+        unlocked: award.unlocked,
+      };
+      return undefined;
+    }
+
+    if (baselineRef.current.unlocked || !award.unlocked) return undefined;
+
+    baselineRef.current = {
+      runKey,
+      unlocked: true,
+    };
+
+    const timer = window.setTimeout(() => {
+      const nowMs = performance.now();
+      setNow(nowMs);
+      setMoment({
+        key: `${runKey}:signature:${award.title}:${Math.round(nowMs)}`,
+        award,
+        stageName,
+        visibleUntil: nowMs + STAGE_SIGNATURE_MOMENT_MS,
+      });
+      playPerkUnlockSound();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [award, runKey, stageName]);
+
+  useEffect(() => {
+    if (!moment) return undefined;
+    const timer = window.setInterval(() => setNow(performance.now()), 120);
+    return () => window.clearInterval(timer);
+  }, [moment]);
+
+  if (!moment || !moment.key.startsWith(`${runKey}:`) || now > moment.visibleUntil) return null;
+
+  const progress = Math.max(0, Math.min(1, (moment.visibleUntil - now) / STAGE_SIGNATURE_MOMENT_MS));
+
+  return (
+    <div
+      id="stage-signature-moment"
+      style={{
+        position: 'fixed',
+        top: isCompact ? 158 : 138,
+        left: '50%',
+        zIndex: 113,
+        width: isCompact ? 'min(318px, calc(100vw - 26px))' : 420,
+        transform: 'translateX(-50%)',
+        pointerEvents: 'none',
+        color: '#fff',
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
+        animation: 'stageOpportunityMomentIn 0.24s ease-out both',
+      }}
+    >
+      <div
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          padding: isCompact ? '11px 12px' : '13px 15px',
+          borderRadius: 8,
+          border: `1px solid ${moment.award.accent}88`,
+          background: `linear-gradient(135deg, ${moment.award.accent}30, rgba(255,230,128,0.14), rgba(4,7,12,0.76))`,
+          boxShadow: `0 14px 34px rgba(0,0,0,0.42), 0 0 34px ${moment.award.accent}52`,
+          backdropFilter: 'blur(11px)',
+          WebkitBackdropFilter: 'blur(11px)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(112deg, transparent, ${moment.award.accent}38, rgba(255,255,255,0.22), transparent)`,
+            transform: 'translateX(-70%)',
+            animation: 'stageOpportunityMomentSweep 1.15s ease-out both',
+          }}
+        />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span
+            style={{
+              flex: '0 0 auto',
+              width: isCompact ? 40 : 46,
+              height: isCompact ? 40 : 46,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 9,
+              background: `${moment.award.accent}28`,
+              border: `1px solid ${moment.award.accent}77`,
+              boxShadow: `0 0 18px ${moment.award.accent}66`,
+              fontSize: isCompact ? 23 : 27,
+            }}
+          >
+            {moment.award.icon}
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                color: moment.award.accent,
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              マップ称号GET / {moment.stageName}
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                color: '#fff',
+                fontSize: isCompact ? 15 : 18,
+                lineHeight: isCompact ? '18px' : '22px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {moment.award.title}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: isCompact ? 10 : 11,
+                lineHeight: '14px',
+                fontWeight: 850,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {moment.award.requirementLabel} 達成 / {moment.award.label}
+            </div>
+          </div>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: '#fff1a8',
+              fontSize: isCompact ? 13 : 15,
+              lineHeight: '18px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            100%
+          </span>
+        </div>
+        <div
+          style={{
+            position: 'relative',
+            marginTop: 9,
+            height: 4,
+            borderRadius: 999,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.14)',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(progress * 100)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${moment.award.accent}, #fff1a8, #ffffff)`,
+              transition: 'width 0.12s linear',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -1028,6 +1237,12 @@ export function StageProgressHUD() {
     <>
       <StageOpportunityMomentAnnouncer
         cue={opportunityCue}
+        stageName={stage.name}
+        runKey={runKey}
+        isCompact={isCompact}
+      />
+      <StageSignatureMomentAnnouncer
+        award={signatureAward}
         stageName={stage.name}
         runKey={runKey}
         isCompact={isCompact}
