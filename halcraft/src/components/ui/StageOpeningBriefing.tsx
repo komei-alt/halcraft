@@ -17,6 +17,7 @@ import {
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
 import { getStageRecordGoal } from '../../types/stageRecordGoals';
+import { getStageSignatureAward } from '../../types/stageSignatureAwards';
 import {
   formatStageRunBonusLabel,
   getStageOpeningItemLabel,
@@ -142,6 +143,7 @@ function getBriefingRouteSteps(
   const buildStyle = getStageBuildStyle(stage.id);
   const combatStyle = getStageCombatStyle(stage.id);
   const recordGoal = getStageRecordGoal({ stage, runBest, buildBest });
+  const signatureAward = getStageSignatureAward({ stage, runBest, buildBest });
   const openingItemLabel = getStageOpeningItemLabel(stage.id);
   const firstAction = modeRule?.actionLabel
     ?? buildStyle?.focusLabel
@@ -176,6 +178,13 @@ function getBriefingRouteSteps(
       detail: recordGoal.title,
       accent: recordGoal.accent,
       valueText: recordGoal.progressLabel,
+    },
+    {
+      icon: signatureAward.icon,
+      label: signatureAward.unlocked ? '獲得称号' : 'マップ称号',
+      detail: signatureAward.nextLabel,
+      accent: signatureAward.accent,
+      valueText: signatureAward.progressLabel,
     },
   ];
 }
@@ -421,7 +430,9 @@ export function StageOpeningBriefing() {
           position: 'relative',
           marginTop: isCompact ? 9 : 11,
           display: 'grid',
-          gridTemplateColumns: isCompact ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+          gridTemplateColumns: isCompact
+            ? '1fr'
+            : `repeat(${Math.min(4, Math.max(1, routeSteps.length))}, minmax(0, 1fr))`,
           gap: isCompact ? 5 : 7,
         }}
       >

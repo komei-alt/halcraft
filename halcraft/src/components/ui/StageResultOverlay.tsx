@@ -23,6 +23,7 @@ import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../typ
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { formatStageMasteryPerkLabel, getStageMasteryPerk, getStageMasterySummary } from '../../types/stageMastery';
 import { getStageRecordGoal } from '../../types/stageRecordGoals';
+import { getStageSignatureAward } from '../../types/stageSignatureAwards';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -154,6 +155,11 @@ export function StageResultOverlay() {
   const buildBest = buildBestByStage[stage.id];
   const activeRecordEvent = recentRecord?.stageId === stage.id ? recentRecord : null;
   const nextRecordGoal = getStageRecordGoal({
+    stage,
+    runBest,
+    buildBest,
+  });
+  const signatureAward = getStageSignatureAward({
     stage,
     runBest,
     buildBest,
@@ -625,6 +631,112 @@ export function StageResultOverlay() {
           >
             次: {mastery.nextLabel} / チャレンジ {mastery.challengeScore}pt
             {stage.category === 'build' ? ` / 作品 ${mastery.buildScore}pt` : ''}
+          </div>
+        </div>
+
+        <div
+          id="stage-signature-award-result"
+          style={{
+            marginBottom: 14,
+            padding: '10px 11px',
+            borderRadius: 11,
+            background: signatureAward.unlocked
+              ? `linear-gradient(135deg, ${signatureAward.accent}28, rgba(255,230,128,0.12))`
+              : `${signatureAward.accent}18`,
+            border: `1px solid ${signatureAward.accent}55`,
+            boxShadow: signatureAward.unlocked
+              ? `0 0 22px ${signatureAward.accent}26, inset 0 1px 0 rgba(255,255,255,0.13)`
+              : `inset 0 0 16px ${signatureAward.accent}12`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <span
+              style={{
+                flex: '0 0 auto',
+                width: isCompact ? 34 : 38,
+                height: isCompact ? 34 : 38,
+                borderRadius: 9,
+                display: 'grid',
+                placeItems: 'center',
+                background: `${signatureAward.accent}24`,
+                border: `1px solid ${signatureAward.accent}66`,
+                boxShadow: `0 0 14px ${signatureAward.accent}33`,
+                fontSize: isCompact ? 18 : 21,
+              }}
+            >
+              {signatureAward.icon}
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  color: signatureAward.accent,
+                  fontSize: isCompact ? 10 : 11,
+                  lineHeight: '13px',
+                  fontWeight: 950,
+                  letterSpacing: 1,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {signatureAward.unlocked ? 'マップ称号 獲得済み' : 'マップ称号チャレンジ'} / {signatureAward.label}
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  color: '#fff',
+                  fontSize: isCompact ? 14 : 16,
+                  lineHeight: isCompact ? '18px' : '20px',
+                  fontWeight: 950,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {signatureAward.title}
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '0 0 auto',
+                color: signatureAward.accent,
+                fontSize: isCompact ? 10 : 11,
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                textAlign: 'right',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {signatureAward.progressLabel}
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 9,
+              height: 6,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.13)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(signatureAward.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${signatureAward.accent}, ${stage.color})`,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 7,
+              color: 'rgba(255,255,255,0.76)',
+              fontSize: isCompact ? 11 : 12,
+              lineHeight: '17px',
+              fontWeight: 850,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {signatureAward.requirementLabel} / 次: {signatureAward.nextLabel}
           </div>
         </div>
 

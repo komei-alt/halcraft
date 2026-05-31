@@ -44,6 +44,7 @@ import { formatStageCombatBonus, getStageCombatStyle, getStageCombatWeaponLabel 
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStageRecordGoal, type StageRecordGoal } from '../../types/stageRecordGoals';
+import { getStageSignatureAward, type StageSignatureAward } from '../../types/stageSignatureAwards';
 import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
@@ -249,6 +250,7 @@ function getStageBriefingSections(
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
+  signatureAward: StageSignatureAward,
   compact: boolean,
 ): StageBriefingSection[] {
   const blockPreview = getStarterBlockPreview(stage, compact ? 3 : 4)
@@ -402,6 +404,17 @@ function getStageBriefingSections(
   }
 
   sections.push({
+    title: 'マップ称号',
+    value: `${signatureAward.icon} ${signatureAward.title}`,
+    details: [
+      signatureAward.requirementLabel,
+      signatureAward.unlocked ? '獲得済み / 最高記録を更新しよう' : signatureAward.nextLabel,
+    ],
+    accent: signatureAward.accent,
+    group: 'style',
+  });
+
+  sections.push({
     title: 'チャレンジ',
     value: `${completedCount}/${challengeCount} 達成`,
     details: challengePreview.length > 0 ? challengePreview : ['クリアでメダル獲得'],
@@ -467,8 +480,9 @@ function getStagePrepCues(args: {
   completedIds?: string[];
   runBonus: StageRunBonus | null;
   masteryPerk: StageMasteryPerk | null;
+  signatureAward: StageSignatureAward;
 }): StagePrepCue[] {
-  const { stage, recordGoal, challenges, completedIds, runBonus, masteryPerk } = args;
+  const { stage, recordGoal, challenges, completedIds, runBonus, masteryPerk, signatureAward } = args;
   const modeRule = getStageModeRule(stage.id);
   const challenge = getFirstUnfinishedChallenge(challenges, completedIds);
   const cues: StagePrepCue[] = [
@@ -478,6 +492,13 @@ function getStagePrepCues(args: {
       value: recordGoal.title,
       detail: recordGoal.detail,
       accent: recordGoal.accent,
+    },
+    {
+      icon: signatureAward.icon,
+      label: signatureAward.unlocked ? '獲得称号' : 'マップ称号',
+      value: signatureAward.title,
+      detail: `${signatureAward.nextLabel} / ${signatureAward.progressLabel}`,
+      accent: signatureAward.accent,
     },
   ];
 
@@ -678,6 +699,14 @@ export function StartScreen() {
     }),
     [activeBuildBest, activeRunBest, activeStage],
   );
+  const activeSignatureAward = useMemo(
+    () => getStageSignatureAward({
+      stage: activeStage,
+      runBest: activeRunBest,
+      buildBest: activeBuildBest,
+    }),
+    [activeBuildBest, activeRunBest, activeStage],
+  );
   const activeBriefingSections = useMemo(
     () => getStageBriefingSections(
       activeStage,
@@ -689,6 +718,7 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
+      activeSignatureAward,
       compactLayout,
     ),
     [
@@ -701,6 +731,7 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
+      activeSignatureAward,
       compactLayout,
     ],
   );
@@ -712,6 +743,7 @@ export function StartScreen() {
       completedIds: activeRunBest?.completedIds,
       runBonus: activeRunBonus,
       masteryPerk: activeMasteryPerk,
+      signatureAward: activeSignatureAward,
     }),
     [
       activeChallenges,
@@ -720,6 +752,7 @@ export function StartScreen() {
       activeRunBest?.completedIds,
       activeRunBonus,
       activeStage,
+      activeSignatureAward,
     ],
   );
 
@@ -1782,7 +1815,11 @@ export function StartScreen() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: viewportSize.w < 390 ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+                  gridTemplateColumns: viewportSize.w < 390
+                    ? '1fr'
+                    : viewportSize.w < 720
+                      ? 'repeat(2, minmax(0, 1fr))'
+                      : 'repeat(4, minmax(0, 1fr))',
                   gap: compactLayout ? 6 : 8,
                 }}
               >
