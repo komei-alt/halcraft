@@ -17,6 +17,7 @@ import type { StageCategory } from '../types/stages';
 import {
   playBuildFocusPlaceSound,
   playCombatFocusHitSound,
+  playModeFlowProgressSound,
   playModeFlowSurgeSound,
   playStageRewardSound,
 } from '../utils/sounds';
@@ -67,6 +68,7 @@ interface ModeFlowState {
   streakExpiresAt: number;
   flowRank: number;
   activationCount: number;
+  progressCueTier: number;
   buildFocusUntil: number;
   buildFocusChain: number;
   bestBuildFocusChain: number;
@@ -148,6 +150,27 @@ function getRewardMultiplier(rank: number): number {
   if (rank >= 3) return 2;
   if (rank === 2) return 1.5;
   return 1;
+}
+
+function getProgressCueTier(meter: number, threshold: number): 0 | 1 | 2 | 3 {
+  if (threshold <= 0) return 0;
+  const ratio = Math.max(0, meter) / threshold;
+  if (ratio >= 0.9) return 3;
+  if (ratio >= 0.68) return 2;
+  if (ratio >= 0.4) return 1;
+  return 0;
+}
+
+function playProgressCueIfNeeded(
+  rule: StageModeRule,
+  nextMeter: number,
+  previousTier: number,
+): 0 | 1 | 2 | 3 {
+  const cueTier = getProgressCueTier(nextMeter, rule.threshold);
+  if (cueTier > previousTier && (cueTier === 1 || cueTier === 2 || cueTier === 3)) {
+    playModeFlowProgressSound(rule.category, cueTier);
+  }
+  return cueTier;
 }
 
 export function getBuildFocusRemainingMs(now = nowMs()): number {
@@ -349,6 +372,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   streakExpiresAt: 0,
   flowRank: 0,
   activationCount: 0,
+  progressCueTier: 0,
   buildFocusUntil: 0,
   buildFocusChain: 0,
   bestBuildFocusChain: 0,
@@ -376,6 +400,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       streakExpiresAt: 0,
       flowRank: 0,
       activationCount: 0,
+      progressCueTier: 0,
       buildFocusUntil: 0,
       buildFocusChain: 0,
       bestBuildFocusChain: 0,
@@ -452,6 +477,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const progressCueTier = reached ? 0 : playProgressCueIfNeeded(rule, nextRawMeter, state.progressCueTier);
     const focusActiveBeforePlace = state.buildFocusUntil > createdAt;
     const buildFocusUntil = reached
       ? Math.max(
@@ -477,6 +503,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      progressCueTier,
       buildFocusUntil,
       buildFocusChain: nextBuildFocusChain,
       bestBuildFocusChain: nextBestBuildFocusChain,
@@ -527,6 +554,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const progressCueTier = reached ? 0 : playProgressCueIfNeeded(rule, nextRawMeter, state.progressCueTier);
     const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
     const nextBestCombatFocusChain = Math.max(state.bestCombatFocusChain, nextCombatFocusChain);
 
@@ -541,6 +569,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      progressCueTier,
       ...combatFocusPatch,
       combatFocusChain: nextCombatFocusChain,
       bestCombatFocusChain: nextBestCombatFocusChain,
@@ -567,6 +596,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const progressCueTier = reached ? 0 : playProgressCueIfNeeded(rule, nextRawMeter, state.progressCueTier);
     const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
@@ -578,6 +608,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      progressCueTier,
       ...combatFocusPatch,
       combatFocusChain: reached ? 0 : state.combatFocusChain,
       combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,
@@ -601,6 +632,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const progressCueTier = reached ? 0 : playProgressCueIfNeeded(rule, nextRawMeter, state.progressCueTier);
     const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
@@ -615,6 +647,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      progressCueTier,
       ...combatFocusPatch,
       combatFocusChain: reached ? 0 : state.combatFocusChain,
       combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,
@@ -634,6 +667,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const progressCueTier = reached ? 0 : playProgressCueIfNeeded(rule, nextRawMeter, state.progressCueTier);
     const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
@@ -645,6 +679,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      progressCueTier,
       ...combatFocusPatch,
       combatFocusChain: reached ? 0 : state.combatFocusChain,
       combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,

@@ -3,6 +3,7 @@
 // 外部音声ファイル不要 — コードで合成
 
 import type { BlockUseFeedbackSoundKind } from './blockUseFeedback';
+import type { BiomeId, StageCategory } from '../types/stages';
 
 /** AudioContext のシングルトン */
 let audioCtx: AudioContext | null = null;
@@ -1591,6 +1592,7 @@ type StageEventSoundKind = 'forest' | 'tropical' | 'snow' | 'desert' | 'war' | '
 type StagePressureSoundKind = 'ambush' | 'humidity' | 'cold' | 'heat';
 type StagePressureSoundSeverity = 'danger' | 'critical';
 type StageStartSoundKind = 'build' | 'war';
+type ModeFlowProgressTier = 1 | 2 | 3;
 export type ItemPickupSoundKind = 'common' | 'resource' | 'precious' | 'power' | 'hazard';
 export type StageOpportunitySoundKind = 'build' | 'war' | 'boss';
 
@@ -1693,8 +1695,8 @@ export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void 
   noise.stop(now + 0.16);
 }
 
-/** ステージ開始SE — 建築と戦争でスタートの気分を変える */
-export function playStageStartSound(kind: StageStartSoundKind): void {
+/** ステージ開始SE — 建築/戦争に加え、マップごとの空気も耳で分かるようにする */
+export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('stageStart', 900)) return;
   const now = ctx.currentTime;
@@ -1726,24 +1728,169 @@ export function playStageStartSound(kind: StageStartSoundKind): void {
     osc.stop(t + 0.28);
   });
 
-  if (kind !== 'war') return;
+  if (kind === 'war') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
 
-  const noise = ctx.createBufferSource();
-  noise.buffer = getNoiseBuffer(ctx);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.setValueAtTime(900, now);
 
-  const noiseFilter = ctx.createBiquadFilter();
-  noiseFilter.type = 'highpass';
-  noiseFilter.frequency.setValueAtTime(900, now);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.03, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
-  const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.03, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.2);
+  }
 
-  noise.connect(noiseFilter);
-  noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
-  noise.start(now);
-  noise.stop(now + 0.2);
+  if (!biome) return;
+
+  const biomeProfile: Record<BiomeId, {
+    notes: number[];
+    wave: OscillatorType;
+    filter: BiquadFilterType;
+    filterFrequency: number;
+    volume: number;
+    noise: 'leaf' | 'spray' | 'snow' | 'sand';
+  }> = {
+    forest: {
+      notes: [392, 587.33],
+      wave: 'triangle',
+      filter: 'lowpass',
+      filterFrequency: 1800,
+      volume: 0.026,
+      noise: 'leaf',
+    },
+    tropical: {
+      notes: [659.25, 880, 1318.51],
+      wave: 'sine',
+      filter: 'highpass',
+      filterFrequency: 700,
+      volume: 0.024,
+      noise: 'spray',
+    },
+    snow: {
+      notes: [523.25, 783.99, 1046.5],
+      wave: 'sine',
+      filter: 'bandpass',
+      filterFrequency: 2400,
+      volume: 0.022,
+      noise: 'snow',
+    },
+    desert: {
+      notes: [220, 329.63, 440],
+      wave: 'sawtooth',
+      filter: 'bandpass',
+      filterFrequency: 680,
+      volume: 0.026,
+      noise: 'sand',
+    },
+  };
+  const profile = biomeProfile[biome];
+
+  profile.notes.forEach((note, index) => {
+    const t = now + 0.16 + index * 0.046;
+    const osc = ctx.createOscillator();
+    osc.type = profile.wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (profile.noise === 'sand' ? 0.9 : 1.08), t + 0.2);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = profile.filter;
+    filter.frequency.setValueAtTime(profile.filterFrequency, t);
+    filter.Q.setValueAtTime(profile.noise === 'snow' ? 2.1 : 1.2, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(profile.volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  });
+
+  const texture = ctx.createBufferSource();
+  texture.buffer = getNoiseBuffer(ctx);
+
+  const textureFilter = ctx.createBiquadFilter();
+  textureFilter.type = profile.noise === 'sand' ? 'bandpass' : 'highpass';
+  textureFilter.frequency.setValueAtTime(
+    profile.noise === 'leaf' ? 1700 : profile.noise === 'spray' ? 2400 : profile.noise === 'snow' ? 3200 : 760,
+    now + 0.1,
+  );
+  textureFilter.Q.setValueAtTime(profile.noise === 'sand' ? 2.4 : 0.8, now + 0.1);
+
+  const textureGain = ctx.createGain();
+  textureGain.gain.setValueAtTime(profile.noise === 'sand' ? 0.018 : 0.014, now + 0.1);
+  textureGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+  texture.connect(textureFilter);
+  textureFilter.connect(textureGain);
+  textureGain.connect(ctx.destination);
+  texture.start(now + 0.1);
+  texture.stop(now + 0.36);
+}
+
+/** モードゲージ進行SE — 発動前の近づき具合を耳でも返す */
+export function playModeFlowProgressSound(kind: StageCategory, tier: ModeFlowProgressTier): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`modeFlowProgress:${kind}:${tier}`, 620)) return;
+  const now = ctx.currentTime;
+  const safeTier = Math.max(1, Math.min(3, Math.round(tier))) as ModeFlowProgressTier;
+  const isBuild = kind === 'build';
+  const base = isBuild ? 520 + safeTier * 70 : 180 + safeTier * 42;
+  const notes = isBuild
+    ? [base, base * 1.25, base * 1.5]
+    : [base * 1.6, base, base * 2.05];
+  const wave: OscillatorType = isBuild ? 'triangle' : 'sawtooth';
+
+  notes.slice(0, safeTier + 1).forEach((note, index) => {
+    const t = now + index * 0.042;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (isBuild ? 1.1 : 0.92), t + 0.18);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = isBuild ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(isBuild ? 3000 + safeTier * 240 : 800 + safeTier * 120, t);
+    filter.Q.setValueAtTime(isBuild ? 0.75 : 2.0, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.018 + safeTier * 0.007, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.21);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.21);
+  });
+
+  if (safeTier < 3) return;
+
+  const nearReady = ctx.createBufferSource();
+  nearReady.buffer = getNoiseBuffer(ctx);
+
+  const nearReadyFilter = ctx.createBiquadFilter();
+  nearReadyFilter.type = 'highpass';
+  nearReadyFilter.frequency.setValueAtTime(isBuild ? 2600 : 1200, now);
+
+  const nearReadyGain = ctx.createGain();
+  nearReadyGain.gain.setValueAtTime(isBuild ? 0.012 : 0.02, now);
+  nearReadyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+  nearReady.connect(nearReadyFilter);
+  nearReadyFilter.connect(nearReadyGain);
+  nearReadyGain.connect(ctx.destination);
+  nearReady.start(now);
+  nearReady.stop(now + 0.14);
 }
 
 /** 記録チャンスSE — 建築・戦闘・ボスで「今やる」合図を変える */

@@ -223,7 +223,7 @@ export function StageOpeningBriefing() {
     if (phase !== 'playing' || !stage || shownRunIdRef.current === runId) return undefined;
 
     shownRunIdRef.current = runId;
-    playStageStartSound(stage.category);
+    playStageStartSound(stage.category, stage.biome);
     return undefined;
   }, [phase, runId, stage]);
 
