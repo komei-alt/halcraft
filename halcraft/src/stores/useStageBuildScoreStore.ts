@@ -10,11 +10,13 @@ import {
   getStageBuildStyle,
 } from '../types/stageBuildStyles';
 import { playStageRewardSound } from '../utils/sounds';
+import type { ModeFlowBuildPlacementResult } from './useModeFlowStore';
 
 export interface StageBuildScoreBest {
   score: number;
   achievedMilestones: number[];
   bestComboChain: number;
+  bestFocusChain: number;
   updatedAt: number;
 }
 
@@ -45,6 +47,19 @@ export interface StageBuildScoreComboEvent {
   createdAt: number;
 }
 
+export interface StageBuildFocusComboEvent {
+  id: string;
+  stageId: string;
+  score: number;
+  focusChain: number;
+  bonus: number;
+  title: string;
+  detail: string;
+  accent: string;
+  glow: string;
+  createdAt: number;
+}
+
 interface StageBuildScoreState {
   currentStageId: string | null;
   score: number;
@@ -52,21 +67,27 @@ interface StageBuildScoreState {
   recentThemeLabels: string[];
   comboChain: number;
   bestComboChain: number;
+  bestFocusChain: number;
   lastPlacementLabel: string | null;
   lastPlacementPoints: number;
   lastComboBonus: number;
+  lastFocusBonus: number;
   achievedMilestones: number[];
   bestByStage: Record<string, StageBuildScoreBest>;
   recentMilestone: StageBuildScoreMilestoneEvent | null;
   recentCombo: StageBuildScoreComboEvent | null;
+  recentFocusCombo: StageBuildFocusComboEvent | null;
   startRun: (stageId: string | null) => void;
-  recordBlockPlace: (blockId: BlockId) => void;
+  recordBlockPlace: (blockId: BlockId, focusResult?: ModeFlowBuildPlacementResult | null) => void;
   clearRecentMilestone: () => void;
   clearRecentCombo: () => void;
+  clearRecentFocusCombo: () => void;
 }
 
 const BUILD_COMBO_WINDOW = 4;
 const BUILD_COMBO_MIN_UNIQUE = 3;
+const BUILD_FOCUS_SCORE_MIN_CHAIN = 2;
+const BUILD_FOCUS_SCORE_EVENT_STEP = 3;
 
 function nowMs(): number {
   if (typeof performance !== 'undefined') return performance.now();
@@ -81,6 +102,30 @@ function getBuildComboBonus(uniqueCount: number, comboChain: number): number {
   return Math.min(12, 2 + uniqueCount + Math.floor(Math.max(0, comboChain - 1) / 2));
 }
 
+function getBuildFocusScoreBonus(
+  focusResult: ModeFlowBuildPlacementResult | null | undefined,
+  blockPoints: number,
+  comboBonus: number,
+): number {
+  if (!focusResult?.focused || focusResult.chain < BUILD_FOCUS_SCORE_MIN_CHAIN) return 0;
+
+  const chainBonus = Math.floor(focusResult.chain / 2);
+  const activationBonus = focusResult.activated ? 2 : 0;
+  const comboLift = comboBonus > 0 ? 2 : 0;
+  return Math.min(16, 2 + Math.min(6, blockPoints) + chainBonus + activationBonus + comboLift);
+}
+
+function shouldEmitBuildFocusCombo(
+  focusResult: ModeFlowBuildPlacementResult | null | undefined,
+  currentBestFocusChain: number,
+  focusBonus: number,
+): focusResult is ModeFlowBuildPlacementResult {
+  if (!focusResult?.focused || focusBonus <= 0) return false;
+  if (focusResult.chain < BUILD_FOCUS_SCORE_EVENT_STEP) return false;
+  if (focusResult.chain <= currentBestFocusChain) return false;
+  return focusResult.chain % BUILD_FOCUS_SCORE_EVENT_STEP === 0;
+}
+
 export const useStageBuildScoreStore = create<StageBuildScoreState>()(
   persist(
     (set, get) => ({
@@ -90,13 +135,16 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
       recentThemeLabels: [],
       comboChain: 0,
       bestComboChain: 0,
+      bestFocusChain: 0,
       lastPlacementLabel: null,
       lastPlacementPoints: 0,
       lastComboBonus: 0,
+      lastFocusBonus: 0,
       achievedMilestones: [],
       bestByStage: {},
       recentMilestone: null,
       recentCombo: null,
+      recentFocusCombo: null,
 
       startRun: (stageId) => {
         set({
@@ -106,16 +154,19 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
           recentThemeLabels: [],
           comboChain: 0,
           bestComboChain: 0,
+          bestFocusChain: 0,
           lastPlacementLabel: null,
           lastPlacementPoints: 0,
           lastComboBonus: 0,
+          lastFocusBonus: 0,
           achievedMilestones: [],
           recentMilestone: null,
           recentCombo: null,
+          recentFocusCombo: null,
         });
       },
 
-      recordBlockPlace: (blockId) => {
+      recordBlockPlace: (blockId, focusResult) => {
         const state = get();
         const stageId = state.currentStageId;
         if (!stageId) return;
@@ -135,8 +186,13 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
         const comboBonus = comboActive
           ? getBuildComboBonus(nextRecentThemeLabels.length, nextComboChain)
           : 0;
-        const nextScore = previousScore + blockScore.points + comboBonus;
+        const focusBonus = getBuildFocusScoreBonus(focusResult, blockScore.points, comboBonus);
+        const nextScore = previousScore + blockScore.points + comboBonus + focusBonus;
         const nextBestComboChain = Math.max(state.bestComboChain, nextComboChain);
+        const nextBestFocusChain = Math.max(
+          state.bestFocusChain,
+          focusResult?.focused ? focusResult.chain : 0,
+        );
         const milestone = getReachedStageBuildMilestone(
           previousScore,
           nextScore,
@@ -156,6 +212,7 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
           score: bestScore,
           achievedMilestones: bestMilestones,
           bestComboChain: Math.max(currentBest?.bestComboChain ?? 0, nextBestComboChain),
+          bestFocusChain: Math.max(currentBest?.bestFocusChain ?? 0, nextBestFocusChain),
           updatedAt: Date.now(),
         };
 
@@ -190,6 +247,25 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
               createdAt,
             }
           : state.recentCombo;
+        const focusComboActive = shouldEmitBuildFocusCombo(
+          focusResult,
+          state.bestFocusChain,
+          focusBonus,
+        );
+        const recentFocusCombo = focusComboActive
+          ? {
+              id: `${stageId}-focus-${focusResult.chain}-${Math.round(createdAt)}`,
+              stageId,
+              score: nextScore,
+              focusChain: focusResult.chain,
+              bonus: focusBonus,
+              title: `高速建築 x${focusResult.chain}`,
+              detail: `${blockScore.label}+${blockScore.points} / 連置 +${focusBonus} / ${nextScore}pt`,
+              accent: focusResult.accent,
+              glow: focusResult.glow,
+              createdAt,
+            }
+          : state.recentFocusCombo;
 
         set({
           score: nextScore,
@@ -200,22 +276,26 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
           recentThemeLabels: nextRecentThemeLabels,
           comboChain: nextComboChain,
           bestComboChain: nextBestComboChain,
+          bestFocusChain: nextBestFocusChain,
           lastPlacementLabel: blockScore.label,
           lastPlacementPoints: blockScore.points,
           lastComboBonus: comboBonus,
+          lastFocusBonus: focusBonus,
           achievedMilestones: nextAchievedMilestones,
           bestByStage: nextBestByStage,
           recentMilestone,
           recentCombo,
+          recentFocusCombo,
         });
 
-        if (milestone || comboBonus > 0) {
+        if (milestone || comboBonus > 0 || focusComboActive) {
           playStageRewardSound('build_supply');
         }
       },
 
       clearRecentMilestone: () => set({ recentMilestone: null }),
       clearRecentCombo: () => set({ recentCombo: null }),
+      clearRecentFocusCombo: () => set({ recentFocusCombo: null }),
     }),
     {
       name: 'halcraft-stage-build-score-v1',
@@ -231,6 +311,7 @@ export const useStageBuildScoreStore = create<StageBuildScoreState>()(
               {
                 ...best,
                 bestComboChain: Math.max(0, best.bestComboChain ?? 0),
+                bestFocusChain: Math.max(0, best.bestFocusChain ?? 0),
               },
             ]),
           ),

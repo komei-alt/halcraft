@@ -66,6 +66,7 @@ export function StageResultOverlay() {
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const buildBestComboChain = useStageBuildScoreStore((s) => s.bestComboChain);
+  const buildBestFocusChain = useStageBuildScoreStore((s) => s.bestFocusChain);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeActivations = useModeFlowStore((s) => s.activationCount);
@@ -174,6 +175,7 @@ export function StageResultOverlay() {
         ['作品', `${buildScore}pt`],
         ['節目', `${buildMilestones.length}/${BUILD_SCORE_MILESTONES.length}`],
         ['コンボ', buildBestComboChain > 0 ? `x${buildBestComboChain}` : '—'],
+        ['高速', buildBestFocusChain > 0 ? `x${buildBestFocusChain}` : '—'],
       ]
     : [
         ['目標', objectiveValue],
@@ -187,7 +189,7 @@ export function StageResultOverlay() {
   const recordDetail = modeRule
     ? modeRule.category === 'war'
       ? `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 連続 x${bestModeStreak}`
-      : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt / 素材x${Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)}`
+      : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt / 素材x${Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)} / 高速x${Math.max(buildBest?.bestFocusChain ?? 0, buildBestFocusChain)}`
     : 'このマップのクリア記録を保存中';
 
   return (
@@ -734,6 +736,12 @@ export function StageResultOverlay() {
                 <>
                   <br />
                   素材コンボ BEST x{Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)}
+                </>
+              )}
+              {Math.max(buildBest?.bestFocusChain ?? 0, buildBestFocusChain) > 0 && (
+                <>
+                  <br />
+                  高速建築 BEST x{Math.max(buildBest?.bestFocusChain ?? 0, buildBestFocusChain)}
                 </>
               )}
             </div>

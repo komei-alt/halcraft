@@ -682,8 +682,9 @@ export function BlockInteraction() {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
     recordStageBlockPlace(blockId);
     recordConditionBlockPlace(blockId);
-    useStageBuildScoreStore.getState().recordBlockPlace(blockId);
-    return useModeFlowStore.getState().recordBuildBlockPlace(blockId);
+    const buildFocusResult = useModeFlowStore.getState().recordBuildBlockPlace(blockId);
+    useStageBuildScoreStore.getState().recordBlockPlace(blockId, buildFocusResult);
+    return buildFocusResult;
   }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
   const getPlacementChallengeProgressContext = useCallback((blockId: BlockId): BlockUseFeedbackContext['stageChallengeProgress'] => {

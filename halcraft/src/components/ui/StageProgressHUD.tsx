@@ -203,6 +203,7 @@ function getBuildScoreGuidance(
   lastPlacementLabel: string | null,
   lastPlacementPoints: number,
   lastComboBonus: number,
+  lastFocusBonus: number,
 ): StageGuidance | null {
   const style = getStageBuildStyle(stage.id);
   if (!style) return null;
@@ -216,9 +217,11 @@ function getBuildScoreGuidance(
     icon: style.icon,
     label: `${style.shortLabel} ${score}pt`,
     detail: lastPlacementLabel
-      ? lastComboBonus > 0
-        ? `${lastPlacementLabel}+${lastPlacementPoints} / 多素材+${lastComboBonus}`
-        : `${lastPlacementLabel}+${lastPlacementPoints} / ${formatStageBuildFocus(style, 2)}でコンボ`
+      ? [
+          `${lastPlacementLabel}+${lastPlacementPoints}`,
+          lastComboBonus > 0 ? `多素材+${lastComboBonus}` : null,
+          lastFocusBonus > 0 ? `連置+${lastFocusBonus}` : null,
+        ].filter(Boolean).join(' / ') || `${lastPlacementLabel}+${lastPlacementPoints}`
       : `${formatStageBuildFocus(style, 3)}で作品評価アップ`,
     accent: style.accent,
     progressText: comboChain > 0 ? `コンボx${comboChain}` : progressText,
@@ -256,6 +259,7 @@ function getStageGuidance(
   lastPlacementLabel: string | null,
   lastPlacementPoints: number,
   lastComboBonus: number,
+  lastFocusBonus: number,
   equippedItem: EquippedItem,
   swapLabel: string,
 ): StageGuidance {
@@ -269,6 +273,7 @@ function getStageGuidance(
     lastPlacementLabel,
     lastPlacementPoints,
     lastComboBonus,
+    lastFocusBonus,
   );
   const combatStyleGuidance = getCombatStyleGuidance(stage, equippedItem, swapLabel);
   const condition = getStageCondition(stage.id);
@@ -835,14 +840,18 @@ export function StageProgressHUD() {
   const buildStyleHits = useStageBuildScoreStore((s) => s.styleHits);
   const buildComboChain = useStageBuildScoreStore((s) => s.comboChain);
   const buildBestComboChain = useStageBuildScoreStore((s) => s.bestComboChain);
+  const buildBestFocusChain = useStageBuildScoreStore((s) => s.bestFocusChain);
   const lastPlacementLabel = useStageBuildScoreStore((s) => s.lastPlacementLabel);
   const lastPlacementPoints = useStageBuildScoreStore((s) => s.lastPlacementPoints);
   const lastComboBonus = useStageBuildScoreStore((s) => s.lastComboBonus);
+  const lastFocusBonus = useStageBuildScoreStore((s) => s.lastFocusBonus);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
+  const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
+  const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
   const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
   const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
   const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
@@ -855,11 +864,11 @@ export function StageProgressHUD() {
   const [eventNow, setEventNow] = useState(() => performance.now());
 
   useEffect(() => {
-    if (phase !== 'playing' || !isCompact) return undefined;
+    if (phase !== 'playing') return undefined;
 
     const timer = window.setInterval(() => setEventNow(performance.now()), 500);
     return () => window.clearInterval(timer);
-  }, [isCompact, phase]);
+  }, [phase]);
 
   if (phase !== 'playing' || !stage) return null;
 
@@ -921,6 +930,7 @@ export function StageProgressHUD() {
         lastPlacementLabel,
         lastPlacementPoints,
         lastComboBonus,
+        lastFocusBonus,
         equippedItem,
         isCompact ? '装備ボタン' : 'Vで切替',
       );
@@ -946,6 +956,9 @@ export function StageProgressHUD() {
     : '';
   const compactCombatFocusActive = modeRule?.category === 'war' && combatFocusUntil > eventNow;
   const compactCombatFocusChain = combatFocusChainExpiresAt > eventNow ? combatFocusChain : 0;
+  const activeBuildFocusChain = modeRule?.category === 'build' && buildFocusChainExpiresAt > eventNow
+    ? buildFocusChain
+    : 0;
   const compactModeActionLabel = compactCombatFocusActive
     ? compactCombatFocusChain >= 2
       ? `作戦集中 追撃x${compactCombatFocusChain}`
@@ -1583,7 +1596,11 @@ export function StageProgressHUD() {
               }}
             >
               {lastPlacementLabel
-                ? `${lastPlacementLabel}+${lastPlacementPoints}${lastComboBonus > 0 ? ` / 多素材+${lastComboBonus}` : ''}`
+                ? [
+                    `${lastPlacementLabel}+${lastPlacementPoints}`,
+                    lastComboBonus > 0 ? `多素材+${lastComboBonus}` : null,
+                    lastFocusBonus > 0 ? `連置+${lastFocusBonus}` : null,
+                  ].filter(Boolean).join(' / ')
                 : formatStageBuildFocus(buildStyle, 3)}
             </span>
             <span
@@ -1597,7 +1614,11 @@ export function StageProgressHUD() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {buildComboChain > 0 ? `x${buildComboChain}` : `BEST x${buildBestComboChain}`}
+              {activeBuildFocusChain >= 2
+                ? `FAST x${activeBuildFocusChain}`
+                : buildComboChain > 0
+                  ? `x${buildComboChain}`
+                  : `BEST x${Math.max(buildBestComboChain, buildBestFocusChain)}`}
             </span>
           </div>
           <div
@@ -1611,7 +1632,7 @@ export function StageProgressHUD() {
           >
             <div
               style={{
-                width: `${Math.min(100, Math.max(8, buildComboChain * 18))}%`,
+                width: `${Math.min(100, Math.max(8, Math.max(buildComboChain, activeBuildFocusChain) * 18))}%`,
                 height: '100%',
                 borderRadius: 999,
                 background: `linear-gradient(90deg, ${buildStyle.accent}, #ffffff)`,
@@ -1794,6 +1815,11 @@ export function StageProgressHUD() {
           {buildStyle && buildBestComboChain > 0 && (
             <span style={{ color: 'rgba(255,241,168,0.9)', fontWeight: 900 }}>
               <span style={{ opacity: 0.4 }}>· </span>コンボBEST x{buildBestComboChain}
+            </span>
+          )}
+          {buildStyle && buildBestFocusChain > 0 && (
+            <span style={{ color: buildStyle.accent, fontWeight: 900 }}>
+              <span style={{ opacity: 0.4 }}>· </span>高速BEST x{buildBestFocusChain}
             </span>
           )}
           {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (

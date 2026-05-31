@@ -57,6 +57,7 @@ export function ProgressCelebration() {
   const lastStageEventIdRef = useRef<string | null>(null);
   const lastBuildScoreIdRef = useRef<string | null>(null);
   const lastBuildComboIdRef = useRef<string | null>(null);
+  const lastBuildFocusIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
   const lastModeFlowIdRef = useRef<string | null>(null);
   const lastVehicleFirepowerIdRef = useRef<string | null>(null);
@@ -279,6 +280,23 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeBuildFocus = useStageBuildScoreStore.subscribe((state, previous) => {
+      const focus = state.recentFocusCombo;
+      if (useGameStore.getState().phase !== 'playing' || !focus) return;
+      if (focus.id === previous.recentFocusCombo?.id || lastBuildFocusIdRef.current === focus.id) return;
+      lastBuildFocusIdRef.current = focus.id;
+
+      addToast({
+        id: `build-focus-${focus.id}`,
+        icon: '⚡',
+        eyebrow: '高速建築連置',
+        title: focus.title,
+        detail: focus.detail,
+        accent: focus.accent,
+        glow: focus.glow,
+      });
+    });
+
     const unsubscribeItemFeedback = useItemFeedbackStore.subscribe((state, previous) => {
       const feedback = state.recentFeedback;
       if (useGameStore.getState().phase !== 'playing' || !feedback) return;
@@ -337,6 +355,7 @@ export function ProgressCelebration() {
       unsubscribeStageEvent();
       unsubscribeBuildScore();
       unsubscribeBuildCombo();
+      unsubscribeBuildFocus();
       unsubscribeItemFeedback();
       unsubscribeModeFlow();
       unsubscribeVehicleFirepower();
