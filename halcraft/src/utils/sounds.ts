@@ -1539,6 +1539,7 @@ type StageEventSoundKind = 'forest' | 'tropical' | 'snow' | 'desert' | 'war' | '
 type StagePressureSoundKind = 'ambush' | 'humidity' | 'cold' | 'heat';
 type StagePressureSoundSeverity = 'danger' | 'critical';
 type StageStartSoundKind = 'build' | 'war';
+export type StageOpportunitySoundKind = 'build' | 'war' | 'boss';
 
 /** ステージ開始SE — 建築と戦争でスタートの気分を変える */
 export function playStageStartSound(kind: StageStartSoundKind): void {
@@ -1591,6 +1592,79 @@ export function playStageStartSound(kind: StageStartSoundKind): void {
   noiseGain.connect(ctx.destination);
   noise.start(now);
   noise.stop(now + 0.2);
+}
+
+/** 記録チャンスSE — 建築・戦闘・ボスで「今やる」合図を変える */
+export function playStageOpportunitySound(kind: StageOpportunitySoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`stageOpportunity:${kind}`, 1350)) return;
+  const now = ctx.currentTime;
+  const notes: Record<StageOpportunitySoundKind, number[]> = {
+    build: [659.25, 880, 1174.66, 1567.98],
+    war: [220, 330, 440, 660],
+    boss: [164.81, 329.63, 659.25, 987.77],
+  };
+  const wave: Record<StageOpportunitySoundKind, OscillatorType> = {
+    build: 'triangle',
+    war: 'square',
+    boss: 'sawtooth',
+  };
+
+  notes[kind].forEach((note, index) => {
+    const t = now + index * 0.042;
+    const osc = ctx.createOscillator();
+    osc.type = wave[kind];
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'boss' ? 0.9 : 1.08), t + 0.2);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'build' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'build' ? 3300 : kind === 'boss' ? 820 : 1180, t);
+    filter.Q.setValueAtTime(kind === 'build' ? 0.75 : 2.1, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'boss' ? 0.058 : 0.046, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.24);
+  });
+
+  if (kind === 'build') {
+    const sparkle = ctx.createOscillator();
+    sparkle.type = 'sine';
+    sparkle.frequency.setValueAtTime(1760, now + 0.12);
+
+    const sparkleGain = ctx.createGain();
+    sparkleGain.gain.setValueAtTime(0.026, now + 0.12);
+    sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    sparkle.connect(sparkleGain);
+    sparkleGain.connect(ctx.destination);
+    sparkle.start(now + 0.12);
+    sparkle.stop(now + 0.28);
+    return;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'boss' ? 950 : 1600, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(kind === 'boss' ? 0.045 : 0.022, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.18);
 }
 
 /** ステージ特性発動SE — 効果タイプごとに手触りを変える */

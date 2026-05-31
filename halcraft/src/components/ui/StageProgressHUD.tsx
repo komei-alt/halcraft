@@ -1,7 +1,7 @@
 // ステージ進行HUD
 // 選んだマップごとの目的・進行・ランドマークを常時見える状態にする
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore, type StageBuildScoreBest } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
@@ -46,6 +46,7 @@ import {
 } from '../../types/stageLandmarks';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
+import { playStageOpportunitySound, type StageOpportunitySoundKind } from '../../utils/sounds';
 import { getStageEventHudDisplay } from './stageEventDisplay';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
@@ -74,12 +75,15 @@ interface StageRecordTarget {
 }
 
 interface StageOpportunityCue {
+  id: string;
   icon: string;
   label: string;
   detail: string;
   accent: string;
   valueText: string;
   ratio: number;
+  momentLabel: string;
+  soundKind: StageOpportunitySoundKind;
 }
 
 interface StageOpportunityCandidate {
@@ -96,8 +100,16 @@ interface StageRouteStep {
   ratio: number;
 }
 
+interface StageOpportunityMoment {
+  key: string;
+  cue: StageOpportunityCue;
+  stageName: string;
+  visibleUntil: number;
+}
+
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
 const OPPORTUNITY_RATIO = 0.68;
+const STAGE_OPPORTUNITY_MOMENT_MS = 2800;
 
 function isCloseToTarget(current: number, target: number): boolean {
   if (target <= 0 || current <= 0) return false;
@@ -367,12 +379,15 @@ function getStageOpportunityCue(args: {
     candidates.push({
       priority: 100,
       cue: {
+        id: `boss:${args.stage.id}:${args.bossWeakness ?? 'finish'}`,
         icon: '👑',
         label: 'ボス撃破チャンス',
         detail: args.bossWeakness ? `弱点「${args.bossWeakness}」へ火力を集中` : 'いま押し切ればクリア記録が伸びる',
         accent: args.bossAccent ?? '#ffdd66',
         valueText: `${bossPercent}%`,
         ratio: 1 - args.bossHpRatio,
+        momentLabel: '決着の一撃',
+        soundKind: 'boss',
       },
     });
   }
@@ -394,12 +409,15 @@ function getStageOpportunityCue(args: {
     candidates.push({
       priority: 80,
       cue: {
+        id: `challenge:${challenge.definition.id}`,
         icon: challenge.definition.icon,
         label: 'チャレンジ目前',
         detail: `${challenge.definition.title}: ${challenge.definition.description}`,
         accent: challenge.definition.accent,
         valueText: `あと${remaining}`,
         ratio: challenge.progress.ratio,
+        momentLabel: 'あと一歩で達成',
+        soundKind: args.stage.category === 'build' ? 'build' : 'war',
       },
     });
   }
@@ -412,12 +430,15 @@ function getStageOpportunityCue(args: {
       candidates.push({
         priority: 70,
         cue: {
+          id: `mode:${args.modeRule.stageId}:${args.modeActivationCount + 1}`,
           icon: args.modeRule.icon,
           label: `${args.modeRule.meterLabel}発動目前`,
           detail: `${args.modeRule.actionLabel}で${getModeFlowRankLabel(args.modeRule.category, nextRank)}へ`,
           accent: args.modeRule.accent,
           valueText: `あと${remaining}`,
           ratio,
+          momentLabel: '今ため切る',
+          soundKind: args.modeRule.category === 'build' ? 'build' : 'war',
         },
       });
     }
@@ -431,12 +452,15 @@ function getStageOpportunityCue(args: {
       candidates.push({
         priority: args.buildComboChain >= 3 ? 75 : 60,
         cue: {
+          id: `build:${args.stage.id}:${nextMilestone}`,
           icon: style.icon,
           label: '作品節目前',
           detail: `${style.shortLabel}を重ねて${nextMilestone}ptの作品記録へ`,
           accent: style.accent,
           valueText: args.buildComboChain > 0 ? `コンボx${args.buildComboChain}` : `あと${remaining}pt`,
           ratio: Math.min(1, args.buildScore / nextMilestone),
+          momentLabel: '節目へつなぐ',
+          soundKind: 'build',
         },
       });
     }
@@ -452,12 +476,15 @@ function getStageOpportunityCue(args: {
     candidates.push({
       priority: 55,
       cue: {
+        id: `boss-spawn:${args.stage.id}`,
         icon: args.stage.icon,
         label: 'ボス出現目前',
         detail: args.stage.rules.objective.description,
         accent: '#ffdd66',
         valueText: `あと${remaining}体`,
         ratio: Math.min(1, args.enemiesDefeated / args.targetCount),
+        momentLabel: '次の撃破で決戦',
+        soundKind: 'war',
       },
     });
   }
@@ -468,6 +495,7 @@ function getStageOpportunityCue(args: {
       candidates.push({
         priority: 10,
         cue: {
+          id: `first-build:${args.stage.id}`,
           icon: style?.icon ?? args.stage.icon,
           label: '初回作品チャンス',
           detail: style
@@ -476,18 +504,23 @@ function getStageOpportunityCue(args: {
           accent: style?.accent ?? args.stage.color,
           valueText: 'START',
           ratio: 0.08,
+          momentLabel: '最初の記録を作る',
+          soundKind: 'build',
         },
       });
     } else {
       candidates.push({
         priority: 10,
         cue: {
+          id: `first-clear:${args.stage.id}`,
           icon: args.stage.icon,
           label: '初回クリアチャンス',
           detail: `${args.stage.rules.objective.title}を進めてBESTタイムの基準を作る`,
           accent: '#ffdd66',
           valueText: args.targetCount ? `0/${args.targetCount}` : 'START',
           ratio: 0.08,
+          momentLabel: '最初の記録を作る',
+          soundKind: 'war',
         },
       });
     }
@@ -590,9 +623,204 @@ function getStageRouteSteps(args: {
   return steps.slice(0, 3);
 }
 
+function StageOpportunityMomentAnnouncer({
+  cue,
+  stageName,
+  runKey,
+  isCompact,
+}: {
+  cue: StageOpportunityCue | null;
+  stageName: string;
+  runKey: string;
+  isCompact: boolean;
+}) {
+  const [now, setNow] = useState(() => performance.now());
+  const [moment, setMoment] = useState<StageOpportunityMoment | null>(null);
+  const announcedKeysRef = useRef<Set<string>>(new Set());
+  const runKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (runKeyRef.current !== runKey) {
+      runKeyRef.current = runKey;
+      announcedKeysRef.current = new Set();
+    }
+
+    if (!cue) return undefined;
+    const shouldAnnounce = cue.soundKind === 'boss' || cue.ratio >= OPPORTUNITY_RATIO;
+    if (!shouldAnnounce) return undefined;
+
+    const announceKey = `${runKey}:${cue.id}`;
+    if (announcedKeysRef.current.has(announceKey)) return undefined;
+    announcedKeysRef.current.add(announceKey);
+
+    const timer = window.setTimeout(() => {
+      const nowMs = performance.now();
+      setNow(nowMs);
+      setMoment({
+        key: announceKey,
+        cue,
+        stageName,
+        visibleUntil: nowMs + STAGE_OPPORTUNITY_MOMENT_MS,
+      });
+      playStageOpportunitySound(cue.soundKind);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [cue, runKey, stageName]);
+
+  useEffect(() => {
+    if (!moment) return undefined;
+    const timer = window.setInterval(() => setNow(performance.now()), 120);
+    return () => window.clearInterval(timer);
+  }, [moment]);
+
+  if (!moment || !moment.key.startsWith(`${runKey}:`) || now > moment.visibleUntil) return null;
+
+  const progress = Math.max(0, Math.min(1, (moment.visibleUntil - now) / STAGE_OPPORTUNITY_MOMENT_MS));
+
+  return (
+    <div
+      id="stage-opportunity-moment"
+      data-opportunity-id={moment.cue.id}
+      style={{
+        position: 'fixed',
+        top: isCompact ? 112 : 94,
+        left: '50%',
+        zIndex: 111,
+        width: isCompact ? 'min(318px, calc(100vw - 26px))' : 390,
+        transform: 'translateX(-50%)',
+        pointerEvents: 'none',
+        color: '#fff',
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
+        animation: 'stageOpportunityMomentIn 0.24s ease-out both',
+      }}
+    >
+      <div
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          padding: isCompact ? '10px 12px' : '12px 14px',
+          borderRadius: 8,
+          border: `1px solid ${moment.cue.accent}77`,
+          background: `linear-gradient(135deg, ${moment.cue.accent}2e, rgba(4,7,12,0.72))`,
+          boxShadow: `0 14px 34px rgba(0,0,0,0.42), 0 0 30px ${moment.cue.accent}45`,
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(112deg, transparent, ${moment.cue.accent}38, transparent)`,
+            transform: 'translateX(-70%)',
+            animation: 'stageOpportunityMomentSweep 1.05s ease-out both',
+          }}
+        />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span
+            style={{
+              flex: '0 0 auto',
+              width: isCompact ? 38 : 44,
+              height: isCompact ? 38 : 44,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 8,
+              background: `${moment.cue.accent}26`,
+              border: `1px solid ${moment.cue.accent}66`,
+              boxShadow: `0 0 16px ${moment.cue.accent}66`,
+              fontSize: isCompact ? 22 : 25,
+            }}
+          >
+            {moment.cue.icon}
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                color: moment.cue.accent,
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              記録チャンス到来 / {moment.stageName}
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                color: '#fff',
+                fontSize: isCompact ? 14 : 16,
+                lineHeight: isCompact ? '17px' : '20px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {moment.cue.momentLabel}: {moment.cue.label}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                color: 'rgba(255,255,255,0.68)',
+                fontSize: isCompact ? 10 : 11,
+                lineHeight: '14px',
+                fontWeight: 850,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {moment.cue.detail}
+            </div>
+          </div>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: '#fff1a8',
+              fontSize: isCompact ? 12 : 13,
+              lineHeight: '15px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {moment.cue.valueText}
+          </span>
+        </div>
+        <div
+          style={{
+            position: 'relative',
+            marginTop: 8,
+            height: 4,
+            borderRadius: 999,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.14)',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(progress * 100)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${moment.cue.accent}, #fff1a8)`,
+              transition: 'width 0.12s linear',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
+  const runId = useGameStore((s) => s.runId);
   const enemiesDefeated = useGameStore((s) => s.enemiesDefeated);
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
   const bossSpawned = useGameStore((s) => s.bossSpawned);
@@ -743,28 +971,36 @@ export function StageProgressHUD() {
     recordTarget,
     opportunityCue,
   });
+  const runKey = `${runId}:${stage.id}`;
 
   return (
-    <div
-      id="stage-progress-hud"
-      style={{
-        position: 'fixed',
-        top: isCompact ? 54 : 14,
-        left: isCompact ? 14 : 64,
-        zIndex: 96,
-        width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
-        padding: 0,
-        background: 'none',
-        border: 'none',
-        backdropFilter: 'none',
-        WebkitBackdropFilter: 'none',
-        color: '#fff',
-        pointerEvents: 'none',
-        boxShadow: 'none',
-        textShadow: HUD_TEXT_SHADOW,
-        fontFamily: SG.font,
-      }}
-    >
+    <>
+      <StageOpportunityMomentAnnouncer
+        cue={opportunityCue}
+        stageName={stage.name}
+        runKey={runKey}
+        isCompact={isCompact}
+      />
+      <div
+        id="stage-progress-hud"
+        style={{
+          position: 'fixed',
+          top: isCompact ? 54 : 14,
+          left: isCompact ? 14 : 64,
+          zIndex: 96,
+          width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
+          padding: 0,
+          background: 'none',
+          border: 'none',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          color: '#fff',
+          pointerEvents: 'none',
+          boxShadow: 'none',
+          textShadow: HUD_TEXT_SHADOW,
+          fontFamily: SG.font,
+        }}
+      >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <span style={{ fontSize: isCompact ? 20 : 23, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))' }}>{stage.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -1556,6 +1792,7 @@ export function StageProgressHUD() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
