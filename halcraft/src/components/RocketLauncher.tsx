@@ -19,7 +19,7 @@ import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
-import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
+import { playRocketDirectHitSound, playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
 import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { checkProjectileHitVehicle } from '../utils/vehicleCombat';
@@ -43,6 +43,8 @@ const EXPLOSION_LIFETIME = 1.45;
 const EXPLOSION_BLOCK_RADIUS = 2.8;
 const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
 const EXPLOSION_SURFACE_OFFSET = 0.36;
+const ROCKET_DIRECT_HIT_MIN_DISTANCE = 18;
+const ROCKET_DIRECT_HIT_BONUS_DAMAGE = 10;
 const SPARK_COUNT = 36;
 const SMOKE_COUNT = 24;
 const FIREBALL_COUNT = 10;
@@ -68,6 +70,7 @@ const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 interface RocketProjectile {
   id: number;
   syncId: string;
+  launchPos: THREE.Vector3;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age: number;
@@ -109,6 +112,13 @@ interface ExplosionEffect {
   smoke: ExplosionParticle[];
   fireballs: ExplosionParticle[];
   debris: ExplosionDebris[];
+}
+
+interface RocketDirectHitContext {
+  targetType: 'mob' | 'player' | 'vehicle';
+  targetId?: string;
+  distance: number;
+  precision: boolean;
 }
 
 interface ExplosionBlockCandidate {
@@ -161,13 +171,17 @@ function calculateExplosionDamage(distance: number, radius = EXPLOSION_RADIUS, d
   ));
 }
 
-function createExplosion(pos: THREE.Vector3): ExplosionEffect {
+function createExplosion(pos: THREE.Vector3, precisionDirectHit = false): ExplosionEffect {
   const sparks: ExplosionParticle[] = [];
   const smoke: ExplosionParticle[] = [];
   const fireballs: ExplosionParticle[] = [];
   const debris: ExplosionDebris[] = [];
+  const sparkCount = precisionDirectHit ? SPARK_COUNT + 18 : SPARK_COUNT;
+  const smokeCount = precisionDirectHit ? SMOKE_COUNT + 8 : SMOKE_COUNT;
+  const fireballCount = precisionDirectHit ? FIREBALL_COUNT + 4 : FIREBALL_COUNT;
+  const debrisCount = precisionDirectHit ? DEBRIS_COUNT + 8 : DEBRIS_COUNT;
 
-  for (let i = 0; i < SPARK_COUNT; i++) {
+  for (let i = 0; i < sparkCount; i++) {
     const theta = Math.random() * Math.PI * 2;
     const phi = (Math.random() - 0.16) * Math.PI * 0.78;
     const speed = 8 + Math.random() * 16;
@@ -190,7 +204,7 @@ function createExplosion(pos: THREE.Vector3): ExplosionEffect {
     });
   }
 
-  for (let i = 0; i < FIREBALL_COUNT; i++) {
+  for (let i = 0; i < fireballCount; i++) {
     const theta = Math.random() * Math.PI * 2;
     const speed = 1.8 + Math.random() * 4.6;
     const life = 0.34 + Math.random() * 0.36;
@@ -212,7 +226,7 @@ function createExplosion(pos: THREE.Vector3): ExplosionEffect {
     });
   }
 
-  for (let i = 0; i < SMOKE_COUNT; i++) {
+  for (let i = 0; i < smokeCount; i++) {
     const theta = Math.random() * Math.PI * 2;
     const speed = 1.3 + Math.random() * 4.2;
     const life = 1.15 + Math.random() * 0.9;
@@ -234,7 +248,7 @@ function createExplosion(pos: THREE.Vector3): ExplosionEffect {
     });
   }
 
-  for (let i = 0; i < DEBRIS_COUNT; i++) {
+  for (let i = 0; i < debrisCount; i++) {
     const theta = Math.random() * Math.PI * 2;
     const speed = 3.0 + Math.random() * 8.5;
     const life = 0.95 + Math.random() * 0.75;
@@ -406,7 +420,7 @@ export function RocketLauncher() {
     }
   }, []);
 
-  const applyExplosionDamage = useCallback((center: THREE.Vector3) => {
+  const applyExplosionDamage = useCallback((center: THREE.Vector3, directHit?: RocketDirectHitContext) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
     const combatFocus = getCombatFocusModifier('rocket_launcher');
@@ -428,7 +442,11 @@ export function RocketLauncher() {
     for (const mob of mobStore.mobs) {
       const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
       const distance = mobCenter.distanceTo(center);
-      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier);
+      const directTarget = directHit?.targetType === 'mob' && directHit.targetId === mob.id;
+      const directBonus = directTarget
+        ? directHit.precision ? ROCKET_DIRECT_HIT_BONUS_DAMAGE : Math.round(ROCKET_DIRECT_HIT_BONUS_DAMAGE * 0.5)
+        : 0;
+      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier) + directBonus;
       if (damage <= 0) continue;
       masteryHits += 1;
 
@@ -449,9 +467,9 @@ export function RocketLauncher() {
         impactDir.x,
         Math.max(0.2, impactDir.y),
         impactDir.z,
-        damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.7,
+        directTarget || damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.7,
       );
-      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.75);
+      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, directTarget || damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.75);
     }
 
     for (const [, player] of multi.remotePlayers) {
@@ -463,7 +481,11 @@ export function RocketLauncher() {
         player.position[2],
       );
       const distance = playerBody.distanceTo(center);
-      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier);
+      const directTarget = directHit?.targetType === 'player' && directHit.targetId === player.id;
+      const directBonus = directTarget
+        ? directHit.precision ? ROCKET_DIRECT_HIT_BONUS_DAMAGE : Math.round(ROCKET_DIRECT_HIT_BONUS_DAMAGE * 0.5)
+        : 0;
+      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier) + directBonus;
       if (damage <= 0) continue;
       masteryHits += 1;
 
@@ -483,36 +505,54 @@ export function RocketLauncher() {
         impactDir.x,
         Math.max(0.2, impactDir.y),
         impactDir.z,
-        false,
+        directTarget,
       );
-      spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], false);
+      spawnDamagePopup(damage, player.position[0], player.position[1] + 1.1, player.position[2], directTarget);
     }
 
     if (masteryHits > 0) {
+      const directHitLabel = directHit?.precision ? '遠距離直撃' : directHit ? '直撃ヒット' : null;
+      const directHitAmount = directHit?.precision
+        ? 24 + masteryHits * 6
+        : directHit
+          ? 18 + masteryHits * 5
+          : 10 + masteryHits * 5;
+      const directHitCritical = Boolean(directHit) || masteryHits >= 3;
       useMasteryStore.getState().recordItemHit('rocket_launcher', {
-        label: masteryHits >= 3 ? '大爆風ヒット' : '爆風ヒット',
-        amount: 10 + masteryHits * 5,
-        critical: masteryHits >= 3,
+        label: directHitLabel ?? (masteryHits >= 3 ? '大爆風ヒット' : '爆風ヒット'),
+        amount: directHitAmount,
+        critical: directHitCritical,
       });
       useStageChallengeStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
       useStageConditionStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
-      useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', masteryHits, masteryHits >= 3);
+      useModeFlowStore.getState().recordCombatStyleHit(
+        'rocket_launcher',
+        directHit?.precision ? masteryHits + 1 : masteryHits,
+        directHitCritical,
+      );
     }
   }, [camera, takeDamage]);
 
-  const spawnExplosionAt = useCallback((pos: THREE.Vector3, applyGameplay: boolean = true) => {
+  const spawnExplosionAt = useCallback((
+    pos: THREE.Vector3,
+    applyGameplay: boolean = true,
+    directHit?: RocketDirectHitContext,
+  ) => {
     if (applyGameplay) {
       const combatFocus = getCombatFocusModifier('rocket_launcher');
       destroyExplosionBlocks(pos, EXPLOSION_BLOCK_RADIUS * combatFocus.rocketRadiusMultiplier);
-      applyExplosionDamage(pos);
+      applyExplosionDamage(pos, directHit);
       useStageChallengeStore.getState().recordDetonation();
       useStageConditionStore.getState().recordDetonation();
     }
     setExplosions((prev) => {
-      const next = [...prev, createExplosion(pos)];
+      const next = [...prev, createExplosion(pos, Boolean(directHit?.precision))];
       return next.slice(-6);
     });
     playRocketExplosionSound(pos.distanceTo(camera.position));
+    if (directHit) {
+      playRocketDirectHitSound(pos.distanceTo(camera.position), directHit.precision);
+    }
   }, [applyExplosionDamage, camera, destroyExplosionBlocks]);
 
   const fireLauncher = useCallback(() => {
@@ -568,6 +608,7 @@ export function RocketLauncher() {
     const projectile: RocketProjectile = {
       id: nextRocketId++,
       syncId: rocketId,
+      launchPos: muzzleWorld.current.clone(),
       pos: muzzleWorld.current.clone(),
       vel: velocity,
       age: 0,
@@ -600,6 +641,7 @@ export function RocketLauncher() {
       const projectile: RocketProjectile = {
         id: nextRocketId++,
         syncId: data.rocketId,
+        launchPos: startPos.clone(),
         pos: startPos,
         vel: velocity,
         age: 0,
@@ -697,6 +739,7 @@ export function RocketLauncher() {
       syncId: string;
       applyGameplay: boolean;
       notifyRemote: boolean;
+      directHit?: RocketDirectHitContext;
     }> = [];
 
     if (projectilesRef.current.length > 0) {
@@ -751,6 +794,15 @@ export function RocketLauncher() {
         );
 
         if (hitResult.type !== 'none') {
+          const hitDistance = projectile.launchPos.distanceTo(hitResult.hitPos);
+          const directHit = hitResult.type === 'mob' || hitResult.type === 'player'
+            ? {
+                targetType: hitResult.type,
+                targetId: hitResult.targetId,
+                distance: hitDistance,
+                precision: hitDistance >= ROCKET_DIRECT_HIT_MIN_DISTANCE,
+              } satisfies RocketDirectHitContext
+            : undefined;
           explosionsToSpawn.push({
             pos: hitResult.type === 'block'
               ? getVisibleExplosionPosition(hitResult.hitPos, hitResult.normal)
@@ -758,6 +810,7 @@ export function RocketLauncher() {
             syncId: projectile.syncId,
             applyGameplay: true,
             notifyRemote: true,
+            directHit,
           });
           continue;
         }
@@ -767,20 +820,27 @@ export function RocketLauncher() {
           projectile.pos.x, projectile.pos.y, projectile.pos.z,
         );
         if (vehicleHit) {
+          const hitDistance = projectile.launchPos.distanceTo(projectile.pos);
+          const precision = hitDistance >= ROCKET_DIRECT_HIT_MIN_DISTANCE;
           useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
           useMasteryStore.getState().recordItemHit('rocket_launcher', {
-            label: '直撃ヒット',
-            amount: 18,
+            label: precision ? '遠距離直撃' : '直撃ヒット',
+            amount: precision ? 30 : 18,
             critical: true,
           });
           useStageChallengeStore.getState().recordWeaponHit('rocket_launcher');
           useStageConditionStore.getState().recordWeaponHit('rocket_launcher');
-          useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', 1, true);
+          useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', precision ? 2 : 1, true);
           explosionsToSpawn.push({
             pos: projectile.pos.clone(),
             syncId: projectile.syncId,
             applyGameplay: true,
             notifyRemote: true,
+            directHit: {
+              targetType: 'vehicle',
+              distance: hitDistance,
+              precision,
+            },
           });
           continue;
         }
@@ -871,7 +931,11 @@ export function RocketLauncher() {
     if (explosionsToSpawn.length > 0) {
       const multi = useMultiplayerStore.getState();
       for (const explosion of explosionsToSpawn) {
-        spawnExplosionAt(explosion.pos, explosion.applyGameplay);
+        if (explosion.directHit) {
+          spawnExplosionAt(explosion.pos, explosion.applyGameplay, explosion.directHit);
+        } else {
+          spawnExplosionAt(explosion.pos, explosion.applyGameplay);
+        }
         if (explosion.notifyRemote) {
           multi.sendRocketExplode(
             explosion.syncId,

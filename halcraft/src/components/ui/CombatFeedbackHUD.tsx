@@ -126,6 +126,28 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
         soundKind: 'ready',
       };
     }
+    if (feedback.label.includes('遠距離')) {
+      return {
+        eyebrow: 'ロケット技',
+        label: 'ロングショット直撃',
+        detail: '離れて狙い切ると直撃ダメージと戦意が強く伸びる',
+        meterLabel: 'DIRECT',
+        meterText: 'RANGE',
+        ratio: 1,
+        soundKind: 'finish',
+      };
+    }
+    if (feedback.label.includes('直撃')) {
+      return {
+        eyebrow: 'ロケット技',
+        label: '直撃成功',
+        detail: '中心を当てると爆風だけより大きく押し込める',
+        meterLabel: 'DIRECT',
+        meterText: 'HIT',
+        ratio: 0.9,
+        soundKind: 'blast',
+      };
+    }
     if (feedback.kind === 'critical') {
       return {
         eyebrow: 'ロケット技',

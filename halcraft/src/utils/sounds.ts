@@ -612,6 +612,58 @@ export function playRocketExplosionSound(distance: number): void {
   tail.stop(now + 0.65);
 }
 
+/** ロケット直撃の命中アクセント — 爆発音の後に「狙って当てた」手応えを足す */
+export function playRocketDirectHitSound(distance: number, precision: boolean): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('rocketDirectHit', precision ? 260 : 420)) return;
+
+  const maxDist = 72;
+  if (distance > maxDist) return;
+  const volume = Math.max(0, (precision ? 0.34 : 0.22) * (1 - distance / maxDist));
+  const now = ctx.currentTime + 0.035;
+  const notes = precision ? [520, 1040, 1560] : [420, 840];
+
+  notes.forEach((note, index) => {
+    const t = now + index * 0.04;
+    const osc = ctx.createOscillator();
+    osc.type = precision ? 'square' : 'triangle';
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * 1.14, t + 0.12);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(precision ? 1900 : 1500, t);
+    filter.Q.setValueAtTime(2.4, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(volume * (index === 0 ? 0.72 : 1), t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.16);
+  });
+
+  const tick = ctx.createBufferSource();
+  tick.buffer = getNoiseBuffer(ctx);
+
+  const tickFilter = ctx.createBiquadFilter();
+  tickFilter.type = 'highpass';
+  tickFilter.frequency.setValueAtTime(precision ? 3200 : 2400, now);
+
+  const tickGain = ctx.createGain();
+  tickGain.gain.setValueAtTime(volume * 0.48, now + 0.01);
+  tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+  tick.connect(tickFilter);
+  tickFilter.connect(tickGain);
+  tickGain.connect(ctx.destination);
+  tick.start(now + 0.01);
+  tick.stop(now + 0.13);
+}
+
 // ============================================
 // 11. ヘリコプターのローター音
 // ============================================

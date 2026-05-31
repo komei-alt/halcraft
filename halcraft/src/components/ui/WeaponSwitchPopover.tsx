@@ -68,6 +68,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     subtitle: '広範囲にダメージを与える重火器です',
     controls: [
       '左クリック または R: 発射',
+      '遠距離直撃: ダメージと戦意アップ',
       '爆風: 周囲まとめてダメージ',
       'V: 機関銃に切り替え',
     ],
@@ -118,6 +119,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
       ...base,
       controls: [
         '💥 ボタン: ロケット発射',
+        '遠距離直撃: ダメージと戦意アップ',
         '爆風: 周囲まとめてダメージ',
         '右上の装備ボタンで切り替え',
       ],

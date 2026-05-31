@@ -111,10 +111,10 @@ function getItemTechniqueRecord(
   if (equippedItem === 'rocket_launcher') {
     const detail = techniqueCount > 0
       ? `${bestLabel} / 技 ${techniqueCount}回`
-      : '3体以上を巻き込むと爆風技の記録が伸びる';
+      : '遠くから直撃、または3体以上を巻き込むと爆風技の記録が伸びる';
     return {
       icon: '💥',
-      label: bestScore > 0 ? '爆風ベスト' : '爆風ベストを作ろう',
+      label: bestScore > 0 ? '爆風ベスト' : '直撃・爆風ベストを作ろう',
       detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus, techniqueProgress.nextTargetText),
       meterLabel: 'BLAST',
       meterText: bestScore > 0 ? `${bestScore}` : 'AREA',
