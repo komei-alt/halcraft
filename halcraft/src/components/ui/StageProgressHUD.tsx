@@ -45,6 +45,7 @@ import {
   STAGE_LANDMARK_RADIUS,
 } from '../../types/stageLandmarks';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
+import { getStageSignatureAward, type StageSignatureAward } from '../../types/stageSignatureAwards';
 import { isTouchDevice } from '../../utils/device';
 import { playStageOpportunitySound, type StageOpportunitySoundKind } from '../../utils/sounds';
 import { getStageEventHudDisplay } from './stageEventDisplay';
@@ -376,6 +377,7 @@ function getStageOpportunityCue(args: {
   bossHpRatio: number | null;
   bossWeakness: string | null;
   bossAccent: string | null;
+  signatureAward: StageSignatureAward;
 }): StageOpportunityCue | null {
   const candidates: StageOpportunityCandidate[] = [];
 
@@ -447,6 +449,23 @@ function getStageOpportunityCue(args: {
         },
       });
     }
+  }
+
+  if (!args.signatureAward.unlocked && args.signatureAward.ratio >= 0.58) {
+    candidates.push({
+      priority: args.signatureAward.ratio >= OPPORTUNITY_RATIO ? 72 : 52,
+      cue: {
+        id: `signature:${args.stage.id}:${Math.floor(args.signatureAward.ratio * 10)}`,
+        icon: args.signatureAward.icon,
+        label: '称号目前',
+        detail: `${args.signatureAward.title}: ${args.signatureAward.nextLabel}`,
+        accent: args.signatureAward.accent,
+        valueText: `${Math.round(args.signatureAward.ratio * 100)}%`,
+        ratio: args.signatureAward.ratio,
+        momentLabel: 'マップ称号へあと少し',
+        soundKind: args.stage.category === 'build' ? 'build' : 'war',
+      },
+    });
   }
 
   if (args.stage.category === 'build') {
@@ -544,8 +563,7 @@ function getStageRouteSteps(args: {
   targetCount: number | null;
   bossSpawned: boolean;
   bossHpPercent: number | null;
-  recordTarget: StageRecordTarget;
-  opportunityCue: StageOpportunityCue | null;
+  signatureAward: StageSignatureAward;
 }): StageRouteStep[] {
   const {
     stage,
@@ -557,8 +575,7 @@ function getStageRouteSteps(args: {
     targetCount,
     bossSpawned,
     bossHpPercent,
-    recordTarget,
-    opportunityCue,
+    signatureAward,
   } = args;
   const buildStyle = getStageBuildStyle(stage.id);
   const combatStyle = getStageCombatStyle(stage.id);
@@ -605,25 +622,16 @@ function getStageRouteSteps(args: {
     });
   }
 
-  if (opportunityCue) {
-    steps.push({
-      icon: opportunityCue.icon,
-      label: '寄り道',
-      detail: opportunityCue.detail,
-      valueText: opportunityCue.valueText,
-      accent: opportunityCue.accent,
-      ratio: opportunityCue.ratio,
-    });
-  } else {
-    steps.push({
-      icon: recordTarget.icon,
-      label: '記録',
-      detail: recordTarget.detail,
-      valueText: recordTarget.valueText,
-      accent: recordTarget.accent,
-      ratio: recordTarget.ratio,
-    });
-  }
+  steps.push({
+    icon: signatureAward.icon,
+    label: '称号',
+    detail: signatureAward.unlocked
+      ? `${signatureAward.title} 獲得済み`
+      : `${signatureAward.title}: ${signatureAward.nextLabel}`,
+    valueText: `${Math.round(signatureAward.ratio * 100)}%`,
+    accent: signatureAward.accent,
+    ratio: signatureAward.ratio,
+  });
 
   return steps.slice(0, 3);
 }
@@ -850,6 +858,7 @@ export function StageProgressHUD() {
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
+  const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
   const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
@@ -964,6 +973,24 @@ export function StageProgressHUD() {
       ? `作戦集中 追撃x${compactCombatFocusChain}`
       : `作戦集中 Lv.${Math.max(1, combatFocusRank)}`
     : modeRule?.actionLabel;
+  const signatureAward = getStageSignatureAward({
+    stage,
+    runBest: stageBestByStage[stage.id],
+    buildBest: buildBestByStage[stage.id],
+    buildProgress: stage.category === 'build'
+      ? {
+          score: buildScore,
+          comboChain: buildBestComboChain,
+          focusChain: Math.max(buildBestFocusChain, activeBuildFocusChain),
+        }
+      : undefined,
+    warProgress: stage.category === 'war'
+      ? {
+          modeRank: modeFlowRank,
+          streak: modeBestStreak,
+        }
+      : undefined,
+  });
   const opportunityCue = getStageOpportunityCue({
     stage,
     stats: challengeStats,
@@ -981,6 +1008,7 @@ export function StageProgressHUD() {
     bossHpRatio,
     bossWeakness: bossEncounter?.weakness ?? null,
     bossAccent: bossEncounter?.accent ?? null,
+    signatureAward,
   });
   const routeSteps = getStageRouteSteps({
     stage,
@@ -992,8 +1020,7 @@ export function StageProgressHUD() {
     targetCount: target,
     bossSpawned,
     bossHpPercent,
-    recordTarget,
-    opportunityCue,
+    signatureAward,
   });
   const runKey = `${runId}:${stage.id}`;
 
@@ -1256,7 +1283,7 @@ export function StageProgressHUD() {
               style={{
                 marginTop: 6,
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, routeSteps.length))}, minmax(0, 1fr))`,
                 gap: 6,
               }}
             >

@@ -39,6 +39,18 @@ interface WarSignatureConfig {
   streakTarget: number;
 }
 
+export interface StageSignatureBuildProgress {
+  score?: number;
+  comboChain?: number;
+  focusChain?: number;
+}
+
+export interface StageSignatureWarProgress {
+  clearCount?: number;
+  modeRank?: number;
+  streak?: number;
+}
+
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
 
 const BUILD_SIGNATURES: Record<string, BuildSignatureConfig> = {
@@ -107,6 +119,7 @@ function getModeRankText(rank: number): string {
 function getBuildSignatureAward(
   stage: StageDefinition,
   buildBest: StageBuildScoreBest | undefined,
+  progress?: StageSignatureBuildProgress,
 ): StageSignatureAward {
   const style = getStageBuildStyle(stage.id);
   const config = BUILD_SIGNATURES[stage.id] ?? {
@@ -115,9 +128,9 @@ function getBuildSignatureAward(
     targetScore: FINAL_BUILD_SCORE,
     comboTarget: 4,
   };
-  const score = Math.max(0, Math.floor(buildBest?.score ?? 0));
-  const combo = Math.max(0, Math.floor(buildBest?.bestComboChain ?? 0));
-  const focus = Math.max(0, Math.floor(buildBest?.bestFocusChain ?? 0));
+  const score = Math.max(0, Math.floor(Math.max(buildBest?.score ?? 0, progress?.score ?? 0)));
+  const combo = Math.max(0, Math.floor(Math.max(buildBest?.bestComboChain ?? 0, progress?.comboChain ?? 0)));
+  const focus = Math.max(0, Math.floor(Math.max(buildBest?.bestFocusChain ?? 0, progress?.focusChain ?? 0)));
   const secondaryTarget = config.comboTarget ?? config.focusTarget ?? 1;
   const secondaryValue = config.comboTarget ? combo : focus;
   const secondaryShortLabel = config.comboTarget ? 'コンボ' : '高速';
@@ -147,6 +160,7 @@ function getBuildSignatureAward(
 function getWarSignatureAward(
   stage: StageDefinition,
   runBest: StageChallengeBest | undefined,
+  progress?: StageSignatureWarProgress,
 ): StageSignatureAward {
   const config = WAR_SIGNATURES[stage.id] ?? {
     title: `${stage.name}マスター`,
@@ -156,9 +170,9 @@ function getWarSignatureAward(
   };
   const modeRule = getStageModeRule(stage.id);
   const combatStyle = getStageCombatStyle(stage.id);
-  const clearCount = Math.max(0, Math.floor(runBest?.clearCount ?? 0));
-  const modeRank = Math.max(0, Math.floor(runBest?.bestModeFlowRank ?? 0));
-  const streak = Math.max(0, Math.floor(runBest?.bestStreak ?? 0));
+  const clearCount = Math.max(0, Math.floor(Math.max(runBest?.clearCount ?? 0, progress?.clearCount ?? 0)));
+  const modeRank = Math.max(0, Math.floor(Math.max(runBest?.bestModeFlowRank ?? 0, progress?.modeRank ?? 0)));
+  const streak = Math.max(0, Math.floor(Math.max(runBest?.bestStreak ?? 0, progress?.streak ?? 0)));
   const clearDone = clearCount > 0;
   const modeDone = modeRank >= config.modeRankTarget;
   const streakDone = streak >= config.streakTarget;
@@ -193,8 +207,10 @@ export function getStageSignatureAward(args: {
   stage: StageDefinition;
   runBest?: StageChallengeBest;
   buildBest?: StageBuildScoreBest;
+  buildProgress?: StageSignatureBuildProgress;
+  warProgress?: StageSignatureWarProgress;
 }): StageSignatureAward {
   return args.stage.category === 'build'
-    ? getBuildSignatureAward(args.stage, args.buildBest)
-    : getWarSignatureAward(args.stage, args.runBest);
+    ? getBuildSignatureAward(args.stage, args.buildBest, args.buildProgress)
+    : getWarSignatureAward(args.stage, args.runBest, args.warProgress);
 }
