@@ -34,7 +34,12 @@ import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
 import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
-import { GraphicsPostFX, RendererColorPipeline, SceneReflectionPipeline } from './components/GraphicsQuality';
+import {
+  CanvasResolutionPipeline,
+  GraphicsPostFX,
+  RendererColorPipeline,
+  SceneReflectionPipeline,
+} from './components/GraphicsQuality';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
 import { StageEventSystem } from './components/StageEventSystem';
@@ -118,11 +123,27 @@ function GameCanvas() {
   useSettingsStore((s) => s.shadowQuality);
   useSettingsStore((s) => s.resolutionScale);
   const performanceProfile = getPerformanceProfile();
+  const premiumRendering = performanceProfile.tier === 'high' && !isTouch;
+  const handleCanvasCreated = useCallback(({ gl, camera }: { gl: THREE.WebGLRenderer; camera: THREE.Camera }) => {
+    if (typeof window === 'undefined') return;
+
+    const width = Math.max(1, window.innerWidth);
+    const height = Math.max(1, window.innerHeight);
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, performanceProfile.maxDpr));
+    gl.setPixelRatio(dpr);
+    gl.setSize(width, height, false);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+  }, [performanceProfile.maxDpr]);
 
   return (
     <div className="game-canvas-shell">
       <Canvas
-        shadows={performanceProfile.shadowsEnabled ? { type: THREE.PCFShadowMap } : false}
+        shadows={performanceProfile.shadowsEnabled
+          ? { type: premiumRendering ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap }
+          : false}
         camera={{
           fov: isTouch ? 65 : 70,
           near: 0.1,
@@ -135,9 +156,11 @@ function GameCanvas() {
           stencil: false,
           depth: true,
         }}
+        onCreated={handleCanvasCreated}
         tabIndex={0}
         style={{ width: '100%', height: '100%', outline: 'none' }}
       >
+        <CanvasResolutionPipeline />
         <RendererColorPipeline />
         <SceneReflectionPipeline />
         <Suspense fallback={null}>

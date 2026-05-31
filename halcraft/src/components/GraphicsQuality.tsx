@@ -1,7 +1,7 @@
 // 画面全体の仕上げを担うグラフィック品質レイヤー
 // 色管理・ポストエフェクトを設定値に合わせて軽量に切り替える
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -67,6 +67,8 @@ interface ReflectionRig {
   texture: THREE.Texture;
   dispose: () => void;
 }
+
+const CANVAS_RESOLUTION_SYNC_INTERVAL_MS = 300;
 
 function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuning {
   if (isHighQuality && !isTouch) {
@@ -252,6 +254,63 @@ function getDarkSceneLift(gameTime: number, dimension: string): number {
     return t * t * (3 - 2 * t) * 0.78;
   }
   return 1;
+}
+
+/** 設定変更や復帰後も、WebGLの内部解像度を表示サイズへ戻してぼやけを防ぐ */
+export function CanvasResolutionPipeline() {
+  const { gl, camera, setDpr, setSize } = useThree();
+  const lastSyncTime = useRef(0);
+
+  const syncCanvasResolution = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    const canvas = gl.domElement;
+    const parent = canvas.parentElement;
+    const width = Math.max(1, Math.round(canvas.clientWidth || parent?.clientWidth || window.innerWidth));
+    const height = Math.max(1, Math.round(canvas.clientHeight || parent?.clientHeight || window.innerHeight));
+    const profile = getPerformanceProfile();
+    const targetDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, profile.maxDpr));
+    const targetBufferWidth = Math.max(1, Math.round(width * targetDpr));
+    const targetBufferHeight = Math.max(1, Math.round(height * targetDpr));
+    const currentDpr = gl.getPixelRatio();
+    const needsResize =
+      Math.abs(canvas.width - targetBufferWidth) > 1 ||
+      Math.abs(canvas.height - targetBufferHeight) > 1 ||
+      Math.abs(currentDpr - targetDpr) > 0.01;
+
+    if (!needsResize) return;
+
+    // Three.jsとR3Fの両方にサイズを渡し、レイキャストと描画解像度をそろえる。
+    /* eslint-disable react-hooks/immutability */
+    setDpr(targetDpr);
+    setSize(width, height);
+    gl.setPixelRatio(targetDpr);
+    gl.setSize(width, height, false);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+    /* eslint-enable react-hooks/immutability */
+  }, [camera, gl, setDpr, setSize]);
+
+  useEffect(() => {
+    syncCanvasResolution();
+    window.addEventListener('resize', syncCanvasResolution);
+    window.addEventListener('orientationchange', syncCanvasResolution);
+    return () => {
+      window.removeEventListener('resize', syncCanvasResolution);
+      window.removeEventListener('orientationchange', syncCanvasResolution);
+    };
+  }, [syncCanvasResolution]);
+
+  useFrame(() => {
+    const now = performance.now();
+    if (now - lastSyncTime.current < CANVAS_RESOLUTION_SYNC_INTERVAL_MS) return;
+    lastSyncTime.current = now;
+    syncCanvasResolution();
+  });
+
+  return null;
 }
 
 /** Three.jsレンダラー側の色空間と基本トーンを整える */

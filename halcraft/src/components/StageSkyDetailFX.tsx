@@ -121,6 +121,7 @@ const BALANCED_TIER_SCALE = 0.72;
 const TOUCH_SCALE = 0.55;
 const WAR_COUNT_SCALE = 1.12;
 const WAR_MOTION_SCALE = 1.28;
+const SKY_ALPHA_TEXTURE_SIZE = 192;
 
 const sharedPanelGeometry = new THREE.PlaneGeometry(1, 1);
 const _right = new THREE.Vector3();
@@ -169,6 +170,136 @@ function getPanelOpacity(config: SkyDetailConfig, category: StageCategory | null
       ? 0.74 + Math.max(0, Math.sin(elapsed * 0.7)) * 0.22
       : 0.88 + Math.sin(elapsed * 0.16) * 0.08;
   return config.opacity * categoryBoost * pulse;
+}
+
+function drawSoftOval(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radiusX: number,
+  radiusY: number,
+  rotation: number,
+  intensity = 1,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.scale(radiusX, radiusY);
+  const gradient = ctx.createRadialGradient(0, 0, 0.04, 0, 0, 1);
+  gradient.addColorStop(0, `rgba(255,255,255,${0.98 * intensity})`);
+  gradient.addColorStop(0.46, `rgba(255,255,255,${0.58 * intensity})`);
+  gradient.addColorStop(0.82, `rgba(255,255,255,${0.16 * intensity})`);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSoftStroke(
+  ctx: CanvasRenderingContext2D,
+  points: Array<[number, number]>,
+  width: number,
+  intensity: number,
+): void {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = `rgba(255,255,255,${intensity})`;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i];
+    const [nextX, nextY] = points[i + 1];
+    ctx.quadraticCurveTo(x, y, (x + nextX) * 0.5, (y + nextY) * 0.5);
+  }
+  const last = points[points.length - 1];
+  ctx.lineTo(last[0], last[1]);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTradeCloudMask(ctx: CanvasRenderingContext2D): void {
+  drawSoftOval(ctx, 92, 92, 74, 34, -0.08, 0.82);
+  drawSoftOval(ctx, 58, 92, 45, 25, 0.15, 0.74);
+  drawSoftOval(ctx, 126, 90, 52, 27, -0.18, 0.78);
+  drawSoftOval(ctx, 92, 72, 44, 22, 0.08, 0.68);
+  drawSoftOval(ctx, 104, 108, 54, 16, -0.1, 0.42);
+  drawSoftStroke(ctx, [[28, 96], [58, 90], [94, 88], [132, 91], [166, 84]], 9, 0.18);
+}
+
+function drawLeafCanopyMask(ctx: CanvasRenderingContext2D): void {
+  drawSoftOval(ctx, 94, 96, 72, 28, -0.18, 0.52);
+  for (let i = 0; i < 34; i++) {
+    const angle = seededUnit(i, 20.4) * Math.PI * 2;
+    const distance = 12 + seededUnit(i, 21.6) * 68;
+    const x = 96 + Math.cos(angle) * distance;
+    const y = 96 + Math.sin(angle) * distance * 0.36;
+    const width = 7 + seededUnit(i, 22.8) * 13;
+    const height = 2.8 + seededUnit(i, 23.2) * 7.2;
+    drawSoftOval(ctx, x, y, width, height, angle + seededUnit(i, 24.1) * 0.8, 0.34 + seededUnit(i, 25.7) * 0.42);
+  }
+  drawSoftStroke(ctx, [[30, 110], [70, 94], [112, 88], [160, 104]], 6, 0.12);
+}
+
+function drawAuroraCloudMask(ctx: CanvasRenderingContext2D): void {
+  drawSoftOval(ctx, 96, 96, 78, 17, 0.04, 0.34);
+  drawSoftStroke(ctx, [[16, 120], [48, 78], [83, 112], [122, 68], [174, 98]], 18, 0.42);
+  drawSoftStroke(ctx, [[22, 78], [60, 104], [96, 72], [140, 116], [176, 82]], 11, 0.28);
+  drawSoftStroke(ctx, [[36, 132], [76, 118], [112, 132], [156, 110]], 8, 0.16);
+  drawSoftOval(ctx, 102, 88, 56, 12, -0.26, 0.26);
+}
+
+function drawHeatHazeMask(ctx: CanvasRenderingContext2D): void {
+  for (let i = 0; i < 8; i++) {
+    const x = 28 + i * 20 + (seededUnit(i, 30.1) - 0.5) * 7;
+    const y = 96 + (seededUnit(i, 30.8) - 0.5) * 28;
+    const wave = seededUnit(i, 31.4) * 18;
+    drawSoftStroke(ctx, [
+      [x - 7, y + 36],
+      [x + wave * 0.18, y + 12],
+      [x - wave * 0.22, y - 10],
+      [x + 6, y - 34],
+    ], 7 + seededUnit(i, 32.6) * 6, 0.16 + seededUnit(i, 33.2) * 0.18);
+  }
+  drawSoftOval(ctx, 96, 98, 80, 24, 0.02, 0.2);
+}
+
+function createSkyAlphaTexture(kind: SkyDetailKind): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = SKY_ALPHA_TEXTURE_SIZE;
+  canvas.height = SKY_ALPHA_TEXTURE_SIZE;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, SKY_ALPHA_TEXTURE_SIZE, SKY_ALPHA_TEXTURE_SIZE);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SKY_ALPHA_TEXTURE_SIZE, SKY_ALPHA_TEXTURE_SIZE);
+  ctx.globalCompositeOperation = 'lighter';
+
+  if (kind === 'leafCanopy') {
+    drawLeafCanopyMask(ctx);
+  } else if (kind === 'tradeCloud') {
+    drawTradeCloudMask(ctx);
+  } else if (kind === 'auroraCloud') {
+    drawAuroraCloudMask(ctx);
+  } else {
+    drawHeatHazeMask(ctx);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
 }
 
 function tunePanelMotion(
@@ -238,6 +369,9 @@ export function StageSkyDetailFX() {
 
   const primaryColor = useMemo(() => new THREE.Color(config?.primaryColor ?? 0xffffff), [config?.primaryColor]);
   const secondaryColor = useMemo(() => new THREE.Color(config?.secondaryColor ?? 0xffffff), [config?.secondaryColor]);
+  const alphaTexture = useMemo(() => (
+    config ? createSkyAlphaTexture(config.kind) : null
+  ), [config]);
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -252,6 +386,10 @@ export function StageSkyDetailFX() {
       mesh.instanceColor.needsUpdate = true;
     }
   }, [panels, primaryColor, secondaryColor]);
+
+  useEffect(() => () => {
+    alphaTexture?.dispose();
+  }, [alphaTexture]);
 
   useFrame(({ clock }) => {
     if (!meshRef.current || !materialRef.current || !config || phase !== 'playing') return;
@@ -302,6 +440,7 @@ export function StageSkyDetailFX() {
         vertexColors
         transparent
         opacity={config.opacity}
+        alphaMap={alphaTexture ?? undefined}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}
