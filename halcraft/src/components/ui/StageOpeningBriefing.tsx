@@ -136,6 +136,7 @@ function getBriefingRouteSteps(
   stage: StageDefinition,
   runBest: StageChallengeBest | undefined,
   buildBest: StageBuildScoreBest | undefined,
+  masteryPerk: StageMasteryPerk | null,
 ): BriefingRouteStep[] {
   const modeRule = getStageModeRule(stage.id);
   const buildStyle = getStageBuildStyle(stage.id);
@@ -153,8 +154,12 @@ function getBriefingRouteSteps(
       icon: stage.category === 'build' ? '🧰' : '⚔️',
       label: '初動装備',
       detail: stage.category === 'build'
-        ? '建築テンポを作って作品点へつなげる'
-        : 'マップ推奨の戦い方で戦意をためる',
+        ? masteryPerk?.buildFocusMs
+          ? `${masteryPerk.shortLabel}で開幕高速建築`
+          : '建築テンポを作って作品点へつなげる'
+        : masteryPerk?.shieldMs
+          ? `${masteryPerk.shortLabel}で安全時間を上乗せ`
+          : 'マップ推奨の戦い方で戦意をためる',
       accent: stage.category === 'build' ? '#9bdcff' : '#ffb36d',
       valueText: openingItemLabel,
     },
@@ -222,9 +227,10 @@ export function StageOpeningBriefing() {
           stage,
           bestByStage[stage.id],
           buildBestByStage[stage.id],
+          masteryPerk,
         )
       : []),
-    [bestByStage, buildBestByStage, stage],
+    [bestByStage, buildBestByStage, masteryPerk, stage],
   );
 
   if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;

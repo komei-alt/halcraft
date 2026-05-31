@@ -71,6 +71,7 @@ interface ModeFlowState {
   buildFocusChainExpiresAt: number;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
+  grantOpeningBuildFocus: (durationMs: number, sourceLabel: string) => void;
   recordBuildBlockPlace: (blockId: BlockId) => ModeFlowBuildPlacementResult | null;
   recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
   recordVehicleHit: (vehicleType: VehicleType, amount?: number, critical?: boolean) => void;
@@ -217,6 +218,29 @@ function triggerRule(rule: StageModeRule, flowRank: number, createdAt: number): 
   return createActivation(rule, reward, flowRank, createdAt);
 }
 
+function createOpeningBuildFocusActivation(
+  rule: StageModeRule,
+  durationMs: number,
+  sourceLabel: string,
+  createdAt: number,
+): ModeFlowActivation {
+  const seconds = Math.max(1, Math.round(durationMs / 1000));
+  return {
+    id: `${rule.stageId}-opening-focus-${Math.round(createdAt)}`,
+    stageId: rule.stageId,
+    category: 'build',
+    icon: rule.icon,
+    eyebrow: 'マップ熟練特典',
+    title: '開幕高速建築',
+    detail: `${sourceLabel} / 高速建築 +${seconds}s`,
+    flowRank: 0,
+    rankLabel: '開幕制作',
+    accent: rule.accent,
+    glow: rule.glow,
+    createdAt,
+  };
+}
+
 export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   currentStageId: null,
   meter: 0,
@@ -255,6 +279,25 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       buildFocusChainExpiresAt: 0,
       recentActivation: null,
     });
+  },
+
+  grantOpeningBuildFocus: (durationMs, sourceLabel) => {
+    const state = get();
+    const rule = getStageModeRule(state.currentStageId);
+    if (!rule || rule.category !== 'build' || durationMs <= 0) return;
+
+    const createdAt = nowMs();
+    const activation = createOpeningBuildFocusActivation(rule, durationMs, sourceLabel, createdAt);
+    set({
+      lastGain: 0,
+      lastGainLabel: '熟練BOOST',
+      lastGainAt: createdAt,
+      recentActivation: activation,
+      buildFocusUntil: Math.max(state.buildFocusUntil, createdAt + durationMs),
+      buildFocusChain: 0,
+      buildFocusChainExpiresAt: 0,
+    });
+    playStageRewardSound('build_supply');
   },
 
   recordBuildBlockPlace: (blockId) => {

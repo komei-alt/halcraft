@@ -328,6 +328,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 建築カテゴリは無敵（クリエイティブ的）
       invincibleUntil: openingInvincibleUntil,
     });
+
+    if (masteryPerk?.buildFocusMs && masteryPerk.buildFocusMs > 0) {
+      useModeFlowStore.getState().grantOpeningBuildFocus(
+        masteryPerk.buildFocusMs,
+        masteryPerk.shortLabel,
+      );
+    }
   },
 
   registerEnemyDefeat: () => {

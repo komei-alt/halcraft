@@ -59,15 +59,18 @@ export function ModeFlowHUD() {
   const buildFocusRemainingMs = rule.category === 'build' ? Math.max(0, buildFocusUntil - now) : 0;
   const buildFocusActive = buildFocusRemainingMs > 0;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
-  const activeTitle = recentActivation?.stageId === stage.id ? recentActivation.title : rule.title;
-  const visibleRank = recentActivation?.stageId === stage.id ? recentActivation.flowRank : flowRank;
+  const activeActivation = recentActivation?.stageId === stage.id ? recentActivation : null;
+  const activeTitle = activeActivation ? activeActivation.title : rule.title;
+  const visibleRank = activeActivation ? activeActivation.flowRank : flowRank;
   const nextRank = getModeFlowRank(activationCount + 1) || 1;
   const previewReward = getScaledStageModeReward(rule, Math.max(visibleRank, nextRank, 1));
-  const rankLabel = visibleRank > 0
-    ? getModeFlowRankLabel(rule.category, visibleRank)
-    : `次${getModeFlowRankLabel(rule.category, nextRank)}`;
-  const activeDetail = recentActivation?.stageId === stage.id
-    ? recentActivation.detail
+  const rankLabel = activeActivation
+    ? activeActivation.rankLabel
+    : visibleRank > 0
+      ? getModeFlowRankLabel(rule.category, visibleRank)
+      : `次${getModeFlowRankLabel(rule.category, nextRank)}`;
+  const activeDetail = activeActivation
+    ? activeActivation.detail
     : rule.category === 'build'
       ? buildFocusActive
         ? activeBuildFocusChain >= 2

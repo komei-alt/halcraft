@@ -43,6 +43,7 @@ export interface StageMasteryPerk {
   hunger: number;
   shieldMs: number;
   rocketReady: boolean;
+  buildFocusMs: number;
 }
 
 interface StageMasteryInput {
@@ -227,6 +228,7 @@ export function getStageMasteryPerk(
 
   const supplies = STAGE_MASTERY_SUPPLIES[stage.id] ?? [];
   const isWar = stage.category === 'war';
+  const buildFocusMs = isWar ? 0 : 2800 + rankValue * 1400;
   return {
     rank: mastery.rank,
     rankValue,
@@ -245,6 +247,7 @@ export function getStageMasteryPerk(
     hunger: isWar ? rankValue : 0,
     shieldMs: isWar ? rankValue * 900 : 0,
     rocketReady: isWar && rankValue >= 4,
+    buildFocusMs,
   };
 }
 
@@ -266,6 +269,7 @@ export function formatStageMasteryPerkLabel(perk: StageMasteryPerk): string {
     perk.hunger > 0 ? `満腹 +${perk.hunger}` : '',
     perk.shieldMs > 0 ? `開幕安全 +${Math.round(perk.shieldMs / 1000)}s` : '',
     perk.rocketReady ? 'ロケット即応' : '',
+    perk.buildFocusMs > 0 ? `開幕高速建築 +${Math.round(perk.buildFocusMs / 1000)}s` : '',
   ].filter(Boolean);
 
   return parts.join(' / ');
