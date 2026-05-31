@@ -23,6 +23,7 @@ interface CombatFeedback {
   label: string;
   xp: number;
   streak: number;
+  techniqueRecordUpdated: boolean;
 }
 
 interface TechniqueFeedback {
@@ -54,6 +55,17 @@ function getFeedbackLabel(feedback: CombatFeedback): string {
 
 function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
   if (feedback.item === 'rocket_launcher') {
+    if (feedback.techniqueRecordUpdated) {
+      return {
+        eyebrow: 'ロケット記録',
+        label: '爆風BEST更新',
+        detail: '今の巻き込みがロケット技の新記録',
+        meterLabel: 'BLAST',
+        meterText: 'NEW',
+        ratio: 1,
+        soundKind: 'ready',
+      };
+    }
     if (feedback.kind === 'critical') {
       return {
         eyebrow: 'ロケット技',
@@ -88,6 +100,17 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
   }
 
   if (feedback.item === 'machine_gun') {
+    if (feedback.techniqueRecordUpdated) {
+      return {
+        eyebrow: '制圧記録',
+        label: 'チェーンBEST更新',
+        detail: '当て続けた弾幕が新記録',
+        meterLabel: 'BURST',
+        meterText: 'NEW',
+        ratio: 1,
+        soundKind: 'ready',
+      };
+    }
     if (feedback.streak >= 8) {
       return {
         eyebrow: '制圧技',
@@ -122,6 +145,17 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
   }
 
   if (feedback.item === 'lightsaber') {
+    if (feedback.techniqueRecordUpdated) {
+      return {
+        eyebrow: 'セイバー記録',
+        label: 'コンボBEST更新',
+        detail: '今の斬撃がセイバー技の新記録',
+        meterLabel: 'COMBO',
+        meterText: 'NEW',
+        ratio: 1,
+        soundKind: 'ready',
+      };
+    }
     if (feedback.kind === 'critical') {
       return {
         eyebrow: 'セイバー技',
@@ -152,6 +186,18 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
       meterText: `${Math.min(5, Math.max(1, feedback.streak))}/5`,
       ratio: Math.min(1, feedback.streak / 5),
       soundKind: null,
+    };
+  }
+
+  if (feedback.techniqueRecordUpdated) {
+    return {
+      eyebrow: 'ビルダー記録',
+      label: '制作連鎖更新',
+      detail: '作る流れがビルダー技の新記録',
+      meterLabel: 'BUILD',
+      meterText: 'NEW',
+      ratio: 1,
+      soundKind: 'ready',
     };
   }
 
@@ -194,6 +240,7 @@ export function CombatFeedbackHUD() {
         label: event.label,
         xp: event.xp,
         streak: event.streak,
+        techniqueRecordUpdated: event.techniqueRecordUpdated,
       };
       setFeedback(nextFeedback);
       playCombatFeedbackSound(kind);

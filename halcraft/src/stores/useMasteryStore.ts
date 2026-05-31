@@ -33,6 +33,10 @@ export interface MasteryItemState {
   hits: number;
   defeats: number;
   blocksChanged: number;
+  techniqueActivations: number;
+  bestTechniqueScore: number;
+  bestTechniqueLabel: string;
+  bestTechniqueStreak: number;
   lastLeveledAt: number;
 }
 
@@ -46,6 +50,7 @@ export interface MasteryEvent {
   leveledUp: boolean;
   critical: boolean;
   streak: number;
+  techniqueRecordUpdated: boolean;
   createdAt: number;
 }
 
@@ -145,6 +150,10 @@ function createInitialMasteryItem(): MasteryItemState {
     hits: 0,
     defeats: 0,
     blocksChanged: 0,
+    techniqueActivations: 0,
+    bestTechniqueScore: 0,
+    bestTechniqueLabel: '',
+    bestTechniqueStreak: 0,
     lastLeveledAt: 0,
   };
 }
@@ -178,6 +187,24 @@ export function getMasteryTitle(item: EquippedItem, level: number): string {
 
 function isCombatKind(kind: MasteryEventKind): boolean {
   return kind === 'use' || kind === 'hit' || kind === 'defeat';
+}
+
+function isTechniqueActivation(kind: MasteryEventKind, streak: number, critical: boolean): boolean {
+  if (critical || kind === 'defeat' || kind === 'detonate' || kind === 'summon') return true;
+  if (kind === 'block_place' || kind === 'block_break') return streak >= 8;
+  if (kind === 'hit') return streak >= 5;
+  return false;
+}
+
+function getTechniqueScore(kind: MasteryEventKind, xp: number, streak: number, critical: boolean): number {
+  const kindBonus = kind === 'defeat'
+    ? 18
+    : kind === 'detonate' || kind === 'summon'
+      ? 14
+      : kind === 'hit'
+        ? 8
+        : 0;
+  return Math.max(0, Math.round(xp + streak * 3 + kindBonus + (critical ? 16 : 0)));
 }
 
 interface MasteryState {
@@ -218,6 +245,10 @@ export const useMasteryStore = create<MasteryState>()(
         const criticalBonus = options?.critical ? 4 : 0;
         const gainedXp = Math.max(1, Math.round((options?.amount ?? baseXp) + streakBonus + criticalBonus));
         const current = state.items[item] ?? createInitialMasteryItem();
+        const eventLabel = options?.label ?? fallbackLabel;
+        const techniqueScore = getTechniqueScore(kind, gainedXp, streak, Boolean(options?.critical));
+        const techniqueActivation = isTechniqueActivation(kind, streak, Boolean(options?.critical));
+        const techniqueRecordUpdated = techniqueActivation && techniqueScore > (current.bestTechniqueScore ?? 0);
 
         let nextLevel = current.level;
         let nextXp = current.xp + gainedXp;
@@ -241,6 +272,14 @@ export const useMasteryStore = create<MasteryState>()(
           hits: current.hits + (statDeltas.hits ?? 0),
           defeats: current.defeats + (statDeltas.defeats ?? 0),
           blocksChanged: current.blocksChanged + (statDeltas.blocksChanged ?? 0),
+          techniqueActivations: (current.techniqueActivations ?? 0) + (techniqueActivation ? 1 : 0),
+          bestTechniqueScore: techniqueRecordUpdated
+            ? techniqueScore
+            : (current.bestTechniqueScore ?? 0),
+          bestTechniqueLabel: techniqueRecordUpdated
+            ? eventLabel
+            : (current.bestTechniqueLabel ?? ''),
+          bestTechniqueStreak: Math.max(current.bestTechniqueStreak ?? 0, streak),
           lastLeveledAt: leveledUp ? now : current.lastLeveledAt,
         };
         const nextSequence = state.eventSequence + 1;
@@ -248,12 +287,13 @@ export const useMasteryStore = create<MasteryState>()(
           id: nextSequence,
           item,
           kind,
-          label: options?.label ?? fallbackLabel,
+          label: eventLabel,
           xp: gainedXp,
           level: nextLevel,
           leveledUp,
           critical: Boolean(options?.critical),
           streak,
+          techniqueRecordUpdated,
           createdAt: now,
         };
         const nextItems: MasteryItems = {
@@ -376,12 +416,17 @@ export const useMasteryStore = create<MasteryState>()(
       partialize: (state) => ({ items: state.items }),
       merge: (persisted, current) => {
         const persistedState = persisted as Partial<Pick<MasteryState, 'items'>>;
+        const mergedItems = { ...current.items };
+        for (const item of Object.keys(current.items) as EquippedItem[]) {
+          mergedItems[item] = {
+            ...createInitialMasteryItem(),
+            ...current.items[item],
+            ...(persistedState.items?.[item] ?? {}),
+          };
+        }
         return {
           ...current,
-          items: {
-            ...current.items,
-            ...(persistedState.items ?? {}),
-          },
+          items: mergedItems,
         };
       },
     },

@@ -33,6 +33,16 @@ interface ItemActionStatus {
   meterColor: string;
 }
 
+interface ItemTechniqueRecord {
+  icon: string;
+  label: string;
+  detail: string;
+  meterLabel: string;
+  meterText: string;
+  ratio: number;
+  accent: string;
+}
+
 interface ItemActionStatusOptions {
   equippedItem: EquippedItem;
   selectedBlock: BlockId;
@@ -55,6 +65,71 @@ function clampRatio(value: number): number {
 function formatCooldown(seconds: number): string {
   if (seconds <= 0) return '0s';
   return seconds < 1 ? `${seconds.toFixed(1)}s` : `${Math.ceil(seconds)}s`;
+}
+
+function getItemTechniqueRecord(
+  equippedItem: EquippedItem,
+  mastery: ReturnType<typeof useMasteryStore.getState>['items'][EquippedItem],
+  def: (typeof MASTERY_DEFS)[EquippedItem],
+): ItemTechniqueRecord {
+  const bestStreak = mastery.bestTechniqueStreak ?? 0;
+  const bestScore = mastery.bestTechniqueScore ?? 0;
+  const techniqueCount = mastery.techniqueActivations ?? 0;
+  const bestLabel = mastery.bestTechniqueLabel || 'まだ記録なし';
+
+  if (equippedItem === 'builder') {
+    return {
+      icon: '🏗️',
+      label: bestStreak >= 8 ? '制作連鎖記録' : '制作連鎖を作ろう',
+      detail: techniqueCount > 0
+        ? `${bestLabel} / 技 ${techniqueCount}回 / ${mastery.blocksChanged}ブロック`
+        : '置く・掘る・起爆を続けると制作連鎖が記録される',
+      meterLabel: 'CHAIN',
+      meterText: bestStreak > 0 ? `x${bestStreak}` : 'START',
+      ratio: clampRatio(bestStreak / 12),
+      accent: def.accent,
+    };
+  }
+
+  if (equippedItem === 'rocket_launcher') {
+    return {
+      icon: '💥',
+      label: bestScore > 0 ? '爆風ベスト' : '爆風ベストを作ろう',
+      detail: techniqueCount > 0
+        ? `${bestLabel} / 技 ${techniqueCount}回`
+        : '3体以上を巻き込むと爆風技の記録が伸びる',
+      meterLabel: 'BLAST',
+      meterText: bestScore > 0 ? `${bestScore}` : 'AREA',
+      ratio: clampRatio(bestScore / 90),
+      accent: def.accent,
+    };
+  }
+
+  if (equippedItem === 'machine_gun') {
+    return {
+      icon: '🎯',
+      label: bestStreak >= 5 ? '弾幕チェーン記録' : '弾幕チェーンを作ろう',
+      detail: techniqueCount > 0
+        ? `${bestLabel} / 技 ${techniqueCount}回 / HIT ${mastery.hits}`
+        : '当て続けるほど制圧チェーンが記録される',
+      meterLabel: 'BURST',
+      meterText: bestStreak > 0 ? `x${bestStreak}` : 'HOLD',
+      ratio: clampRatio(bestStreak / 12),
+      accent: def.accent,
+    };
+  }
+
+  return {
+    icon: '✨',
+    label: bestStreak >= 5 ? 'コンボ記録' : 'コンボ記録を作ろう',
+    detail: techniqueCount > 0
+      ? `${bestLabel} / 技 ${techniqueCount}回 / DOWN ${mastery.defeats}`
+      : '5段目のフィニッシュを当てると記録が伸びる',
+    meterLabel: 'COMBO',
+    meterText: bestStreak > 0 ? `x${bestStreak}` : '5段',
+    ratio: clampRatio(bestStreak / 8),
+    accent: def.accent,
+  };
 }
 
 function getItemActionStatus({
@@ -184,6 +259,7 @@ export function MasteryHUD() {
     recommendedStageStyle,
     swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
   });
+  const techniqueRecord = getItemTechniqueRecord(equippedItem, mastery, def);
 
   return (
     <div
@@ -383,6 +459,92 @@ export function MasteryHUD() {
       </div>
 
       <div
+        id="item-technique-record"
+        style={{
+          marginTop: 7,
+          paddingLeft: 9,
+          borderLeft: `3px solid ${techniqueRecord.accent}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            minWidth: 0,
+          }}
+        >
+          <span style={{ flex: '0 0 auto', fontSize: isTouch ? 11 : 12 }}>
+            {techniqueRecord.icon}
+          </span>
+          <span
+            style={{
+              minWidth: 0,
+              flex: 1,
+              color: techniqueRecord.accent,
+              fontSize: isTouch ? 9 : 10,
+              lineHeight: '12px',
+              fontWeight: 950,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            技記録: {techniqueRecord.label}
+          </span>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: isTouch ? 8 : 9,
+              lineHeight: '12px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+            }}
+          >
+            {techniqueRecord.meterLabel} {techniqueRecord.meterText}
+          </span>
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            height: 3,
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.12)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(techniqueRecord.ratio * 100)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${techniqueRecord.accent}, #ffffff)`,
+              boxShadow: `0 0 8px ${def.glow}`,
+              transition: 'width 0.24s ease',
+            }}
+          />
+        </div>
+        {!isTouch && (
+          <div
+            style={{
+              marginTop: 3,
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 10,
+              lineHeight: '13px',
+              fontWeight: 760,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {techniqueRecord.detail}
+          </div>
+        )}
+      </div>
+
+      <div
         style={{
           marginTop: 5,
           display: isTouch ? 'none' : 'flex',
@@ -453,7 +615,11 @@ export function MasteryHUD() {
           }}
         >
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {recentEvent.leveledUp ? 'レベルアップ！' : recentEvent.label}
+            {recentEvent.leveledUp
+              ? 'レベルアップ！'
+              : recentEvent.techniqueRecordUpdated
+                ? '技記録更新！'
+                : recentEvent.label}
           </span>
           <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
             +{recentEvent.xp} XP
