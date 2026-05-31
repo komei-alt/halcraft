@@ -59,13 +59,24 @@ function cloneSceneWithMaterials(scene: THREE.Group): THREE.Group {
   return clone;
 }
 
+type ColorMaterial = THREE.Material & { color: THREE.Color };
+type EmissiveMaterial = THREE.Material & { emissive: THREE.Color; emissiveIntensity?: number };
+
+function hasMaterialColor(material: THREE.Material): material is ColorMaterial {
+  return 'color' in material && material.color instanceof THREE.Color;
+}
+
+function hasMaterialEmissive(material: THREE.Material): material is EmissiveMaterial {
+  return 'emissive' in material && material.emissive instanceof THREE.Color;
+}
+
 function collectOriginalColors(scene: THREE.Group): Map<string, THREE.Color> {
   const colors = new Map<string, THREE.Color>();
   scene.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((mat, index) => {
-        if ('color' in mat && mat.color instanceof THREE.Color) {
+        if (hasMaterialColor(mat)) {
           colors.set(`${child.uuid}-${index}`, mat.color.clone());
         }
       });
@@ -74,14 +85,24 @@ function collectOriginalColors(scene: THREE.Group): Map<string, THREE.Color> {
   return colors;
 }
 
-function tintScene(scene: THREE.Group, colorByKey: Map<string, THREE.Color>, tint: THREE.Color | null): void {
+function tintScene(
+  scene: THREE.Group,
+  colorByKey: Map<string, THREE.Color>,
+  tint: THREE.Color | null,
+  glowColor: THREE.Color,
+  glowIntensity: number,
+): void {
   scene.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((mat, index) => {
-        if ('color' in mat && mat.color instanceof THREE.Color) {
+        if (hasMaterialColor(mat)) {
           const original = colorByKey.get(`${child.uuid}-${index}`);
           mat.color.copy(tint ?? original ?? mat.color);
+        }
+        if (hasMaterialEmissive(mat)) {
+          mat.emissive.copy(glowColor);
+          mat.emissiveIntensity = glowIntensity;
         }
       });
     }
@@ -110,40 +131,91 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
     if (isAngry) return config.angryTint ?? new THREE.Color(0xff6644);
     return null;
   }, [config.angryTint, config.damagedTint, isAngry, isDamaged]);
+  const traitAccent = mob.traitAccent;
+  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.3, 0, 1);
+  const glowColor = useMemo(() => {
+    if (tint) return tint.clone().multiplyScalar(0.58);
+    if (traitAccent) return new THREE.Color(traitAccent).multiplyScalar(0.34);
+    return new THREE.Color(0xffe7bd).multiplyScalar(0.16);
+  }, [tint, traitAccent]);
+  const glowIntensity = 0.18 + hitPulse * 0.34 + (isAngry ? 0.16 : 0) + (traitAccent ? 0.07 : 0);
 
   useEffect(() => {
-    tintScene(clonedScene, originalColors, tint);
-  }, [clonedScene, originalColors, tint]);
+    tintScene(clonedScene, originalColors, tint, glowColor, glowIntensity);
+  }, [clonedScene, glowColor, glowIntensity, originalColors, tint]);
 
   const hpRatio = mob.hp / mob.maxHp;
   const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
   const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
+  const speed = Math.min(1.8, Math.sqrt(mob.vx * mob.vx + mob.vz * mob.vz));
   const bob = isMoving
     ? Math.sin(animTime * (config.bobSpeed ?? 4)) * (config.bobAmount ?? 0.04)
     : 0;
-  const traitAccent = mob.traitAccent;
+  const movePhase = animTime * (config.bobSpeed ?? 4);
+  const strideLean = isMoving ? Math.sin(movePhase) * Math.min(0.12, speed * 0.045) : 0;
+  const sideLean = isMoving ? Math.cos(movePhase * 0.5) * Math.min(0.07, speed * 0.025) : 0;
+  const hitLean = -hitPulse * 0.2;
+  const hitRoll = Math.sin(animTime * 34) * hitPulse * 0.08;
+  const squashY = 1 - hitPulse * 0.05 + (isMoving ? Math.abs(Math.sin(movePhase)) * 0.015 : 0);
+  const squashXZ = 1 + hitPulse * 0.045;
+  const shadowScale = Math.max(0.34, config.hpBarWidth * 0.72) * (1 + speed * 0.08 + hitPulse * 0.08);
+  const angryPulse = isAngry ? 0.5 + Math.sin(animTime * 8) * 0.18 : 0;
+  const traitPulse = traitAccent ? 0.42 + Math.sin(animTime * 3.2) * 0.08 : 0;
+  const auraColor = traitAccent ?? (isAngry ? '#ff6644' : '#ffffff');
 
   return (
     <group position={[mob.x, mob.y + bob, mob.z]} rotation={[0, mob.rotation, 0]}>
+      <mesh position={[0, 0.018 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[shadowScale * 1.18, shadowScale, 1]}>
+        <circleGeometry args={[1, 28]} />
+        <meshBasicMaterial
+          color={0x111111}
+          transparent
+          opacity={0.22}
+          depthWrite={false}
+        />
+      </mesh>
       {traitAccent && (
-        <mesh position={[0, 0.035 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.46, 0.6, 28]} />
+        <mesh
+          position={[0, 0.04 - bob, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          scale={[1 + traitPulse * 0.08, 1 + traitPulse * 0.08, 1]}
+        >
+          <ringGeometry args={[0.46, 0.62, 36]} />
           <meshBasicMaterial
-            color={traitAccent}
+            color={auraColor}
             transparent
-            opacity={0.48}
+            opacity={traitPulse}
             side={THREE.DoubleSide}
             depthWrite={false}
+            blending={THREE.AdditiveBlending}
           />
         </mesh>
       )}
 
-      <primitive
-        object={clonedScene}
-        scale={[config.scale, config.scale, config.scale]}
+      {isAngry && (
+        <mesh position={[0, 0.06 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1 + angryPulse * 0.16, 1 + angryPulse * 0.16, 1]}>
+          <ringGeometry args={[0.54, 0.68, 36]} />
+          <meshBasicMaterial
+            color={auraColor}
+            transparent
+            opacity={0.22 + angryPulse * 0.18}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+
+      <group
         position={groundedPosition}
-        rotation={config.modelRotation ?? [0, 0, 0]}
-      />
+        rotation={[hitLean + strideLean, 0, hitRoll + sideLean]}
+        scale={[config.scale * squashXZ, config.scale * squashY, config.scale * squashXZ]}
+      >
+        <primitive
+          object={clonedScene}
+          rotation={config.modelRotation ?? [0, 0, 0]}
+        />
+      </group>
 
       {mob.hp < mob.maxHp && (
         <Billboard position={[0, config.hpBarY, 0]}>
