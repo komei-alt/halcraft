@@ -78,12 +78,28 @@ interface StarterBlockPreview {
   count: number;
 }
 
+/** ブリーフィングの情報グループ（同じ箱の羅列をやめ、意味でゾーン分けする） */
+type BriefingGroup = 'rule' | 'style' | 'loadout';
+
 interface StageBriefingSection {
   title: string;
   value: string;
   details: string[];
   accent: string;
+  group: BriefingGroup;
 }
+
+/** グループの表示順とラベル（ゾーンの見出し） */
+const BRIEFING_GROUPS: Array<{
+  id: BriefingGroup;
+  label: string;
+  icon: string;
+  tint: string;
+}> = [
+  { id: 'rule', label: 'このマップのルール', icon: '📜', tint: 'rgba(130, 200, 255, 0.95)' },
+  { id: 'style', label: '戦い方・つくり方', icon: '⚔️', tint: 'rgba(255, 150, 110, 0.95)' },
+  { id: 'loadout', label: 'もちもの', icon: '🎒', tint: 'rgba(255, 224, 130, 0.98)' },
+];
 
 function loadCategory(): StageCategory {
   try {
@@ -133,24 +149,6 @@ function formatRunTime(seconds?: number): string {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
-}
-
-function getStageRunRecordDetails(
-  stage: StageDefinition,
-  best: StageChallengeBest | undefined,
-  compact: boolean,
-): string[] {
-  if (!best?.clearCount) return ['クリアするとBESTが残る'];
-
-  const rankLabel = getModeFlowRankLabel(stage.category, best.bestModeFlowRank ?? 0);
-  const activationLabel = `発動最多 ${best.bestModeActivations ?? 0}回`;
-  const streakLabel = stage.category === 'war'
-    ? `連続 x${best.bestStreak ?? 0}`
-    : 'テーマ行動で更新';
-
-  return compact
-    ? [rankLabel, activationLabel]
-    : [rankLabel, activationLabel, streakLabel];
 }
 
 function getStarterBlockPreview(stage: StageDefinition, limit: number): StarterBlockPreview[] {
@@ -232,8 +230,6 @@ function getStageBriefingSections(
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
-  mastery: StageMasterySummary,
-  best: StageChallengeBest | undefined,
   compact: boolean,
 ): StageBriefingSection[] {
   const blockPreview = getStarterBlockPreview(stage, compact ? 3 : 4)
@@ -263,6 +259,7 @@ function getStageBriefingSections(
         stage.rules.objective.prompts.slice(0, compact ? 2 : 3).join('・'),
       ],
       accent: stage.color,
+      group: 'rule',
     },
     {
       title: 'マップ特性',
@@ -274,6 +271,7 @@ function getStageBriefingSections(
           ]
         : [stage.rules.shortPitch],
       accent: condition?.accent ?? stage.color,
+      group: 'rule',
     },
   ];
 
@@ -286,6 +284,7 @@ function getStageBriefingSections(
         pressure.protectLabel,
       ],
       accent: pressure.accent,
+      group: 'rule',
     });
   }
 
@@ -298,6 +297,7 @@ function getStageBriefingSections(
         event.label,
       ],
       accent: event.accent,
+      group: 'rule',
     });
   }
 
@@ -317,6 +317,7 @@ function getStageBriefingSections(
             `発動: ${formatStageModeReward(modeRule)}`,
           ],
       accent: modeRule.accent,
+      group: 'rule',
     });
   }
 
@@ -329,6 +330,7 @@ function getStageBriefingSections(
         buildStyle.detail,
       ],
       accent: buildStyle.accent,
+      group: 'style',
     });
   }
 
@@ -342,6 +344,7 @@ function getStageBriefingSections(
         combatStyle.detail,
       ],
       accent: combatStyle.accent,
+      group: 'style',
     });
   }
 
@@ -352,9 +355,10 @@ function getStageBriefingSections(
       value: `${enemyProfile.icon} ${enemyProfile.title}`,
       details: [
         formatStageEnemyProfile(enemyProfile),
-        enemyProfile.detail,
+        ...getEnemyPreview(stage).slice(1, compact ? 2 : 3),
       ],
       accent: enemyProfile.accent,
+      group: 'style',
     });
   }
 
@@ -374,8 +378,17 @@ function getStageBriefingSections(
             `報酬: ${formatStageBossReward(bossEncounter)}`,
           ],
       accent: bossEncounter.accent,
+      group: 'style',
     });
   }
+
+  sections.push({
+    title: 'チャレンジ',
+    value: `${completedCount}/${challengeCount} 達成`,
+    details: challengePreview.length > 0 ? challengePreview : ['クリアでメダル獲得'],
+    accent: 'rgba(150, 230, 255, 0.95)',
+    group: 'style',
+  });
 
   sections.push(
     {
@@ -387,6 +400,7 @@ function getStageBriefingSections(
         ...(toolPreview.length > 0 ? toolPreview : ['手ぶらで開始']),
       ],
       accent: 'rgba(255, 230, 128, 0.95)',
+      group: 'loadout',
     },
   );
 
@@ -399,41 +413,9 @@ function getStageBriefingSections(
         formatStageRunBonusLabel(runBonus),
       ],
       accent: runBonus.accent,
+      group: 'loadout',
     });
   }
-
-  sections.push({
-    title: 'マップ熟練',
-    value: `${mastery.rankLabel} ${mastery.score}/100`,
-    details: [
-      mastery.title,
-      mastery.nextLabel,
-    ],
-    accent: mastery.accent,
-  });
-
-  if (best?.clearCount) {
-    sections.push({
-      title: 'ベスト記録',
-      value: `BEST ${formatRunTime(best.bestClearSeconds)} / ${best.clearCount}回`,
-      details: getStageRunRecordDetails(stage, best, compact),
-      accent: 'rgba(168, 255, 205, 0.95)',
-    });
-  }
-
-  sections.push(
-    {
-      title: stage.rules.enemyTuning ? '敵とやり込み' : 'やり込み',
-      value: `${completedCount}/${challengeCount} チャレンジ`,
-      details: stage.rules.enemyTuning
-        ? [
-            ...getEnemyPreview(stage).slice(0, compact ? 1 : 2),
-            ...challengePreview.slice(0, 1),
-          ]
-        : challengePreview,
-      accent: stage.rules.enemyTuning ? 'rgba(255, 154, 102, 0.95)' : 'rgba(150, 230, 255, 0.95)',
-    },
-  );
 
   return sections;
 }

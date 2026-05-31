@@ -229,9 +229,11 @@ export function CombatFeedbackHUD() {
       key={feedback.id}
       style={{
         position: 'fixed',
-        left: '50%',
-        top: isCompact ? 204 : '50%',
-        transform: isCompact ? 'translateX(-50%)' : 'translate(-50%, -68px)',
+        // 照準（画面中央のクロスヘア）に重ならないよう、デスクトップはクロスヘアの右上へ寄せる。
+        // 射撃の視界中心と射線を空けつつ、手応えのパネルは視界の隅で確認できる位置に置く。
+        left: isCompact ? '50%' : 'calc(50% + 52px)',
+        top: isCompact ? 204 : 'calc(50% - 156px)',
+        transform: isCompact ? 'translateX(-50%)' : 'none',
         zIndex: 121,
         pointerEvents: 'none',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",

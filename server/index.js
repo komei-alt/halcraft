@@ -351,6 +351,8 @@ class Stage {
     this.lastDarwinSpawnTime = 0;
     this.vehicleStates = makeDefaultVehiclesState();
     this.helicopterState = this.vehicleStates.helicopter;
+    // ボイスチャット参加者（socket.id）。新規参加者へ既存メンバーを通知するために保持
+    this.voicePeers = new Set();
   }
 
   hasAnyPassenger(type = 'helicopter') {
@@ -883,6 +885,117 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// ============================================
+// WebRTC ICE 設定（STUN + TURN）
+// 一部のネットワーク（対称NAT / CGNAT / 企業FW）では STUN だけでは P2P が確立できず、
+// その人だけボイスチャットに繋がらない。TURN サーバーを返して中継経路を確保する。
+//
+// 優先順位:
+//   1. 環境変数 TURN_URLS（カンマ区切り）+ TURN_USERNAME + TURN_CREDENTIAL（静的TURN / 自前coturn等）
+//   2. Cloudflare Realtime TURN（CF_TURN_KEY_ID + CF_TURN_API_TOKEN があれば短命credentialを発行）
+//   3. 公開無料TURN（OpenRelay）— ベストエフォートのフォールバック
+// いずれも未設定でも STUN は常に返すため、通常のNAT環境はこれまで通り動作する。
+// ============================================
+
+const STUN_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
+
+let cachedIce = null;
+let cachedIceExpiry = 0;
+
+async function generateCloudflareTurn() {
+  const keyId = process.env.CF_TURN_KEY_ID;
+  const apiToken = process.env.CF_TURN_API_TOKEN;
+  if (!keyId || !apiToken) return null;
+  try {
+    const resp = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ttl: 86400 }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn('[Voice] Cloudflare TURN credential 発行失敗:', resp.status);
+      return null;
+    }
+    const data = await resp.json();
+    // Cloudflare は { iceServers: { urls, username, credential } } を返す
+    if (data?.iceServers) return data.iceServers;
+    return null;
+  } catch (err) {
+    console.warn('[Voice] Cloudflare TURN 取得エラー:', err.message);
+    return null;
+  }
+}
+
+async function buildIceServers() {
+  const servers = [...STUN_SERVERS];
+
+  // 1. 静的TURN（環境変数）
+  if (process.env.TURN_URLS) {
+    const urls = process.env.TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean);
+    if (urls.length > 0) {
+      servers.push({
+        urls,
+        username: process.env.TURN_USERNAME || '',
+        credential: process.env.TURN_CREDENTIAL || '',
+      });
+      return servers;
+    }
+  }
+
+  // 2. Cloudflare Realtime TURN（短命credential）
+  const cfTurn = await generateCloudflareTurn();
+  if (cfTurn) {
+    servers.push(cfTurn);
+    return servers;
+  }
+
+  // 3. 公開無料TURN（ベストエフォート）。明示的な本番TURN未設定時のフォールバック
+  servers.push(
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  );
+  return servers;
+}
+
+app.get('/api/voice/ice', async (_req, res) => {
+  const now = Date.now();
+  // Cloudflare TURN は短命なので 30 分でキャッシュ更新
+  if (!cachedIce || now > cachedIceExpiry) {
+    try {
+      cachedIce = await buildIceServers();
+      cachedIceExpiry = now + 30 * 60 * 1000;
+    } catch (err) {
+      reportServerError('voice', 'ICE 設定生成エラー', err, { kind: 'voice_ice_error' });
+      cachedIce = STUN_SERVERS;
+      cachedIceExpiry = now + 60 * 1000;
+    }
+  }
+  res.json({ iceServers: cachedIce });
+});
+
 app.get('/api/stages', (_req, res) => {
   const stageInfo = Array.from(stages.values()).map(s => ({
     id: s.id,
@@ -1337,11 +1450,20 @@ io.on('connection', (socket) => {
   socket.on('voice:joined', () => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (!stage) return;
+    // 既存のボイス参加者リストを新規参加者へ返す（双方が対称的にピア接続を張る）
+    const existing = Array.from(stage.voicePeers).filter((id) => id !== socket.id);
+    stage.voicePeers.add(socket.id);
+    socket.emit('voice:peers', { peerIds: existing });
+    // 既存メンバーへ新規参加を通知
     socket.to(player.stageId).emit('voice:peer-joined', { peerId: socket.id });
   });
   socket.on('voice:left', () => {
     const player = connectedPlayers.get(socket.id);
     if (!player) return;
+    const stage = stages.get(player.stageId);
+    if (stage) stage.voicePeers.delete(socket.id);
     socket.to(player.stageId).emit('voice:peer-left', { peerId: socket.id });
   });
   socket.on('voice:speaking', (data) => {
@@ -1369,6 +1491,10 @@ io.on('connection', (socket) => {
         }
         stage.players.delete(socket.id);
         stage.attackCooldowns.delete(socket.id);
+        // ボイスチャット参加者からも除外し、他メンバーへ退出を通知
+        if (stage.voicePeers.delete(socket.id)) {
+          socket.to(player.stageId).emit('voice:peer-left', { peerId: socket.id });
+        }
         io.to(player.stageId).emit('player:left', { id: socket.id });
       }
       connectedPlayers.delete(socket.id);

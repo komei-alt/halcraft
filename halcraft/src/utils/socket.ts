@@ -10,6 +10,11 @@ const SERVER_URL = import.meta.env.PROD
   ? 'https://halcraft-ws.rosch.jp'
   : `http://${window.location.hostname}:4001`;
 
+/** REST API などで使うサーバーのベースURLを返す */
+export function getServerUrl(): string {
+  return SERVER_URL;
+}
+
 let socket: Socket | null = null;
 
 /**

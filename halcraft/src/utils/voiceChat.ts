@@ -6,18 +6,23 @@
 // モード:
 //   - listener: スピーカーのみ（マイクなし、受信専用）
 //   - full: マイク＋スピーカー（送受信）
+//
+// 接続安定化の方針（一部の人で繋がらない/不安定への対策）:
+//   - ICE設定をサーバー(/api/voice/ice)から動的取得。TURNサーバーで対称NAT/CGNATを越える
+//   - Perfect Negotiation パターンで同時オファー衝突(Glare)を解消
+//   - onnegotiationneeded 駆動でマイクON/OFFの再ネゴシエーションを安全に処理
+//   - ICE candidate はリモート記述が入るまでキューイングして取りこぼしを防止
+//   - リスナーでも recvonly transceiver で音声経路(m-line)を先に確保
 // ============================================
 
-import { getSocket } from './socket';
+import { getSocket, getServerUrl } from './socket';
 
-/** WebRTC の STUN/TURN サーバー設定 */
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ],
-};
+/** フォールバック用の ICE 設定（サーバーから取得できなかった場合） */
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
 
 /** 発話検出の閾値 */
 const SPEAKING_THRESHOLD = 0.015;
@@ -29,6 +34,14 @@ interface PeerConnection {
   pc: RTCPeerConnection;
   /** リモートオーディオの再生要素 */
   audioElement: HTMLAudioElement;
+  /** Perfect Negotiation: 衝突時に自分が譲るか（politeなら譲る） */
+  polite: boolean;
+  /** 自分がオファー作成中か */
+  makingOffer: boolean;
+  /** 衝突で受信オファーを無視中か */
+  ignoreOffer: boolean;
+  /** リモート記述が入る前に届いた ICE candidate のキュー */
+  pendingCandidates: RTCIceCandidateInit[];
 }
 
 /** ボイスチャットのコールバック */
@@ -71,6 +84,10 @@ class VoiceChatManager {
   private analyser: AnalyserNode | null = null;
   private isSpeaking = false;
   private socketListenersAttached = false;
+  /** サーバーから取得した ICE 設定 */
+  private iceConfig: RTCConfiguration = { iceServers: FALLBACK_ICE_SERVERS };
+  /** ICE 設定を取得済みか */
+  private iceLoaded = false;
 
   /** 現在の状態を取得 */
   getState(): VoiceChatState {
@@ -108,6 +125,29 @@ class VoiceChatManager {
     this.callbacks.onStateChange?.(state);
   }
 
+  /** サーバーから ICE 設定（STUN/TURN）を取得 */
+  private async loadIceConfig(): Promise<void> {
+    if (this.iceLoaded) return;
+    try {
+      const res = await fetch(`${getServerUrl()}/api/voice/ice`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          this.iceConfig = { iceServers: data.iceServers };
+          this.iceLoaded = true;
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[VoiceChat] ICE設定の取得に失敗（STUNのみで継続）:', err);
+    }
+    // 失敗時はフォールバック（STUNのみ）
+    this.iceConfig = { iceServers: FALLBACK_ICE_SERVERS };
+  }
+
   /**
    * リスナーモードで参加（スピーカーのみ、マイク不要）
    * マルチプレイ接続時に自動で呼ばれる
@@ -123,10 +163,13 @@ class VoiceChatManager {
     this.setState('connecting');
 
     try {
+      // 先に ICE 設定（TURN含む）を取得してからピア接続を張る
+      await this.loadIceConfig();
+
       // Socket.IO シグナリングイベントを登録（受信用）
       this.attachSocketListeners();
 
-      // ボイスチャット参加を通知 → 他のピアからオファーを受け取る
+      // ボイスチャット参加を通知 → 既存メンバー一覧(voice:peers)とオファーを受け取る
       socket.emit('voice:joined');
 
       this.isSpeakerEnabled = true;
@@ -162,24 +205,16 @@ class VoiceChatManager {
       });
 
       // 既存のピア接続にローカルトラックを追加
+      // recvonly で確保済みの transceiver があれば addTrack がそれを sendrecv に再利用するため、
+      // onnegotiationneeded が発火して再ネゴシエーションが自動で走る（手動オファー不要）
       for (const [peerId, peer] of this.peers) {
         this.localStream.getTracks().forEach((track) => {
           try {
-            peer.pc.addTrack(track, this.localStream!);
+            this.attachLocalTrack(peer.pc, track);
           } catch (e) {
             console.warn(`[VoiceChat] ピア ${peerId} にトラック追加失敗:`, e);
           }
         });
-
-        // 再ネゴシエーション: 新しいトラックを通知するためにオファーを再送
-        try {
-          const offer = await peer.pc.createOffer();
-          await peer.pc.setLocalDescription(offer);
-          const socket = getSocket();
-          socket?.emit('voice:offer', { targetId: peerId, offer });
-        } catch (e) {
-          console.warn(`[VoiceChat] ピア ${peerId} 再ネゴシエーション失敗:`, e);
-        }
       }
 
       // 発話検出の設定
@@ -195,12 +230,40 @@ class VoiceChatManager {
     } catch (err) {
       console.error('[VoiceChat] マイクの取得に失敗:', err);
 
-      const errorMessage =
-        err instanceof DOMException && err.name === 'NotAllowedError'
-          ? 'マイクの使用が許可されていません。設定から許可してください。'
-          : 'マイクの接続に失敗しました。';
+      let errorMessage = 'マイクの接続に失敗しました。';
+      if (err instanceof DOMException) {
+        if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+          errorMessage = 'マイクの使用が許可されていません。ブラウザの設定から許可してください。';
+        } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+          errorMessage = 'マイクが見つかりません。デバイスを確認してください。';
+        } else if (err.name === 'NotReadableError') {
+          errorMessage = 'マイクが他のアプリで使用中の可能性があります。';
+        }
+      }
 
       this.callbacks.onError?.(errorMessage);
+    }
+  }
+
+  /**
+   * ローカルの音声トラックをピア接続へ載せる
+   * recvonly で待機している sender があれば replaceTrack で再利用し、無ければ addTrack する
+   */
+  private attachLocalTrack(pc: RTCPeerConnection, track: MediaStreamTrack): void {
+    // 既に同じトラックを送信中なら何もしない
+    const senders = pc.getSenders();
+    const sendingSame = senders.some((s) => s.track === track);
+    if (sendingSame) return;
+
+    // 送信トラックが空の sender（recvonly transceiver由来）を再利用
+    const freeSender = senders.find((s) => s.track === null);
+    if (freeSender) {
+      void freeSender.replaceTrack(track);
+      return;
+    }
+
+    if (this.localStream) {
+      pc.addTrack(track, this.localStream);
     }
   }
 
@@ -224,18 +287,17 @@ class VoiceChatManager {
 
     // ローカルストリームを停止
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => track.stop());
+      const localTracks = this.localStream.getTracks();
+      localTracks.forEach((track) => track.stop());
 
-      // ピア接続からローカルトラックを削除
+      // ピア接続から送信トラックを外す（接続は維持。replaceTrack(null) で再ネゴシエーションを最小化）
       for (const [, peer] of this.peers) {
-        const senders = peer.pc.getSenders();
-        for (const sender of senders) {
-          if (sender.track && this.localStream.getTracks().includes(sender.track)) {
+        for (const sender of peer.pc.getSenders()) {
+          if (sender.track && localTracks.includes(sender.track)) {
             try {
-              peer.pc.removeTrack(sender);
+              void sender.replaceTrack(null);
             } catch (e) {
-              // removeTrack が非対応のブラウザ
-              console.warn('[VoiceChat] トラック削除失敗:', e);
+              console.warn('[VoiceChat] トラック解除失敗:', e);
             }
           }
         }
@@ -246,7 +308,7 @@ class VoiceChatManager {
 
     // AudioContext を閉じる
     if (this.audioContext) {
-      this.audioContext.close();
+      void this.audioContext.close();
       this.audioContext = null;
       this.analyser = null;
     }
@@ -374,6 +436,7 @@ class VoiceChatManager {
     if (!socket || this.socketListenersAttached) return;
 
     this.socketHandlers = {
+      'voice:peers': (data) => this.handlePeerList((data.peerIds as string[]) || []),
       'voice:peer-joined': (data) => this.handlePeerJoined(data.peerId as string),
       'voice:peer-left': (data) => this.handlePeerLeft(data.peerId as string),
       'voice:offer': (data) => this.handleOffer(data.fromId as string, data.offer as RTCSessionDescriptionInit),
@@ -404,20 +467,20 @@ class VoiceChatManager {
 
   // ── WebRTC ピア接続管理 ──
 
-  /** 新しいピアが参加 → こちらからオファーを送信 */
-  private async handlePeerJoined(peerId: string): Promise<void> {
-    console.log(`[VoiceChat] ピア参加: ${peerId}`);
-    const pc = this.createPeerConnection(peerId);
-
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const socket = getSocket();
-      socket?.emit('voice:offer', { targetId: peerId, offer });
-    } catch (err) {
-      console.error('[VoiceChat] オファー作成失敗:', err);
+  /** 既存ボイス参加者の一覧を受信 → 各ピアと接続を確立 */
+  private handlePeerList(peerIds: string[]): void {
+    for (const peerId of peerIds) {
+      if (peerId && peerId !== getSocket()?.id) {
+        this.ensurePeer(peerId);
+      }
     }
+  }
+
+  /** 新しいピアが参加 → ピア接続を用意（オファーは onnegotiationneeded が駆動） */
+  private handlePeerJoined(peerId: string): void {
+    if (!peerId || peerId === getSocket()?.id) return;
+    console.log(`[VoiceChat] ピア参加: ${peerId}`);
+    this.ensurePeer(peerId);
   }
 
   /** ピアが退出 → 接続をクリーンアップ */
@@ -432,20 +495,30 @@ class VoiceChatManager {
     }
   }
 
-  /** オファーを受信 → アンサーを送信 */
+  /** オファーを受信 → Perfect Negotiation で衝突を裁定しつつアンサーを返す */
   private async handleOffer(fromId: string, offer: RTCSessionDescriptionInit): Promise<void> {
-    console.log(`[VoiceChat] オファー受信: ${fromId}`);
-    const pc = this.createPeerConnection(fromId);
+    if (!fromId) return;
+    const peer = this.ensurePeer(fromId);
+    const pc = peer.pc;
+
+    // 衝突判定: 自分がオファー中、または stable でない状態でオファーが来たら衝突
+    const offerCollision = peer.makingOffer || pc.signalingState !== 'stable';
+    peer.ignoreOffer = !peer.polite && offerCollision;
+    if (peer.ignoreOffer) {
+      // impolite 側は自分のオファーを優先し、相手のオファーを無視
+      return;
+    }
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await this.flushCandidates(peer);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
       const socket = getSocket();
-      socket?.emit('voice:answer', { targetId: fromId, answer });
+      socket?.emit('voice:answer', { targetId: fromId, answer: pc.localDescription });
     } catch (err) {
-      console.error('[VoiceChat] アンサー作成失敗:', err);
+      console.warn('[VoiceChat] オファー処理失敗:', err);
     }
   }
 
@@ -456,52 +529,57 @@ class VoiceChatManager {
 
     try {
       await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      await this.flushCandidates(peer);
     } catch (err) {
-      console.error('[VoiceChat] アンサー設定失敗:', err);
+      console.warn('[VoiceChat] アンサー設定失敗:', err);
     }
   }
 
-  /** ICE candidate を受信 */
+  /** ICE candidate を受信（リモート記述が未設定ならキューイング） */
   private async handleIceCandidate(fromId: string, candidate: RTCIceCandidateInit): Promise<void> {
     const peer = this.peers.get(fromId);
     if (!peer) return;
 
+    // リモート記述が入る前の candidate は追加できないのでキューに退避
+    if (!peer.pc.remoteDescription || !peer.pc.remoteDescription.type) {
+      peer.pendingCandidates.push(candidate);
+      return;
+    }
+
     try {
       await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
-      console.error('[VoiceChat] ICE candidate 追加失敗:', err);
+      // 衝突で無視中のオファーに紐づく candidate はエラーになり得るが無害
+      if (!peer.ignoreOffer) {
+        console.warn('[VoiceChat] ICE candidate 追加失敗:', err);
+      }
     }
   }
 
-  /** PeerConnection を作成 */
-  private createPeerConnection(peerId: string): RTCPeerConnection {
-    // 既存の接続があれば閉じる
-    const existing = this.peers.get(peerId);
-    if (existing) {
-      existing.pc.close();
-      existing.audioElement.srcObject = null;
-      existing.audioElement.remove();
-    }
-
-    const pc = new RTCPeerConnection(ICE_SERVERS);
-
-    // ローカルの音声トラックを追加（マイクが有効な場合のみ）
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
-    }
-
-    // ICE candidate をシグナリングサーバー経由で送信
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        const socket = getSocket();
-        socket?.emit('voice:ice-candidate', {
-          targetId: peerId,
-          candidate: event.candidate.toJSON(),
-        });
+  /** キュー済みの ICE candidate をまとめて適用 */
+  private async flushCandidates(peer: PeerConnection): Promise<void> {
+    if (peer.pendingCandidates.length === 0) return;
+    const pending = peer.pendingCandidates;
+    peer.pendingCandidates = [];
+    for (const candidate of pending) {
+      try {
+        await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('[VoiceChat] キュー candidate 適用失敗:', err);
       }
-    };
+    }
+  }
+
+  /** ピア接続を取得（無ければ作成）。双方が対称的に作成し Perfect Negotiation で衝突を解消 */
+  private ensurePeer(peerId: string): PeerConnection {
+    const existing = this.peers.get(peerId);
+    if (existing) return existing;
+
+    const pc = new RTCPeerConnection(this.iceConfig);
+
+    // politeness: socket.id の比較で双方が一意に決まる（id が大きい側を polite=譲る側に）
+    const myId = getSocket()?.id ?? '';
+    const polite = myId > peerId;
 
     // リモート音声ストリームを受信 → Audio要素で再生
     const audioElement = document.createElement('audio');
@@ -516,43 +594,106 @@ class VoiceChatManager {
     audioElement.style.display = 'none';
     document.body.appendChild(audioElement);
 
+    const peer: PeerConnection = {
+      pc,
+      audioElement,
+      polite,
+      makingOffer: false,
+      ignoreOffer: false,
+      pendingCandidates: [],
+    };
+
+    // ローカルの音声トラックを追加（マイクが有効な場合）。
+    // 未有効なら recvonly transceiver で受信用の m-line を先に確保しておく。
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream!));
+    } else {
+      try {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      } catch (e) {
+        console.warn('[VoiceChat] recvonly transceiver 追加失敗:', e);
+      }
+    }
+
+    // Perfect Negotiation: ネゴシエーションが必要になったらオファーを作って送る
+    pc.onnegotiationneeded = async () => {
+      try {
+        peer.makingOffer = true;
+        const offer = await pc.createOffer();
+        // 競合中に状態が変わっていたら中断
+        if (pc.signalingState !== 'stable') return;
+        await pc.setLocalDescription(offer);
+        const socket = getSocket();
+        socket?.emit('voice:offer', { targetId: peerId, offer: pc.localDescription });
+      } catch (err) {
+        console.warn('[VoiceChat] ネゴシエーション失敗:', err);
+      } finally {
+        peer.makingOffer = false;
+      }
+    };
+
+    // ICE candidate をシグナリングサーバー経由で送信
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        const socket = getSocket();
+        socket?.emit('voice:ice-candidate', {
+          targetId: peerId,
+          candidate: event.candidate.toJSON(),
+        });
+      }
+    };
+
     pc.ontrack = (event) => {
       console.log(`[VoiceChat] リモート音声受信: ${peerId}, tracks: ${event.streams[0]?.getTracks().length}`);
       // iOS Safari 互換性: 新しい MediaStream を明示的に作成
       const remoteStream = new MediaStream();
-      event.streams[0].getTracks().forEach((track) => {
-        console.log(`[VoiceChat]   track: ${track.kind} enabled=${track.enabled} muted=${track.muted}`);
-        remoteStream.addTrack(track);
+      const tracks = event.streams[0] ? event.streams[0].getTracks() : [event.track];
+      tracks.forEach((track) => {
+        if (track) remoteStream.addTrack(track);
       });
       audioElement.srcObject = remoteStream;
       // 再生試行
       const playPromise = audioElement.play();
       if (playPromise) {
-        playPromise.then(() => {
-          console.log(`[VoiceChat] 音声再生開始: ${peerId}`);
-        }).catch((err) => {
-          console.warn(`[VoiceChat] 自動再生ブロック: ${peerId}`, err);
-          // 次のタッチ/クリックで再試行
-          const playHandler = () => {
-            audioElement.play().catch(() => {});
-            document.removeEventListener('touchstart', playHandler);
-            document.removeEventListener('click', playHandler);
-          };
-          document.addEventListener('touchstart', playHandler, { once: false });
-          document.addEventListener('click', playHandler, { once: false });
-        });
+        playPromise
+          .then(() => {
+            console.log(`[VoiceChat] 音声再生開始: ${peerId}`);
+          })
+          .catch((err) => {
+            console.warn(`[VoiceChat] 自動再生ブロック: ${peerId}`, err);
+            // 次のタッチ/クリックで再試行
+            const playHandler = () => {
+              audioElement.play().catch(() => {});
+              document.removeEventListener('touchstart', playHandler);
+              document.removeEventListener('click', playHandler);
+            };
+            document.addEventListener('touchstart', playHandler, { once: false });
+            document.addEventListener('click', playHandler, { once: false });
+          });
+      }
+    };
+
+    // ICE 接続が切れた/失敗した場合は ICE リスタートを試み、回復不能なら片付ける
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        console.warn(`[VoiceChat] ピア ${peerId} ICE失敗 → リスタート試行`);
+        try {
+          pc.restartIce();
+        } catch {
+          this.handlePeerLeft(peerId);
+        }
       }
     };
 
     pc.onconnectionstatechange = () => {
       console.log(`[VoiceChat] ピア ${peerId} 接続状態: ${pc.connectionState}`);
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         this.handlePeerLeft(peerId);
       }
     };
 
-    this.peers.set(peerId, { pc, audioElement });
-    return pc;
+    this.peers.set(peerId, peer);
+    return peer;
   }
 }
 
