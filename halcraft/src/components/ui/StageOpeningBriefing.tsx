@@ -176,7 +176,7 @@ function getBriefingRouteSteps(
           ? `${signaturePerk.shortLabel}で開幕高速建築`
           : masteryPerk?.buildFocusMs
           ? `${masteryPerk.shortLabel}で開幕高速建築`
-          : '建築テンポを作って作品点へつなげる'
+          : '最初から飛行して空中建築を始められる'
         : signaturePerk?.combatFocusMs
           ? `${signaturePerk.shortLabel}で作戦集中`
           : masteryPerk?.shieldMs

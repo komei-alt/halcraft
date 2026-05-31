@@ -313,7 +313,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     set({
       phase: 'playing',
-      creativeFlying: false,
+      creativeFlying: isBuildMode,
       runId: get().runId + 1,
       gameTime: rules?.startTime ?? 0.0,
       dayCount: 1,
