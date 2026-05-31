@@ -6,12 +6,15 @@ import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
+import { useInventoryStore } from '../../stores/useInventoryStore';
+import { BLOCK_IDS } from '../../types/blocks';
 import {
   getStageCombatStyle,
   getStageCombatStyleForItem,
   getStageCombatWeaponLabel,
 } from '../../types/stageCombatStyles';
 import { getStageModeRule } from '../../types/stageModeRules';
+import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
 
 interface CrosshairProfile {
@@ -72,6 +75,9 @@ export function Crosshair() {
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
   const worldPosition = usePlayerStore((s) => s.worldPosition);
+  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
+  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const inventoryItems = useInventoryStore((s) => s.items);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
@@ -101,6 +107,12 @@ export function Crosshair() {
   const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
+  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
+  const selectedBlockCount = inventoryItems[selectedBlock] ?? 0;
+  const selectedBlockProfile = getBlockUseProfile(selectedBlock, currentStageId);
+  const builderHasStock = selectedBlockCount > 0;
+  const builderStockAccent = builderHasStock ? selectedBlockProfile.accent : '#ff6b6b';
+  const builderStockGlow = builderHasStock ? selectedBlockProfile.glow : 'rgba(255, 80, 80, 0.34)';
   const buildFocusActive = isBuilder && modeRule?.category === 'build' && buildFocusUntil > now;
   const combatFocusActive = !isBuilder && combatFocusItem === equippedItem && combatFocusUntil > now;
   const buildFlightActive = isBuilder && isBuildMode && creativeFlying;
@@ -108,11 +120,17 @@ export function Crosshair() {
   const buildFocusSeconds = formatReticleSeconds(buildFocusUntil - now);
   const combatFocusSeconds = formatReticleSeconds(combatFocusUntil - now);
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
-  const builderFocusAccent = buildFocusActive ? modeRule.accent : profile.color;
+  const builderFocusAccent = buildFocusActive ? modeRule.accent : builderStockAccent;
   const combatFocusAccent = combatFocusActive ? (stageStyle?.accent ?? profile.color) : profile.color;
-  const activeColor = buildFocusActive ? builderFocusAccent : combatFocusActive ? combatFocusAccent : profile.color;
+  const activeColor = isBuilder
+    ? builderFocusAccent
+    : combatFocusActive
+      ? combatFocusAccent
+      : profile.color;
   const activeGlow = buildFocusActive
     ? `${builderFocusAccent}88`
+    : isBuilder
+      ? builderStockGlow
     : combatFocusActive
       ? `${combatFocusAccent}aa`
       : profile.glow;
@@ -143,6 +161,11 @@ export function Crosshair() {
                 ? 'LOW SPREAD'
                 : 'BURST READY'
               : profile.code;
+  const builderStatusLabel = buildFocusActive
+    ? `FAST x${Math.max(1, activeBuildFocusChain)}`
+    : builderHasStock
+      ? `x${selectedBlockCount}`
+      : 'EMPTY';
   const ringSize = equippedItem === 'machine_gun' ? 42 : 36;
   const arms = [
     {
@@ -375,6 +398,100 @@ export function Crosshair() {
             >
               FAST {buildFocusSeconds} x{Math.max(1, activeBuildFocusChain)}
             </div>
+          )}
+        </>
+      )}
+
+      {isBuilder && (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: builderHasStock ? 34 : 30,
+              height: builderHasStock ? 34 : 30,
+              transform: 'translate(-50%, -50%) rotate(45deg)',
+              borderRadius: 7,
+              border: `1px solid ${activeColor}88`,
+              boxShadow: `0 0 12px ${activeGlow}, inset 0 0 10px ${activeColor}22`,
+              opacity: builderHasStock ? 0.72 : 0.5,
+              animation: buildFocusActive ? 'builderFocusReticle 0.72s ease-in-out infinite alternate' : undefined,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: 4,
+              height: 4,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              background: activeColor,
+              boxShadow: `0 0 10px ${activeGlow}`,
+              opacity: builderHasStock ? 0.95 : 0.58,
+            }}
+          />
+          {!isCompact && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, 24px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  minWidth: 66,
+                  height: 16,
+                  padding: '0 6px',
+                  borderRadius: 5,
+                  border: `1px solid ${activeColor}66`,
+                  background: builderHasStock ? `${activeColor}20` : 'rgba(80, 10, 10, 0.5)',
+                  color: activeColor,
+                  fontSize: 9,
+                  lineHeight: '16px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                  whiteSpace: 'nowrap',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.84)',
+                  boxShadow: `0 0 9px ${activeGlow}`,
+                }}
+              >
+                <span style={{ fontFamily: 'system-ui, sans-serif', fontSize: 10, lineHeight: 1 }}>
+                  {selectedBlockProfile.icon}
+                </span>
+                <span>{builderStatusLabel}</span>
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(24px, -50%)',
+                  width: 68,
+                  height: 14,
+                  borderRadius: 4,
+                  border: `1px solid ${activeColor}44`,
+                  background: builderHasStock ? 'rgba(0,0,0,0.38)' : 'rgba(60, 8, 8, 0.5)',
+                  color: activeColor,
+                  fontSize: 8,
+                  lineHeight: '14px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                  letterSpacing: 0,
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.82)',
+                }}
+              >
+                {selectedBlockProfile.eyebrow}
+              </div>
+            </>
           )}
         </>
       )}
