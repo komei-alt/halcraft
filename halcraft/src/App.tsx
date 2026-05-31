@@ -53,6 +53,7 @@ import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
 import { VehicleCombat } from './components/vehicles/VehicleCombat';
 import { VehicleExplosionEffect } from './components/vehicles/VehicleExplosionEffect';
 import { VehicleHealthBars } from './components/vehicles/VehicleHealthBars';
+import { VehicleMotionTrailFX } from './components/vehicles/VehicleMotionTrailFX';
 import { PlayerMachineGun } from './components/PlayerMachineGun';
 import { Lightsaber } from './components/Lightsaber';
 import { CockpitHUD } from './components/ui/CockpitHUD';
@@ -177,6 +178,7 @@ function GameCanvas() {
           <MachineGun />
           <VehicleWeapons />
           <VehicleCombat />
+          <VehicleMotionTrailFX />
           <VehicleExplosionEffect />
           <VehicleHealthBars />
           {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
