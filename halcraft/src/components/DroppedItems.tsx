@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { useDroppedItemStore, type DroppedItem } from '../stores/useDroppedItemStore';
 import { useInventoryStore } from '../stores/useInventoryStore';
 import { useWorldStore } from '../stores/useWorldStore';
-import { BLOCK_DEFS, BLOCK_IDS } from '../types/blocks';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId, type BlockInfo } from '../types/blocks';
 
 /** ピックアップ距離 */
 const PICKUP_RADIUS = 2.0;
@@ -25,6 +25,10 @@ const BOB_SPEED = 2.5;
 const ROTATE_SPEED = 1.2;
 /** アイテムの表示サイズ */
 const ITEM_SCALE = 0.3;
+/** アイテムの光輪サイズ */
+const HALO_SCALE = 1;
+/** アイテム吸い込み時の光跡の長さ */
+const PICKUP_TRAIL_LENGTH = 1.45;
 /** 期限切れチェック間隔（フレーム数） */
 const CLEANUP_INTERVAL = 120;
 
@@ -44,10 +48,54 @@ function getItemTexture(textureName: string): THREE.Texture {
 
 /** 共有ジオメトリ（全ドロップアイテムで再利用） */
 const sharedItemGeometry = new THREE.BoxGeometry(1, 1, 1);
+const sharedItemEdgesGeometry = new THREE.EdgesGeometry(sharedItemGeometry);
+const sharedHaloGeometry = new THREE.RingGeometry(0.78, 1.08, 36);
+const sharedShadowGeometry = new THREE.CircleGeometry(0.72, 32);
+const sharedBillboardGlowGeometry = new THREE.CircleGeometry(1.05, 36);
+
+function getDropAccentColor(blockId: BlockId, def: BlockInfo | undefined): THREE.Color {
+  if (def?.emissiveColor) return def.emissiveColor.clone();
+
+  if (
+    blockId === BLOCK_IDS.DIAMOND_ORE ||
+    blockId === BLOCK_IDS.DIAMOND_GEM ||
+    blockId === BLOCK_IDS.ELECTRIC
+  ) {
+    return new THREE.Color(0x65f8ff);
+  }
+  if (blockId === BLOCK_IDS.GOLD_ORE || blockId === BLOCK_IDS.GOLD_INGOT) {
+    return new THREE.Color(0xffd66b);
+  }
+  if (blockId === BLOCK_IDS.IRON || blockId === BLOCK_IDS.IRON_ORE || blockId === BLOCK_IDS.IRON_INGOT) {
+    return new THREE.Color(0xc9d6df);
+  }
+  if (blockId === BLOCK_IDS.WOOD || blockId === BLOCK_IDS.RAW_WOOD || blockId === BLOCK_IDS.STICK) {
+    return new THREE.Color(0xd49454);
+  }
+  if (blockId === BLOCK_IDS.LEAVES || blockId === BLOCK_IDS.GRASS) {
+    return new THREE.Color(0x8adf69);
+  }
+  if (blockId === BLOCK_IDS.SAND) {
+    return new THREE.Color(0xffd28a);
+  }
+  if (blockId === BLOCK_IDS.SNOW) {
+    return new THREE.Color(0xe9fbff);
+  }
+  if (blockId === BLOCK_IDS.TNT || blockId === BLOCK_IDS.LAVA) {
+    return new THREE.Color(0xff6a3d);
+  }
+
+  return new THREE.Color(0xffffff);
+}
 
 /** 個別のドロップアイテム描画 */
 function DroppedItemRenderer({ item }: { item: DroppedItem }) {
+  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
+  const haloRef = useRef<THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>>(null);
+  const shadowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
+  const glowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
+  const trailRef = useRef<THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>(null);
   const { camera } = useThree();
   const getBlock = useWorldStore((s) => s.getBlock);
   const addItem = useInventoryStore((s) => s.addItem);
@@ -68,13 +116,21 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
     return null;
   }, [def]);
 
+  const accentColor = useMemo(() => getDropAccentColor(item.blockId, def), [def, item.blockId]);
+  const trailGeometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    return geo;
+  }, []);
+
   // 再利用用ベクトル
   const tempVec = useRef(new THREE.Vector3());
 
   useFrame((_, delta) => {
-    if (!meshRef.current) return;
+    if (!groupRef.current || !meshRef.current) return;
     const clampedDelta = Math.min(delta, 0.05);
     const now = Date.now();
+    const ageSeconds = (now - item.spawnedAt) / 1000;
 
     let { x, y, z, vx, vy, vz } = item;
 
@@ -99,11 +155,36 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
       y += tempVec.current.y;
       z += tempVec.current.z;
       updatePosition(item.id, x, y, z, 0, 0, 0);
-      meshRef.current.position.set(x, y, z);
+      groupRef.current.position.set(x, y, z);
 
       // ピックアップ中はスケールが縮む
       const scale = Math.max(0.1, dist / PICKUP_RADIUS) * ITEM_SCALE;
-      meshRef.current.scale.setScalar(scale);
+      groupRef.current.scale.setScalar(scale);
+      meshRef.current.rotation.y += ROTATE_SPEED * 3.6 * clampedDelta;
+      meshRef.current.rotation.x += ROTATE_SPEED * 1.8 * clampedDelta;
+
+      if (haloRef.current) {
+        haloRef.current.scale.setScalar(HALO_SCALE * (1.22 + Math.sin(ageSeconds * 18) * 0.08));
+        haloRef.current.material.opacity = 0.5;
+      }
+      if (glowRef.current) {
+        glowRef.current.quaternion.copy(camera.quaternion);
+        glowRef.current.scale.setScalar(1.18 + Math.sin(ageSeconds * 16) * 0.08);
+        glowRef.current.material.opacity = 0.36;
+      }
+      if (shadowRef.current) {
+        shadowRef.current.material.opacity = 0.04;
+      }
+      if (trailRef.current) {
+        const trailDir = tempVec.current.lengthSq() > 0.001
+          ? tempVec.current.clone().normalize().multiplyScalar(Math.min(PICKUP_TRAIL_LENGTH, dist))
+          : tempVec.current.set(0, 0.4, 0);
+        const positions = trailRef.current.geometry.getAttribute('position') as THREE.BufferAttribute;
+        positions.setXYZ(0, 0, 0, 0);
+        positions.setXYZ(1, trailDir.x, trailDir.y, trailDir.z);
+        positions.needsUpdate = true;
+        trailRef.current.material.opacity = 0.62;
+      }
       return;
     }
 
@@ -136,9 +217,32 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
     }
 
     // ボブ＆回転アニメーション（着地後）
-    const bobOffset = Math.sin(now / 1000 * BOB_SPEED + item.spawnedAt * 0.001) * BOB_HEIGHT;
-    meshRef.current.position.set(x, y + bobOffset, z);
+    const bobOffset = Math.sin(ageSeconds * BOB_SPEED + item.spawnedAt * 0.001) * BOB_HEIGHT;
+    groupRef.current.position.set(x, y + bobOffset, z);
+    groupRef.current.scale.setScalar(ITEM_SCALE);
     meshRef.current.rotation.y += ROTATE_SPEED * clampedDelta;
+    meshRef.current.rotation.x = Math.sin(ageSeconds * 1.45) * 0.16;
+    meshRef.current.rotation.z = Math.cos(ageSeconds * 1.18) * 0.1;
+
+    const pulse = 1 + Math.sin(ageSeconds * 4.8) * 0.065;
+    if (haloRef.current) {
+      haloRef.current.scale.setScalar(HALO_SCALE * pulse);
+      haloRef.current.rotation.z = -ageSeconds * 0.8;
+      haloRef.current.material.opacity = 0.2 + Math.max(0, Math.sin(ageSeconds * 3.2)) * 0.12;
+    }
+    if (glowRef.current) {
+      glowRef.current.quaternion.copy(camera.quaternion);
+      glowRef.current.scale.setScalar(0.95 + Math.sin(ageSeconds * 3.7) * 0.08);
+      glowRef.current.material.opacity = 0.16 + Math.max(0, Math.sin(ageSeconds * 4.1)) * 0.08;
+    }
+    if (shadowRef.current) {
+      shadowRef.current.position.y = -0.43 - bobOffset;
+      shadowRef.current.scale.set(1.05 + Math.abs(bobOffset) * 1.3, 1.05 + Math.abs(bobOffset) * 1.3, 1);
+      shadowRef.current.material.opacity = 0.16;
+    }
+    if (trailRef.current) {
+      trailRef.current.material.opacity = 0;
+    }
 
     // ピックアップ判定
     if (now >= item.pickupableAt) {
@@ -156,14 +260,77 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
   if (!def || !texture) return null;
 
   return (
-    <mesh ref={meshRef} position={[item.x, item.y, item.z]} scale={ITEM_SCALE} geometry={sharedItemGeometry}>
-      <meshStandardMaterial
-        map={texture}
-        emissive={emissiveColor ?? undefined}
-        emissiveIntensity={emissiveColor ? 0.3 : 0}
-        roughness={0.7}
-      />
-    </mesh>
+    <group ref={groupRef} position={[item.x, item.y, item.z]} scale={ITEM_SCALE}>
+      <mesh
+        ref={shadowRef}
+        geometry={sharedShadowGeometry}
+        position={[0, -0.43, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        renderOrder={1}
+      >
+        <meshBasicMaterial
+          color={0x111827}
+          depthWrite={false}
+          opacity={0.16}
+          transparent
+        />
+      </mesh>
+      <mesh
+        ref={haloRef}
+        geometry={sharedHaloGeometry}
+        rotation={[-Math.PI / 2, 0, 0]}
+        renderOrder={2}
+      >
+        <meshBasicMaterial
+          color={accentColor}
+          depthWrite={false}
+          opacity={0.24}
+          transparent
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <lineSegments ref={trailRef} geometry={trailGeometry} renderOrder={4}>
+        <lineBasicMaterial
+          color={accentColor}
+          opacity={0}
+          transparent
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </lineSegments>
+      <mesh ref={glowRef} geometry={sharedBillboardGlowGeometry} renderOrder={2}>
+        <meshBasicMaterial
+          color={accentColor}
+          depthTest={false}
+          depthWrite={false}
+          fog={false}
+          opacity={0.18}
+          transparent
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={meshRef} geometry={sharedItemGeometry} castShadow receiveShadow>
+        <meshStandardMaterial
+          map={texture}
+          emissive={emissiveColor ?? accentColor}
+          emissiveIntensity={emissiveColor ? 0.42 : 0.1}
+          metalness={item.blockId === BLOCK_IDS.IRON || item.blockId === BLOCK_IDS.IRON_INGOT ? 0.18 : 0}
+          opacity={def.transparent ? 0.78 : 1}
+          transparent={def.transparent}
+          roughness={0.54}
+        />
+      </mesh>
+      <lineSegments geometry={sharedItemEdgesGeometry} renderOrder={3}>
+        <lineBasicMaterial
+          color={accentColor}
+          opacity={0.52}
+          transparent
+          toneMapped={false}
+        />
+      </lineSegments>
+    </group>
   );
 }
 
