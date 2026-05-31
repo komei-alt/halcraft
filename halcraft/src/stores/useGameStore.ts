@@ -18,6 +18,8 @@ import { useFunctionalBlockStore } from './useFunctionalBlockStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
 import { getStageOpeningItem, getStageRunBonusForProgress } from '../types/stageRunBonuses';
+import { getStageMasteryPerkForProgress } from '../types/stageMastery';
+import { getStageChallenges } from '../types/stageChallenges';
 import { getStageHotbarSlots } from '../types/stageHotbars';
 import { resolveBiomeConfig, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
@@ -229,16 +231,30 @@ export const useGameStore = create<GameState>((set, get) => ({
     const bestMedal = currentStage
       ? useStageChallengeStore.getState().bestByStage[currentStage.id]?.medal ?? 'none'
       : 'none';
+    const stageChallengeBest = currentStage
+      ? useStageChallengeStore.getState().bestByStage[currentStage.id]
+      : null;
     const buildBestScore = currentStage
       ? useStageBuildScoreStore.getState().bestByStage[currentStage.id]?.score ?? 0
       : 0;
     const runBonus = getStageRunBonusForProgress(currentStage?.id, bestMedal, buildBestScore);
+    const masteryPerk = currentStage
+      ? getStageMasteryPerkForProgress({
+          stage: currentStage,
+          completedCount: stageChallengeBest?.completedCount ?? 0,
+          challengeCount: getStageChallenges(currentStage.id).length,
+          buildScore: buildBestScore,
+        })
+      : null;
 
     const starterItems: Record<number, number> = {};
     for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {
       if (count && count > 0) starterItems[Number(blockId)] = count;
     }
     for (const block of runBonus?.blocks ?? []) {
+      starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
+    }
+    for (const block of masteryPerk?.blocks ?? []) {
       starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
     const stageHotbarSlots = getStageHotbarSlots(currentStage?.id, starterItems);
@@ -262,9 +278,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       const def = TOOL_DEFS[toolId];
       if (def) startingTools[toolId] = def.maxDurability;
     }
+    for (const toolId of masteryPerk?.tools ?? []) {
+      const def = TOOL_DEFS[toolId];
+      if (def) startingTools[toolId] = def.maxDurability;
+    }
     const openingInvincibleUntil = isBuildMode
       ? Number.POSITIVE_INFINITY
-      : Date.now() + 5000 + (runBonus?.shieldMs ?? 0);
+      : Date.now() + 5000 + (runBonus?.shieldMs ?? 0) + (masteryPerk?.shieldMs ?? 0);
 
     set({
       phase: 'playing',
@@ -296,10 +316,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       rocketCooldown: 0,
       rocketCooldownDuration: 2.8,
       rocketCharge: 1,
-      rocketReadyPulseUntil: 0,
+      rocketReadyPulseUntil: masteryPerk?.rocketReady ? Date.now() + 1800 : 0,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,
-      hunger: Math.min(20, (starterKit?.hunger ?? 20) + (runBonus?.hunger ?? 0)),
+      hunger: Math.min(20, (starterKit?.hunger ?? 20) + (runBonus?.hunger ?? 0) + (masteryPerk?.hunger ?? 0)),
       hungerExhaustion: 0,
       airSupply: 15,
       isSubmerged: false,

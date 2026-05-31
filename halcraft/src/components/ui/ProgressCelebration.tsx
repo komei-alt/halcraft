@@ -14,6 +14,8 @@ import { useStageEventStore } from '../../stores/useStageEventStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
+import { getStageChallenges } from '../../types/stageChallenges';
+import { formatStageMasteryPerkLabel, getStageMasteryPerkForProgress } from '../../types/stageMastery';
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { isTouchDevice } from '../../utils/device';
 import { playStageRewardSound } from '../../utils/sounds';
@@ -74,10 +76,17 @@ export function ProgressCelebration() {
     if (lastRunBonusKeyRef.current === toastKey) return;
     if (pendingRunBonusKeyRef.current === toastKey) return;
 
-    const challengeMedal = challengeBestByStage[stage.id]?.medal ?? 'none';
+    const challengeBest = challengeBestByStage[stage.id];
+    const challengeMedal = challengeBest?.medal ?? 'none';
     const buildScore = buildBestByStage[stage.id]?.score ?? 0;
     const runBonus = getStageRunBonusForProgress(stage.id, challengeMedal, buildScore);
-    if (!runBonus) return;
+    const masteryPerk = getStageMasteryPerkForProgress({
+      stage,
+      completedCount: challengeBest?.completedCount ?? 0,
+      challengeCount: getStageChallenges(stage.id).length,
+      buildScore,
+    });
+    if (!runBonus && !masteryPerk) return;
 
     pendingRunBonusKeyRef.current = toastKey;
     const timer = window.setTimeout(() => {
@@ -88,15 +97,28 @@ export function ProgressCelebration() {
 
       lastRunBonusKeyRef.current = toastKey;
       playStageRewardSound(stage.category === 'build' ? 'build_supply' : 'war_supply');
-      addToast({
-        id: `run-bonus-${toastKey}`,
-        icon: runBonus.icon,
-        eyebrow: runBonus.sourceLabel,
-        title: `${runBonus.shortLabel} ${runBonus.title}`,
-        detail: formatStageRunBonusLabel(runBonus),
-        accent: runBonus.accent,
-        glow: `${runBonus.accent}44`,
-      });
+      if (masteryPerk) {
+        addToast({
+          id: `mastery-perk-${toastKey}`,
+          icon: masteryPerk.icon,
+          eyebrow: 'マップ熟練特典',
+          title: `${masteryPerk.shortLabel} ${masteryPerk.title}`,
+          detail: formatStageMasteryPerkLabel(masteryPerk),
+          accent: masteryPerk.accent,
+          glow: masteryPerk.glow,
+        });
+      }
+      if (runBonus) {
+        addToast({
+          id: `run-bonus-${toastKey}`,
+          icon: runBonus.icon,
+          eyebrow: runBonus.sourceLabel,
+          title: `${runBonus.shortLabel} ${runBonus.title}`,
+          detail: formatStageRunBonusLabel(runBonus),
+          accent: runBonus.accent,
+          glow: `${runBonus.accent}44`,
+        });
+      }
     }, 260);
     timersRef.current.push(timer);
 

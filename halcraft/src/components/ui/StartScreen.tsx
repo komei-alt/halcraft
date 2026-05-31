@@ -22,7 +22,10 @@ import { getStageEvent } from '../../types/stageEvents';
 import { formatStageBossReward, getStageBossEncounter } from '../../types/stageBossEncounters';
 import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
 import {
+  formatStageMasteryPerkLabel,
+  getStageMasteryPerk,
   getStageMasterySummary,
+  type StageMasteryPerk,
   type StageMasterySummary,
 } from '../../types/stageMastery';
 import {
@@ -229,6 +232,7 @@ function getStageBriefingSections(
   pressure: ReturnType<typeof getStagePressure>,
   event: ReturnType<typeof getStageEvent>,
   runBonus: StageRunBonus | null,
+  masteryPerk: StageMasteryPerk | null,
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
@@ -243,7 +247,7 @@ function getStageBriefingSections(
   );
   const hotbarPreview = formatStageHotbarPreview(
     stage.id,
-    getStageStarterHotbarItemCounts(stage, runBonus),
+    getStageStarterHotbarItemCounts(stage, runBonus, masteryPerk),
     compact ? 3 : 4,
   );
   const challengePreview = challenges
@@ -419,6 +423,19 @@ function getStageBriefingSections(
     });
   }
 
+  if (masteryPerk) {
+    sections.push({
+      title: 'マップ熟練特典',
+      value: `${masteryPerk.icon} ${masteryPerk.title}`,
+      details: [
+        masteryPerk.shortLabel,
+        formatStageMasteryPerkLabel(masteryPerk),
+      ],
+      accent: masteryPerk.accent,
+      group: 'loadout',
+    });
+  }
+
   return sections;
 }
 
@@ -571,6 +588,10 @@ export function StartScreen() {
     () => getStageRunBonusForProgress(activeStage.id, activeMedal, activeBuildBest?.score ?? 0),
     [activeBuildBest?.score, activeStage.id, activeMedal],
   );
+  const activeMasteryPerk = useMemo(
+    () => getStageMasteryPerk(activeStage, activeMastery),
+    [activeMastery, activeStage],
+  );
   const activeRecordGoal = useMemo(
     () => getStageRecordGoal({
       stage: activeStage,
@@ -586,6 +607,7 @@ export function StartScreen() {
       activePressure,
       activeEvent,
       activeRunBonus,
+      activeMasteryPerk,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
@@ -597,6 +619,7 @@ export function StartScreen() {
       activePressure,
       activeEvent,
       activeRunBonus,
+      activeMasteryPerk,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,

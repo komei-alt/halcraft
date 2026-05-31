@@ -8,6 +8,12 @@ import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuil
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { getStageCondition } from '../../types/stageConditions';
 import { getStageEvent } from '../../types/stageEvents';
+import { getStageChallenges } from '../../types/stageChallenges';
+import {
+  formatStageMasteryPerkLabel,
+  getStageMasteryPerkForProgress,
+  type StageMasteryPerk,
+} from '../../types/stageMastery';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
 import {
@@ -30,6 +36,7 @@ function getBriefingPoints(
   stage: StageDefinition,
   compact: boolean,
   runBonus: StageRunBonus | null,
+  masteryPerk: StageMasteryPerk | null,
 ): BriefingPoint[] {
   const condition = getStageCondition(stage.id);
   const event = getStageEvent(stage.id);
@@ -55,6 +62,15 @@ function getBriefingPoints(
       title: runBonus.sourceLabel,
       detail: `${runBonus.shortLabel}: ${formatStageRunBonusLabel(runBonus)}`,
       accent: runBonus.accent,
+    });
+  }
+
+  if (masteryPerk) {
+    points.push({
+      icon: masteryPerk.icon,
+      title: 'マップ熟練特典',
+      detail: `${masteryPerk.shortLabel}: ${formatStageMasteryPerkLabel(masteryPerk)}`,
+      accent: masteryPerk.accent,
     });
   }
 
@@ -133,9 +149,19 @@ export function StageOpeningBriefing() {
     );
   }, [bestByStage, buildBestByStage, stage]);
 
+  const masteryPerk = useMemo(() => {
+    if (!stage) return null;
+    return getStageMasteryPerkForProgress({
+      stage,
+      completedCount: bestByStage[stage.id]?.completedCount ?? 0,
+      challengeCount: getStageChallenges(stage.id).length,
+      buildScore: buildBestByStage[stage.id]?.score ?? 0,
+    });
+  }, [bestByStage, buildBestByStage, stage]);
+
   const points = useMemo(
-    () => (stage ? getBriefingPoints(stage, isCompact, runBonus) : []),
-    [isCompact, runBonus, stage],
+    () => (stage ? getBriefingPoints(stage, isCompact, runBonus, masteryPerk) : []),
+    [isCompact, masteryPerk, runBonus, stage],
   );
 
   if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;

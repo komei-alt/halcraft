@@ -21,7 +21,7 @@ import {
 } from '../../types/stageBuildStyles';
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
-import { getStageMasterySummary } from '../../types/stageMastery';
+import { formatStageMasteryPerkLabel, getStageMasteryPerk, getStageMasterySummary } from '../../types/stageMastery';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -161,6 +161,7 @@ export function StageResultOverlay() {
     challengeCount: challenges.length,
     buildScore: buildBest?.score ?? buildScore,
   });
+  const nextMasteryPerk = getStageMasteryPerk(stage, mastery);
   const objectiveValue = targetCount
     ? `${Math.min(enemiesDefeated, targetCount)}/${targetCount}`
     : buildStyle
@@ -798,6 +799,42 @@ export function StageResultOverlay() {
               }}
             >
               {formatStageRunBonusLabel(nextRunBonus)}
+            </div>
+          </div>
+        )}
+
+        {nextMasteryPerk && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '9px 10px',
+              borderRadius: 11,
+              color: '#fff',
+              background: `${nextMasteryPerk.accent}1f`,
+              border: `1px solid ${nextMasteryPerk.accent}55`,
+              boxShadow: `inset 0 0 16px ${nextMasteryPerk.glow}`,
+              fontSize: isCompact ? 11 : 12,
+              fontWeight: 850,
+              lineHeight: '17px',
+            }}
+          >
+            <div
+              style={{
+                color: nextMasteryPerk.accent,
+                fontSize: isCompact ? 10 : 11,
+                fontWeight: 950,
+                marginBottom: 2,
+              }}
+            >
+              マップ熟練特典: {nextMasteryPerk.icon} {nextMasteryPerk.shortLabel}
+            </div>
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.78)',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {formatStageMasteryPerkLabel(nextMasteryPerk)}
             </div>
           </div>
         )}

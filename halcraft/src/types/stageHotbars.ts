@@ -3,9 +3,15 @@
 
 import { BLOCK_DEFS, BLOCK_IDS, HOTBAR_BLOCKS, type BlockId } from './blocks';
 import type { StageDefinition } from './stages';
-import type { StageRunBonus } from './stageRunBonuses';
 
 export type HotbarItemCounts = Readonly<Record<number, number | undefined>>;
+
+interface HotbarBonusBlocks {
+  blocks: Array<{
+    blockId: BlockId;
+    count: number;
+  }>;
+}
 
 const STAGE_HOTBAR_PRIORITIES: Record<string, BlockId[]> = {
   'build-forest': [
@@ -143,7 +149,8 @@ function getShortBlockName(blockId: BlockId): string {
 
 export function getStageStarterHotbarItemCounts(
   stage: StageDefinition,
-  runBonus: Pick<StageRunBonus, 'blocks'> | null,
+  runBonus: HotbarBonusBlocks | null,
+  masteryPerk: HotbarBonusBlocks | null = null,
 ): Record<number, number> {
   const items: Record<number, number> = {};
 
@@ -154,8 +161,10 @@ export function getStageStarterHotbarItemCounts(
     }
   }
 
-  for (const block of runBonus?.blocks ?? []) {
-    items[block.blockId] = (items[block.blockId] ?? 0) + block.count;
+  for (const bonus of [runBonus, masteryPerk]) {
+    for (const block of bonus?.blocks ?? []) {
+      items[block.blockId] = (items[block.blockId] ?? 0) + block.count;
+    }
   }
 
   return items;
