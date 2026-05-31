@@ -17,6 +17,96 @@
   height: 100% !important;
 }
 
+.stage-mood-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: var(--stage-mood-opacity);
+  mix-blend-mode: screen;
+  animation: stageMoodIn 0.7s ease-out both;
+}
+
+.stage-mood-overlay__edge {
+  position: absolute;
+  pointer-events: none;
+}
+
+.stage-mood-overlay__edge--top {
+  inset: 0 0 auto 0;
+  height: 18vh;
+  background:
+    linear-gradient(180deg, var(--stage-mood-shadow), transparent 74%),
+    linear-gradient(90deg, transparent, var(--stage-mood-accent), transparent);
+}
+
+.stage-mood-overlay__edge--bottom {
+  inset: auto 0 0 0;
+  height: 22vh;
+  background:
+    linear-gradient(0deg, var(--stage-mood-shadow), transparent 78%),
+    linear-gradient(90deg, transparent, var(--stage-mood-mode), transparent);
+}
+
+.stage-mood-overlay__edge--left {
+  inset: 0 auto 0 0;
+  width: 13vw;
+  background: linear-gradient(90deg, var(--stage-mood-accent), transparent 72%);
+  opacity: 0.66;
+}
+
+.stage-mood-overlay__edge--right {
+  inset: 0 0 0 auto;
+  width: 13vw;
+  background: linear-gradient(270deg, var(--stage-mood-secondary), transparent 72%);
+  opacity: 0.62;
+}
+
+.stage-mood-overlay__ribbon {
+  position: absolute;
+  left: -12vw;
+  right: -12vw;
+  height: 11vh;
+  opacity: var(--stage-mood-stripe-opacity);
+  background: linear-gradient(100deg, transparent 16%, var(--stage-mood-stripe) 48%, transparent 78%);
+  filter: blur(10px);
+  transform: rotate(-2deg);
+  animation: stageMoodFlow var(--stage-mood-flow-ms) ease-in-out infinite alternate;
+}
+
+.stage-mood-overlay__ribbon--a {
+  top: 14vh;
+}
+
+.stage-mood-overlay__ribbon--b {
+  bottom: 13vh;
+  transform: rotate(2deg);
+  animation-delay: -2.4s;
+}
+
+.stage-mood-overlay--war .stage-mood-overlay__ribbon {
+  filter: blur(7px);
+}
+
+.stage-mood-overlay__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.2;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 38px,
+      var(--stage-mood-stripe) 39px,
+      transparent 42px,
+      transparent 84px
+  );
+  mask-image: linear-gradient(180deg, transparent 0%, #000 20%, #000 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 20%, #000 82%, transparent 100%);
+  animation: stageMoodTexture 9s linear infinite;
+}
+
 @keyframes masteryPulse {
   0% {
     opacity: 0;
@@ -26,6 +116,36 @@
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes stageMoodIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: var(--stage-mood-opacity);
+  }
+}
+
+@keyframes stageMoodFlow {
+  0% {
+    transform: translateX(-2vw) rotate(-2deg);
+  }
+
+  100% {
+    transform: translateX(2vw) rotate(2deg);
+  }
+}
+
+@keyframes stageMoodTexture {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(84px);
   }
 }
 

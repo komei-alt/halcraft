@@ -83,6 +83,7 @@ import { StageResultOverlay } from './components/ui/StageResultOverlay';
 import { MasteryHUD } from './components/ui/MasteryHUD';
 import { CombatFeedbackHUD } from './components/ui/CombatFeedbackHUD';
 import { ProgressCelebration } from './components/ui/ProgressCelebration';
+import { StageMoodOverlay } from './components/ui/StageMoodOverlay';
 import { StartScreen } from './components/ui/StartScreen';
 import { PauseScreen } from './components/ui/PauseScreen';
 import { CraftingScreen } from './components/ui/CraftingScreen';
@@ -307,6 +308,7 @@ export default function App() {
       {phase !== 'menu' && (
         <>
           <GameCanvas />
+          <StageMoodOverlay />
           <Crosshair />
           <Hotbar />
           <HealthBar />
