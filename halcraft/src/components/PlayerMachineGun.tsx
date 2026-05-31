@@ -53,6 +53,7 @@ interface BulletProjectile {
   prev: THREE.Vector3;
   vel: THREE.Vector3;
   createdAt: number;
+  scoped: boolean;
 }
 
 let nextBulletId = 0;
@@ -197,8 +198,9 @@ export function PlayerMachineGun() {
       shootDir.current.normalize();
     }
 
+    const scopedShot = isRightMouseDown.current && isDesktopGameplayInputActive();
     const masteryBonus = getMachineGunMasteryBonus();
-    const spread = (isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD)
+    const spread = (scopedShot ? SCOPED_SPREAD : HIP_SPREAD)
       * masteryBonus.machineGunSpreadMultiplier
       * techniqueBonus.machineGunSpreadMultiplier
       * stageStyle.machineGunSpreadMultiplier
@@ -216,9 +218,10 @@ export function PlayerMachineGun() {
       prev: startPos.clone(),
       vel,
       createdAt: now,
+      scoped: scopedShot,
     }]);
 
-    flashTimer.current = combatFocus.active ? 0.09 : 0.065;
+    flashTimer.current = combatFocus.active ? 0.09 : scopedShot ? 0.08 : 0.065;
     playMachineGunSound(startPos.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
@@ -324,48 +327,63 @@ export function PlayerMachineGun() {
         );
 
         if (hit.type === 'block') {
-          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
+          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, bullet.scoped);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'block');
           continue;
         }
 
         if (hit.type === 'mob' && hit.targetId) {
           const mob = mobs.find((m) => m.id === hit.targetId);
+          const precisionHit = bullet.scoped;
+          const hitDamage = bulletDamage + (precisionHit ? 1 : 0);
           if (mob) {
-            useMultiplayerStore.getState().sendMobDamage(hit.targetId, bulletDamage, moveDir.x * 1.5, moveDir.z * 1.5);
-            useMobStore.getState().damageMob(hit.targetId, bulletDamage, moveDir.x, moveDir.z);
-            spawnDamagePopup(bulletDamage, mob.x, mob.y + 1.0, mob.z, false);
+            useMultiplayerStore.getState().sendMobDamage(hit.targetId, hitDamage, moveDir.x * 1.5, moveDir.z * 1.5);
+            useMobStore.getState().damageMob(hit.targetId, hitDamage, moveDir.x, moveDir.z);
+            spawnDamagePopup(hitDamage, mob.x, mob.y + 1.0, mob.z, precisionHit);
           }
-          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
+          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, precisionHit);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
-          useMasteryStore.getState().recordItemHit('machine_gun', { label: '連射ヒット', amount: 6 });
+          useMasteryStore.getState().recordItemHit('machine_gun', {
+            label: precisionHit ? '精密制圧ヒット' : '連射ヒット',
+            amount: precisionHit ? 9 : 6,
+          });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
-          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun', 1, precisionHit);
           continue;
         }
 
         if (hit.type === 'player' && hit.targetId) {
-          useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, bulletDamage, moveDir.x * 1.5, moveDir.z * 1.5);
-          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
-          useMasteryStore.getState().recordItemHit('machine_gun', { label: '対戦ヒット', amount: 7 });
+          const precisionHit = bullet.scoped;
+          const hitDamage = bulletDamage + (precisionHit ? 1 : 0);
+          useMultiplayerStore.getState().sendPlayerAttack(hit.targetId, hitDamage, moveDir.x * 1.5, moveDir.z * 1.5);
+          spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, precisionHit);
+          useMasteryStore.getState().recordItemHit('machine_gun', {
+            label: precisionHit ? '精密対戦ヒット' : '対戦ヒット',
+            amount: precisionHit ? 10 : 7,
+          });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
-          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun', 1, precisionHit);
           continue;
         }
 
         // 乗り物への弾丸ダメージ
         const vehicleHit = checkProjectileHitVehicle(bullet.pos.x, bullet.pos.y, bullet.pos.z);
         if (vehicleHit) {
-          useVehicleStore.getState().damageVehicle(vehicleHit.type, bulletDamage);
-          spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
-          spawnDamagePopup(bulletDamage, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
+          const precisionHit = bullet.scoped;
+          const hitDamage = bulletDamage + (precisionHit ? 1 : 0);
+          useVehicleStore.getState().damageVehicle(vehicleHit.type, hitDamage);
+          spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, precisionHit);
+          spawnDamagePopup(hitDamage, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, precisionHit);
           playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
-          useMasteryStore.getState().recordItemHit('machine_gun', { label: '乗り物ヒット', amount: 7 });
+          useMasteryStore.getState().recordItemHit('machine_gun', {
+            label: precisionHit ? '精密車両ヒット' : '乗り物ヒット',
+            amount: precisionHit ? 10 : 7,
+          });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
-          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun', 1, precisionHit);
           continue;
         }
 

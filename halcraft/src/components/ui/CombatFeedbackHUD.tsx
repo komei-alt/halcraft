@@ -171,6 +171,17 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
         soundKind: 'ready',
       };
     }
+    if (feedback.label.includes('精密')) {
+      return {
+        eyebrow: '精密制圧',
+        label: feedback.streak >= 3 ? 'スコープチェーン' : 'スコープHIT',
+        detail: '右クリック照準でブレを抑え、戦意も強く進む',
+        meterLabel: 'SCOPE',
+        meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'ADS',
+        ratio: Math.min(1, feedback.streak / 6),
+        soundKind: feedback.streak >= 4 ? 'chain' : null,
+      };
+    }
     if (feedback.streak >= 8) {
       return {
         eyebrow: '制圧技',
