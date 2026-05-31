@@ -6,7 +6,11 @@ import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
-import { getStageCombatStyleForItem } from '../../types/stageCombatStyles';
+import {
+  getStageCombatStyle,
+  getStageCombatStyleForItem,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
 import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 
@@ -55,6 +59,10 @@ function getChargeForItem(item: EquippedItem, rocketCharge: number, attackCharge
   return 1;
 }
 
+function formatReticleSeconds(remainingMs: number): string {
+  return `${Math.max(1, Math.ceil(remainingMs / 1000))}s`;
+}
+
 export function Crosshair() {
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const currentStageId = useGameStore((s) => s.currentStageId);
@@ -87,10 +95,13 @@ export function Crosshair() {
 
   const profile = CROSSHAIR_PROFILES[equippedItem];
   const charge = Math.max(0, Math.min(1, getChargeForItem(equippedItem, rocketCharge, attackCharge)));
+  const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
   const buildFocusActive = isBuilder && modeRule?.category === 'build' && buildFocusUntil > now;
   const combatFocusActive = !isBuilder && combatFocusItem === equippedItem && combatFocusUntil > now;
+  const buildFocusSeconds = formatReticleSeconds(buildFocusUntil - now);
+  const combatFocusSeconds = formatReticleSeconds(combatFocusUntil - now);
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const builderFocusAccent = buildFocusActive ? modeRule.accent : profile.color;
   const combatFocusAccent = combatFocusActive ? (stageStyle?.accent ?? profile.color) : profile.color;
@@ -102,6 +113,31 @@ export function Crosshair() {
       : profile.glow;
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
   const isRocketReloading = equippedItem === 'rocket_launcher' && charge < 1;
+  const isRocketReady = equippedItem === 'rocket_launcher' && charge >= 1;
+  const recommendedWeaponLabel = recommendedStageStyle
+    ? getStageCombatWeaponLabel(recommendedStageStyle.weapon)
+    : null;
+  const mapStatusLabel = stageStyle
+    ? 'MAP MATCH'
+    : recommendedWeaponLabel && !isBuilder
+      ? `MAP ${recommendedWeaponLabel}へ`
+      : null;
+  const stageAccent = stageStyle?.accent ?? recommendedStageStyle?.accent ?? activeColor;
+  const tacticalStatusLabel = buildFocusActive
+    ? `FAST ${buildFocusSeconds}`
+    : combatFocusActive
+      ? `FOCUS ${combatFocusSeconds}`
+      : isRocketReloading
+        ? `RELOAD ${Math.round(charge * 100)}%`
+        : isRocketReady
+          ? 'RKT READY'
+          : equippedItem === 'lightsaber'
+            ? `COMBO ${Math.round(charge * 100)}%`
+            : equippedItem === 'machine_gun'
+              ? stageStyle
+                ? 'LOW SPREAD'
+                : 'BURST READY'
+              : profile.code;
   const ringSize = equippedItem === 'machine_gun' ? 42 : 36;
   const arms = [
     {
@@ -149,6 +185,35 @@ export function Crosshair() {
         zIndex: 100,
       }}
     >
+      {!isCompact && mapStatusLabel && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -42px)',
+            minWidth: 62,
+            height: 14,
+            padding: '0 6px',
+            borderRadius: 4,
+            border: `1px solid ${stageAccent}66`,
+            background: stageStyle ? `${stageAccent}22` : 'rgba(0, 0, 0, 0.5)',
+            color: stageAccent,
+            fontSize: 8,
+            lineHeight: '14px',
+            fontWeight: 950,
+            fontFamily: 'monospace',
+            letterSpacing: 0,
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+            textShadow: '0 1px 2px rgba(0,0,0,0.88)',
+            boxShadow: stageStyle ? `0 0 10px ${stageAccent}33` : '0 0 8px rgba(0,0,0,0.4)',
+          }}
+        >
+          {mapStatusLabel}
+        </div>
+      )}
+
       {!isBuilder && (
         <div
           style={{
@@ -167,6 +232,30 @@ export function Crosshair() {
             animation: combatFocusActive ? 'builderFocusReticle 0.66s ease-in-out infinite alternate' : undefined,
           }}
         />
+      )}
+
+      {stageStyle && !isBuilder && (
+        <>
+          {[-1, 1].map((side) => (
+            <div
+              key={`stage-reticle-${side}`}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: 5,
+                height: 18,
+                transform: `translate(${side < 0 ? '-31px' : '26px'}, -50%)`,
+                borderTop: `1px solid ${stageAccent}`,
+                borderBottom: `1px solid ${stageAccent}`,
+                borderLeft: side < 0 ? `1px solid ${stageAccent}` : undefined,
+                borderRight: side > 0 ? `1px solid ${stageAccent}` : undefined,
+                opacity: combatFocusActive ? 0.95 : 0.68,
+                boxShadow: `0 0 ${combatFocusActive ? 10 : 6}px ${stageAccent}66`,
+              }}
+            />
+          ))}
+        </>
       )}
 
       {isBuilder && buildFocusActive && (
@@ -207,7 +296,7 @@ export function Crosshair() {
                 textShadow: '0 1px 2px rgba(0,0,0,0.8)',
               }}
             >
-              FAST x{Math.max(1, activeBuildFocusChain)}
+              FAST {buildFocusSeconds} x{Math.max(1, activeBuildFocusChain)}
             </div>
           )}
         </>
@@ -274,7 +363,8 @@ export function Crosshair() {
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                transform: 'translate(-50%, 22px)',
+                transform: 'translate(-97px, -50%)',
+                width: 68,
                 padding: '1px 5px',
                 borderRadius: 4,
                 border: `1px solid ${activeColor}55`,
@@ -290,6 +380,33 @@ export function Crosshair() {
               }}
             >
               {label}
+            </div>
+          )}
+          {!isCompact && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(25px, -50%)',
+                width: 72,
+                height: 14,
+                borderRadius: 4,
+                border: `1px solid ${activeColor}44`,
+                background: combatFocusActive || isRocketReady ? `${activeColor}1f` : 'rgba(0, 0, 0, 0.38)',
+                color: activeColor,
+                fontSize: 8,
+                lineHeight: '14px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                letterSpacing: 0,
+                textAlign: 'center',
+                whiteSpace: 'nowrap',
+                textShadow: '0 1px 2px rgba(0,0,0,0.82)',
+                boxShadow: combatFocusActive || isRocketReady ? `0 0 9px ${activeGlow}` : undefined,
+              }}
+            >
+              {tacticalStatusLabel}
             </div>
           )}
         </>
