@@ -40,6 +40,7 @@ import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
+import { SG } from './startScreenTheme';
 
 /** localStorage のキー */
 const PLAYER_NAME_KEY = 'halcraft-player-name';
@@ -420,6 +421,44 @@ function getStageBriefingSections(
   return sections;
 }
 
+/** セクションの STEP 見出し（番号バッジ＋ラベル）。子供にも手順が伝わるよう番号を振る */
+function StepLabel({ n, text, accent, compact }: { n: number; text: string; accent: string; compact: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: compact ? 19 : 22,
+          height: compact ? 19 : 22,
+          borderRadius: 999,
+          background: accent,
+          color: '#0a0e14',
+          fontWeight: 900,
+          fontSize: compact ? 11 : 12,
+          boxShadow: `0 0 14px ${accent}88`,
+          fontFamily: SG.font,
+          flexShrink: 0,
+        }}
+      >
+        {n}
+      </span>
+      <span
+        style={{
+          color: 'rgba(255,255,255,0.92)',
+          fontWeight: 800,
+          fontSize: compact ? 12 : 14,
+          letterSpacing: 2,
+          textShadow: '0 1px 6px rgba(0,0,0,0.85)',
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase);
   const startGame = useGameStore((s) => s.startGame);
@@ -666,7 +705,7 @@ export function StartScreen() {
         display: 'flex',
         flexDirection: 'column',
         zIndex: 200,
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        fontFamily: SG.font,
         padding: 0,
         /* モバイルでスクロール可能にする */
         overflowX: 'hidden',
@@ -690,6 +729,31 @@ export function StartScreen() {
         draggable={false}
       />
 
+      {/* 周辺減光ビネット（額縁感・中央に視線を集める） */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'radial-gradient(120% 90% at 50% 38%, transparent 40%, rgba(0,0,0,0.34) 78%, rgba(0,0,0,0.6) 100%)',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* 上部グラデーション（タイトル＆設定ボタンの可読性） */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '34%',
+          background: 'linear-gradient(to bottom, rgba(4,7,12,0.6) 0%, rgba(4,7,12,0.18) 55%, transparent 100%)',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
+
       {/* 下部グラデーション（UIを読みやすくする） */}
       <div
         style={{
@@ -697,8 +761,8 @@ export function StartScreen() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: '70%',
-          background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 40%, transparent 100%)',
+          height: '78%',
+          background: 'linear-gradient(to top, rgba(4,7,12,0.96) 0%, rgba(4,7,12,0.7) 32%, rgba(4,7,12,0.32) 60%, transparent 100%)',
           zIndex: 1,
           pointerEvents: 'none',
         }}
@@ -743,85 +807,218 @@ export function StartScreen() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* カテゴリ選択（建築 / 戦争） */}
+        {/* ブランドロゴ（ハルクラ） */}
         <div
+          className="sg-rise"
           style={{
-            marginBottom: isTouch ? 10 : 14,
             display: 'flex',
-            flexDirection: 'row',
-            gap: isTouch ? 8 : 10,
-            justifyContent: 'center',
+            flexDirection: 'column',
+            alignItems: 'center',
+            marginBottom: compactLayout ? 16 : 26,
+            animationDelay: '0s',
           }}
         >
-          {CATEGORIES.map((cat) => {
-            const isSelected = selectedCategory === cat.id;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
+          <div
+            style={{
+              fontFamily: SG.font,
+              fontWeight: 900,
+              fontSize: isLandscapeMobile ? 30 : (compactLayout ? 42 : 62),
+              lineHeight: 1,
+              letterSpacing: compactLayout ? 1 : 2,
+              background: 'linear-gradient(150deg, #ffe27a 0%, #8ee86b 44%, #5ad1ff 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+              filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.6)) drop-shadow(0 0 24px rgba(120,230,150,0.34))',
+              animation: 'sgFloat 5s ease-in-out infinite',
+            }}
+          >
+            ハルクラ
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: compactLayout ? 9 : 14,
+              marginTop: compactLayout ? 5 : 8,
+            }}
+          >
+            <span style={{ width: compactLayout ? 24 : 46, height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55))' }} />
+            <span
+              style={{
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: compactLayout ? 10 : 13,
+                fontWeight: 800,
+                letterSpacing: compactLayout ? 4 : 8,
+                textShadow: '0 1px 6px rgba(0,0,0,0.8)',
+              }}
+            >
+              HALCRAFT
+            </span>
+            <span style={{ width: compactLayout ? 24 : 46, height: 1, background: 'linear-gradient(90deg, rgba(255,255,255,0.55), transparent)' }} />
+          </div>
+          {!isLandscapeMobile && (
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.62)',
+                fontSize: compactLayout ? 10 : 12.5,
+                fontWeight: 600,
+                letterSpacing: 1,
+                textShadow: '0 1px 6px rgba(0,0,0,0.85)',
+                marginTop: compactLayout ? 4 : 7,
+              }}
+            >
+              ハルがつくった、ぼうけんの世界
+            </div>
+          )}
+        </div>
+
+        {/* STEP 1: あそびをえらぶ（建築 / 戦争 のモード選択） */}
+        <div
+          className="sg-rise"
+          style={{
+            marginBottom: compactLayout ? 14 : 18,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: compactLayout ? 8 : 10,
+            animationDelay: '0.06s',
+          }}
+        >
+          <StepLabel n={1} text="あそびをえらぶ" accent={selectedCategory === 'build' ? SG.build : SG.war} compact={compactLayout} />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              gap: compactLayout ? 9 : 12,
+              justifyContent: 'center',
+            }}
+          >
+            {CATEGORIES.map((cat) => {
+              const isSelected = selectedCategory === cat.id;
+              const accent = cat.id === 'build' ? SG.build : SG.war;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  style={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    width: compactLayout ? 'min(46vw, 168px)' : 222,
+                    padding: compactLayout ? '12px 12px' : '16px 18px',
+                    background: isSelected
+                      ? `linear-gradient(165deg, ${accent}38 0%, ${accent}12 100%)`
+                      : 'rgba(8,12,18,0.5)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    border: '2px solid',
+                    borderColor: isSelected ? accent : 'rgba(255,255,255,0.16)',
+                    borderRadius: 16,
+                    color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
+                    cursor: 'pointer',
+                    transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: compactLayout ? 3 : 5,
+                    boxShadow: isSelected
+                      ? `0 10px 28px ${accent}44, inset 0 1px 0 rgba(255,255,255,0.14)`
+                      : '0 4px 14px rgba(0,0,0,0.32)',
+                    transform: isSelected ? 'translateY(-3px)' : 'none',
+                    fontFamily: SG.font,
+                    textAlign: 'center',
+                  }}
+                >
+                  {isSelected && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 7,
+                        right: 9,
+                        fontSize: compactLayout ? 9 : 10,
+                        fontWeight: 900,
+                        color: accent,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      ✓ えらび中
+                    </span>
+                  )}
+                  <span style={{ fontSize: compactLayout ? 26 : 34, lineHeight: 1, filter: isSelected ? `drop-shadow(0 0 10px ${accent}aa)` : 'none' }}>{cat.icon}</span>
+                  <span style={{ fontSize: compactLayout ? 16 : 20, fontWeight: 900, letterSpacing: 1 }}>{cat.name}</span>
+                  <span style={{ fontSize: compactLayout ? 10 : 11.5, opacity: 0.84, fontWeight: 600 }}>{cat.caption}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* STEP 2: マップをえらぶ（見出し＋カテゴリ進捗チップ） */}
+        <div
+          className="sg-rise"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: isTouch ? 9 : 11,
+            animationDelay: '0.12s',
+          }}
+        >
+          <StepLabel n={2} text="マップをえらぶ" accent={selectedCategory === 'build' ? SG.build : SG.war} compact={compactLayout} />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: isTouch ? 6 : 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            {[
+              { label: `${selectedCategory === 'build' ? '建築' : '戦争'}熟練`, value: `${categoryAverageMastery}/100`, accent: selectedCategory === 'build' ? SG.build : SG.war },
+              { label: 'MASTER', value: `${categoryMasteredCount}/${filteredStages.length}`, accent: SG.gold },
+              { label: '選択中', value: activeMastery.rankLabel, accent: SG.emerald },
+            ].map((chip) => (
+              <span
+                key={chip.label}
                 style={{
-                  width: isTouch ? 150 : 200,
-                  padding: isTouch ? '7px 10px' : '10px 14px',
-                  background: isSelected ? cat.color : 'rgba(0,0,0,0.48)',
-                  backdropFilter: 'blur(8px)',
-                  border: '2px solid',
-                  borderColor: isSelected
-                    ? (cat.id === 'build' ? 'rgba(130, 210, 255, 0.82)' : 'rgba(220, 100, 80, 0.82)')
-                    : 'rgba(255,255,255,0.18)',
-                  borderRadius: 8,
-                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.68)',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s, border-color 0.2s, color 0.2s',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 3,
-                  boxShadow: isSelected ? `0 0 16px ${cat.glowColor}` : 'none',
-                  fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-                  textAlign: 'center',
+                  gap: 5,
+                  padding: isTouch ? '3px 9px' : '4px 11px',
+                  borderRadius: 999,
+                  background: 'rgba(8,12,18,0.5)',
+                  border: `1px solid ${chip.accent}55`,
+                  fontSize: isTouch ? 9 : 10.5,
+                  fontWeight: 800,
+                  fontFamily: SG.font,
+                  color: 'rgba(255,255,255,0.62)',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <span style={{ fontSize: isTouch ? 16 : 20 }}>{cat.icon}</span>
-                <span style={{ fontSize: isTouch ? 13 : 15, fontWeight: 800 }}>{cat.name}</span>
-                <span style={{ fontSize: isTouch ? 10 : 11, opacity: 0.82 }}>{cat.caption}</span>
-              </button>
-            );
-          })}
+                {chip.label}
+                <span style={{ color: chip.accent, fontWeight: 900 }}>{chip.value}</span>
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* ステージ選択UI（選択カテゴリに属するステージのみ表示） */}
         <div
           id="start-screen-stages"
+          className="sg-rise"
           style={{
-            marginBottom: isTouch ? 12 : 16,
+            marginBottom: isTouch ? 14 : 18,
             display: 'flex',
             flexDirection: 'row',
             gap: isTouch ? 8 : 12,
             flexWrap: 'wrap',
             justifyContent: 'center',
-            maxWidth: isTouch ? 340 : 820,
+            maxWidth: isTouch ? 340 : 840,
+            animationDelay: '0.16s',
           }}
         >
-          <div
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 8,
-              flexWrap: 'wrap',
-              color: 'rgba(255,255,255,0.72)',
-              fontSize: isTouch ? 9 : 10,
-              fontWeight: 900,
-              marginBottom: 2,
-            }}
-          >
-            <span style={{ color: selectedCategory === 'build' ? '#9bdcff' : '#ffb36d' }}>
-              {selectedCategory === 'build' ? '建築' : '戦争'}熟練 {categoryAverageMastery}/100
-            </span>
-            <span>MASTER {categoryMasteredCount}/{filteredStages.length}</span>
-            <span>選んだマップ: {activeMastery.rankLabel}</span>
-          </div>
           {filteredStages.map((stage) => {
             const isSelected = activeStageId === stage.id;
             const players = stagePlayerCounts[stage.id] || 0;
@@ -1008,23 +1205,33 @@ export function StartScreen() {
           })}
         </div>
 
+        {/* STEP 3: さくせんを確認 */}
+        <div
+          className="sg-rise"
+          style={{ marginBottom: isTouch ? 8 : 10, animationDelay: '0.2s' }}
+        >
+          <StepLabel n={3} text="さくせんを確認" accent={activeStage.color} compact={compactLayout} />
+        </div>
+
         {/* 選択中ステージの差分ブリーフィング */}
         <div
           id="stage-briefing-panel"
+          className="sg-rise"
           style={{
             width: briefingPanelWidth,
-            marginBottom: isTouch ? 12 : 16,
-            padding: isTouch ? '10px 11px' : '14px 16px',
-            background: 'rgba(8,12,18,0.62)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.16)',
-            borderRadius: 14,
+            marginBottom: isTouch ? 14 : 18,
+            padding: isTouch ? '11px 12px' : '16px 18px',
+            background: 'rgba(8,12,18,0.66)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            borderRadius: 18,
             color: '#fff',
-            boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 26px ${activeStage.color}26`,
+            boxShadow: `var(--sg-shadow), 0 0 26px ${activeStage.color}26`,
             display: 'flex',
             flexDirection: 'column',
-            gap: isTouch ? 10 : 12,
+            gap: isTouch ? 11 : 13,
+            animationDelay: '0.24s',
           }}
         >
           {/* ── ヒーローヘッダー（マップ名 + 目的） ── */}
@@ -1370,109 +1577,127 @@ export function StartScreen() {
           })}
         </div>
 
-        {/* 名前入力 */}
+        {/* STEP 4: なまえを入れてスタート */}
         <div
+          className="sg-rise"
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 6,
+            gap: isTouch ? 9 : 12,
+            animationDelay: '0.3s',
           }}
         >
-          <label
-            style={{
-              color: 'rgba(255,255,255,0.8)',
-              fontSize: isTouch ? 12 : 15,
-              letterSpacing: 2,
-              textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-            }}
-          >
-            なまえを入力してね
-          </label>
+          <StepLabel n={4} text="なまえを入れてスタート" accent={SG.emerald} compact={compactLayout} />
           <div
             style={{
               display: 'flex',
               flexDirection: compactLayout ? 'column' : 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: compactLayout ? 7 : 10,
+              gap: compactLayout ? 8 : 12,
             }}
           >
-            <input
-              id="player-name-input"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value.slice(0, 8))}
-              onKeyDown={handleKeyDown}
-              placeholder="ハル"
-              maxLength={8}
-              autoComplete="off"
-              autoFocus={!isTouch && !showUpdateLog}
-              style={{
-                width: isTouch ? 180 : 240,
-                padding: isTouch ? '10px 14px' : '12px 16px',
-                fontSize: isTouch ? 16 : 22,
-                fontWeight: 700,
-                textAlign: 'center',
-                background: 'rgba(0,0,0,0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                border: '2px solid',
-                borderColor: isValidName
-                  ? 'rgba(100, 220, 100, 0.7)'
-                  : 'rgba(255,255,255,0.2)',
-                borderRadius: 10,
-                color: '#fff',
-                outline: 'none',
-                letterSpacing: 4,
-                transition: 'border-color 0.3s, box-shadow 0.3s',
-                boxShadow: isValidName
-                  ? '0 0 20px rgba(100, 220, 100, 0.3)'
-                  : 'none',
-                fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-              }}
-            />
+            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <input
+                id="player-name-input"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value.slice(0, 8))}
+                onKeyDown={handleKeyDown}
+                placeholder="ハル"
+                maxLength={8}
+                autoComplete="off"
+                autoFocus={!isTouch && !showUpdateLog}
+                style={{
+                  width: isTouch ? 190 : 248,
+                  padding: isTouch ? '11px 16px' : '13px 18px',
+                  fontSize: isTouch ? 17 : 22,
+                  fontWeight: 800,
+                  textAlign: 'center',
+                  background: 'rgba(6,10,16,0.62)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  border: '2px solid',
+                  borderColor: isValidName ? 'rgba(111,230,168,0.85)' : 'rgba(255,255,255,0.2)',
+                  borderRadius: 14,
+                  color: '#fff',
+                  outline: 'none',
+                  letterSpacing: 4,
+                  transition: 'border-color 0.3s, box-shadow 0.3s',
+                  boxShadow: isValidName ? `0 0 22px ${SG.emerald}4d, var(--sg-inset-hi)` : 'var(--sg-shadow-sm)',
+                  fontFamily: SG.font,
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'rgba(255,255,255,0.34)',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  fontFamily: SG.font,
+                  pointerEvents: 'none',
+                }}
+              >
+                {name.trim().length}/8
+              </span>
+            </div>
 
             <div
               id="start-game-button"
               onClick={handleStart}
               style={{
-                minWidth: isTouch ? 180 : 210,
-                padding: isTouch ? '10px 24px' : '13px 28px',
+                position: 'relative',
+                overflow: 'hidden',
+                minWidth: isTouch ? 200 : 240,
+                padding: isTouch ? '12px 26px' : '15px 32px',
                 background: isValidName
-                  ? 'rgba(50, 180, 50, 0.35)'
+                  ? 'linear-gradient(165deg, #58d98a 0%, #2fa863 100%)'
                   : 'rgba(255,255,255,0.05)',
-                backdropFilter: 'blur(4px)',
                 border: '2px solid',
-                borderColor: isValidName
-                  ? 'rgba(100, 220, 100, 0.6)'
-                  : 'rgba(255,255,255,0.1)',
-                borderRadius: 10,
-                color: isValidName ? '#fff' : 'rgba(255,255,255,0.3)',
-                fontSize: isTouch ? 14 : 18,
-                fontWeight: 800,
-                letterSpacing: 2,
-                animation: isValidName ? 'pulse 2s ease-in-out infinite' : 'none',
-                transition: 'all 0.3s',
+                borderColor: isValidName ? 'rgba(150,255,195,0.65)' : 'rgba(255,255,255,0.1)',
+                borderRadius: 14,
+                color: isValidName ? '#06210f' : 'rgba(255,255,255,0.3)',
+                fontSize: isTouch ? 16 : 19,
+                fontWeight: 900,
+                letterSpacing: 1.5,
+                fontFamily: SG.font,
+                animation: isValidName ? 'pulse 2.4s ease-in-out infinite' : 'none',
+                transition: 'all 0.25s var(--sg-ease)',
                 pointerEvents: isValidName ? 'auto' : 'none',
-                textShadow: isValidName ? '0 1px 4px rgba(0,0,0,0.6)' : 'none',
+                textShadow: isValidName ? '0 1px 0 rgba(255,255,255,0.25)' : 'none',
+                boxShadow: isValidName
+                  ? `0 10px 28px ${SG.emerald}55, var(--sg-inset-hi)`
+                  : 'none',
                 cursor: isValidName ? 'pointer' : 'default',
                 textAlign: 'center',
                 boxSizing: 'border-box',
+                backdropFilter: isValidName ? 'none' : 'blur(4px)',
               }}
             >
-              {isJoining ? '接続中...' : (isTouch ? 'タップでスタート' : 'クリックでスタート')}
+              <span style={{ position: 'relative', zIndex: 1 }}>
+                {isJoining ? '接続中...' : `▶ ${isTouch ? 'タップでスタート' : 'クリックでスタート'}`}
+              </span>
+              {isValidName && !isJoining && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '36%',
+                    height: '100%',
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)',
+                    animation: 'sgShine 2.8s ease-in-out infinite',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
             </div>
           </div>
-          <span
-            style={{
-              color: 'rgba(255,255,255,0.4)',
-              fontSize: 10,
-              textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-            }}
-          >
-            {name.trim().length}/8
-          </span>
         </div>
 
         {/* スキン選択 */}
@@ -1499,40 +1724,71 @@ export function StartScreen() {
           </div>
         )}
 
-        {/* 操作説明 */}
+        {/* 操作説明（キーキャップ風チップ） */}
         <div
           style={{
-            marginTop: compactLayout ? 12 : 20,
+            marginTop: compactLayout ? 14 : 22,
             display: 'flex',
-            flexDirection: compactLayout ? 'column' : 'row',
-            gap: compactLayout ? 4 : 20,
+            flexWrap: 'wrap',
+            gap: isTouch ? 6 : 8,
+            justifyContent: 'center',
             alignItems: 'center',
-            maxWidth: 'calc(100vw - 32px)',
-            textAlign: 'center',
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: compactLayout ? 10 : 12,
-            textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+            maxWidth: isTouch ? 'calc(100vw - 28px)' : 720,
           }}
         >
-          {isTouch ? (
-            <>
-              <span>左スティック — 移動</span>
-              <span>右スワイプ — 視点</span>
-              <span>タップ — 破壊/設置</span>
-              <span>▲ ボタン — ジャンプ / 2回で飛行</span>
-            </>
-          ) : (
-            <>
-              <span>WASD — 移動</span>
-              <span>Space — ジャンプ</span>
-              <span>建築: Space×2 — 飛行</span>
-              <span>左クリック — 破壊</span>
-              <span>右クリック — 設置</span>
-              <span>V — 武器切替</span>
-              <span>1-9 — ブロック選択</span>
-              <span>F — ✈ 飛行機にのる</span>
-            </>
-          )}
+          {(isTouch
+            ? [
+                { key: 'L', label: '移動' },
+                { key: 'R', label: '視点' },
+                { key: 'タップ', label: '破壊/設置' },
+                { key: '▲', label: 'ジャンプ/飛行' },
+              ]
+            : [
+                { key: 'WASD', label: '移動' },
+                { key: 'Space', label: 'ジャンプ' },
+                { key: 'Space×2', label: '飛行' },
+                { key: 'L-Click', label: '破壊' },
+                { key: 'R-Click', label: '設置' },
+                { key: 'V', label: '武器切替' },
+                { key: '1-9', label: 'ブロック' },
+                { key: 'F', label: '✈ 飛行機' },
+              ]
+          ).map((c) => (
+            <span
+              key={c.key}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: isTouch ? '4px 8px 4px 5px' : '5px 11px 5px 6px',
+                borderRadius: 999,
+                background: 'rgba(8,12,18,0.42)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                fontFamily: SG.font,
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: isTouch ? 18 : 22,
+                  height: isTouch ? 18 : 22,
+                  padding: '0 6px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.13)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  color: '#fff',
+                  fontSize: isTouch ? 9 : 10.5,
+                  fontWeight: 800,
+                  boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.3)',
+                }}
+              >
+                {c.key}
+              </span>
+              <span style={{ color: 'rgba(255,255,255,0.62)', fontSize: isTouch ? 9.5 : 11, fontWeight: 600 }}>{c.label}</span>
+            </span>
+          ))}
         </div>
 
         {/* iOS Safari用：ホーム画面に追加の案内バナー */}

@@ -52,6 +52,71 @@ body {
   -webkit-user-select: none;
 }
 
+/* === ハルクラ UI デザイントークン（コンシューマー級の統一基盤） === */
+:root {
+  /* 表示用フォント（丸ゴシック）。未読込時はシステムへフォールバック */
+  --font-game: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Segoe UI', 'Hiragino Sans', sans-serif;
+
+  /* サーフェス（ガラス階層） */
+  --sg-surface-0: rgba(11, 15, 23, 0.74);
+  --sg-surface-1: rgba(20, 27, 38, 0.62);
+  --sg-surface-2: rgba(255, 255, 255, 0.055);
+  --sg-surface-3: rgba(255, 255, 255, 0.09);
+
+  /* 罫線 */
+  --sg-line: rgba(255, 255, 255, 0.14);
+  --sg-line-strong: rgba(255, 255, 255, 0.22);
+
+  /* テキスト階層 */
+  --sg-text: #f3f7fc;
+  --sg-text-dim: rgba(238, 244, 252, 0.66);
+  --sg-text-faint: rgba(238, 244, 252, 0.42);
+
+  /* アクセント */
+  --sg-build: #58b7ff;
+  --sg-war: #ff6c4f;
+  --sg-emerald: #6fe6a8;
+  --sg-gold: #ffd56a;
+
+  /* 影 */
+  --sg-shadow: 0 10px 34px rgba(0, 0, 0, 0.46), 0 2px 10px rgba(0, 0, 0, 0.34);
+  --sg-shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.38);
+  --sg-inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+
+  /* 角丸 */
+  --sg-r-sm: 9px;
+  --sg-r-md: 14px;
+  --sg-r-lg: 18px;
+  --sg-r-xl: 24px;
+
+  /* トランジション */
+  --sg-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* === スタート画面：モーション === */
+/* 各ブロックがふわっとせり上がって登場 */
+@keyframes sgRise {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* CTA の光沢スイープ */
+@keyframes sgShine {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(320%) skewX(-18deg); }
+}
+
+/* ロゴのやわらかな浮遊 */
+@keyframes sgFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* せり上がり登場のユーティリティ（インラインで animation-delay を上書き） */
+.sg-rise {
+  animation: sgRise 0.5s var(--sg-ease) both;
+}
+
 /* パルスアニメーション（スタート画面用） */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
