@@ -63,6 +63,7 @@ export function StageResultOverlay() {
   const dismissStageResult = useStageChallengeStore((s) => s.dismissStageResult);
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const buildBestComboChain = useStageBuildScoreStore((s) => s.bestComboChain);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeActivations = useModeFlowStore((s) => s.activationCount);
@@ -169,7 +170,7 @@ export function StageResultOverlay() {
     ? [
         ['作品', `${buildScore}pt`],
         ['節目', `${buildMilestones.length}/${BUILD_SCORE_MILESTONES.length}`],
-        ['時間', formatElapsed(stageElapsedSeconds)],
+        ['コンボ', buildBestComboChain > 0 ? `x${buildBestComboChain}` : '—'],
       ]
     : [
         ['目標', objectiveValue],
@@ -183,7 +184,7 @@ export function StageResultOverlay() {
   const recordDetail = modeRule
     ? modeRule.category === 'war'
       ? `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 連続 x${bestModeStreak}`
-      : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt`
+      : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt / 素材x${Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)}`
     : 'このマップのクリア記録を保存中';
 
   return (
@@ -600,6 +601,12 @@ export function StageResultOverlay() {
               }}
             >
               {buildStyle.detail}
+              {buildBestComboChain > 0 && (
+                <>
+                  <br />
+                  素材コンボ BEST x{Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)}
+                </>
+              )}
             </div>
           </div>
         )}

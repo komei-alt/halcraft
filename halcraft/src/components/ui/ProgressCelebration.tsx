@@ -37,6 +37,7 @@ export function ProgressCelebration() {
   const lastConditionIdRef = useRef<string | null>(null);
   const lastStageEventIdRef = useRef<string | null>(null);
   const lastBuildScoreIdRef = useRef<string | null>(null);
+  const lastBuildComboIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
   const lastModeFlowIdRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
@@ -152,6 +153,23 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeBuildCombo = useStageBuildScoreStore.subscribe((state, previous) => {
+      const combo = state.recentCombo;
+      if (useGameStore.getState().phase !== 'playing' || !combo) return;
+      if (combo.id === previous.recentCombo?.id || lastBuildComboIdRef.current === combo.id) return;
+      lastBuildComboIdRef.current = combo.id;
+
+      addToast({
+        id: `build-combo-${combo.id}`,
+        icon: '🧩',
+        eyebrow: '素材コンボ',
+        title: combo.title,
+        detail: combo.detail,
+        accent: combo.accent,
+        glow: combo.glow,
+      });
+    });
+
     const unsubscribeItemFeedback = useItemFeedbackStore.subscribe((state, previous) => {
       const feedback = state.recentFeedback;
       if (useGameStore.getState().phase !== 'playing' || !feedback) return;
@@ -192,6 +210,7 @@ export function ProgressCelebration() {
       unsubscribeCondition();
       unsubscribeStageEvent();
       unsubscribeBuildScore();
+      unsubscribeBuildCombo();
       unsubscribeItemFeedback();
       unsubscribeModeFlow();
     };

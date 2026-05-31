@@ -659,10 +659,12 @@ export function StartScreen() {
     };
   }, [phase]);
 
+  const isStartPending = isJoining && phase !== 'menu';
+
   const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent) => {
     // 入力フィールドのクリックでゲーム開始しないようにする
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    if (!isValidName || isJoining) return;
+    if (!isValidName || isStartPending) return;
 
     setIsJoining(true);
     const trimmedName = name.trim();
@@ -696,7 +698,7 @@ export function StartScreen() {
         activateDesktopGameplayInput();
       }, 120);
     });
-  }, [isValidName, isJoining, name, selectedCategory, activeStageId, setStage, startGame, join]);
+  }, [isValidName, isStartPending, name, selectedCategory, activeStageId, setStage, startGame, join]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -911,7 +913,10 @@ export function StartScreen() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
+                  onClick={() => {
+                    setIsJoining(false);
+                    setSelectedCategory(cat.id);
+                  }}
                   style={{
                     position: 'relative',
                     overflow: 'hidden',
@@ -1054,7 +1059,10 @@ export function StartScreen() {
             return (
               <div
                 key={stage.id}
-                onClick={() => setSelectedStageId(stage.id)}
+                onClick={() => {
+                  setIsJoining(false);
+                  setSelectedStageId(stage.id);
+                }}
                 style={{
                   width: isTouch ? 154 : 188,
                   minHeight: isTouch ? 132 : 150,
@@ -1813,9 +1821,9 @@ export function StartScreen() {
               }}
             >
               <span style={{ position: 'relative', zIndex: 1 }}>
-                {isJoining ? '接続中...' : `▶ ${isTouch ? 'タップでスタート' : 'クリックでスタート'}`}
+                {isStartPending ? '接続中...' : `▶ ${isTouch ? 'タップでスタート' : 'クリックでスタート'}`}
               </span>
-              {isValidName && !isJoining && (
+              {isValidName && !isStartPending && (
                 <span
                   aria-hidden
                   style={{

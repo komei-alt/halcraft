@@ -151,6 +151,10 @@ function getBuildScoreGuidance(
   stage: StageDefinition,
   score: number,
   achievedMilestones: number[],
+  comboChain: number,
+  lastPlacementLabel: string | null,
+  lastPlacementPoints: number,
+  lastComboBonus: number,
 ): StageGuidance | null {
   const style = getStageBuildStyle(stage.id);
   if (!style) return null;
@@ -163,9 +167,13 @@ function getBuildScoreGuidance(
   return {
     icon: style.icon,
     label: `${style.shortLabel} ${score}pt`,
-    detail: `${formatStageBuildFocus(style, 3)}で作品評価アップ`,
+    detail: lastPlacementLabel
+      ? lastComboBonus > 0
+        ? `${lastPlacementLabel}+${lastPlacementPoints} / 多素材+${lastComboBonus}`
+        : `${lastPlacementLabel}+${lastPlacementPoints} / ${formatStageBuildFocus(style, 2)}でコンボ`
+      : `${formatStageBuildFocus(style, 3)}で作品評価アップ`,
     accent: style.accent,
-    progressText,
+    progressText: comboChain > 0 ? `コンボx${comboChain}` : progressText,
   };
 }
 
@@ -196,12 +204,24 @@ function getStageGuidance(
   bossSpawned: boolean,
   buildScore: number,
   buildMilestones: number[],
+  buildComboChain: number,
+  lastPlacementLabel: string | null,
+  lastPlacementPoints: number,
+  lastComboBonus: number,
   equippedItem: EquippedItem,
   swapLabel: string,
 ): StageGuidance {
   const challengeGuidance = getChallengeGuidance(stage, stats, completedIds);
   const conditionGuidance = getConditionGuidance(stage, charge);
-  const buildScoreGuidance = getBuildScoreGuidance(stage, buildScore, buildMilestones);
+  const buildScoreGuidance = getBuildScoreGuidance(
+    stage,
+    buildScore,
+    buildMilestones,
+    buildComboChain,
+    lastPlacementLabel,
+    lastPlacementPoints,
+    lastComboBonus,
+  );
   const combatStyleGuidance = getCombatStyleGuidance(stage, equippedItem, swapLabel);
   const condition = getStageCondition(stage.id);
   const conditionClose = Boolean(
@@ -300,6 +320,12 @@ export function StageProgressHUD() {
   const conditionCharge = useStageConditionStore((s) => s.charge);
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const buildStyleHits = useStageBuildScoreStore((s) => s.styleHits);
+  const buildComboChain = useStageBuildScoreStore((s) => s.comboChain);
+  const buildBestComboChain = useStageBuildScoreStore((s) => s.bestComboChain);
+  const lastPlacementLabel = useStageBuildScoreStore((s) => s.lastPlacementLabel);
+  const lastPlacementPoints = useStageBuildScoreStore((s) => s.lastPlacementPoints);
+  const lastComboBonus = useStageBuildScoreStore((s) => s.lastComboBonus);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
@@ -370,9 +396,16 @@ export function StageProgressHUD() {
         bossSpawned,
         buildScore,
         buildMilestones,
+        buildComboChain,
+        lastPlacementLabel,
+        lastPlacementPoints,
+        lastComboBonus,
         equippedItem,
         isCompact ? '装備ボタン' : 'Vで切替',
       );
+  const buildTopMaterial = buildStyle
+    ? Object.entries(buildStyleHits).sort((a, b) => b[1] - a[1])[0]
+    : undefined;
   const enemyProfile = getStageEnemyProfile(stage.id);
   const eventDefinition = getStageEvent(stage.id);
   const compactStageEvent = isCompact && eventDefinition && nextStageEventAtSeconds !== null
@@ -653,6 +686,88 @@ export function StageProgressHUD() {
         )}
       </div>
 
+      {buildStyle && (
+        <div
+          id="build-combo-hud"
+          style={{
+            marginTop: 7,
+            paddingLeft: 9,
+            borderLeft: `3px solid ${buildStyle.accent}`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ flex: '0 0 auto', fontSize: isCompact ? 12 : 13 }}>🧩</span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: buildStyle.accent,
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+              }}
+            >
+              素材コンボ
+            </span>
+            <span
+              style={{
+                minWidth: 0,
+                flex: 1,
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: isCompact ? 10 : 11,
+                lineHeight: '13px',
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {lastPlacementLabel
+                ? `${lastPlacementLabel}+${lastPlacementPoints}${lastComboBonus > 0 ? ` / 多素材+${lastComboBonus}` : ''}`
+                : formatStageBuildFocus(buildStyle, 3)}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: buildComboChain > 0 ? '#fff1a8' : 'rgba(255,255,255,0.66)',
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {buildComboChain > 0 ? `x${buildComboChain}` : `BEST x${buildBestComboChain}`}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              height: 4,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.12)',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, Math.max(8, buildComboChain * 18))}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${buildStyle.accent}, #ffffff)`,
+                transition: 'width 0.25s ease',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {compactStageEvent && (
         <div
           id="stage-event-mini-hud"
@@ -809,6 +924,16 @@ export function StageProgressHUD() {
           {buildStyle && (
             <span style={{ color: buildStyle.accent, fontWeight: 900 }}>
               <span style={{ opacity: 0.4 }}>· </span>作品: {buildStyle.shortLabel} {buildScore}pt
+            </span>
+          )}
+          {buildStyle && buildTopMaterial && (
+            <span style={{ color: buildStyle.accent, fontWeight: 900 }}>
+              <span style={{ opacity: 0.4 }}>· </span>素材: {buildTopMaterial[0]} x{buildTopMaterial[1]}
+            </span>
+          )}
+          {buildStyle && buildBestComboChain > 0 && (
+            <span style={{ color: 'rgba(255,241,168,0.9)', fontWeight: 900 }}>
+              <span style={{ opacity: 0.4 }}>· </span>コンボBEST x{buildBestComboChain}
             </span>
           )}
           {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (
