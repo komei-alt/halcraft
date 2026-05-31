@@ -15,11 +15,12 @@ import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useVehicleFirepowerStore } from '../../stores/useVehicleFirepowerStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
+import { formatMasteryTechniqueBonus, getMasteryTechniqueBonus } from '../../types/masteryTechniquePerks';
 import { getStageChallenges } from '../../types/stageChallenges';
 import { formatStageMasteryPerkLabel, getStageMasteryPerkForProgress } from '../../types/stageMastery';
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { isTouchDevice } from '../../utils/device';
-import { playStageRewardSound } from '../../utils/sounds';
+import { playPerkUnlockSound, playStageRewardSound } from '../../utils/sounds';
 
 interface CelebrationToast {
   id: string;
@@ -33,6 +34,11 @@ interface CelebrationToast {
 
 const DISPLAY_MS = 3400;
 const MAX_TOASTS = 3;
+
+function getTechniqueRecordValue(item: keyof typeof MASTERY_DEFS, streak: number, score: number): string {
+  if (item === 'rocket_launcher') return `BEST ${score}`;
+  return `BEST x${streak}`;
+}
 
 export function ProgressCelebration() {
   const phase = useGameStore((s) => s.phase);
@@ -53,6 +59,7 @@ export function ProgressCelebration() {
   const lastRunBonusKeyRef = useRef<string | null>(null);
   const pendingRunBonusKeyRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
+  const lastTechniqueRecordIdRef = useRef<number | null>(null);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   const removeToast = useCallback((id: string) => {
@@ -135,23 +142,47 @@ export function ProgressCelebration() {
   useEffect(() => {
     const unsubscribeMastery = useMasteryStore.subscribe((state, previous) => {
       const event = state.recentEvent;
-      if (useGameStore.getState().phase !== 'playing' || !event?.leveledUp) return;
-      if (event.id === previous.recentEvent?.id || lastMasteryIdRef.current === event.id) return;
-      lastMasteryIdRef.current = event.id;
+      if (useGameStore.getState().phase !== 'playing' || !event) return;
+      if (event.id === previous.recentEvent?.id) return;
 
       const def = MASTERY_DEFS[event.item];
-      const perkUpgraded = isMasteryPerkUpgradeLevel(event.item, event.level);
-      addToast({
-        id: `mastery-${event.id}`,
-        icon: def.icon,
-        eyebrow: perkUpgraded ? '特典強化' : 'レベルアップ',
-        title: `${def.shortLabel} Lv.${event.level}`,
-        detail: perkUpgraded
-          ? getMasteryPerkSummary(event.item, event.level)
-          : getMasteryTitle(event.item, event.level),
-        accent: def.accent,
-        glow: def.glow,
-      });
+      const itemState = state.items[event.item];
+
+      if (event.techniqueRecordUpdated && lastTechniqueRecordIdRef.current !== event.id) {
+        lastTechniqueRecordIdRef.current = event.id;
+        const techniqueBonus = getMasteryTechniqueBonus(event.item, itemState);
+        const recordValue = getTechniqueRecordValue(
+          event.item,
+          itemState.bestTechniqueStreak ?? event.streak,
+          itemState.bestTechniqueScore ?? 0,
+        );
+        playPerkUnlockSound();
+        addToast({
+          id: `technique-record-${event.id}`,
+          icon: def.icon,
+          eyebrow: '技記録更新',
+          title: `${def.shortLabel} ${recordValue}`,
+          detail: `${event.label} / ${techniqueBonus.title}: ${techniqueBonus.tierLabel} ${formatMasteryTechniqueBonus(event.item, techniqueBonus)}`,
+          accent: def.accent,
+          glow: def.glow,
+        });
+      }
+
+      if (event.leveledUp && lastMasteryIdRef.current !== event.id) {
+        lastMasteryIdRef.current = event.id;
+        const perkUpgraded = isMasteryPerkUpgradeLevel(event.item, event.level);
+        addToast({
+          id: `mastery-${event.id}`,
+          icon: def.icon,
+          eyebrow: perkUpgraded ? '特典強化' : 'レベルアップ',
+          title: `${def.shortLabel} Lv.${event.level}`,
+          detail: perkUpgraded
+            ? getMasteryPerkSummary(event.item, event.level)
+            : getMasteryTitle(event.item, event.level),
+          accent: def.accent,
+          glow: def.glow,
+        });
+      }
     });
 
     const unsubscribeChallenge = useStageChallengeStore.subscribe((state, previous) => {
