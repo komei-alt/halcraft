@@ -34,7 +34,7 @@ import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
 import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
-import { GraphicsPostFX, RendererColorPipeline } from './components/GraphicsQuality';
+import { GraphicsPostFX, RendererColorPipeline, SceneReflectionPipeline } from './components/GraphicsQuality';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
 import { StageEventSystem } from './components/StageEventSystem';
@@ -139,6 +139,7 @@ function GameCanvas() {
         style={{ width: '100%', height: '100%', outline: 'none' }}
       >
         <RendererColorPipeline />
+        <SceneReflectionPipeline />
         <Suspense fallback={null}>
           <Environment />
           <StageAtmosphereFX />

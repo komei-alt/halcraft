@@ -3,7 +3,18 @@
 
 import { useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Bloom, EffectComposer, HueSaturation, N8AO, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
+import {
+  Bloom,
+  BrightnessContrast,
+  DepthOfField,
+  EffectComposer,
+  HueSaturation,
+  N8AO,
+  Noise,
+  SMAA,
+  ToneMapping,
+  Vignette,
+} from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { useSettingsStore } from '../stores/useSettingsStore';
@@ -19,6 +30,10 @@ interface QualityTuning {
   aoRadius: number;
   vignetteDarkness: number;
   saturation: number;
+  contrast: number;
+  grainOpacity: number;
+  dofBokehScale: number;
+  dofResolutionScale: number;
   resolutionScale: number;
   smaaPreset: SMAAPreset;
   aoQuality: 'performance' | 'low' | 'medium';
@@ -30,6 +45,7 @@ interface StageLookTuning {
   bloomMultiplier: number;
   bloomThresholdOffset: number;
   saturationOffset: number;
+  contrastOffset: number;
   vignetteDarknessOffset: number;
   hue: number;
   middleGrey: number;
@@ -40,11 +56,17 @@ const DEFAULT_STAGE_LOOK: StageLookTuning = {
   bloomMultiplier: 1,
   bloomThresholdOffset: 0,
   saturationOffset: 0,
+  contrastOffset: 0,
   vignetteDarknessOffset: 0,
   hue: 0,
   middleGrey: 0.62,
   whitePoint: 7.5,
 };
+
+interface ReflectionRig {
+  texture: THREE.Texture;
+  dispose: () => void;
+}
 
 function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuning {
   if (isHighQuality && !isTouch) {
@@ -55,6 +77,10 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
       aoRadius: 3.2,
       vignetteDarkness: 0.32,
       saturation: 0.06,
+      contrast: 0.036,
+      grainOpacity: 0.032,
+      dofBokehScale: 0.58,
+      dofResolutionScale: 0.52,
       resolutionScale: 1,
       smaaPreset: SMAAPreset.HIGH,
       aoQuality: 'medium',
@@ -70,6 +96,10 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     aoRadius: isTouch ? 1.8 : 2.4,
     vignetteDarkness: isTouch ? 0.12 : 0.2,
     saturation: isTouch ? 0.025 : 0.04,
+    contrast: isTouch ? 0.012 : 0.022,
+    grainOpacity: isTouch ? 0.012 : 0.022,
+    dofBokehScale: 0.36,
+    dofResolutionScale: 0.42,
     resolutionScale: isTouch ? 0.72 : 0.85,
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
@@ -88,6 +118,7 @@ function getStageLookTuning(
       bloomMultiplier: 1.22,
       bloomThresholdOffset: -0.05,
       saturationOffset: 0.035,
+      contrastOffset: 0.014,
       vignetteDarknessOffset: 0.08,
       hue: 0.018,
       middleGrey: 0.56,
@@ -100,6 +131,7 @@ function getStageLookTuning(
       bloomMultiplier: 1.02,
       bloomThresholdOffset: -0.01,
       saturationOffset: 0.018,
+      contrastOffset: 0.006,
       vignetteDarknessOffset: 0.018,
       hue: -0.006,
       middleGrey: 0.61,
@@ -109,6 +141,7 @@ function getStageLookTuning(
       bloomMultiplier: 1.18,
       bloomThresholdOffset: -0.04,
       saturationOffset: 0.045,
+      contrastOffset: 0.004,
       vignetteDarknessOffset: -0.045,
       hue: 0.012,
       middleGrey: 0.66,
@@ -118,6 +151,7 @@ function getStageLookTuning(
       bloomMultiplier: 1.08,
       bloomThresholdOffset: -0.03,
       saturationOffset: -0.012,
+      contrastOffset: -0.006,
       vignetteDarknessOffset: -0.025,
       hue: -0.018,
       middleGrey: 0.68,
@@ -127,6 +161,7 @@ function getStageLookTuning(
       bloomMultiplier: 1.14,
       bloomThresholdOffset: -0.02,
       saturationOffset: 0.02,
+      contrastOffset: 0.01,
       vignetteDarknessOffset: 0.012,
       hue: 0.024,
       middleGrey: 0.64,
@@ -143,8 +178,69 @@ function getStageLookTuning(
     bloomMultiplier: base.bloomMultiplier * (isWar ? 1.08 : 1.03),
     bloomThresholdOffset: base.bloomThresholdOffset + (isWar ? -0.018 : -0.006),
     saturationOffset: base.saturationOffset + (isWar ? 0.014 : 0.006),
+    contrastOffset: base.contrastOffset + (isWar ? 0.012 : 0.004),
     vignetteDarknessOffset: base.vignetteDarknessOffset + (isWar ? 0.045 : -0.012),
     middleGrey: base.middleGrey + (isWar ? -0.02 : 0.015),
+  };
+}
+
+function createReflectionRig(gl: THREE.WebGLRenderer): ReflectionRig {
+  const pmrem = new THREE.PMREMGenerator(gl);
+  const rigScene = new THREE.Scene();
+  const objects: THREE.Object3D[] = [];
+  const geometries: THREE.BufferGeometry[] = [];
+  const materials: THREE.Material[] = [];
+
+  const skyGeometry = new THREE.SphereGeometry(12, 48, 24);
+  const skyMaterial = new THREE.MeshBasicMaterial({
+    color: 0xb8dfff,
+    side: THREE.BackSide,
+  });
+  geometries.push(skyGeometry);
+  materials.push(skyMaterial);
+  objects.push(new THREE.Mesh(skyGeometry, skyMaterial));
+
+  const panelGeometry = new THREE.PlaneGeometry(6, 6);
+  geometries.push(panelGeometry);
+
+  const createPanel = (
+    color: number,
+    position: THREE.Vector3,
+    scale: [number, number, number],
+  ): THREE.Mesh => {
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(panelGeometry, material);
+    mesh.position.copy(position);
+    mesh.scale.set(...scale);
+    mesh.lookAt(0, 0.5, 0);
+    materials.push(material);
+    return mesh;
+  };
+
+  objects.push(
+    createPanel(0xfff0b8, new THREE.Vector3(-4.5, 4.2, -3.6), [1.1, 0.78, 1]),
+    createPanel(0x8fc8ff, new THREE.Vector3(4.8, 3.1, 3.8), [0.86, 0.62, 1]),
+    createPanel(0x82ffd7, new THREE.Vector3(0.2, 1.3, -5.4), [0.68, 0.44, 1]),
+    createPanel(0x3e2a1c, new THREE.Vector3(0, -2.2, 0), [2.8, 0.72, 1]),
+  );
+
+  rigScene.add(...objects);
+  const target = pmrem.fromScene(rigScene, 0.04);
+
+  objects.forEach((object) => rigScene.remove(object));
+
+  return {
+    texture: target.texture,
+    dispose: () => {
+      target.dispose();
+      pmrem.dispose();
+      geometries.forEach((geometry) => geometry.dispose());
+      materials.forEach((material) => material.dispose());
+    },
   };
 }
 
@@ -194,6 +290,59 @@ export function RendererColorPipeline() {
   return null;
 }
 
+/** 金属・ガラス・宝石が環境光を拾うための、軽量な反射用ライティング */
+export function SceneReflectionPipeline() {
+  const { gl, scene } = useThree();
+  const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
+  const lightingQuality = useSettingsStore((s) => s.lightingQuality);
+  const resolutionScale = useSettingsStore((s) => s.resolutionScale);
+  const profile = getPerformanceProfile();
+  const enabled = graphicsPreset !== 'light' && lightingQuality !== 'simple' && profile.tier !== 'low';
+
+  /* eslint-disable react-hooks/immutability */
+  useEffect(() => {
+    if (!enabled) return undefined;
+
+    const previousEnvironment = scene.environment;
+    const previousIntensity = scene.environmentIntensity;
+    const previousRotationY = scene.environmentRotation.y;
+    const rig = createReflectionRig(gl);
+
+    scene.environment = rig.texture;
+    scene.environmentIntensity = profile.tier === 'high' || lightingQuality === 'rich' ? 0.82 : 0.58;
+
+    return () => {
+      if (scene.environment === rig.texture) {
+        scene.environment = previousEnvironment;
+        scene.environmentIntensity = previousIntensity;
+        scene.environmentRotation.y = previousRotationY;
+      }
+      rig.dispose();
+    };
+  }, [enabled, gl, lightingQuality, profile.tier, scene]);
+
+  useFrame(() => {
+    if (!enabled || !scene.environment) return;
+
+    const gameState = useGameStore.getState();
+    const darkLift = getDarkSceneLift(gameState.gameTime, gameState.dimension);
+    const stageBoost = gameState.dimension === 'overworld'
+      ? gameState.currentStage?.rules.ambientIntensity ?? 1
+      : 1;
+    const crispBoost = resolutionScale === 'crisp' ? 0.08 : 0;
+    const targetIntensity = (profile.tier === 'high' || lightingQuality === 'rich' ? 0.8 : 0.56)
+      + crispBoost
+      + darkLift * 0.12
+      + Math.max(0, stageBoost - 1) * 0.08;
+
+    scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, targetIntensity, 0.055);
+    scene.environmentRotation.y = gameState.gameTime * Math.PI * 2 * 0.08;
+  });
+  /* eslint-enable react-hooks/immutability */
+
+  return null;
+}
+
 /** 品質設定時だけ重ねる、製品感を出す控えめなポストエフェクト */
 export function GraphicsPostFX() {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
@@ -219,11 +368,13 @@ export function GraphicsPostFX() {
     0.86,
   );
   const saturation = THREE.MathUtils.clamp(tuning.saturation + stageLook.saturationOffset, -0.08, 0.14);
+  const contrast = THREE.MathUtils.clamp(tuning.contrast + stageLook.contrastOffset, 0, 0.075);
   const vignetteDarkness = THREE.MathUtils.clamp(
     tuning.vignetteDarkness + stageLook.vignetteDarknessOffset,
     0.08,
     0.45,
   );
+  const cinematicFocus = isHighQuality && !isTouch;
 
   return (
     <EffectComposer
@@ -245,6 +396,14 @@ export function GraphicsPostFX() {
           depthAwareUpsampling
         />
       ) : <></>}
+      {cinematicFocus ? (
+        <DepthOfField
+          worldFocusDistance={22}
+          worldFocusRange={52}
+          bokehScale={tuning.dofBokehScale}
+          resolutionScale={tuning.dofResolutionScale}
+        />
+      ) : <></>}
       <Bloom
         blendFunction={BlendFunction.SCREEN}
         intensity={tuning.bloomIntensity * stageLook.bloomMultiplier}
@@ -263,10 +422,20 @@ export function GraphicsPostFX() {
         hue={stageLook.hue}
         saturation={saturation}
       />
+      <BrightnessContrast
+        blendFunction={BlendFunction.NORMAL}
+        brightness={dimension === 'nether' ? -0.006 : 0.002}
+        contrast={contrast}
+      />
       <Vignette
         blendFunction={BlendFunction.NORMAL}
         offset={0.24}
         darkness={vignetteDarkness}
+      />
+      <Noise
+        blendFunction={BlendFunction.SOFT_LIGHT}
+        opacity={tuning.grainOpacity}
+        premultiply
       />
       <SMAA preset={tuning.smaaPreset} />
     </EffectComposer>
