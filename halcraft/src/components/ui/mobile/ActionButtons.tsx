@@ -1,9 +1,9 @@
 // モバイルアクションボタン群
 // 右側に配置：武器・乗り物・建築の「今のマップで効く行動」を短い状態で返す
 
-import { useCallback, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useGameStore } from '../../../stores/useGameStore';
-import { useModeFlowStore } from '../../../stores/useModeFlowStore';
+import { getScaledStageModeReward, useModeFlowStore } from '../../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../../stores/usePlayerStore';
 import { useStageChallengeStore } from '../../../stores/useStageChallengeStore';
 import { useVehicleStore, type VehicleType } from '../../../stores/useVehicleStore';
@@ -163,11 +163,50 @@ function getCombatMetric(item: EquippedItem): StageChallengeMetric | null {
   return null;
 }
 
-function getActionTone(item: EquippedItem, matched: boolean): ButtonTone {
-  if (item === 'machine_gun') return matched ? { ...TONES.machineGun, border: '2px solid rgba(255, 238, 160, 0.72)' } : TONES.machineGun;
-  if (item === 'rocket_launcher') return matched ? { ...TONES.rocket, border: '2px solid rgba(255, 196, 109, 0.72)' } : TONES.rocket;
-  if (item === 'lightsaber') return matched ? { ...TONES.lightsaber, border: '2px solid rgba(210, 185, 255, 0.72)' } : TONES.lightsaber;
+function getActionTone(item: EquippedItem, matched: boolean, focused: boolean): ButtonTone {
+  if (item === 'machine_gun') {
+    if (focused) {
+      return {
+        ...TONES.machineGun,
+        background: 'rgba(255, 229, 104, 0.28)',
+        border: '2px solid rgba(255, 248, 188, 0.9)',
+        glow: 'rgba(255, 224, 92, 0.5)',
+      };
+    }
+    return matched ? { ...TONES.machineGun, border: '2px solid rgba(255, 238, 160, 0.72)' } : TONES.machineGun;
+  }
+  if (item === 'rocket_launcher') {
+    if (focused) {
+      return {
+        ...TONES.rocket,
+        background: 'rgba(255, 159, 80, 0.3)',
+        border: '2px solid rgba(255, 220, 146, 0.92)',
+        glow: 'rgba(255, 158, 76, 0.54)',
+      };
+    }
+    return matched ? { ...TONES.rocket, border: '2px solid rgba(255, 196, 109, 0.72)' } : TONES.rocket;
+  }
+  if (item === 'lightsaber') {
+    if (focused) {
+      return {
+        ...TONES.lightsaber,
+        background: 'rgba(182, 139, 255, 0.3)',
+        border: '2px solid rgba(222, 203, 255, 0.92)',
+        glow: 'rgba(180, 135, 255, 0.55)',
+      };
+    }
+    return matched ? { ...TONES.lightsaber, border: '2px solid rgba(210, 185, 255, 0.72)' } : TONES.lightsaber;
+  }
   return TONES.builder;
+}
+
+function getRuntimeNow(): number {
+  if (typeof performance !== 'undefined') return performance.now();
+  return Date.now();
+}
+
+function formatFocusBadge(rank: number, remainingMs: number): string {
+  return `F${Math.max(1, rank)} ${Math.max(1, Math.ceil(remainingMs / 1000))}s`;
 }
 
 function getWeaponIcon(item: EquippedItem): ReactNode {
@@ -360,6 +399,9 @@ interface WalkingActionsProps {
   buildProgressRatio: number | null;
   combatBadge: string | null;
   combatProgress: string | null;
+  combatFocusActive: boolean;
+  combatFocusBadge: string | null;
+  combatFocusRatio: number | null;
   recommendedLabel: string | null;
   combatMatched: boolean;
   onWeaponSwitch: TouchHandler;
@@ -379,6 +421,9 @@ function WalkingActions({
   buildProgressRatio,
   combatBadge,
   combatProgress,
+  combatFocusActive,
+  combatFocusBadge,
+  combatFocusRatio,
   recommendedLabel,
   combatMatched,
   onWeaponSwitch,
@@ -389,54 +434,60 @@ function WalkingActions({
   onTogglePlace,
   onCrafting,
 }: WalkingActionsProps) {
-  const actionTone = getActionTone(equippedItem, combatMatched);
+  const actionTone = getActionTone(equippedItem, combatMatched, combatFocusActive);
 
   return (
     <>
       <ActionButton
-        ariaLabel={recommendedLabel ? `装備切り替え ${recommendedLabel}` : '装備切り替え'}
-        badge={recommendedLabel ?? null}
+        ariaLabel={
+          combatFocusBadge
+            ? `装備切り替え 作戦集中 ${combatFocusBadge}`
+            : recommendedLabel
+              ? `装備切り替え ${recommendedLabel}`
+              : '装備切り替え'
+        }
+        badge={combatFocusBadge ?? recommendedLabel ?? null}
         bottom={getBottom(2)}
         icon={getWeaponIcon(equippedItem)}
         onTouchStart={onWeaponSwitch}
-        pulse={Boolean(recommendedLabel)}
+        pulse={combatFocusActive || Boolean(recommendedLabel)}
         tone={actionTone}
       />
 
       {equippedItem === 'rocket_launcher' ? (
         <ActionButton
           ariaLabel="ロケット発射"
-          badge={combatProgress ?? combatBadge}
+          badge={combatFocusBadge ?? combatProgress ?? combatBadge}
           bottom={getBottom(0)}
           icon="💥"
-          meterRatio={combatMatched ? buildProgressRatio : null}
+          meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchStart={onRocket}
-          pulse={combatMatched}
-          tone={TONES.rocket}
+          pulse={combatFocusActive || combatMatched}
+          tone={combatFocusActive ? actionTone : TONES.rocket}
         />
       ) : equippedItem === 'machine_gun' ? (
         <ActionButton
           ariaLabel="機関銃"
-          badge={combatProgress ?? combatBadge}
+          badge={combatFocusBadge ?? combatProgress ?? combatBadge}
           bottom={getBottom(0)}
           icon="🔫"
-          meterRatio={combatMatched ? buildProgressRatio : null}
+          meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchCancel={onMachineGunEnd}
           onTouchEnd={onMachineGunEnd}
           onTouchStart={onMachineGunStart}
-          pulse={combatMatched}
-          tone={TONES.machineGun}
+          pulse={combatFocusActive || combatMatched}
+          tone={combatFocusActive ? actionTone : TONES.machineGun}
         />
       ) : equippedItem === 'lightsaber' ? (
         <ActionButton
           ariaLabel="ライトセイバー"
-          badge={combatProgress ?? combatBadge}
+          badge={combatFocusBadge ?? combatProgress ?? combatBadge}
           bottom={getBottom(0)}
           icon="⚔️"
-          meterRatio={combatMatched ? buildProgressRatio : null}
+          meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchStart={onLightsaber}
-          pulse={combatMatched}
-          tone={TONES.lightsaber}
+          pulse={combatFocusActive || combatMatched}
+          tone={combatFocusActive ? actionTone : TONES.lightsaber}
         />
       ) : (
         <ActionButton
@@ -478,6 +529,28 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const modeMeter = useModeFlowStore((s) => s.meter);
+  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
+  const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
+  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const [now, setNow] = useState(() => getRuntimeNow());
+
+  useEffect(() => {
+    const currentNow = getRuntimeNow();
+    if (combatFocusUntil <= currentNow) return undefined;
+    const updateNow = () => setNow(getRuntimeNow());
+    const firstTick = window.setTimeout(updateNow, 0);
+    const timer = window.setInterval(() => {
+      const nextNow = getRuntimeNow();
+      setNow(nextNow);
+      if (combatFocusUntil <= nextNow) {
+        window.clearInterval(timer);
+      }
+    }, 160);
+    return () => {
+      window.clearTimeout(firstTick);
+      window.clearInterval(timer);
+    };
+  }, [combatFocusUntil]);
 
   const stageCombatStyle = getStageCombatStyle(currentStageId);
   const matchedCombatStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
@@ -497,6 +570,17 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const meterRatio = modeRule ? clampRatio(modeMeter / modeRule.threshold) : null;
   const recommendedLabel = stageCombatStyle && !matchedCombatStyle
     ? getStageCombatWeaponLabel(stageCombatStyle.weapon)
+    : null;
+  const combatFocusRemainingMs = Math.max(0, combatFocusUntil - now);
+  const combatFocusActive = combatFocusItem === equippedItem && combatFocusRemainingMs > 0;
+  const combatFocusDurationMs = modeRule && combatFocusRank > 0
+    ? getScaledStageModeReward(modeRule, combatFocusRank).combatFocusMs
+    : 0;
+  const combatFocusRatio = combatFocusActive && combatFocusDurationMs > 0
+    ? clampRatio(combatFocusRemainingMs / combatFocusDurationMs)
+    : null;
+  const combatFocusBadge = combatFocusActive
+    ? formatFocusBadge(combatFocusRank, combatFocusRemainingMs)
     : null;
   const combatBadge = matchedCombatStyle
     ? '戦意+'
@@ -592,6 +676,9 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
       buildBadge={buildBadge}
       buildProgressRatio={meterRatio}
       combatBadge={combatBadge}
+      combatFocusActive={combatFocusActive}
+      combatFocusBadge={combatFocusBadge}
+      combatFocusRatio={combatFocusRatio}
       combatMatched={Boolean(matchedCombatStyle)}
       combatProgress={combatProgress}
       equippedItem={equippedItem}
