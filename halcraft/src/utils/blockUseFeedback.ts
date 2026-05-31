@@ -474,6 +474,24 @@ function getStagePlacementFeedback(
   };
 }
 
+function withStagePlacementDetail(
+  feedback: BlockUseFeedbackContent,
+  blockId: BlockId,
+  stageId: string | null | undefined,
+  includeStagePlacement = true,
+): BlockUseFeedbackContent {
+  if (!includeStagePlacement) return feedback;
+
+  const stageFeedback = getStagePlacementFeedback(blockId, stageId);
+  if (!stageFeedback) return feedback;
+
+  return {
+    ...feedback,
+    eyebrow: `${feedback.eyebrow} / ${stageFeedback.eyebrow}`,
+    detail: `${feedback.detail} / ${stageFeedback.detail}`,
+  };
+}
+
 export function getBlockUseHint(blockId: BlockId, stageId?: string | null): string {
   const conditionHint = getConditionHint(blockId, stageId);
   if (conditionHint) return conditionHint;
@@ -517,7 +535,7 @@ export function getBlockUseFeedback(
 
   if (blockId === BLOCK_IDS.LEVER) {
     const count = context.detonatedCount ?? 0;
-    return {
+    return withStagePlacementDetail({
       icon: '⚡',
       eyebrow: count > 0 ? '起爆成功' : '起爆装置',
       title: count > 0 ? `TNT ${count}個を起爆` : 'レバー設置',
@@ -528,12 +546,12 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 209, 102, 0.35)',
       kind: 'switch',
       soundKind: count > 0 ? 'explosive' : 'switch',
-    };
+    }, blockId, stageId, count <= 0);
   }
 
   if (blockId === BLOCK_IDS.TNT) {
     const count = context.detonatedCount ?? 0;
-    return {
+    return withStagePlacementDetail({
       icon: '💥',
       eyebrow: count > 0 ? '爆発発動' : '爆薬設置',
       title: count > 0 ? 'TNT起爆' : 'TNT設置',
@@ -544,11 +562,11 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 112, 67, 0.38)',
       kind: 'explosive',
       soundKind: count > 0 ? 'explosive' : 'utility',
-    };
+    }, blockId, stageId, count <= 0);
   }
 
   if (blockId === BLOCK_IDS.SPAWNER) {
-    return {
+    return withStagePlacementDetail({
       icon: '🛡️',
       eyebrow: '味方召喚',
       title: context.spawnedIronGolem ? 'ゴーレム出撃' : 'スポナー設置',
@@ -557,11 +575,11 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 120, 80, 0.35)',
       kind: 'summon',
       soundKind: 'summon',
-    };
+    }, blockId, stageId);
   }
 
   if (blockId === BLOCK_IDS.TURRET) {
-    return {
+    return withStagePlacementDetail({
       icon: '🎯',
       eyebrow: '自動防衛',
       title: 'タレット展開',
@@ -570,7 +588,7 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 90, 120, 0.34)',
       kind: 'defense',
       soundKind: 'defense',
-    };
+    }, blockId, stageId);
   }
 
   const stagePlacementFeedback = getStagePlacementFeedback(blockId, stageId);
