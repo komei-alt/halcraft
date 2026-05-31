@@ -2,7 +2,16 @@
 // ホットバーのヒント、トースト、SE、3Dエフェクトで同じ意味づけを共有する
 
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
+import {
+  getStageBuildBlockScore,
+  getStageBuildStyle,
+} from '../types/stageBuildStyles';
+import { getStageChallenges } from '../types/stageChallenges';
 import { getStageCondition } from '../types/stageConditions';
+import {
+  getStageModeBuildGain,
+  getStageModeRule,
+} from '../types/stageModeRules';
 
 export type BlockUseFeedbackKind =
   | 'condition'
@@ -425,6 +434,46 @@ function getExplosionConditionDetail(stageId: string | null | undefined): string
   return `${condition.title}ゲージも進む`;
 }
 
+function getStagePlacementFeedback(
+  blockId: BlockId,
+  stageId: string | null | undefined,
+): BlockUseFeedbackContent | null {
+  const style = getStageBuildStyle(stageId);
+  const blockScore = getStageBuildBlockScore(stageId, blockId);
+  const groupChallenge = getStageChallenges(stageId).find((challenge) => (
+    challenge.metric === 'block_group_placed'
+    && challenge.blockIds?.includes(blockId)
+  ));
+  const modeRule = getStageModeRule(stageId);
+  const modeGain = modeRule?.category === 'build'
+    ? getStageModeBuildGain(stageId, blockId)
+    : 0;
+
+  if (!blockScore && !groupChallenge && modeGain <= 0) return null;
+
+  const accent = groupChallenge?.accent ?? style?.accent ?? modeRule?.accent ?? '#9bdcff';
+  const detailParts = [
+    blockScore && style ? `${style.shortLabel}: ${blockScore.label}+${blockScore.points}pt` : '',
+    groupChallenge ? `${groupChallenge.title}: ${groupChallenge.target}個目標` : '',
+    modeRule?.category === 'build' && modeGain > 0 ? `${modeRule.meterLabel}+${modeGain}` : '',
+  ].filter(Boolean);
+
+  return {
+    icon: groupChallenge?.icon ?? style?.icon ?? modeRule?.icon ?? '✨',
+    eyebrow: 'マップ貢献',
+    title: blockScore
+      ? `${BLOCK_DEFS[blockId]?.name ?? 'ブロック'} +${blockScore.points}pt`
+      : groupChallenge
+        ? `${groupChallenge.title}の対象`
+        : `${modeRule?.meterLabel ?? 'マップ'} +${modeGain}`,
+    detail: detailParts.join(' / '),
+    accent,
+    glow: groupChallenge ? `${groupChallenge.accent}44` : (style?.glow ?? modeRule?.glow ?? `${accent}44`),
+    kind: 'condition',
+    soundKind: 'condition',
+  };
+}
+
 export function getBlockUseHint(blockId: BlockId, stageId?: string | null): string {
   const conditionHint = getConditionHint(blockId, stageId);
   if (conditionHint) return conditionHint;
@@ -443,7 +492,8 @@ export function getBlockUseProfile(
   blockId: BlockId,
   stageId?: string | null,
 ): BlockUseFeedbackContent {
-  return getConditionFeedback(blockId, stageId)
+  return getStagePlacementFeedback(blockId, stageId)
+    ?? getConditionFeedback(blockId, stageId)
     ?? getBlockUseFeedback(blockId, stageId)
     ?? {
       icon: '⬛',
@@ -522,6 +572,9 @@ export function getBlockUseFeedback(
       soundKind: 'defense',
     };
   }
+
+  const stagePlacementFeedback = getStagePlacementFeedback(blockId, stageId);
+  if (stagePlacementFeedback) return stagePlacementFeedback;
 
   if (LIGHT_BLOCKS.has(blockId)) {
     return {
