@@ -35,6 +35,8 @@ interface UseEffectBurst {
 const MAX_EFFECTS = 18;
 const PARTICLES_PER_EFFECT = 22;
 const MAX_PARTICLES = MAX_EFFECTS * PARTICLES_PER_EFFECT;
+const SIGNATURES_PER_EFFECT = 2;
+const MAX_SIGNATURES = MAX_EFFECTS * SIGNATURES_PER_EFFECT;
 const BASE_LIFETIME = 0.78;
 const RING_LIFETIME = 0.64;
 
@@ -124,13 +126,92 @@ function getRingScale(kind: BlockUseFeedbackKind, progress: number): number {
   return base + progress * spread;
 }
 
+function getCoreScale(kind: BlockUseFeedbackKind, progress: number): number {
+  const pulse = Math.sin(Math.min(1, progress) * Math.PI);
+  if (kind === 'explosive') return 0.22 + pulse * 0.42 + progress * 0.2;
+  if (kind === 'summon') return 0.28 + pulse * 0.36;
+  if (kind === 'condition' || kind === 'light') return 0.18 + pulse * 0.28;
+  if (kind === 'rail') return 0.16 + pulse * 0.22;
+  return 0.14 + pulse * 0.18;
+}
+
+function getSignatureScale(
+  kind: BlockUseFeedbackKind,
+  progress: number,
+  layer: number,
+): { width: number; height: number; y: number; rotation: number } {
+  const pulse = Math.sin(Math.min(1, progress) * Math.PI);
+  const layerScale = layer === 0 ? 1 : 0.72;
+
+  if (kind === 'explosive') {
+    return {
+      width: (0.6 + progress * 2.2) * layerScale,
+      height: (0.18 + pulse * 0.46) * layerScale,
+      y: 0.02 + pulse * 0.22,
+      rotation: layer * Math.PI * 0.5,
+    };
+  }
+
+  if (kind === 'summon') {
+    return {
+      width: (0.36 + pulse * 0.28) * layerScale,
+      height: (1.15 + progress * 1.4) * layerScale,
+      y: 0.45 + progress * 0.58,
+      rotation: layer * Math.PI * 0.5,
+    };
+  }
+
+  if (kind === 'condition' || kind === 'light') {
+    return {
+      width: (0.22 + pulse * 0.18) * layerScale,
+      height: (0.92 + progress * 0.86) * layerScale,
+      y: 0.34 + progress * 0.34,
+      rotation: layer * Math.PI * 0.5,
+    };
+  }
+
+  if (kind === 'rail') {
+    return {
+      width: (1.05 + progress * 1.25) * layerScale,
+      height: (0.09 + pulse * 0.16) * layerScale,
+      y: 0.02 + pulse * 0.12,
+      rotation: layer * Math.PI * 0.5,
+    };
+  }
+
+  if (kind === 'defense' || kind === 'switch') {
+    return {
+      width: (0.72 + progress * 0.82) * layerScale,
+      height: (0.14 + pulse * 0.2) * layerScale,
+      y: 0.16 + pulse * 0.14,
+      rotation: layer * Math.PI * 0.5,
+    };
+  }
+
+  return {
+    width: (0.44 + progress * 0.72) * layerScale,
+    height: (0.12 + pulse * 0.16) * layerScale,
+    y: 0.12 + pulse * 0.1,
+    rotation: layer * Math.PI * 0.5,
+  };
+}
+
+function getSignatureCount(kind: BlockUseFeedbackKind): number {
+  if (kind === 'condition' || kind === 'explosive' || kind === 'summon' || kind === 'rail') return 2;
+  return 1;
+}
+
 export function BlockUseEffect() {
   const effectsRef = useRef<UseEffectBurst[]>([]);
   const floorRingRef = useRef<THREE.InstancedMesh>(null);
   const haloRingRef = useRef<THREE.InstancedMesh>(null);
+  const coreRef = useRef<THREE.InstancedMesh>(null);
+  const signatureRef = useRef<THREE.InstancedMesh>(null);
 
   const floorRingGeometry = useMemo(() => new THREE.RingGeometry(0.38, 0.53, 56), []);
   const haloRingGeometry = useMemo(() => new THREE.RingGeometry(0.28, 0.42, 56), []);
+  const coreGeometry = useMemo(() => new THREE.OctahedronGeometry(0.5, 0), []);
+  const signatureGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const ringMaterial = useMemo(() => new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
@@ -141,6 +222,25 @@ export function BlockUseEffect() {
     side: THREE.DoubleSide,
   }), []);
   const haloMaterial = useMemo(() => ringMaterial.clone(), [ringMaterial]);
+  const coreMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.88,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }), []);
+  const signatureMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.74,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }), []);
   const dummyObject = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
 
@@ -221,6 +321,8 @@ export function BlockUseEffect() {
       geometry.setDrawRange(0, 0);
       if (floorRingRef.current) floorRingRef.current.count = 0;
       if (haloRingRef.current) haloRingRef.current.count = 0;
+      if (coreRef.current) coreRef.current.count = 0;
+      if (signatureRef.current) signatureRef.current.count = 0;
       return;
     }
 
@@ -239,6 +341,8 @@ export function BlockUseEffect() {
     let particleIndex = 0;
     let ringIndex = 0;
     let haloIndex = 0;
+    let coreIndex = 0;
+    let signatureIndex = 0;
 
     for (const effect of effects) {
       if (effect.life > 0) {
@@ -248,6 +352,40 @@ export function BlockUseEffect() {
         const ringScale = getRingScale(effect.kind, progress);
         const colorPower = 0.22 + fade * 0.9 + bloom * 0.22;
         tempColor.copy(effect.accent).multiplyScalar(colorPower);
+
+        if (coreRef.current && coreIndex < MAX_EFFECTS) {
+          dummyObject.position.set(effect.originX, effect.originY + 0.08 + bloom * 0.24, effect.originZ);
+          dummyObject.rotation.set(
+            effect.spin + progress * 2.1,
+            effect.spin * 0.31 + progress * 1.4,
+            effect.spin * 0.7 + progress * 2.6,
+          );
+          dummyObject.scale.setScalar(getCoreScale(effect.kind, progress));
+          dummyObject.updateMatrix();
+          coreRef.current.setMatrixAt(coreIndex, dummyObject.matrix);
+          coreRef.current.setColorAt(coreIndex, tempColor);
+          coreIndex++;
+        }
+
+        if (signatureRef.current) {
+          const signatureCount = getSignatureCount(effect.kind);
+          for (let layer = 0; layer < signatureCount && signatureIndex < MAX_SIGNATURES; layer++) {
+            const signature = getSignatureScale(effect.kind, progress, layer);
+            dummyObject.position.set(
+              effect.originX,
+              effect.originY + signature.y + bloom * 0.08,
+              effect.originZ,
+            );
+            dummyObject.quaternion.copy(camera.quaternion);
+            dummyObject.rotateZ(effect.spin + progress * 1.7 + signature.rotation);
+            dummyObject.scale.set(signature.width, signature.height, 1);
+            dummyObject.updateMatrix();
+            signatureRef.current.setMatrixAt(signatureIndex, dummyObject.matrix);
+            tempColor.copy(effect.accent).multiplyScalar((0.18 + fade * 0.66 + bloom * 0.34) * (layer === 0 ? 1 : 0.72));
+            signatureRef.current.setColorAt(signatureIndex, tempColor);
+            signatureIndex++;
+          }
+        }
 
         if (floorRingRef.current && ringIndex < MAX_EFFECTS) {
           dummyObject.position.set(effect.originX, effect.originY - 0.46, effect.originZ);
@@ -308,10 +446,26 @@ export function BlockUseEffect() {
       haloRingRef.current.instanceMatrix.needsUpdate = true;
       if (haloRingRef.current.instanceColor) haloRingRef.current.instanceColor.needsUpdate = true;
     }
+    if (coreRef.current) {
+      coreRef.current.count = coreIndex;
+      coreRef.current.instanceMatrix.needsUpdate = true;
+      if (coreRef.current.instanceColor) coreRef.current.instanceColor.needsUpdate = true;
+    }
+    if (signatureRef.current) {
+      signatureRef.current.count = signatureIndex;
+      signatureRef.current.instanceMatrix.needsUpdate = true;
+      if (signatureRef.current.instanceColor) signatureRef.current.instanceColor.needsUpdate = true;
+    }
   });
 
   return (
     <>
+      <instancedMesh
+        ref={signatureRef}
+        args={[signatureGeometry, signatureMaterial, MAX_SIGNATURES]}
+        renderOrder={224}
+        frustumCulled={false}
+      />
       <instancedMesh
         ref={floorRingRef}
         args={[floorRingGeometry, ringMaterial, MAX_EFFECTS]}
@@ -322,6 +476,12 @@ export function BlockUseEffect() {
         ref={haloRingRef}
         args={[haloRingGeometry, haloMaterial, MAX_EFFECTS]}
         renderOrder={226}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={coreRef}
+        args={[coreGeometry, coreMaterial, MAX_EFFECTS]}
+        renderOrder={228}
         frustumCulled={false}
       />
       <points geometry={geometry} material={material} renderOrder={227} frustumCulled={false} />

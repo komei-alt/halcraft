@@ -1083,6 +1083,20 @@ export function playBlockUseFeedbackSound(kind: BlockUseFeedbackSoundKind): void
   const ctx = getAudioContext();
   if (!ctx || !canPlay(`blockUse:${kind}`, kind === 'condition' ? 320 : 140)) return;
   const now = ctx.currentTime;
+  const output = ctx.createGain();
+  const panner = ctx.createStereoPanner();
+  const compressor = ctx.createDynamicsCompressor();
+  output.gain.setValueAtTime(0.92, now);
+  output.gain.exponentialRampToValueAtTime(0.001, now + 0.54);
+  panner.pan.setValueAtTime((Math.random() - 0.5) * 0.16, now);
+  compressor.threshold.setValueAtTime(-19, now);
+  compressor.knee.setValueAtTime(12, now);
+  compressor.ratio.setValueAtTime(4, now);
+  compressor.attack.setValueAtTime(0.003, now);
+  compressor.release.setValueAtTime(0.16, now);
+  output.connect(panner);
+  panner.connect(compressor);
+  compressor.connect(ctx.destination);
 
   const notes: Record<BlockUseFeedbackSoundKind, number[]> = {
     condition: [523.25, 659.25, 880],
@@ -1115,34 +1129,86 @@ export function playBlockUseFeedbackSound(kind: BlockUseFeedbackSoundKind): void
     filter.Q.setValueAtTime(kind === 'switch' ? 3.2 : 1.3, t);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(kind === 'explosive' ? 0.052 : 0.042, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    const noteVolume = kind === 'condition' || kind === 'summon'
+      ? 0.05
+      : kind === 'explosive'
+        ? 0.058
+        : 0.04;
+    gain.gain.setValueAtTime(noteVolume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(output);
     osc.start(t);
-    osc.stop(t + 0.18);
+    osc.stop(t + 0.2);
   });
 
-  if (kind !== 'explosive' && kind !== 'liquid' && kind !== 'defense') return;
+  const bodyFrequency: Record<BlockUseFeedbackSoundKind, number> = {
+    condition: 196,
+    defense: 92,
+    explosive: 48,
+    light: 330,
+    liquid: 140,
+    rail: 164,
+    summon: 132,
+    switch: 120,
+    utility: 116,
+  };
+  const body = ctx.createOscillator();
+  body.type = kind === 'explosive' || kind === 'defense' ? 'sine' : 'triangle';
+  body.frequency.setValueAtTime(bodyFrequency[kind], now);
+  body.frequency.exponentialRampToValueAtTime(bodyFrequency[kind] * (kind === 'explosive' ? 0.62 : 1.18), now + 0.22);
+
+  const bodyGain = ctx.createGain();
+  bodyGain.gain.setValueAtTime(kind === 'explosive' ? 0.105 : kind === 'defense' ? 0.072 : 0.046, now);
+  bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+  body.connect(bodyGain);
+  bodyGain.connect(output);
+  body.start(now);
+  body.stop(now + 0.24);
+
+  if (kind === 'condition' || kind === 'light' || kind === 'summon' || kind === 'rail') {
+    const shimmer = ctx.createOscillator();
+    shimmer.type = 'sine';
+    shimmer.frequency.setValueAtTime(kind === 'rail' ? 980 : 1320, now + 0.03);
+    shimmer.frequency.exponentialRampToValueAtTime(kind === 'summon' ? 1980 : 1660, now + 0.24);
+
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0.028, now + 0.03);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    const shimmerFilter = ctx.createBiquadFilter();
+    shimmerFilter.type = 'highpass';
+    shimmerFilter.frequency.setValueAtTime(900, now + 0.03);
+
+    shimmer.connect(shimmerFilter);
+    shimmerFilter.connect(shimmerGain);
+    shimmerGain.connect(output);
+    shimmer.start(now + 0.03);
+    shimmer.stop(now + 0.28);
+  }
+
+  if (kind !== 'explosive' && kind !== 'liquid' && kind !== 'defense' && kind !== 'switch') return;
 
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
 
   const noiseFilter = ctx.createBiquadFilter();
-  noiseFilter.type = kind === 'liquid' ? 'lowpass' : 'highpass';
-  noiseFilter.frequency.setValueAtTime(kind === 'liquid' ? 680 : 1800, now);
+  noiseFilter.type = kind === 'liquid' ? 'lowpass' : kind === 'switch' ? 'bandpass' : 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'liquid' ? 680 : kind === 'switch' ? 1200 : 1800, now);
+  noiseFilter.Q.setValueAtTime(kind === 'switch' ? 5.5 : 1.2, now);
 
   const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(kind === 'explosive' ? 0.045 : 0.025, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  noiseGain.gain.setValueAtTime(kind === 'explosive' ? 0.062 : kind === 'switch' ? 0.018 : 0.028, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (kind === 'explosive' ? 0.22 : 0.16));
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(output);
   noise.start(now);
-  noise.stop(now + 0.16);
+  noise.stop(now + (kind === 'explosive' ? 0.22 : 0.16));
 }
 
 /** 素材不足SE — 置けないことを小さく知らせる */
