@@ -8,6 +8,7 @@ import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useGameStore } from '../stores/useGameStore';
+import type { BiomeId, StageCategory } from '../types/stages';
 import { isTouchDevice } from '../utils/device';
 import { getPerformanceProfile } from '../utils/performance';
 
@@ -24,6 +25,26 @@ interface QualityTuning {
   aoSamples: number;
   denoiseSamples: number;
 }
+
+interface StageLookTuning {
+  bloomMultiplier: number;
+  bloomThresholdOffset: number;
+  saturationOffset: number;
+  vignetteDarknessOffset: number;
+  hue: number;
+  middleGrey: number;
+  whitePoint: number;
+}
+
+const DEFAULT_STAGE_LOOK: StageLookTuning = {
+  bloomMultiplier: 1,
+  bloomThresholdOffset: 0,
+  saturationOffset: 0,
+  vignetteDarknessOffset: 0,
+  hue: 0,
+  middleGrey: 0.62,
+  whitePoint: 7.5,
+};
 
 function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuning {
   if (isHighQuality && !isTouch) {
@@ -54,6 +75,76 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     aoQuality: isTouch ? 'performance' : 'low',
     aoSamples: isTouch ? 5 : 8,
     denoiseSamples: isTouch ? 2 : 3,
+  };
+}
+
+function getStageLookTuning(
+  biomeId: BiomeId | null,
+  category: StageCategory | null,
+  dimension: string,
+): StageLookTuning {
+  if (dimension === 'nether') {
+    return {
+      bloomMultiplier: 1.22,
+      bloomThresholdOffset: -0.05,
+      saturationOffset: 0.035,
+      vignetteDarknessOffset: 0.08,
+      hue: 0.018,
+      middleGrey: 0.56,
+      whitePoint: 6.8,
+    };
+  }
+
+  const biomeLook: Record<BiomeId, StageLookTuning> = {
+    forest: {
+      bloomMultiplier: 1.02,
+      bloomThresholdOffset: -0.01,
+      saturationOffset: 0.018,
+      vignetteDarknessOffset: 0.018,
+      hue: -0.006,
+      middleGrey: 0.61,
+      whitePoint: 7.6,
+    },
+    tropical: {
+      bloomMultiplier: 1.18,
+      bloomThresholdOffset: -0.04,
+      saturationOffset: 0.045,
+      vignetteDarknessOffset: -0.045,
+      hue: 0.012,
+      middleGrey: 0.66,
+      whitePoint: 7.9,
+    },
+    snow: {
+      bloomMultiplier: 1.08,
+      bloomThresholdOffset: -0.03,
+      saturationOffset: -0.012,
+      vignetteDarknessOffset: -0.025,
+      hue: -0.018,
+      middleGrey: 0.68,
+      whitePoint: 8.2,
+    },
+    desert: {
+      bloomMultiplier: 1.14,
+      bloomThresholdOffset: -0.02,
+      saturationOffset: 0.02,
+      vignetteDarknessOffset: 0.012,
+      hue: 0.024,
+      middleGrey: 0.64,
+      whitePoint: 7.3,
+    },
+  };
+
+  const base = biomeId ? biomeLook[biomeId] : DEFAULT_STAGE_LOOK;
+  if (!category) return base;
+  const isWar = category === 'war';
+
+  return {
+    ...base,
+    bloomMultiplier: base.bloomMultiplier * (isWar ? 1.08 : 1.03),
+    bloomThresholdOffset: base.bloomThresholdOffset + (isWar ? -0.018 : -0.006),
+    saturationOffset: base.saturationOffset + (isWar ? 0.014 : 0.006),
+    vignetteDarknessOffset: base.vignetteDarknessOffset + (isWar ? 0.045 : -0.012),
+    middleGrey: base.middleGrey + (isWar ? -0.02 : 0.015),
   };
 }
 
@@ -109,6 +200,9 @@ export function GraphicsPostFX() {
   const lightingQuality = useSettingsStore((s) => s.lightingQuality);
   const shadowQuality = useSettingsStore((s) => s.shadowQuality);
   useSettingsStore((s) => s.resolutionScale);
+  const stageBiome = useGameStore((s) => s.currentStage?.biome ?? null);
+  const stageCategory = useGameStore((s) => s.currentStage?.category ?? null);
+  const dimension = useGameStore((s) => s.dimension);
   const profile = getPerformanceProfile();
   const isTouch = isTouchDevice();
   const isHighQuality = profile.tier === 'high' || graphicsPreset === 'quality' || lightingQuality === 'rich';
@@ -117,7 +211,19 @@ export function GraphicsPostFX() {
   if (!enabled) return null;
 
   const tuning = getQualityTuning(isHighQuality, isTouch);
+  const stageLook = getStageLookTuning(stageBiome, stageCategory, dimension);
   const aoEnabled = shadowQuality !== 'off';
+  const bloomThreshold = THREE.MathUtils.clamp(
+    tuning.bloomThreshold + stageLook.bloomThresholdOffset,
+    0.56,
+    0.86,
+  );
+  const saturation = THREE.MathUtils.clamp(tuning.saturation + stageLook.saturationOffset, -0.08, 0.14);
+  const vignetteDarkness = THREE.MathUtils.clamp(
+    tuning.vignetteDarkness + stageLook.vignetteDarknessOffset,
+    0.08,
+    0.45,
+  );
 
   return (
     <EffectComposer
@@ -141,26 +247,26 @@ export function GraphicsPostFX() {
       ) : <></>}
       <Bloom
         blendFunction={BlendFunction.SCREEN}
-        intensity={tuning.bloomIntensity}
-        luminanceThreshold={tuning.bloomThreshold}
+        intensity={tuning.bloomIntensity * stageLook.bloomMultiplier}
+        luminanceThreshold={bloomThreshold}
         luminanceSmoothing={0.18}
         mipmapBlur
       />
       <ToneMapping
         mode={ToneMappingMode.ACES_FILMIC}
-        whitePoint={7.5}
-        middleGrey={0.62}
+        whitePoint={stageLook.whitePoint}
+        middleGrey={stageLook.middleGrey}
         minLuminance={0.015}
       />
       <HueSaturation
         blendFunction={BlendFunction.NORMAL}
-        hue={0}
-        saturation={tuning.saturation}
+        hue={stageLook.hue}
+        saturation={saturation}
       />
       <Vignette
         blendFunction={BlendFunction.NORMAL}
         offset={0.24}
-        darkness={tuning.vignetteDarkness}
+        darkness={vignetteDarkness}
       />
       <SMAA preset={tuning.smaaPreset} />
     </EffectComposer>
