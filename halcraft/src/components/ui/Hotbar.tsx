@@ -6,9 +6,176 @@ import { useMemo } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useGameStore } from '../../stores/useGameStore';
-import { BLOCK_DEFS } from '../../types/blocks';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
+import {
+  getNextStageBuildMilestone,
+  getStageBuildBlockScore,
+  getStageBuildStyle,
+} from '../../types/stageBuildStyles';
+import {
+  getStageChallengeProgress,
+  getStageChallenges,
+  type StageChallengeStats,
+} from '../../types/stageChallenges';
+import {
+  getStageCombatStyle,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
+import {
+  getStageModeBuildGain,
+  getStageModeRule,
+} from '../../types/stageModeRules';
+import type { StageDefinition } from '../../types/stages';
 import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
+
+interface HotbarStageHint {
+  icon: string;
+  label: string;
+  detail: string;
+  value: string;
+  accent: string;
+  ratio: number;
+}
+
+interface ItemTacticBadge {
+  label: string;
+  accent: string;
+  matched: boolean;
+}
+
+function clampRatio(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getBlockChallengeHint(args: {
+  stageId: string | null;
+  blockId: BlockId;
+  stats: StageChallengeStats;
+  completedIds: string[];
+}): HotbarStageHint | null {
+  const challenge = getStageChallenges(args.stageId)
+    .find((item) => (
+      item.metric === 'block_group_placed'
+      && item.blockIds?.includes(args.blockId)
+      && !args.completedIds.includes(item.id)
+    ));
+  if (!challenge) return null;
+
+  const progress = getStageChallengeProgress(challenge, args.stats);
+  if (progress.completed) return null;
+  const remaining = Math.max(0, progress.target - progress.current);
+
+  return {
+    icon: challenge.icon,
+    label: 'チャレンジ',
+    detail: challenge.title,
+    value: remaining > 0 ? `あと${remaining}` : '達成',
+    accent: challenge.accent,
+    ratio: progress.ratio,
+  };
+}
+
+function getBlockBuildHint(args: {
+  stageId: string | null;
+  blockId: BlockId;
+  buildScore: number;
+  buildMilestones: number[];
+}): HotbarStageHint | null {
+  const style = getStageBuildStyle(args.stageId);
+  const blockScore = getStageBuildBlockScore(args.stageId, args.blockId);
+  if (!style || !blockScore) return null;
+
+  const nextMilestone = getNextStageBuildMilestone(args.buildScore, args.buildMilestones);
+  const remaining = nextMilestone ? Math.max(0, nextMilestone - args.buildScore) : 0;
+
+  return {
+    icon: style.icon,
+    label: `作品+${blockScore.points}`,
+    detail: `${style.shortLabel}: ${blockScore.label}が評価対象`,
+    value: nextMilestone ? `あと${remaining}pt` : '作品MAX',
+    accent: style.accent,
+    ratio: nextMilestone ? clampRatio(args.buildScore / nextMilestone) : 1,
+  };
+}
+
+function getBlockModeHint(args: {
+  stageId: string | null;
+  blockId: BlockId;
+  modeMeter: number;
+}): HotbarStageHint | null {
+  const rule = getStageModeRule(args.stageId);
+  if (!rule || rule.category !== 'build') return null;
+
+  const gain = getStageModeBuildGain(args.stageId, args.blockId);
+  if (gain <= 0) return null;
+
+  return {
+    icon: rule.icon,
+    label: `${rule.meterLabel}+${gain}`,
+    detail: rule.shortLabel,
+    value: `${Math.floor(args.modeMeter)}/${rule.threshold}`,
+    accent: rule.accent,
+    ratio: clampRatio(args.modeMeter / rule.threshold),
+  };
+}
+
+function getSelectedBlockStageHint(args: {
+  stage: StageDefinition | null;
+  blockId: BlockId;
+  challengeStats: StageChallengeStats;
+  completedChallengeIds: string[];
+  buildScore: number;
+  buildMilestones: number[];
+  modeMeter: number;
+}): HotbarStageHint | null {
+  const stageId = args.stage?.id ?? null;
+  return getBlockChallengeHint({
+    stageId,
+    blockId: args.blockId,
+    stats: args.challengeStats,
+    completedIds: args.completedChallengeIds,
+  })
+    ?? getBlockBuildHint({
+      stageId,
+      blockId: args.blockId,
+      buildScore: args.buildScore,
+      buildMilestones: args.buildMilestones,
+    })
+    ?? getBlockModeHint({
+      stageId,
+      blockId: args.blockId,
+      modeMeter: args.modeMeter,
+    });
+}
+
+function getItemTacticBadge(
+  item: EquippedItem,
+  stage: StageDefinition | null,
+): ItemTacticBadge | null {
+  if (!stage) return null;
+
+  if (item === 'builder') {
+    const buildStyle = getStageBuildStyle(stage.id);
+    if (!buildStyle) return null;
+    return {
+      label: buildStyle.shortLabel,
+      accent: buildStyle.accent,
+      matched: stage.category === 'build',
+    };
+  }
+
+  const combatStyle = getStageCombatStyle(stage.id);
+  if (!combatStyle) return null;
+  return {
+    label: combatStyle.weapon === item ? '推奨' : getStageCombatWeaponLabel(combatStyle.weapon),
+    accent: combatStyle.accent,
+    matched: combatStyle.weapon === item,
+  };
+}
 
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
@@ -18,12 +185,27 @@ export function Hotbar() {
   const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
   const items = useInventoryStore((s) => s.items);
   const currentStageId = useGameStore((s) => s.currentStageId);
+  const currentStage = useGameStore((s) => s.currentStage);
+  const challengeStats = useStageChallengeStore((s) => s.stats);
+  const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
+  const buildScore = useStageBuildScoreStore((s) => s.score);
+  const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const modeMeter = useModeFlowStore((s) => s.meter);
 
   const isTouch = isTouchDevice();
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
   const selectedDef = BLOCK_DEFS[selectedBlock];
   const selectedCount = items[selectedBlock] ?? 0;
   const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
+  const selectedStageHint = getSelectedBlockStageHint({
+    stage: currentStage,
+    blockId: selectedBlock,
+    challengeStats,
+    completedChallengeIds,
+    buildScore,
+    buildMilestones,
+    modeMeter,
+  });
 
   // セルサイズ（モバイルではやや小さめ）
   const cellSize = isTouch ? 40 : 48;
@@ -146,6 +328,72 @@ export function Hotbar() {
             >
               {selectedCount > 0 ? selectedProfile.detail : '素材なし / クラフト画面で補充'}
             </span>
+            {selectedCount > 0 && selectedStageHint && (
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minWidth: 0,
+                  color: selectedStageHint.accent,
+                  fontSize: isTouch ? 9 : 10,
+                  fontWeight: 900,
+                  lineHeight: '12px',
+                }}
+              >
+                <span style={{ flex: '0 0 auto' }}>{selectedStageHint.icon}</span>
+                <span
+                  style={{
+                    flex: '0 0 auto',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {selectedStageHint.label}
+                </span>
+                <span
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: 'rgba(255,255,255,0.74)',
+                  }}
+                >
+                  {selectedStageHint.detail}
+                </span>
+                <span
+                  style={{
+                    flex: '0 0 auto',
+                    color: selectedStageHint.accent,
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {selectedStageHint.value}
+                </span>
+              </span>
+            )}
+            {selectedCount > 0 && selectedStageHint && (
+              <span
+                style={{
+                  height: 3,
+                  width: '100%',
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.13)',
+                  overflow: 'hidden',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    width: `${Math.round(selectedStageHint.ratio * 100)}%`,
+                    height: '100%',
+                    borderRadius: 999,
+                    background: `linear-gradient(90deg, ${selectedStageHint.accent}, #ffffff)`,
+                  }}
+                />
+              </span>
+            )}
           </span>
           <span
             style={{
@@ -185,6 +433,8 @@ export function Hotbar() {
           { id: 'lightsaber', icon: '⚔️', label: '剣' },
         ] satisfies Array<{ id: EquippedItem; icon: string; label: string }>).map((item) => {
           const isSelected = equippedItem === item.id;
+          const tactic = getItemTacticBadge(item.id, currentStage);
+          const isMatchedTactic = Boolean(tactic?.matched);
           return (
             <button
               key={item.id}
@@ -197,7 +447,9 @@ export function Hotbar() {
                 padding: isTouch ? '7px 10px' : '6px 10px',
                 borderRadius: 999,
                 border: isSelected
-                  ? '1px solid rgba(255, 206, 120, 0.62)'
+                  ? `1px solid ${tactic?.accent ?? 'rgba(255, 206, 120, 0.62)'}`
+                  : isMatchedTactic
+                    ? `1px solid ${tactic?.accent}88`
                   : '1px solid rgba(255,255,255,0.08)',
                 background: isSelected
                   ? item.id === 'rocket_launcher'
@@ -213,10 +465,30 @@ export function Hotbar() {
                 fontWeight: 700,
                 letterSpacing: 0,
                 cursor: 'pointer',
+                boxShadow: isMatchedTactic
+                  ? `0 0 12px ${tactic?.accent}44`
+                  : undefined,
               }}
             >
               <span>{item.icon}</span>
               <span>{item.label}</span>
+              {!isTouch && tactic && (
+                <span
+                  style={{
+                    padding: '1px 4px',
+                    borderRadius: 999,
+                    color: tactic.accent,
+                    background: `${tactic.accent}18`,
+                    border: `1px solid ${tactic.accent}55`,
+                    fontSize: 8,
+                    lineHeight: '10px',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tactic.label}
+                </span>
+              )}
               {!isTouch && item.id !== 'builder' && (
                 <span style={{ fontSize: 9, opacity: 0.7 }}>V</span>
               )}
