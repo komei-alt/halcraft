@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-06-01',
+    items: [
+      { type: 'improve', text: '森・南国・雪・砂漠で、葉っぱ・水しぶき・吹雪・砂風の音が変わって、耳でもマップのちがいがもっと分かるようになったよ！' },
+    ],
+  },
+  {
     date: '2026-05-31',
     items: [
       { type: 'improve', text: '森は葉っぱ、南国は水しぶき、雪山は雪、砂漠は砂風が近くを流れて、マップごとの空気がもっとはっきり感じられるようになったよ！' },

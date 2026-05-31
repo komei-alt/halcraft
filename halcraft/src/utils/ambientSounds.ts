@@ -13,6 +13,14 @@ interface AmbientProfile {
   waterLevel: number;
   caveCutoff: number;
   cavePitch: number;
+  signatureLevel: number;
+  signatureBodyType: BiquadFilterType;
+  signatureBodyPitch: number;
+  signatureBodyQ: number;
+  signatureAirLevel: number;
+  signatureAirPitch: number;
+  signatureAirQ: number;
+  signaturePulseSpeed: number;
 }
 
 const AMBIENT_VOLUME = 0.045;
@@ -28,6 +36,14 @@ const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
     waterLevel: 0.78,
     caveCutoff: 120,
     cavePitch: 46,
+    signatureLevel: 0.072,
+    signatureBodyType: 'bandpass',
+    signatureBodyPitch: 3050,
+    signatureBodyQ: 1.15,
+    signatureAirLevel: 0.036,
+    signatureAirPitch: 5400,
+    signatureAirQ: 1.55,
+    signaturePulseSpeed: 0.7,
   },
   tropical: {
     windLevel: 0.15,
@@ -37,6 +53,14 @@ const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
     waterLevel: 1,
     caveCutoff: 110,
     cavePitch: 42,
+    signatureLevel: 0.086,
+    signatureBodyType: 'bandpass',
+    signatureBodyPitch: 3920,
+    signatureBodyQ: 1.2,
+    signatureAirLevel: 0.05,
+    signatureAirPitch: 6900,
+    signatureAirQ: 1.35,
+    signaturePulseSpeed: 0.92,
   },
   snow: {
     windLevel: 0.3,
@@ -46,6 +70,14 @@ const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
     waterLevel: 0.62,
     caveCutoff: 135,
     cavePitch: 50,
+    signatureLevel: 0.064,
+    signatureBodyType: 'highpass',
+    signatureBodyPitch: 3650,
+    signatureBodyQ: 0.72,
+    signatureAirLevel: 0.05,
+    signatureAirPitch: 7600,
+    signatureAirQ: 1.9,
+    signaturePulseSpeed: 1.18,
   },
   desert: {
     windLevel: 0.24,
@@ -55,6 +87,14 @@ const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
     waterLevel: 0.28,
     caveCutoff: 95,
     cavePitch: 44,
+    signatureLevel: 0.092,
+    signatureBodyType: 'bandpass',
+    signatureBodyPitch: 1850,
+    signatureBodyQ: 1.65,
+    signatureAirLevel: 0.038,
+    signatureAirPitch: 3600,
+    signatureAirQ: 1.85,
+    signaturePulseSpeed: 0.54,
   },
 };
 
@@ -103,6 +143,10 @@ let modeToneFilterNode: BiquadFilterNode | null = null;
 let modeToneNode: OscillatorNode | null = null;
 let modeTextureGain: GainNode | null = null;
 let modeTextureFilterNode: BiquadFilterNode | null = null;
+let biomeSignatureBodyGain: GainNode | null = null;
+let biomeSignatureAirGain: GainNode | null = null;
+let biomeSignatureBodyFilterNode: BiquadFilterNode | null = null;
+let biomeSignatureAirFilterNode: BiquadFilterNode | null = null;
 let activeSources: AudioScheduledSourceNode[] = [];
 let isRunning = false;
 
@@ -179,6 +223,35 @@ function createWaterNoiseBuffer(ctx: AudioContext): AudioBuffer {
   }
 
   softenLoopEdges(buffer, 0.12);
+  return buffer;
+}
+
+function createBiomeSignatureBuffer(ctx: AudioContext): AudioBuffer {
+  const length = Math.floor(ctx.sampleRate * 12);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    let body = 0;
+    let grain = 0;
+    let pulse = 0;
+
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      body = body * 0.965 + white * 0.035;
+      grain = grain * 0.68 + white * 0.32;
+
+      if (Math.random() < 0.0018) {
+        pulse += 0.35 + Math.random() * 0.75;
+      }
+      pulse *= 0.9915;
+
+      const texturedGrain = grain * (0.12 + pulse * 0.24);
+      data[i] = clamp(body * 0.72 + texturedGrain, -1, 1);
+    }
+  }
+
+  softenLoopEdges(buffer, 0.16);
   return buffer;
 }
 
@@ -363,6 +436,38 @@ export function initAmbientSounds(): void {
   modeTextureFilter.connect(modeTextureGain);
   modeTextureSource.start();
 
+  // --- バイオームの近距離質感音: 見た目の葉・水しぶき・雪・砂を耳にも薄く重ねる ---
+  const signatureSource = trackSource(audioCtx.createBufferSource());
+  signatureSource.buffer = createBiomeSignatureBuffer(audioCtx);
+  signatureSource.loop = true;
+
+  const signatureBodyFilter = audioCtx.createBiquadFilter();
+  signatureBodyFilter.type = AMBIENT_PROFILES.forest.signatureBodyType;
+  signatureBodyFilter.frequency.value = AMBIENT_PROFILES.forest.signatureBodyPitch;
+  signatureBodyFilter.Q.value = AMBIENT_PROFILES.forest.signatureBodyQ;
+  biomeSignatureBodyFilterNode = signatureBodyFilter;
+
+  biomeSignatureBodyGain = audioCtx.createGain();
+  biomeSignatureBodyGain.gain.value = 0;
+
+  const signatureAirFilter = audioCtx.createBiquadFilter();
+  signatureAirFilter.type = 'bandpass';
+  signatureAirFilter.frequency.value = AMBIENT_PROFILES.forest.signatureAirPitch;
+  signatureAirFilter.Q.value = AMBIENT_PROFILES.forest.signatureAirQ;
+  biomeSignatureAirFilterNode = signatureAirFilter;
+
+  biomeSignatureAirGain = audioCtx.createGain();
+  biomeSignatureAirGain.gain.value = 0;
+
+  signatureSource.connect(signatureBodyFilter);
+  signatureBodyFilter.connect(biomeSignatureBodyGain);
+  biomeSignatureBodyGain.connect(masterGain);
+
+  signatureSource.connect(signatureAirFilter);
+  signatureAirFilter.connect(biomeSignatureAirGain);
+  biomeSignatureAirGain.connect(masterGain);
+  signatureSource.start();
+
   isRunning = true;
 }
 
@@ -395,7 +500,9 @@ export function updateAmbientSounds(
     !waterGain ||
     !caveGain ||
     !modeToneGain ||
-    !modeTextureGain
+    !modeTextureGain ||
+    !biomeSignatureBodyGain ||
+    !biomeSignatureAirGain
   ) {
     return;
   }
@@ -491,6 +598,46 @@ export function updateAmbientSounds(
     : 0.082 * modePresence * (0.8 + safeModeRatio * 0.45);
   smoothParam(modeToneGain.gain, toneTarget, now, 0.28);
   smoothParam(modeTextureGain.gain, textureTarget, now, 0.36);
+
+  if (biomeSignatureBodyFilterNode) {
+    const categoryPitchShift = stageCategory === 'war' ? 0.88 : stageCategory === 'build' ? 1.08 : 1;
+    biomeSignatureBodyFilterNode.type = profile.signatureBodyType;
+    smoothParam(
+      biomeSignatureBodyFilterNode.frequency,
+      profile.signatureBodyPitch * categoryPitchShift + safeModeRatio * 120,
+      now,
+      0.72,
+    );
+    smoothParam(
+      biomeSignatureBodyFilterNode.Q,
+      profile.signatureBodyQ + (stageCategory === 'war' ? safeModeRank * 0.18 : safeModeRatio * 0.12),
+      now,
+      0.82,
+    );
+  }
+
+  if (biomeSignatureAirFilterNode) {
+    const airLift = stageCategory === 'build' ? 360 + safeModeRatio * 680 : stageCategory === 'war' ? -240 : 0;
+    smoothParam(biomeSignatureAirFilterNode.frequency, profile.signatureAirPitch + airLift, now, 0.68);
+    smoothParam(biomeSignatureAirFilterNode.Q, profile.signatureAirQ + safeModeRatio * 0.2, now, 0.76);
+  }
+
+  const signaturePulse =
+    0.74 +
+    Math.sin(now * profile.signaturePulseSpeed + profile.signatureBodyPitch * 0.001) * 0.13 +
+    Math.sin(now * (profile.signaturePulseSpeed * 0.43 + 0.19)) * 0.09;
+  const signaturePresence = isOutside && !isUnderwater && !isUnderground
+    ? stageIntensity * clamp(signaturePulse, 0.52, 1)
+    : 0;
+  const signatureModeShape = stageCategory === 'war'
+    ? 1.08 + safeModeRatio * 0.16 + safeModeRank * 0.05
+    : stageCategory === 'build'
+      ? 0.9 + safeModeRatio * 0.22 + safeModeRank * 0.03
+      : 0.82;
+  const signatureBodyTarget = profile.signatureLevel * signaturePresence * signatureModeShape * nightBoost;
+  const signatureAirTarget = profile.signatureAirLevel * signaturePresence * (0.78 + safeModeRatio * 0.2);
+  smoothParam(biomeSignatureBodyGain.gain, signatureBodyTarget, now, 0.42);
+  smoothParam(biomeSignatureAirGain.gain, signatureAirTarget, now, 0.38);
 }
 
 /** 環境音の停止 */
@@ -522,5 +669,9 @@ export function stopAmbientSounds(): void {
     modeToneNode = null;
     modeTextureGain = null;
     modeTextureFilterNode = null;
+    biomeSignatureBodyGain = null;
+    biomeSignatureAirGain = null;
+    biomeSignatureBodyFilterNode = null;
+    biomeSignatureAirFilterNode = null;
   }, 500);
 }
