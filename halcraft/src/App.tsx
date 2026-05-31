@@ -67,6 +67,7 @@ import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StageProgressHUD } from './components/ui/StageProgressHUD';
 import { StageLandmarkMomentHUD } from './components/ui/StageLandmarkMomentHUD';
+import { StageMasteryMomentHUD } from './components/ui/StageMasteryMomentHUD';
 import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
 import { StageConditionHUD } from './components/ui/StageConditionHUD';
 import { StageEventHUD } from './components/ui/StageEventHUD';
@@ -304,6 +305,7 @@ export default function App() {
           <TimeDisplay />
           <StageProgressHUD />
           <StageLandmarkMomentHUD />
+          <StageMasteryMomentHUD />
           <StageChallengeHUD />
           <StageConditionHUD />
           <StageEventHUD />
