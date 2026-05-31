@@ -87,6 +87,39 @@
   }
 }
 
+@keyframes celebrationRailPulse {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.22);
+  }
+
+  42% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+
+  100% {
+    opacity: 0.76;
+    transform: scaleY(0.88);
+  }
+}
+
+@keyframes celebrationSpark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35) rotate(0deg);
+  }
+
+  22% {
+    opacity: 0.95;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 18px)) scale(1.18) rotate(115deg);
+  }
+}
+
 @keyframes combatFeedbackPop {
   0% {
     opacity: 0;

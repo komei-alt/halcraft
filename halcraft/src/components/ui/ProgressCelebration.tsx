@@ -38,6 +38,40 @@ interface CelebrationToast {
 
 const DISPLAY_MS = 3400;
 const MAX_TOASTS = 3;
+const CELEBRATION_SPARKS = [
+  { x: '6%', y: '18%', delay: 0, size: 4 },
+  { x: '16%', y: '76%', delay: 0.1, size: 5 },
+  { x: '33%', y: '8%', delay: 0.18, size: 3 },
+  { x: '54%', y: '84%', delay: 0.04, size: 4 },
+  { x: '72%', y: '12%', delay: 0.14, size: 5 },
+  { x: '88%', y: '68%', delay: 0.22, size: 4 },
+] as const;
+
+interface CelebrationVisualTone {
+  code: string;
+  glowScale: number;
+  sweepMs: number;
+}
+
+function getCelebrationVisualTone(toast: CelebrationToast): CelebrationVisualTone {
+  const text = `${toast.eyebrow} ${toast.title}`;
+  if (text.includes('チャレンジ達成') || text.includes('CLEAR')) {
+    return { code: 'CLEAR', glowScale: 1.32, sweepMs: 920 };
+  }
+  if (text.includes('技記録') || text.includes('記録') || text.includes('BEST')) {
+    return { code: 'RECORD', glowScale: 1.25, sweepMs: 980 };
+  }
+  if (text.includes('熟練') || text.includes('特典') || text.includes('レベルアップ')) {
+    return { code: 'PERK', glowScale: 1.3, sweepMs: 1040 };
+  }
+  if (text.includes('高速') || text.includes('素材コンボ') || text.includes('作戦')) {
+    return { code: 'FLOW', glowScale: 1.18, sweepMs: 1080 };
+  }
+  if (text.includes('報酬') || text.includes('補給') || text.includes('イベント')) {
+    return { code: 'BONUS', glowScale: 1.14, sweepMs: 1120 };
+  }
+  return { code: 'GOOD', glowScale: 1, sweepMs: 1150 };
+}
 
 function getTechniqueRecordValue(item: keyof typeof MASTERY_DEFS, streak: number, score: number): string {
   if (item === 'rocket_launcher') return `BEST ${score}`;
@@ -382,120 +416,178 @@ export function ProgressCelebration() {
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
       }}
     >
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          style={{
-            position: 'relative',
-            width: '100%',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            gap: isCompact ? 9 : 11,
-            padding: isCompact ? '9px 11px' : '11px 13px',
-            borderRadius: 8,
-            border: `1px solid ${toast.accent}88`,
-            background: 'linear-gradient(135deg, rgba(12, 16, 24, 0.86), rgba(20, 26, 36, 0.66))',
-            boxShadow: `0 0 22px ${toast.glow}, inset 0 1px 0 rgba(255,255,255,0.16)`,
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            color: '#fff',
-            animation: 'celebrationToast 3.4s ease forwards',
-          }}
-        >
+      {toasts.map((toast) => {
+        const tone = getCelebrationVisualTone(toast);
+        return (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: `linear-gradient(110deg, transparent 0%, ${toast.accent}22 42%, rgba(255,255,255,0.18) 50%, transparent 62%)`,
-              animation: 'celebrationShimmer 1.15s ease-out',
-            }}
-          />
-          <div
+            key={toast.id}
             style={{
               position: 'relative',
-              flex: '0 0 auto',
-              width: isCompact ? 34 : 38,
-              height: isCompact ? 34 : 38,
-              borderRadius: 8,
-              display: 'grid',
-              placeItems: 'center',
-              background: `${toast.accent}24`,
-              border: `1px solid ${toast.accent}77`,
-              boxShadow: `0 0 14px ${toast.glow}`,
-              fontSize: isCompact ? 19 : 21,
-              animation: 'celebrationIconPop 0.55s ease-out',
-            }}
-          >
-            {toast.icon}
-          </div>
-          <div style={{ position: 'relative', minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                color: toast.accent,
-                fontSize: isCompact ? 10 : 11,
-                lineHeight: '13px',
-                fontWeight: 900,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {toast.eyebrow}
-            </div>
-            <div
-              style={{
-                marginTop: 1,
-                color: 'rgba(255,255,255,0.96)',
-                fontSize: isCompact ? 14 : 15,
-                lineHeight: isCompact ? '17px' : '18px',
-                fontWeight: 950,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {toast.title}
-            </div>
-            <div
-              style={{
-                marginTop: 2,
-                color: 'rgba(255,255,255,0.72)',
-                fontSize: isCompact ? 10 : 11,
-                lineHeight: '14px',
-                fontWeight: 800,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {toast.detail}
-            </div>
-          </div>
-          <div
-            style={{
-              position: 'relative',
-              flex: '0 0 auto',
+              width: '100%',
+              overflow: 'hidden',
               display: 'flex',
-              gap: 4,
+              alignItems: 'center',
+              gap: isCompact ? 9 : 11,
+              padding: isCompact ? '9px 11px' : '11px 13px',
+              borderRadius: 8,
+              border: `1px solid ${toast.accent}96`,
+              background: `linear-gradient(135deg, ${toast.accent}1c, rgba(12, 16, 24, 0.88) 42%, rgba(20, 26, 36, 0.68))`,
+              boxShadow: `0 0 ${Math.round(22 * tone.glowScale)}px ${toast.glow}, inset 0 1px 0 rgba(255,255,255,0.18)`,
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              color: '#fff',
+              animation: 'celebrationToast 3.4s ease forwards',
             }}
           >
-            {[0, 1, 2].map((dot) => (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: `radial-gradient(circle at 18% 50%, ${toast.accent}34, transparent 32%), linear-gradient(110deg, transparent 0%, ${toast.accent}26 42%, rgba(255,255,255,0.22) 50%, transparent 62%)`,
+                animation: `celebrationShimmer ${tone.sweepMs}ms ease-out`,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
+                background: `linear-gradient(180deg, transparent, ${toast.accent}, #ffffff, ${toast.accent}, transparent)`,
+                boxShadow: `0 0 14px ${toast.accent}`,
+                animation: 'celebrationRailPulse 0.82s ease-out both',
+              }}
+            />
+            {CELEBRATION_SPARKS.map((spark, index) => (
               <span
-                key={dot}
+                key={`${toast.id}-spark-${index}`}
                 style={{
-                  width: 5,
-                  height: 5,
-                  borderRadius: 999,
-                  background: toast.accent,
-                  opacity: 0.8,
-                  animation: `celebrationDot 0.9s ease-in-out ${dot * 0.12}s infinite`,
+                  position: 'absolute',
+                  left: spark.x,
+                  top: spark.y,
+                  width: spark.size,
+                  height: spark.size,
+                  borderRadius: index % 2 === 0 ? 999 : 2,
+                  background: index % 3 === 0 ? '#fff' : toast.accent,
+                  boxShadow: `0 0 10px ${toast.accent}`,
+                  opacity: 0,
+                  transform: 'translate(-50%, -50%)',
+                  animation: `celebrationSpark 1.05s ease-out ${spark.delay}s both`,
                 }}
               />
             ))}
+            <div
+              style={{
+                position: 'relative',
+                flex: '0 0 auto',
+                width: isCompact ? 34 : 38,
+                height: isCompact ? 34 : 38,
+                borderRadius: 8,
+                display: 'grid',
+                placeItems: 'center',
+                background: `${toast.accent}2c`,
+                border: `1px solid ${toast.accent}88`,
+                boxShadow: `0 0 16px ${toast.glow}`,
+                fontSize: isCompact ? 19 : 21,
+                animation: 'celebrationIconPop 0.55s ease-out',
+              }}
+            >
+              {toast.icon}
+            </div>
+            <div style={{ position: 'relative', minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    color: toast.accent,
+                    fontSize: isCompact ? 10 : 11,
+                    lineHeight: '13px',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {toast.eyebrow}
+                </span>
+                <span
+                  style={{
+                    flex: '0 0 auto',
+                    padding: '1px 6px',
+                    borderRadius: 999,
+                    color: '#0b1017',
+                    background: `linear-gradient(90deg, ${toast.accent}, #ffffff)`,
+                    fontSize: isCompact ? 8 : 9,
+                    lineHeight: '11px',
+                    fontWeight: 950,
+                    fontFamily: 'monospace',
+                    boxShadow: `0 0 10px ${toast.glow}`,
+                  }}
+                >
+                  {tone.code}
+                </span>
+              </div>
+              <div
+                style={{
+                  marginTop: 1,
+                  color: 'rgba(255,255,255,0.96)',
+                  fontSize: isCompact ? 14 : 15,
+                  lineHeight: isCompact ? '17px' : '18px',
+                  fontWeight: 950,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {toast.title}
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  color: 'rgba(255,255,255,0.72)',
+                  fontSize: isCompact ? 10 : 11,
+                  lineHeight: '14px',
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {toast.detail}
+              </div>
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                flex: '0 0 auto',
+                display: 'flex',
+                gap: 4,
+              }}
+            >
+              {[0, 1, 2].map((dot) => (
+                <span
+                  key={dot}
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: 999,
+                    background: toast.accent,
+                    opacity: 0.8,
+                    animation: `celebrationDot 0.9s ease-in-out ${dot * 0.12}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
