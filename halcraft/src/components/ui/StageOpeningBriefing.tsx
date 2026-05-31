@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
-import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { useStageBuildScoreStore, type StageBuildScoreBest } from '../../stores/useStageBuildScoreStore';
+import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
 import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { getStageCondition } from '../../types/stageConditions';
@@ -16,8 +16,10 @@ import {
 } from '../../types/stageMastery';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
+import { getStageRecordGoal } from '../../types/stageRecordGoals';
 import {
   formatStageRunBonusLabel,
+  getStageOpeningItemLabel,
   getStageRunBonusForProgress,
   type StageRunBonus,
 } from '../../types/stageRunBonuses';
@@ -30,6 +32,14 @@ interface BriefingPoint {
   title: string;
   detail: string;
   accent: string;
+}
+
+interface BriefingRouteStep {
+  icon: string;
+  label: string;
+  detail: string;
+  accent: string;
+  valueText: string;
 }
 
 function getBriefingPoints(
@@ -122,6 +132,49 @@ function getBriefingPoints(
   return points.slice(0, compact ? 3 : 4);
 }
 
+function getBriefingRouteSteps(
+  stage: StageDefinition,
+  runBest: StageChallengeBest | undefined,
+  buildBest: StageBuildScoreBest | undefined,
+): BriefingRouteStep[] {
+  const modeRule = getStageModeRule(stage.id);
+  const buildStyle = getStageBuildStyle(stage.id);
+  const combatStyle = getStageCombatStyle(stage.id);
+  const recordGoal = getStageRecordGoal({ stage, runBest, buildBest });
+  const openingItemLabel = getStageOpeningItemLabel(stage.id);
+  const firstAction = modeRule?.actionLabel
+    ?? buildStyle?.focusLabel
+    ?? combatStyle?.shortLabel
+    ?? stage.rules.objective.prompts[0]
+    ?? stage.rules.objective.title;
+
+  return [
+    {
+      icon: stage.category === 'build' ? '🧰' : '⚔️',
+      label: '初動装備',
+      detail: stage.category === 'build'
+        ? '建築テンポを作って作品点へつなげる'
+        : 'マップ推奨の戦い方で戦意をためる',
+      accent: stage.category === 'build' ? '#9bdcff' : '#ffb36d',
+      valueText: openingItemLabel,
+    },
+    {
+      icon: modeRule?.icon ?? stage.icon,
+      label: '最初の一手',
+      detail: firstAction,
+      accent: modeRule?.accent ?? stage.color,
+      valueText: modeRule?.meterLabel ?? stage.rules.modeLabel,
+    },
+    {
+      icon: recordGoal.icon,
+      label: '今回の記録',
+      detail: recordGoal.title,
+      accent: recordGoal.accent,
+      valueText: recordGoal.progressLabel,
+    },
+  ];
+}
+
 export function StageOpeningBriefing() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -162,6 +215,16 @@ export function StageOpeningBriefing() {
   const points = useMemo(
     () => (stage ? getBriefingPoints(stage, isCompact, runBonus, masteryPerk) : []),
     [isCompact, masteryPerk, runBonus, stage],
+  );
+  const routeSteps = useMemo(
+    () => (stage
+      ? getBriefingRouteSteps(
+          stage,
+          bestByStage[stage.id],
+          buildBestByStage[stage.id],
+        )
+      : []),
+    [bestByStage, buildBestByStage, stage],
   );
 
   if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;
@@ -343,6 +406,81 @@ export function StageOpeningBriefing() {
                 {point.detail}
               </span>
             </span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          position: 'relative',
+          marginTop: isCompact ? 9 : 11,
+          display: 'grid',
+          gridTemplateColumns: isCompact ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+          gap: isCompact ? 5 : 7,
+        }}
+      >
+        {routeSteps.map((step) => (
+          <div
+            key={`${step.label}-${step.valueText}`}
+            style={{
+              minWidth: 0,
+              padding: isCompact ? '6px 7px' : '7px 8px',
+              borderRadius: 6,
+              background: 'rgba(255,255,255,0.055)',
+              border: `1px solid ${step.accent}42`,
+              boxShadow: `inset 0 0 12px ${step.accent}12`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span style={{ flex: '0 0 auto', fontSize: isCompact ? 13 : 14 }}>
+                {step.icon}
+              </span>
+              <span
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  color: step.accent,
+                  fontSize: isCompact ? 9 : 10,
+                  lineHeight: '12px',
+                  fontWeight: 950,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {step.label}
+              </span>
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  color: 'rgba(255,255,255,0.68)',
+                  fontSize: isCompact ? 8 : 9,
+                  lineHeight: '12px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                  whiteSpace: 'nowrap',
+                  maxWidth: isCompact ? 92 : 82,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {step.valueText}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                color: 'rgba(255,255,255,0.62)',
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '13px',
+                fontWeight: 790,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {step.detail}
+            </div>
           </div>
         ))}
       </div>
