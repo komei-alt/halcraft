@@ -13,6 +13,8 @@ import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
+const TOOL_DANGER_COLOR = new THREE.Color('#ff6b6b');
+const TOOL_CHIP_DANGER_COLOR = new THREE.Color('#ff7a68');
 const BLOCK_MODEL_OFFSET = new THREE.Vector3(-0.24, -0.66, -1.24);
 const TOOL_MODEL_OFFSET = new THREE.Vector3(0.46, -0.66, -1.12);
 const ROOT_ROTATION = new THREE.Euler(-0.08, 0.03, -0.04, 'YXZ');
@@ -21,6 +23,18 @@ const TOOL_ROTATION = new THREE.Euler(-0.35, Math.PI - 0.24, -0.26, 'YXZ');
 const textureLoader = new THREE.TextureLoader();
 const textureCache = new Map<string, THREE.Texture>();
 const blockMaterialCache = new Map<string, THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]>();
+const TOOL_TYPE_ACCENTS: Record<ToolType, string> = {
+  pickaxe: '#88d8ff',
+  axe: '#9dff8a',
+  shovel: '#ffd36f',
+  sword: '#cba4ff',
+};
+const TOOL_TIER_GLOW: Record<ToolDef['tier'], number> = {
+  wood: 0.12,
+  stone: 0.18,
+  iron: 0.32,
+  diamond: 0.54,
+};
 
 function getTexture(textureName: string): THREE.Texture {
   const cached = textureCache.get(textureName);
@@ -97,10 +111,17 @@ function getBlockAccentColor(blockDef: BlockInfo): THREE.Color {
   return new THREE.Color('#ffe2a3');
 }
 
+function getToolAccentColor(toolDef: ToolDef | null): THREE.Color {
+  if (!toolDef) return new THREE.Color(FIRST_PERSON_SKIN_COLOR);
+  return new THREE.Color(toolDef.color).lerp(new THREE.Color(TOOL_TYPE_ACCENTS[toolDef.type]), 0.42);
+}
+
 function ToolHead({ toolDef }: { toolDef: ToolDef }) {
   const toolColor = toolDef.color;
+  const accentColor = getToolAccentColor(toolDef);
   const type = toolDef.type;
   const metalness = toolDef.tier === 'wood' ? 0.04 : toolDef.tier === 'stone' ? 0.12 : 0.58;
+  const glowStrength = TOOL_TIER_GLOW[toolDef.tier];
 
   if (type === 'sword') {
     return (
@@ -112,6 +133,10 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
         <mesh position={[0, -0.05, 0]} renderOrder={34}>
           <boxGeometry args={[0.24, 0.035, 0.04]} />
           <meshStandardMaterial color="#d4c093" roughness={0.36} metalness={0.22} depthTest={false} depthWrite={false} />
+        </mesh>
+        <mesh position={[0, 0.28, 0.003]} renderOrder={35}>
+          <boxGeometry args={[0.024, 0.5, 0.012]} />
+          <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </mesh>
       </>
     );
@@ -128,16 +153,26 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
           <boxGeometry args={[0.08, 0.2, 0.045]} />
           <meshStandardMaterial color={toolColor} roughness={0.38} metalness={metalness} depthTest={false} depthWrite={false} />
         </mesh>
+        <mesh position={[0.08, 0.29, 0.004]} rotation={[0, 0, -0.25]} renderOrder={35}>
+          <boxGeometry args={[0.24, 0.035, 0.012]} />
+          <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        </mesh>
       </>
     );
   }
 
   if (type === 'shovel') {
     return (
-      <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI / 4]} renderOrder={34}>
-        <boxGeometry args={[0.18, 0.18, 0.045]} />
-        <meshStandardMaterial color={toolColor} roughness={0.44} metalness={metalness} depthTest={false} depthWrite={false} />
-      </mesh>
+      <>
+        <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI / 4]} renderOrder={34}>
+          <boxGeometry args={[0.18, 0.18, 0.045]} />
+          <meshStandardMaterial color={toolColor} roughness={0.44} metalness={metalness} depthTest={false} depthWrite={false} />
+        </mesh>
+        <mesh position={[0, 0.31, 0.004]} rotation={[0, 0, Math.PI / 4]} renderOrder={35}>
+          <boxGeometry args={[0.15, 0.026, 0.012]} />
+          <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        </mesh>
+      </>
     );
   }
 
@@ -154,6 +189,10 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
       <mesh position={[0.16, 0.18, 0]} rotation={[0, 0, -0.35]} renderOrder={34}>
         <boxGeometry args={[0.06, 0.18, 0.05]} />
         <meshStandardMaterial color={toolColor} roughness={0.38} metalness={metalness} depthTest={false} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.27, 0.004]} renderOrder={35}>
+        <boxGeometry args={[0.32, 0.026, 0.012]} />
+        <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </mesh>
     </>
   );
@@ -201,16 +240,23 @@ export function BuilderHeldItem() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedToolId = usePlayerStore((s) => s.equippedToolId);
+  const tools = usePlayerStore((s) => s.tools);
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
   const blockDef = BLOCK_DEFS[selectedBlock] ?? BLOCK_DEFS[BLOCK_IDS.GRASS];
   const blockMaterial = useMemo(() => getBlockViewMaterial(selectedBlock), [selectedBlock]);
   const toolDef = equippedToolId ? TOOL_DEFS[equippedToolId] : null;
+  const toolDurability = equippedToolId && toolDef ? (tools[equippedToolId] ?? 0) : 0;
+  const toolDurabilityRatio = toolDef ? Math.max(0, Math.min(1, toolDurability / toolDef.maxDurability)) : 1;
   const accentColor = useMemo(() => getBlockAccentColor(blockDef), [blockDef]);
+  const toolAccentColor = useMemo(() => getToolAccentColor(toolDef), [toolDef]);
   const rootRef = useRef<THREE.Group>(null);
   const blockRef = useRef<THREE.Group>(null);
   const toolRef = useRef<THREE.Group>(null);
   const blockGlowRef = useRef<THREE.Mesh>(null);
   const blockRingRef = useRef<THREE.Mesh>(null);
+  const toolTrailRef = useRef<THREE.Mesh>(null);
+  const toolStatusGlowRef = useRef<THREE.Mesh>(null);
+  const toolChipRef = useRef<THREE.Mesh>(null);
   const idleTimer = useRef(0);
   const switchPulse = useRef(1);
   const swingKick = useRef(0);
@@ -270,6 +316,36 @@ export function BuilderHeldItem() {
       toolRef.current.scale.setScalar(0.44);
       toolRef.current.rotation.x += swing * getToolTypeSwing(toolDef?.type ?? null);
       toolRef.current.rotation.z -= swing * 0.38;
+    }
+
+    if (toolTrailRef.current) {
+      const trailMaterial = toolTrailRef.current.material as THREE.MeshBasicMaterial;
+      const swing = Math.sin((1 - swingKick.current) * Math.PI) * swingKick.current;
+      const statusPulse = Math.max(0, 1 - toolDurabilityRatio) * 0.25;
+      trailMaterial.color.copy(toolAccentColor);
+      trailMaterial.opacity = swing * 0.62 + switchPulse.current * 0.12 + statusPulse;
+      toolTrailRef.current.rotation.z = -0.72 + idleTimer.current * 0.08 + swing * 1.8;
+      toolTrailRef.current.scale.setScalar(0.74 + swing * 0.38 + switchPulse.current * 0.12);
+    }
+
+    if (toolStatusGlowRef.current) {
+      const glowMaterial = toolStatusGlowRef.current.material as THREE.MeshBasicMaterial;
+      const lowDurabilityPulse = toolDef && toolDurabilityRatio <= 0.18
+        ? 0.55 + Math.sin(idleTimer.current * 9.5) * 0.22
+        : 0;
+      const tierGlow = toolDef ? TOOL_TIER_GLOW[toolDef.tier] : 0.08;
+      glowMaterial.color.copy(lowDurabilityPulse > 0 ? TOOL_DANGER_COLOR : toolAccentColor);
+      glowMaterial.opacity = Math.max(lowDurabilityPulse, tierGlow * 0.36 + switchPulse.current * 0.18);
+      toolStatusGlowRef.current.scale.setScalar(0.7 + switchPulse.current * 0.16 + lowDurabilityPulse * 0.18);
+    }
+
+    if (toolChipRef.current) {
+      const chipMaterial = toolChipRef.current.material as THREE.MeshBasicMaterial;
+      const lowDurability = toolDef && toolDurabilityRatio <= 0.18;
+      chipMaterial.color.copy(lowDurability ? TOOL_CHIP_DANGER_COLOR : toolAccentColor);
+      chipMaterial.opacity = (lowDurability ? 0.72 : 0.32) + switchPulse.current * 0.24;
+      toolChipRef.current.rotation.z -= delta * (lowDurability ? 7.5 : 2.4);
+      toolChipRef.current.scale.setScalar(0.82 + (lowDurability ? Math.sin(idleTimer.current * 8) * 0.08 : 0));
     }
 
     if (blockRef.current) {
@@ -343,6 +419,42 @@ export function BuilderHeldItem() {
       </group>
       <group ref={toolRef}>
         <ToolModel toolDef={toolDef} />
+        <mesh ref={toolTrailRef} position={[0.03, 0.08, -0.035]} rotation={[0, 0, -0.72]} renderOrder={36}>
+          <torusGeometry args={[0.36, 0.012, 8, 42, Math.PI * 1.28]} />
+          <meshBasicMaterial
+            color={toolAccentColor}
+            transparent
+            opacity={0}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh ref={toolStatusGlowRef} position={[0, 0.18, -0.045]} renderOrder={33}>
+          <sphereGeometry args={[0.34, 18, 10]} />
+          <meshBasicMaterial
+            color={toolAccentColor}
+            transparent
+            opacity={0}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh ref={toolChipRef} position={[0.18, 0.42, -0.02]} rotation={[0.15, 0.05, 0.4]} renderOrder={36}>
+          <boxGeometry args={[0.07, 0.018, 0.012]} />
+          <meshBasicMaterial
+            color={toolAccentColor}
+            transparent
+            opacity={0.32}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
         <mesh position={[0.08, -0.42, 0.04]} rotation={[-0.08, 0.04, -0.2]} renderOrder={34}>
           <boxGeometry args={[0.16, 0.42, 0.15]} />
           <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} depthTest={false} depthWrite={false} />
