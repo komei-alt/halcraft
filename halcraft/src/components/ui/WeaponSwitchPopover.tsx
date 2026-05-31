@@ -4,13 +4,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { getMasteryPerkSummary } from '../../types/masteryPerks';
+import {
+  getStageChallengeProgress,
+  getStageChallenges,
+  type StageChallengeDefinition,
+  type StageChallengeMetric,
+  type StageChallengeStats,
+} from '../../types/stageChallenges';
 import {
   formatStageCombatBonus,
   getStageCombatStyle,
   getStageCombatStyleForItem,
   getStageCombatWeaponLabel,
 } from '../../types/stageCombatStyles';
+import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 
 const SHOW_DURATION_MS = 2200;
@@ -23,6 +33,15 @@ interface PopoverContent {
   controls: string[];
   accent: string;
   glow: string;
+}
+
+interface ChallengeHint {
+  icon: string;
+  title: string;
+  progressLabel: string;
+  detail: string;
+  ratio: number;
+  accent: string;
 }
 
 const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
@@ -125,11 +144,87 @@ function getMobileContent(item: EquippedItem): PopoverContent {
   return base;
 }
 
+function clampRatio(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getCombatMetric(item: EquippedItem): StageChallengeMetric | null {
+  if (item === 'machine_gun') return 'machine_gun_hits';
+  if (item === 'rocket_launcher') return 'rocket_hits';
+  if (item === 'lightsaber') return 'lightsaber_hits';
+  return null;
+}
+
+function getPreferredChallengeMetrics(item: EquippedItem): StageChallengeMetric[] {
+  if (item === 'builder') {
+    return ['block_group_placed', 'blocks_placed', 'ores_mined', 'blocks_broken'];
+  }
+
+  const combatMetric = getCombatMetric(item);
+  return [
+    ...(combatMetric ? [combatMetric] : []),
+    'enemies_defeated',
+    'boss_defeated',
+    'detonations',
+    'vehicle_hits',
+    'block_group_placed',
+  ];
+}
+
+function pickChallenge(
+  challenges: StageChallengeDefinition[],
+  stats: StageChallengeStats,
+  completedIds: string[],
+  preferredMetrics: StageChallengeMetric[],
+): StageChallengeDefinition | null {
+  const unfinished = challenges.filter((challenge) => {
+    if (completedIds.includes(challenge.id)) return false;
+    return !getStageChallengeProgress(challenge, stats).completed;
+  });
+  if (unfinished.length === 0) return null;
+
+  for (const metric of preferredMetrics) {
+    const matched = unfinished.find((challenge) => challenge.metric === metric);
+    if (matched) return matched;
+  }
+
+  return unfinished[0] ?? null;
+}
+
+function getChallengeHint(
+  stageId: string | null,
+  item: EquippedItem,
+  stats: StageChallengeStats,
+  completedIds: string[],
+): ChallengeHint | null {
+  const challenge = pickChallenge(
+    getStageChallenges(stageId),
+    stats,
+    completedIds,
+    getPreferredChallengeMetrics(item),
+  );
+  if (!challenge) return null;
+
+  const progress = getStageChallengeProgress(challenge, stats);
+  const current = Math.min(progress.current, progress.target);
+  return {
+    icon: challenge.icon,
+    title: challenge.title,
+    progressLabel: `${current}/${progress.target}`,
+    detail: challenge.description,
+    ratio: progress.ratio,
+    accent: challenge.accent,
+  };
+}
+
 export function WeaponSwitchPopover() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const masteryItems = useMasteryStore((s) => s.items);
+  const modeMeter = useModeFlowStore((s) => s.meter);
+  const challengeStats = useStageChallengeStore((s) => s.stats);
+  const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const isTouch = isTouchDevice();
   const prevItemRef = useRef<EquippedItem>(equippedItem);
   const dismissTimerRef = useRef<number | null>(null);
@@ -201,6 +296,11 @@ export function WeaponSwitchPopover() {
   const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const tacticStyle = stageStyle ?? recommendedStageStyle;
   const tacticMatched = Boolean(stageStyle);
+  const modeRule = getStageModeRule(currentStageId);
+  const modeRatio = modeRule ? clampRatio(modeMeter / modeRule.threshold) : 0;
+  const modeMeterValue = modeRule ? Math.min(Math.floor(modeMeter), modeRule.threshold) : 0;
+  const challengeHint = getChallengeHint(currentStageId, displayItem, challengeStats, completedChallengeIds);
+  const hasStageContext = Boolean(tacticStyle || modeRule || challengeHint);
 
   return (
     <div
@@ -351,45 +451,159 @@ export function WeaponSwitchPopover() {
           </div>
         )}
 
-        {tacticStyle && (
+        {hasStageContext && (
           <div
             style={{
               marginTop: 9,
-              padding: '7px 8px',
+              padding: '7px 8px 8px',
               borderRadius: 7,
-              background: `${tacticStyle.accent}16`,
-              border: `1px solid ${tacticStyle.accent}44`,
+              background: `${(tacticStyle?.accent ?? modeRule?.accent ?? challengeHint?.accent ?? content.accent)}16`,
+              border: `1px solid ${(tacticStyle?.accent ?? modeRule?.accent ?? challengeHint?.accent ?? content.accent)}44`,
               color: 'rgba(255,255,255,0.84)',
               fontSize: isTouch ? 10 : 11,
               lineHeight: '14px',
               fontWeight: 850,
             }}
           >
-            <div
-              style={{
-                color: tacticStyle.accent,
-                fontWeight: 950,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {tacticStyle.icon} {tacticMatched
-                ? tacticStyle.title
-                : `推奨: ${getStageCombatWeaponLabel(tacticStyle.weapon)}`}
-            </div>
-            <div
-              style={{
-                marginTop: 2,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {tacticMatched
-                ? `${formatStageCombatBonus(tacticStyle)} / マップ色エフェクト`
-                : `${tacticStyle.shortLabel}: ${formatStageCombatBonus(tacticStyle)}`}
-            </div>
+            {tacticStyle && (
+              <>
+                <div
+                  style={{
+                    color: tacticStyle.accent,
+                    fontWeight: 950,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {tacticStyle.icon} {tacticMatched
+                    ? `マップ戦術一致: ${tacticStyle.title}`
+                    : `おすすめ武器: ${getStageCombatWeaponLabel(tacticStyle.weapon)}`}
+                </div>
+                <div
+                  style={{
+                    marginTop: 2,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {tacticMatched
+                    ? `${formatStageCombatBonus(tacticStyle)} / 戦意+`
+                    : `${tacticStyle.shortLabel}: ${formatStageCombatBonus(tacticStyle)}`}
+                </div>
+              </>
+            )}
+
+            {modeRule && (
+              <div
+                style={{
+                  marginTop: tacticStyle ? 7 : 0,
+                  display: 'grid',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    color: modeRule.accent,
+                    fontWeight: 950,
+                  }}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {modeRule.icon} {modeRule.meterLabel}
+                  </span>
+                  <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+                    {modeMeterValue}/{modeRule.threshold}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.13)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${modeRatio * 100}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: `linear-gradient(90deg, ${modeRule.accent}, #ffffff)`,
+                      transition: 'width 0.18s ease',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  次: {modeRule.actionLabel}
+                </div>
+              </div>
+            )}
+
+            {challengeHint && (
+              <div
+                style={{
+                  marginTop: modeRule || tacticStyle ? 7 : 0,
+                  display: 'grid',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    color: challengeHint.accent,
+                    fontWeight: 950,
+                  }}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {challengeHint.icon} マップ目標: {challengeHint.title}
+                  </span>
+                  <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+                    {challengeHint.progressLabel}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.13)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${challengeHint.ratio * 100}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: `linear-gradient(90deg, ${challengeHint.accent}, #ffffff)`,
+                      transition: 'width 0.18s ease',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {challengeHint.detail}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
