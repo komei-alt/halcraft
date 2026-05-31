@@ -35,6 +35,7 @@ import {
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
 import { airplaneRealtime } from '../utils/airplaneRealtime';
+import { STAGE_LANDMARK_CENTER } from '../types/stageLandmarks';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
 import { useEffectStore } from '../stores/useEffectStore';
 import { getSpeedMultiplier, getJumpBoostMultiplier } from '../types/potions';
@@ -84,6 +85,8 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // スポーン座標（プレイヤーの家の中心近く）
 const SPAWN_X = 8;
 const SPAWN_Z = 8;
+const INITIAL_LANDMARK_YAW = Math.atan2(-(STAGE_LANDMARK_CENTER.x - SPAWN_X), -(STAGE_LANDMARK_CENTER.z - SPAWN_Z));
+const INITIAL_LANDMARK_PITCH = -0.3;
 // プレイヤーの家の基準高さ（x=7, z=7 の地形高さ）を取得し、床(y=floorY)の上(空気ブロック)にスポーンさせる
 const getSpawnY = () => getTerrainHeight(7, 7) + 1.1;
 
@@ -155,7 +158,7 @@ export function Player() {
   const lastJumpDown = useRef(false);
 
   // 視点回転
-  const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const euler = useRef(new THREE.Euler(INITIAL_LANDMARK_PITCH, INITIAL_LANDMARK_YAW, 0, 'YXZ'));
 
   // タッチデバイス判定（初回のみ）
   const isTouch = useRef(isTouchDevice());

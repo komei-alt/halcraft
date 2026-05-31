@@ -105,6 +105,23 @@ function placeColumn(
   }
 }
 
+function placeHorizontalLine(
+  chunk: ChunkData,
+  cx: number,
+  cz: number,
+  startX: number,
+  startZ: number,
+  dx: number,
+  dz: number,
+  length: number,
+  y: number,
+  blockId: BlockId,
+): void {
+  for (let i = 0; i < length; i++) {
+    setWorldBlock(chunk, cx, cz, startX + dx * i, y, startZ + dz * i, blockId);
+  }
+}
+
 function placeBuildLandmark(chunk: ChunkData, cx: number, cz: number, stage: StageDefinition, baseY: number): void {
   const accent = biomeAccentBlock(stage.biome);
   const center = STAGE_LANDMARK_CENTER;
@@ -138,7 +155,14 @@ function placeBuildLandmark(chunk: ChunkData, cx: number, cz: number, stage: Sta
     for (let i = -6; i <= 6; i++) {
       setWorldBlock(chunk, cx, cz, center.x + i, baseY + 1, center.z - 6, BLOCK_IDS.WATER);
       setWorldBlock(chunk, cx, cz, center.x + i, baseY + 1, center.z + 6, BLOCK_IDS.WATER);
+      if (i % 2 === 0) {
+        setWorldBlock(chunk, cx, cz, center.x + i, baseY + 2, center.z - 4, BLOCK_IDS.GLASS);
+        setWorldBlock(chunk, cx, cz, center.x + i, baseY + 2, center.z + 4, BLOCK_IDS.GLASS);
+      }
     }
+    placeColumn(chunk, cx, cz, center.x - 3, baseY, center.z, 3, BLOCK_IDS.RAW_WOOD);
+    setWorldBlock(chunk, cx, cz, center.x - 3, baseY + 4, center.z, BLOCK_IDS.LEAVES);
+    setWorldBlock(chunk, cx, cz, center.x + 3, baseY + 2, center.z, BLOCK_IDS.GLOWSTONE);
   } else if (stage.biome === 'desert') {
     for (let h = 1; h <= 4; h++) {
       const radius = 5 - h;
@@ -151,16 +175,39 @@ function placeBuildLandmark(chunk: ChunkData, cx: number, cz: number, stage: Sta
       }
     }
     setWorldBlock(chunk, cx, cz, center.x, baseY + 5, center.z, BLOCK_IDS.GLOWSTONE);
+    for (const pos of [
+      { x: center.x - 6, z: center.z },
+      { x: center.x + 6, z: center.z },
+      { x: center.x, z: center.z - 6 },
+      { x: center.x, z: center.z + 6 },
+    ]) {
+      placeColumn(chunk, cx, cz, pos.x, baseY, pos.z, 3, BLOCK_IDS.SAND);
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 4, pos.z, BLOCK_IDS.CANDLE);
+    }
   } else if (stage.biome === 'snow') {
     for (let h = 1; h <= 7; h++) {
       setWorldBlock(chunk, cx, cz, center.x, baseY + h, center.z, h % 2 === 0 ? BLOCK_IDS.GLASS : BLOCK_IDS.SNOW);
     }
     setWorldBlock(chunk, cx, cz, center.x, baseY + 8, center.z, BLOCK_IDS.GLOWSTONE);
+    for (const pos of [
+      { x: center.x - 3, z: center.z },
+      { x: center.x + 3, z: center.z },
+      { x: center.x, z: center.z - 3 },
+      { x: center.x, z: center.z + 3 },
+    ]) {
+      placeColumn(chunk, cx, cz, pos.x, baseY, pos.z, 4, BLOCK_IDS.GLASS);
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 5, pos.z, BLOCK_IDS.SNOW);
+    }
   } else {
     for (let i = -5; i <= 5; i++) {
       setWorldBlock(chunk, cx, cz, center.x + i, baseY + 1, center.z - 5, BLOCK_IDS.LEAVES);
       setWorldBlock(chunk, cx, cz, center.x - 5, baseY + 1, center.z + i, BLOCK_IDS.LEAVES);
     }
+    placeColumn(chunk, cx, cz, center.x - 4, baseY, center.z - 3, 5, BLOCK_IDS.RAW_WOOD);
+    placeColumn(chunk, cx, cz, center.x + 4, baseY, center.z - 3, 5, BLOCK_IDS.RAW_WOOD);
+    placeHorizontalLine(chunk, cx, cz, center.x - 4, center.z - 3, 1, 0, 9, baseY + 6, BLOCK_IDS.WOOD);
+    placeHorizontalLine(chunk, cx, cz, center.x - 3, center.z - 4, 1, 0, 7, baseY + 7, BLOCK_IDS.LEAVES);
+    setWorldBlock(chunk, cx, cz, center.x, baseY + 6, center.z - 2, BLOCK_IDS.GLOWSTONE);
   }
 }
 
@@ -215,13 +262,54 @@ function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: Stage
         }
       }
     }
+    for (const pos of [
+      { x: center.x - 4, z: center.z },
+      { x: center.x + 4, z: center.z },
+      { x: center.x, z: center.z - 4 },
+      { x: center.x, z: center.z + 4 },
+    ]) {
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 1, pos.z, BLOCK_IDS.LAVA);
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 2, pos.z, BLOCK_IDS.NETHERRACK);
+    }
   }
 
   if (stage.biome === 'tropical') {
     for (let i = -9; i <= 9; i++) {
       setWorldBlock(chunk, cx, cz, center.x + i, baseY + 1, center.z - 9, BLOCK_IDS.WATER);
       setWorldBlock(chunk, cx, cz, center.x + i, baseY + 1, center.z + 9, BLOCK_IDS.WATER);
+      if (i % 3 === 0) {
+        setWorldBlock(chunk, cx, cz, center.x + i, baseY + 2, center.z - 7, BLOCK_IDS.GLASS);
+        setWorldBlock(chunk, cx, cz, center.x + i, baseY + 2, center.z + 7, BLOCK_IDS.GLASS);
+      }
     }
+    placeColumn(chunk, cx, cz, center.x, baseY, center.z - 4, 4, BLOCK_IDS.ELECTRIC);
+    setWorldBlock(chunk, cx, cz, center.x, baseY + 5, center.z - 4, BLOCK_IDS.GLOWSTONE);
+  }
+
+  if (stage.biome === 'forest') {
+    for (const pos of [
+      { x: center.x - 8, z: center.z },
+      { x: center.x + 8, z: center.z },
+      { x: center.x, z: center.z - 8 },
+      { x: center.x, z: center.z + 8 },
+    ]) {
+      placeColumn(chunk, cx, cz, pos.x, baseY, pos.z, 3, BLOCK_IDS.IRON_MOSSY);
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 4, pos.z, BLOCK_IDS.LEAVES);
+    }
+    placeHorizontalLine(chunk, cx, cz, center.x - 4, center.z, 1, 0, 9, baseY + 2, BLOCK_IDS.IRON_CRACKED);
+  }
+
+  if (stage.biome === 'snow') {
+    for (const pos of [
+      { x: center.x - 5, z: center.z },
+      { x: center.x + 5, z: center.z },
+      { x: center.x, z: center.z - 5 },
+      { x: center.x, z: center.z + 5 },
+    ]) {
+      placeColumn(chunk, cx, cz, pos.x, baseY, pos.z, 4, BLOCK_IDS.SNOW);
+      setWorldBlock(chunk, cx, cz, pos.x, baseY + 5, pos.z, BLOCK_IDS.GLASS);
+    }
+    setWorldBlock(chunk, cx, cz, center.x, baseY + 3, center.z, BLOCK_IDS.ELECTRIC);
   }
 }
 
