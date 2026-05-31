@@ -44,6 +44,8 @@ interface ModeFlowState {
   meter: number;
   lastGain: number;
   lastGainLabel: string | null;
+  lastGainAt: number;
+  lastCombatStyleItem: EquippedItem | null;
   streak: number;
   bestStreak: number;
   streakExpiresAt: number;
@@ -203,6 +205,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   meter: 0,
   lastGain: 0,
   lastGainLabel: null,
+  lastGainAt: 0,
+  lastCombatStyleItem: null,
   streak: 0,
   bestStreak: 0,
   streakExpiresAt: 0,
@@ -218,6 +222,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: 0,
       lastGain: 0,
       lastGainLabel: null,
+      lastGainAt: 0,
+      lastCombatStyleItem: null,
       streak: 0,
       bestStreak: 0,
       streakExpiresAt: 0,
@@ -254,6 +260,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `+${gain} ${rule.meterLabel}`,
+      lastGainAt: createdAt,
+      lastCombatStyleItem: null,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
@@ -282,6 +290,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `${style.shortLabel} +${gain}`,
+      lastGainAt: createdAt,
+      lastCombatStyleItem: item,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
@@ -308,6 +318,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `${vehicleType === 'airplane' ? '空爆' : '戦車'} +${gain}`,
+      lastGainAt: createdAt,
+      lastCombatStyleItem: null,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
@@ -336,6 +348,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `x${nextStreak} / +${gain}`,
+      lastGainAt: createdAt,
+      lastCombatStyleItem: null,
       streak: nextStreak,
       bestStreak: Math.max(state.bestStreak, nextStreak),
       streakExpiresAt: createdAt + streakWindow,
@@ -363,6 +377,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: safeGain,
       lastGainLabel: `${label} +${safeGain}`,
+      lastGainAt: createdAt,
+      lastCombatStyleItem: null,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,

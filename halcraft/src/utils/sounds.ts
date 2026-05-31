@@ -1154,7 +1154,7 @@ export function playMiningBlockedSound(): void {
 }
 
 type ItemSwitchSoundKind = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
-type StageCombatCueSoundKind = 'match';
+type StageCombatCueSoundKind = 'match' | 'surge';
 
 /** 装備切替SE — アイテムごとの役割が耳でも分かる短い合図 */
 export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
@@ -1224,22 +1224,24 @@ export function playStageCombatCueSound(kind: StageCombatCueSoundKind = 'match')
   const ctx = getAudioContext();
   if (!ctx || !canPlay(`stageCombatCue:${kind}`, 520)) return;
   const now = ctx.currentTime;
-  const notes = [523.25, 783.99, 1046.5];
+  const notes = kind === 'surge'
+    ? [392, 587.33, 783.99, 1174.66]
+    : [523.25, 783.99, 1046.5];
 
   notes.forEach((note, index) => {
-    const t = now + index * 0.04;
+    const t = now + index * (kind === 'surge' ? 0.038 : 0.04);
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(note, t);
-    osc.frequency.exponentialRampToValueAtTime(note * 1.06, t + 0.16);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'surge' ? 1.1 : 1.06), t + 0.16);
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1800, t);
-    filter.Q.setValueAtTime(1.7, t);
+    filter.frequency.setValueAtTime(kind === 'surge' ? 2100 : 1800, t);
+    filter.Q.setValueAtTime(kind === 'surge' ? 2.2 : 1.7, t);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.04, t);
+    gain.gain.setValueAtTime(kind === 'surge' ? 0.048 : 0.04, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
 
     osc.connect(filter);
@@ -1248,6 +1250,25 @@ export function playStageCombatCueSound(kind: StageCombatCueSoundKind = 'match')
     osc.start(t);
     osc.stop(t + 0.18);
   });
+
+  if (kind === 'surge') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.setValueAtTime(1800, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.018, now + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now + 0.02);
+    noise.stop(now + 0.2);
+  }
 }
 
 type CombatFeedbackSoundKind = 'hit' | 'critical' | 'defeat';

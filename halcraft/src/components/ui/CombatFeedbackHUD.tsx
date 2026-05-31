@@ -4,15 +4,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import {
+  getModeFlowRankLabel,
+  useModeFlowStore,
+} from '../../stores/useModeFlowStore';
+import {
   MASTERY_DEFS,
   type MasteryEvent,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
 import type { EquippedItem } from '../../stores/usePlayerStore';
+import {
+  formatStageCombatBonus,
+  getStageCombatStyle,
+  getStageCombatStyleForItem,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
+import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 import {
   playCombatFeedbackSound,
   playCombatTechniqueSound,
+  playStageCombatCueSound,
   type CombatTechniqueSoundKind,
 } from '../../utils/sounds';
 
@@ -24,6 +36,7 @@ interface CombatFeedback {
   xp: number;
   streak: number;
   techniqueRecordUpdated: boolean;
+  createdAt: number;
 }
 
 interface TechniqueFeedback {
@@ -34,6 +47,18 @@ interface TechniqueFeedback {
   meterText: string;
   ratio: number;
   soundKind: CombatTechniqueSoundKind | null;
+}
+
+interface StageTacticFeedback {
+  accent: string;
+  glow: string;
+  eyebrow: string;
+  label: string;
+  detail: string;
+  meterLabel: string;
+  meterText: string;
+  ratio: number;
+  matched: boolean;
 }
 
 const DISPLAY_MS = 1120;
@@ -212,8 +237,64 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
   };
 }
 
+function getStageTacticFeedback(
+  feedback: CombatFeedback,
+  currentStageId: string | null,
+  modeMeter: number,
+  modeLastGain: number,
+  modeLastGainAt: number,
+  modeLastCombatStyleItem: EquippedItem | null,
+  modeFlowRank: number,
+): StageTacticFeedback | null {
+  const rule = getStageModeRule(currentStageId);
+  const recommendedStyle = getStageCombatStyle(currentStageId);
+  if (!rule || rule.category !== 'war' || !recommendedStyle) return null;
+
+  const matchedStyle = getStageCombatStyleForItem(currentStageId, feedback.item);
+  const threshold = Math.max(1, rule.threshold);
+  const ratio = Math.max(0, Math.min(1, modeMeter / threshold));
+  const rankLabel = getModeFlowRankLabel(rule.category, modeFlowRank);
+
+  if (!matchedStyle) {
+    return {
+      accent: recommendedStyle.accent,
+      glow: `${recommendedStyle.accent}3f`,
+      eyebrow: 'マップ作戦',
+      label: '推奨武器へ切替',
+      detail: `${getStageCombatWeaponLabel(recommendedStyle.weapon)}なら${rule.meterLabel}が進む / ${formatStageCombatBonus(recommendedStyle)}`,
+      meterLabel: 'MAP',
+      meterText: 'SWAP',
+      ratio: 0.24,
+      matched: false,
+    };
+  }
+
+  const hasRecentGain = modeLastCombatStyleItem === feedback.item
+    && modeLastGainAt >= feedback.createdAt - 24
+    && modeLastGainAt <= feedback.createdAt + 700;
+  const gainText = hasRecentGain && modeLastGain > 0 ? `+${modeLastGain}` : '進行';
+  const nextText = Math.max(0, threshold - modeMeter);
+  return {
+    accent: matchedStyle.accent,
+    glow: `${matchedStyle.accent}55`,
+    eyebrow: matchedStyle.shortLabel,
+    label: `${rule.meterLabel}${gainText}`,
+    detail: `${rankLabel} / 次の${rule.shortLabel}まであと${Math.ceil(nextText)} / ${formatStageCombatBonus(matchedStyle)}`,
+    meterLabel: rule.meterLabel.toUpperCase(),
+    meterText: `${Math.round(ratio * 100)}%`,
+    ratio,
+    matched: true,
+  };
+}
+
 export function CombatFeedbackHUD() {
   const phase = useGameStore((s) => s.phase);
+  const currentStageId = useGameStore((s) => s.currentStageId);
+  const modeMeter = useModeFlowStore((s) => s.meter);
+  const modeLastGain = useModeFlowStore((s) => s.lastGain);
+  const modeLastGainAt = useModeFlowStore((s) => s.lastGainAt);
+  const modeLastCombatStyleItem = useModeFlowStore((s) => s.lastCombatStyleItem);
+  const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const [feedback, setFeedback] = useState<CombatFeedback | null>(null);
   const clearTimerRef = useRef<number | null>(null);
   const lastEventIdRef = useRef<number | null>(null);
@@ -241,12 +322,19 @@ export function CombatFeedbackHUD() {
         xp: event.xp,
         streak: event.streak,
         techniqueRecordUpdated: event.techniqueRecordUpdated,
+        createdAt: event.createdAt,
       };
       setFeedback(nextFeedback);
       playCombatFeedbackSound(kind);
       const technique = getTechniqueFeedback(nextFeedback);
       if (technique.soundKind) {
         playCombatTechniqueSound(technique.soundKind);
+      }
+      const matchedStyle = getStageCombatStyleForItem(useGameStore.getState().currentStageId, event.item);
+      if (matchedStyle) {
+        playStageCombatCueSound(
+          event.critical || event.kind === 'defeat' || event.techniqueRecordUpdated ? 'surge' : 'match',
+        );
       }
 
       clearTimer();
@@ -269,6 +357,17 @@ export function CombatFeedbackHUD() {
   const isCritical = feedback.kind === 'critical';
   const label = getFeedbackLabel(feedback);
   const technique = getTechniqueFeedback(feedback);
+  const stageTactic = getStageTacticFeedback(
+    feedback,
+    currentStageId,
+    modeMeter,
+    modeLastGain,
+    modeLastGainAt,
+    modeLastCombatStyleItem,
+    modeFlowRank,
+  );
+  const accent = stageTactic?.matched ? stageTactic.accent : def.accent;
+  const glow = stageTactic?.matched ? stageTactic.glow : def.glow;
 
   return (
     <div
@@ -291,15 +390,19 @@ export function CombatFeedbackHUD() {
           width: isCompact ? 'min(236px, calc(100vw - 32px))' : 222,
           padding: isCompact ? '5px 7px' : '6px 9px',
           borderRadius: 6,
-          border: `1px solid ${def.accent}66`,
+          border: `1px solid ${accent}73`,
           background: isDefeat
             ? 'rgba(28, 18, 8, 0.72)'
-            : 'rgba(8, 12, 18, 0.66)',
+            : stageTactic?.matched
+              ? 'rgba(12, 15, 18, 0.72)'
+              : 'rgba(8, 12, 18, 0.66)',
           color: '#fff',
-          boxShadow: `0 0 16px ${isDefeat ? 'rgba(255, 214, 96, 0.28)' : def.glow}`,
+          boxShadow: `0 0 ${stageTactic?.matched ? 24 : 16}px ${isDefeat ? 'rgba(255, 214, 96, 0.28)' : glow}`,
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
-          animation: 'combatFeedbackPop 0.76s ease-out forwards',
+          animation: stageTactic?.matched
+            ? 'combatFeedbackPop 0.76s ease-out forwards, combatStagePulse 0.58s ease-out'
+            : 'combatFeedbackPop 0.76s ease-out forwards',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
@@ -311,8 +414,8 @@ export function CombatFeedbackHUD() {
               display: 'grid',
               placeItems: 'center',
               borderRadius: 5,
-              background: isDefeat ? 'rgba(255, 214, 96, 0.18)' : def.glow,
-              border: `1px solid ${def.accent}66`,
+              background: isDefeat ? 'rgba(255, 214, 96, 0.18)' : glow,
+              border: `1px solid ${accent}66`,
               fontSize: isCompact ? 12 : 14,
             }}
           >
@@ -321,7 +424,7 @@ export function CombatFeedbackHUD() {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div
               style={{
-                color: isDefeat ? '#ffe680' : isCritical ? '#fff1a8' : def.accent,
+                color: isDefeat ? '#ffe680' : isCritical ? '#fff1a8' : accent,
                 fontSize: isCompact ? 11 : 12,
                 lineHeight: '13px',
                 fontWeight: 950,
@@ -364,16 +467,16 @@ export function CombatFeedbackHUD() {
             marginTop: 6,
             padding: isCompact ? '5px 6px' : '6px 7px',
             borderRadius: 5,
-            background: `${def.accent}14`,
-            border: `1px solid ${def.accent}38`,
-            boxShadow: `inset 0 0 12px ${def.glow}`,
+            background: `${accent}14`,
+            border: `1px solid ${accent}38`,
+            boxShadow: `inset 0 0 12px ${glow}`,
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <span
               style={{
                 minWidth: 0,
-                color: def.accent,
+                color: accent,
                 fontSize: isCompact ? 9 : 10,
                 lineHeight: '12px',
                 fontWeight: 950,
@@ -411,8 +514,8 @@ export function CombatFeedbackHUD() {
                 width: `${Math.round(technique.ratio * 100)}%`,
                 height: '100%',
                 borderRadius: 999,
-                background: `linear-gradient(90deg, ${def.accent}, #ffffff)`,
-                boxShadow: `0 0 8px ${def.glow}`,
+                background: `linear-gradient(90deg, ${accent}, #ffffff)`,
+                boxShadow: `0 0 8px ${glow}`,
               }}
             />
           </div>
@@ -431,6 +534,84 @@ export function CombatFeedbackHUD() {
             {technique.detail}
           </div>
         </div>
+        {stageTactic && (
+          <div
+            style={{
+              marginTop: 5,
+              padding: isCompact ? '5px 6px' : '6px 7px',
+              borderRadius: 5,
+              background: stageTactic.matched
+                ? `linear-gradient(90deg, ${stageTactic.accent}24, rgba(255,255,255,0.06))`
+                : 'rgba(255,255,255,0.06)',
+              border: `1px solid ${stageTactic.accent}${stageTactic.matched ? '66' : '38'}`,
+              boxShadow: stageTactic.matched ? `0 0 12px ${stageTactic.glow}` : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span
+                style={{
+                  minWidth: 0,
+                  color: stageTactic.accent,
+                  fontSize: isCompact ? 8 : 9,
+                  lineHeight: '11px',
+                  fontWeight: 950,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {stageTactic.eyebrow}: {stageTactic.label}
+              </span>
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  color: stageTactic.matched ? '#fff4b0' : 'rgba(255,255,255,0.62)',
+                  fontSize: isCompact ? 8 : 9,
+                  lineHeight: '11px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {stageTactic.meterLabel} {stageTactic.meterText}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                height: 3,
+                borderRadius: 999,
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.12)',
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.round(stageTactic.ratio * 100)}%`,
+                  height: '100%',
+                  borderRadius: 999,
+                  background: stageTactic.matched
+                    ? `linear-gradient(90deg, ${stageTactic.accent}, #fff4b0)`
+                    : `linear-gradient(90deg, ${stageTactic.accent}, rgba(255,255,255,0.5))`,
+                  boxShadow: `0 0 8px ${stageTactic.glow}`,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                color: stageTactic.matched ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.58)',
+                fontSize: isCompact ? 8 : 9,
+                lineHeight: '11px',
+                fontWeight: 780,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {stageTactic.detail}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
