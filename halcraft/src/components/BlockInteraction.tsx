@@ -101,6 +101,7 @@ interface BreakProgress {
   x: number;
   y: number;
   z: number;
+  blockId: BlockId;
   /** 現在の破壊進行度（0〜1） */
   progress: number;
   /** そのブロックの硬さ（秒） */
@@ -152,6 +153,9 @@ const placementGhostGeometry = new THREE.BoxGeometry(0.86, 0.86, 0.86);
 const highlightEdgeGeometry = new THREE.EdgesGeometry(highlightGeometry, 15);
 const placementEdgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.98, 0.98, 0.98), 15);
 const placementRingGeometry = new THREE.RingGeometry(0.34, 0.5, 48);
+const breakProgressEdgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.035, 1.035, 1.035), 15);
+const breakProgressHaloGeometry = new THREE.BoxGeometry(1.018, 1.018, 1.018);
+const breakProgressRingGeometry = new THREE.RingGeometry(0.42, 0.51, 64);
 const PLACEMENT_INVALID_COLOR = '#ff5f6d';
 const TARGET_OUTLINE_COLOR = '#ffffff';
 
@@ -178,6 +182,62 @@ function getToolTierLabel(tier: number): string {
 function getBlockShortName(blockId: BlockId): string {
   return (BLOCK_DEFS[blockId]?.name ?? 'このブロック').replace('ブロック', '');
 }
+
+function getBlockProgressColor(blockId: BlockId): THREE.Color {
+  const def = BLOCK_DEFS[blockId];
+  if (def?.emissiveColor) return def.emissiveColor.clone();
+  if (def?.blockCategory === 'ore') return new THREE.Color('#ffe082');
+  if (def?.blockCategory === 'wood') return new THREE.Color('#d79a55');
+  if (def?.blockCategory === 'dirt') return new THREE.Color('#99dd66');
+  if (blockId === BLOCK_IDS.SAND) return new THREE.Color('#ffd66e');
+  if (blockId === BLOCK_IDS.SNOW || blockId === BLOCK_IDS.GLASS) return new THREE.Color('#c9f3ff');
+  if (blockId === BLOCK_IDS.NETHERRACK || blockId === BLOCK_IDS.SOUL_SAND) return new THREE.Color('#d66a8f');
+  return new THREE.Color('#f1f5ff');
+}
+
+function createBreakCrackGeometry(): THREE.BufferGeometry {
+  const segments: number[] = [];
+  const add = (a: [number, number, number], b: [number, number, number]) => {
+    segments.push(...a, ...b);
+  };
+
+  const surface = 0.522;
+  const faceCracks: Array<Array<[[number, number], [number, number]]>> = [
+    [
+      [[-0.42, -0.16], [-0.18, 0.02]],
+      [[-0.18, 0.02], [0.02, -0.08]],
+      [[0.02, -0.08], [0.28, 0.17]],
+      [[-0.08, 0.0], [-0.18, 0.28]],
+      [[0.1, -0.02], [0.36, -0.22]],
+    ],
+    [
+      [[-0.34, 0.24], [-0.1, 0.04]],
+      [[-0.1, 0.04], [0.18, 0.14]],
+      [[0.18, 0.14], [0.38, -0.12]],
+      [[0.02, 0.08], [-0.14, -0.24]],
+    ],
+  ];
+
+  for (const [faceIndex, cracks] of faceCracks.entries()) {
+    const z = faceIndex === 0 ? surface : -surface;
+    for (const [a, b] of cracks) add([a[0], a[1], z], [b[0], b[1], z]);
+  }
+
+  for (const cracks of faceCracks) {
+    for (const [a, b] of cracks) {
+      add([surface, a[0], a[1]], [surface, b[0], b[1]]);
+      add([-surface, a[0], -a[1]], [-surface, b[0], -b[1]]);
+      add([a[0], surface, a[1]], [b[0], surface, b[1]]);
+      add([a[0], -surface, -a[1]], [b[0], -surface, -b[1]]);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(segments, 3));
+  return geometry;
+}
+
+const breakCrackGeometry = createBreakCrackGeometry();
 
 function getBlockBreakBlocker(blockId: BlockId, isBuildMode: boolean, playerTier: number): BlockBreakBlocker | null {
   const def = BLOCK_DEFS[blockId];
@@ -418,28 +478,110 @@ function BlockHighlight({
 
 /** ブロック破壊の進行度表示（ひび割れオーバーレイ） */
 function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProgress | null }) {
-  if (!breakProgress || breakProgress.progress <= 0) return null;
-  const stage = Math.min(9, Math.floor(breakProgress.progress * 10));
-  // 10段階の透明度（進行するほど濃く）
-  const opacity = 0.15 + stage * 0.075;
+  const crackMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
+  const edgeMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
+  const haloMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const ringMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const ringGroupRef = useRef<THREE.Group | null>(null);
+  const timeRef = useRef(0);
+
+  const progress = Math.max(0, Math.min(1, breakProgress?.progress ?? 0));
+  const progressColor = useMemo(
+    () => getBlockProgressColor(breakProgress?.blockId ?? BLOCK_IDS.STONE),
+    [breakProgress?.blockId],
+  );
+
+  useFrame((_, delta) => {
+    timeRef.current += delta;
+    const wave = (Math.sin(timeRef.current * 9.2) + 1) * 0.5;
+    const intensity = Math.max(0.08, progress);
+    if (crackMaterialRef.current) {
+      crackMaterialRef.current.opacity = 0.18 + intensity * 0.62 + wave * 0.08;
+    }
+    if (edgeMaterialRef.current) {
+      edgeMaterialRef.current.opacity = 0.2 + intensity * 0.5 + wave * 0.1;
+    }
+    if (haloMaterialRef.current) {
+      haloMaterialRef.current.opacity = 0.06 + intensity * 0.18 + wave * 0.035;
+    }
+    if (ringMaterialRef.current) {
+      ringMaterialRef.current.opacity = 0.18 + intensity * 0.42 + wave * 0.1;
+    }
+    if (ringGroupRef.current) {
+      ringGroupRef.current.rotation.y = timeRef.current * 0.42;
+      ringGroupRef.current.rotation.z = Math.sin(timeRef.current * 1.6) * 0.08;
+    }
+  });
+
+  if (!breakProgress || progress <= 0) return null;
+
+  const scale = 0.74 + progress * 0.3;
+  const ringScale = 0.84 + progress * 0.5;
   return (
-    <mesh
+    <group
       position={[
         breakProgress.x + 0.5,
         breakProgress.y + 0.5,
         breakProgress.z + 0.5,
       ]}
     >
-      <boxGeometry args={[1.005, 1.005, 1.005]} />
-      <meshBasicMaterial
-        color={0x000000}
-        transparent
-        opacity={opacity}
-        depthTest={true}
-        polygonOffset
-        polygonOffsetFactor={-1}
-      />
-    </mesh>
+      <mesh geometry={breakProgressHaloGeometry} renderOrder={215}>
+        <meshBasicMaterial
+          ref={haloMaterialRef}
+          color={progressColor}
+          transparent
+          opacity={0.12 + progress * 0.16}
+          depthTest={false}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <lineSegments geometry={breakProgressEdgeGeometry} renderOrder={218}>
+        <lineBasicMaterial
+          ref={edgeMaterialRef}
+          color={progressColor}
+          transparent
+          opacity={0.3 + progress * 0.44}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </lineSegments>
+      <lineSegments geometry={breakCrackGeometry} scale={scale} renderOrder={219}>
+        <lineBasicMaterial
+          ref={crackMaterialRef}
+          color={progressColor}
+          transparent
+          opacity={0.28 + progress * 0.54}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </lineSegments>
+      <group ref={ringGroupRef} scale={ringScale}>
+        {[
+          { key: 'front', rotation: [0, 0, 0] as [number, number, number] },
+          { key: 'side', rotation: [0, Math.PI / 2, 0] as [number, number, number] },
+          { key: 'top', rotation: [Math.PI / 2, 0, 0] as [number, number, number] },
+        ].map((ring) => (
+          <mesh
+            key={ring.key}
+            geometry={breakProgressRingGeometry}
+            rotation={ring.rotation}
+            renderOrder={217}
+          >
+            <meshBasicMaterial
+              ref={ring.key === 'front' ? ringMaterialRef : undefined}
+              color={progressColor}
+              transparent
+              opacity={0.24 + progress * 0.32}
+              depthTest={false}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        ))}
+      </group>
+    </group>
   );
 }
 
@@ -1327,7 +1469,7 @@ export function BlockInteraction() {
         isBreakingRef.current = false;
       } else if (!bp || bp.x !== found.x || bp.y !== found.y || bp.z !== found.z) {
         // ターゲットが変わったらリセット
-        breakProgressRef.current = { x: found.x, y: found.y, z: found.z, progress: 0, hardness };
+        breakProgressRef.current = { x: found.x, y: found.y, z: found.z, blockId, progress: 0, hardness };
       } else {
         // 進行度を加算（ツール速度倍率適用）
         const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory)

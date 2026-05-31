@@ -272,7 +272,7 @@ function StageSceneryPreview({
     overflow: 'hidden',
     borderRadius: large ? 14 : 7,
     border: `1px solid ${stage.color}55`,
-    background: scenery.sky,
+    backgroundImage: scenery.sky,
     backgroundSize: '118% 100%',
     boxShadow: large
       ? `inset 0 1px 0 rgba(255,255,255,0.2), 0 0 22px ${stage.color}22`
@@ -338,7 +338,7 @@ function StageSceneryPreview({
             bottom: height * 0.23,
             height: Math.max(4, height * 0.08),
             borderRadius: 999,
-            background: scenery.water,
+            backgroundImage: scenery.water,
             backgroundSize: '180% 100%',
             opacity: 0.7,
             boxShadow: '0 0 16px rgba(120,255,235,0.38)',
