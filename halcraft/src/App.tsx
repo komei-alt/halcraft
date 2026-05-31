@@ -9,6 +9,7 @@ import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
 import { BlockInteraction } from './components/BlockInteraction';
+import { BuilderHeldItem } from './components/BuilderHeldItem';
 import { BlockBreakEffect } from './components/BlockBreakEffect';
 import { BlockUseEffect } from './components/BlockUseEffect';
 import { DamagePopup } from './components/DamagePopup';
@@ -150,6 +151,7 @@ function GameCanvas() {
           <BlockLights />
           <Player />
           <BlockInteraction />
+          <BuilderHeldItem />
           <BlockBreakEffect />
           <BlockUseEffect />
           <DamagePopup />
