@@ -10,6 +10,7 @@ import { getPerformanceProfile } from '../utils/performance';
 
 type MotionKind = 'flutter' | 'sparkle' | 'snow' | 'dust';
 type HorizonKind = 'dunes' | 'forestLine' | 'islands' | 'mountains';
+type WeatherRibbonKind = 'leaf' | 'spray' | 'snowfall' | 'sandGust';
 
 interface AtmosphereConfig {
   count: number;
@@ -32,6 +33,19 @@ interface AtmosphereConfig {
     yOffset: number;
     height: number;
   };
+  weather: {
+    kind: WeatherRibbonKind;
+    count: number;
+    color: number;
+    opacity: number;
+    radius: number;
+    heightMin: number;
+    heightMax: number;
+    speed: number;
+    driftStrength: number;
+    width: number;
+    length: number;
+  };
 }
 
 interface AtmosphereParticle {
@@ -41,6 +55,18 @@ interface AtmosphereParticle {
   height: number;
   speed: number;
   size: number;
+  wave: number;
+}
+
+interface WeatherRibbon {
+  seed: number;
+  angle: number;
+  radius: number;
+  height: number;
+  speed: number;
+  width: number;
+  length: number;
+  spin: number;
   wave: number;
 }
 
@@ -66,6 +92,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       yOffset: -18,
       height: 18,
     },
+    weather: {
+      kind: 'leaf',
+      count: 34,
+      color: 0xd8ff7a,
+      opacity: 0.34,
+      radius: 18,
+      heightMin: 0.8,
+      heightMax: 5.8,
+      speed: 0.18,
+      driftStrength: 1.25,
+      width: 0.11,
+      length: 0.28,
+    },
   },
   tropical: {
     count: 48,
@@ -87,6 +126,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       radius: 158,
       yOffset: -20,
       height: 14,
+    },
+    weather: {
+      kind: 'spray',
+      count: 30,
+      color: 0x95fff0,
+      opacity: 0.27,
+      radius: 19,
+      heightMin: 0.5,
+      heightMax: 4.6,
+      speed: 0.28,
+      driftStrength: 1.55,
+      width: 0.045,
+      length: 0.28,
     },
   },
   snow: {
@@ -110,6 +162,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       yOffset: -20,
       height: 34,
     },
+    weather: {
+      kind: 'snowfall',
+      count: 58,
+      color: 0xf9feff,
+      opacity: 0.5,
+      radius: 22,
+      heightMin: 1.2,
+      heightMax: 12,
+      speed: 0.86,
+      driftStrength: 1.35,
+      width: 0.032,
+      length: 0.58,
+    },
   },
   desert: {
     count: 58,
@@ -132,6 +197,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       yOffset: -22,
       height: 16,
     },
+    weather: {
+      kind: 'sandGust',
+      count: 50,
+      color: 0xffdfa0,
+      opacity: 0.34,
+      radius: 24,
+      heightMin: 0.35,
+      heightMax: 3.8,
+      speed: 0.52,
+      driftStrength: 3.7,
+      width: 0.09,
+      length: 0.98,
+    },
   },
 };
 
@@ -141,6 +219,8 @@ const TOUCH_SCALE = 0.62;
 const _motionOffset = new THREE.Vector3();
 const _horizonPosition = new THREE.Vector3();
 const _horizonRotation = new THREE.Euler();
+const _cameraRight = new THREE.Vector3();
+const _cameraForward = new THREE.Vector3();
 
 interface HorizonPanel {
   angle: number;
@@ -161,6 +241,17 @@ function getEffectiveCount(config: AtmosphereConfig): number {
   return Math.max(22, Math.round(config.count * tierScale * touchScale));
 }
 
+function getEffectiveWeatherCount(config: AtmosphereConfig): number {
+  const profile = getPerformanceProfile();
+  const tierScale = profile.tier === 'low'
+    ? LOW_TIER_SCALE
+    : profile.tier === 'balanced'
+      ? BALANCED_TIER_SCALE
+      : 1;
+  const touchScale = isTouchDevice() ? TOUCH_SCALE : 1;
+  return Math.max(12, Math.round(config.weather.count * tierScale * touchScale));
+}
+
 function createParticles(config: AtmosphereConfig, count: number): AtmosphereParticle[] {
   return Array.from({ length: count }, (_, i) => {
     const seed = (i * 16807 % 9973) / 9973;
@@ -173,6 +264,25 @@ function createParticles(config: AtmosphereConfig, count: number): AtmospherePar
       height: config.heightMin + seed3 * (config.heightMax - config.heightMin),
       speed: config.speed * (0.65 + seed2 * 0.7),
       size: config.size * (0.65 + seed3 * 0.8),
+      wave: seed3 * Math.PI * 2,
+    };
+  });
+}
+
+function createWeatherRibbons(config: AtmosphereConfig, count: number): WeatherRibbon[] {
+  return Array.from({ length: count }, (_, i) => {
+    const seed = (i * 16807 % 9973) / 9973;
+    const seed2 = (i * 48271 % 7919) / 7919;
+    const seed3 = (i * 69621 % 6151) / 6151;
+    return {
+      seed,
+      angle: seed * Math.PI * 2,
+      radius: config.weather.radius * (0.28 + seed2 * 0.72),
+      height: config.weather.heightMin + seed3 * (config.weather.heightMax - config.weather.heightMin),
+      speed: config.weather.speed * (0.72 + seed2 * 0.7),
+      width: config.weather.width * (0.72 + seed * 0.62),
+      length: config.weather.length * (0.76 + seed3 * 0.58),
+      spin: seed2 * Math.PI * 2,
       wave: seed3 * Math.PI * 2,
     };
   });
@@ -286,6 +396,7 @@ function setMotionOffset(
 }
 
 const sharedSphereGeometry = new THREE.SphereGeometry(1, 8, 6);
+const sharedWeatherGeometry = new THREE.PlaneGeometry(1, 1);
 
 function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: string }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -357,6 +468,109 @@ function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: stri
   );
 }
 
+function BiomeWeatherRibbons({ config, phase }: { config: AtmosphereConfig; phase: string }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummyRef = useRef(new THREE.Object3D());
+  const { camera } = useThree();
+  const ribbons = useMemo(
+    () => createWeatherRibbons(config, getEffectiveWeatherCount(config)),
+    [config],
+  );
+  const color = useMemo(() => new THREE.Color(config.weather.color), [config.weather.color]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || phase !== 'playing') return;
+
+    const elapsed = clock.getElapsedTime();
+    const mesh = meshRef.current;
+    const dummy = dummyRef.current;
+    _cameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _cameraForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    _cameraForward.y *= 0.18;
+    if (_cameraForward.lengthSq() > 0.001) _cameraForward.normalize();
+
+    for (let i = 0; i < ribbons.length; i++) {
+      const ribbon = ribbons[i];
+      const orbit = ribbon.angle + elapsed * ribbon.speed * 0.08;
+      const localX = Math.cos(orbit) * ribbon.radius;
+      const localZ = Math.sin(orbit) * ribbon.radius;
+      const travel = (elapsed * ribbon.speed + ribbon.seed * 17) % 1;
+      const wave = elapsed * (1.1 + ribbon.seed) + ribbon.wave;
+      let x = localX;
+      let y = ribbon.height;
+      let z = localZ;
+      let width = ribbon.width;
+      let length = ribbon.length;
+      let rotationZ = ribbon.spin;
+
+      if (config.weather.kind === 'snowfall') {
+        const fallRange = config.weather.heightMax - config.weather.heightMin + 5;
+        y = config.weather.heightMax - travel * fallRange + Math.sin(wave) * 0.12;
+        x += Math.sin(wave * 0.65) * config.weather.driftStrength;
+        z += Math.cos(wave * 0.47) * config.weather.driftStrength * 0.58;
+        rotationZ = -0.2 + Math.sin(wave * 0.4) * 0.24;
+      } else if (config.weather.kind === 'sandGust') {
+        const sweep = (travel - 0.5) * config.weather.radius * 1.65;
+        x += sweep + Math.sin(wave * 0.7) * config.weather.driftStrength;
+        y = config.weather.heightMin + Math.abs(Math.sin(wave * 0.56)) * (config.weather.heightMax - config.weather.heightMin);
+        z += Math.cos(wave * 0.38) * config.weather.driftStrength;
+        width *= 0.86 + Math.sin(wave) * 0.12;
+        length *= 1.18;
+        rotationZ = Math.PI / 2 + Math.sin(wave * 0.7) * 0.18;
+      } else if (config.weather.kind === 'spray') {
+        const rise = Math.sin((travel * Math.PI * 2) + ribbon.wave) * 0.5 + 0.5;
+        y = config.weather.heightMin + rise * (config.weather.heightMax - config.weather.heightMin);
+        x += Math.sin(wave * 1.4) * config.weather.driftStrength;
+        z += Math.cos(wave * 1.1) * config.weather.driftStrength * 0.42;
+        width *= 0.72;
+        length *= 0.72 + rise * 0.7;
+        rotationZ = ribbon.spin + Math.sin(wave * 1.8) * 0.75;
+      } else {
+        const flutter = Math.sin(wave * 1.7);
+        y -= travel * 1.9;
+        x += flutter * config.weather.driftStrength;
+        z += Math.cos(wave) * config.weather.driftStrength * 0.48;
+        rotationZ = ribbon.spin + elapsed * (0.8 + ribbon.seed * 1.2) + flutter * 0.8;
+      }
+
+      dummy.position
+        .copy(camera.position)
+        .addScaledVector(_cameraRight, x)
+        .addScaledVector(_cameraForward, z);
+      dummy.position.y += y;
+      dummy.quaternion.copy(camera.quaternion);
+      dummy.rotateZ(rotationZ);
+      dummy.scale.set(width, length, 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    }
+
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  if (phase !== 'playing') return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[sharedWeatherGeometry, undefined, ribbons.length]}
+      frustumCulled={false}
+      renderOrder={3}
+    >
+      <meshBasicMaterial
+        color={color}
+        depthTest={false}
+        depthWrite={false}
+        opacity={config.weather.opacity}
+        transparent
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        blending={config.weather.kind === 'sandGust' ? THREE.NormalBlending : THREE.AdditiveBlending}
+      />
+    </instancedMesh>
+  );
+}
+
 /** 選んだマップの気候を、プレイ中の視界に薄く重ねる */
 export function StageAtmosphereFX() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -406,6 +620,7 @@ export function StageAtmosphereFX() {
   return (
     <>
       <BiomeHorizon config={config} phase={phase} />
+      <BiomeWeatherRibbons config={config} phase={phase} />
       <instancedMesh
         ref={meshRef}
         args={[sharedSphereGeometry, undefined, particles.length]}
