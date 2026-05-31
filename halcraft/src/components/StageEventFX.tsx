@@ -42,7 +42,7 @@ function createParticles(): EventParticle[] {
       height: -0.25 + seed3 * 1.8,
       speed: 0.7 + seed2 * 1.4,
       phase: seed3 * Math.PI * 2,
-      size: 0.055 + seed * 0.04,
+      size: 0.034 + seed * 0.026,
     };
   });
 }
@@ -78,7 +78,7 @@ export function StageEventFX() {
     mesh.visible = true;
     const material = materialRef.current;
     material.color.copy(color);
-    material.opacity = 0.52 * fade;
+    material.opacity = 0.34 * fade;
 
     const elapsed = clock.getElapsedTime();
     const dummy = dummyRef.current;
@@ -131,6 +131,7 @@ export function StageEventFX() {
         opacity={0.45}
         transparent
         toneMapped={false}
+        blending={THREE.AdditiveBlending}
       />
     </instancedMesh>
   );

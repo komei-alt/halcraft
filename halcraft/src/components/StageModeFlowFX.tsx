@@ -32,20 +32,20 @@ interface ModeFlowParticle {
 const CONFIGS: Record<StageCategory, ModeFlowFxConfig> = {
   build: {
     count: 46,
-    opacity: 0.56,
-    distance: 2.45,
+    opacity: 0.34,
+    distance: 3.15,
     radius: 1.1,
     height: 1.85,
-    size: 0.06,
+    size: 0.034,
     speed: 1.12,
   },
   war: {
     count: 54,
-    opacity: 0.62,
-    distance: 2.75,
+    opacity: 0.38,
+    distance: 3.35,
     radius: 0.95,
     height: 1.35,
-    size: 0.066,
+    size: 0.038,
     speed: 1.65,
   },
 };
@@ -127,7 +127,7 @@ export function StageModeFlowFX() {
     const burst = Math.max(0, 1 - (performance.now() - activation.createdAt) / 720);
     const material = materialRef.current;
     material.color.copy(color);
-    material.opacity = Math.min(0.82, config.opacity * fade * rankScale);
+    material.opacity = Math.min(0.48, config.opacity * fade * rankScale);
 
     camera.getWorldDirection(_forward);
     _forward.y = 0;
@@ -189,6 +189,7 @@ export function StageModeFlowFX() {
         opacity={config.opacity}
         transparent
         toneMapped={false}
+        blending={THREE.AdditiveBlending}
       />
     </instancedMesh>
   );

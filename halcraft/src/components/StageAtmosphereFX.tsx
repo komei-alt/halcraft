@@ -11,6 +11,7 @@ import { getPerformanceProfile } from '../utils/performance';
 type MotionKind = 'flutter' | 'sparkle' | 'snow' | 'dust';
 type HorizonKind = 'dunes' | 'forestLine' | 'islands' | 'mountains';
 type WeatherRibbonKind = 'leaf' | 'spray' | 'snowfall' | 'sandGust';
+type SignatureVeilKind = 'forestShaft' | 'lagoonGlint' | 'aurora' | 'heatMirage';
 
 interface AtmosphereConfig {
   count: number;
@@ -46,6 +47,20 @@ interface AtmosphereConfig {
     width: number;
     length: number;
   };
+  signature: {
+    kind: SignatureVeilKind;
+    count: number;
+    color: number;
+    secondaryColor: number;
+    opacity: number;
+    radius: number;
+    heightMin: number;
+    heightMax: number;
+    speed: number;
+    driftStrength: number;
+    width: number;
+    length: number;
+  };
 }
 
 interface AtmosphereParticle {
@@ -59,6 +74,18 @@ interface AtmosphereParticle {
 }
 
 interface WeatherRibbon {
+  seed: number;
+  angle: number;
+  radius: number;
+  height: number;
+  speed: number;
+  width: number;
+  length: number;
+  spin: number;
+  wave: number;
+}
+
+interface SignatureVeil {
   seed: number;
   angle: number;
   radius: number;
@@ -105,6 +132,20 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       width: 0.11,
       length: 0.28,
     },
+    signature: {
+      kind: 'forestShaft',
+      count: 12,
+      color: 0xfff3a8,
+      secondaryColor: 0x84ff8f,
+      opacity: 0.16,
+      radius: 34,
+      heightMin: 2.8,
+      heightMax: 12,
+      speed: 0.13,
+      driftStrength: 1.1,
+      width: 1.1,
+      length: 8.2,
+    },
   },
   tropical: {
     count: 48,
@@ -139,6 +180,20 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftStrength: 1.55,
       width: 0.045,
       length: 0.28,
+    },
+    signature: {
+      kind: 'lagoonGlint',
+      count: 14,
+      color: 0x8affff,
+      secondaryColor: 0xfff4a6,
+      opacity: 0.2,
+      radius: 31,
+      heightMin: 0.8,
+      heightMax: 4.4,
+      speed: 0.2,
+      driftStrength: 1.7,
+      width: 2.4,
+      length: 0.42,
     },
   },
   snow: {
@@ -175,6 +230,20 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       width: 0.032,
       length: 0.58,
     },
+    signature: {
+      kind: 'aurora',
+      count: 5,
+      color: 0x7dffe8,
+      secondaryColor: 0xd3a8ff,
+      opacity: 0.11,
+      radius: 46,
+      heightMin: 15,
+      heightMax: 25,
+      speed: 0.06,
+      driftStrength: 3.6,
+      width: 13,
+      length: 1.15,
+    },
   },
   desert: {
     count: 58,
@@ -209,6 +278,20 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftStrength: 3.7,
       width: 0.09,
       length: 0.98,
+    },
+    signature: {
+      kind: 'heatMirage',
+      count: 16,
+      color: 0xffe0a0,
+      secondaryColor: 0xff965a,
+      opacity: 0.15,
+      radius: 36,
+      heightMin: 0.75,
+      heightMax: 3.4,
+      speed: 0.34,
+      driftStrength: 3.1,
+      width: 3.8,
+      length: 0.34,
     },
   },
 };
@@ -252,6 +335,18 @@ function getEffectiveWeatherCount(config: AtmosphereConfig): number {
   return Math.max(12, Math.round(config.weather.count * tierScale * touchScale));
 }
 
+function getEffectiveSignatureCount(config: AtmosphereConfig): number {
+  const profile = getPerformanceProfile();
+  const tierScale = profile.tier === 'low'
+    ? LOW_TIER_SCALE
+    : profile.tier === 'balanced'
+      ? BALANCED_TIER_SCALE
+      : 1;
+  const touchScale = isTouchDevice() ? TOUCH_SCALE : 1;
+  const minCount = config.signature.kind === 'aurora' ? 3 : 5;
+  return Math.max(minCount, Math.round(config.signature.count * tierScale * touchScale));
+}
+
 function createParticles(config: AtmosphereConfig, count: number): AtmosphereParticle[] {
   return Array.from({ length: count }, (_, i) => {
     const seed = (i * 16807 % 9973) / 9973;
@@ -282,6 +377,25 @@ function createWeatherRibbons(config: AtmosphereConfig, count: number): WeatherR
       speed: config.weather.speed * (0.72 + seed2 * 0.7),
       width: config.weather.width * (0.72 + seed * 0.62),
       length: config.weather.length * (0.76 + seed3 * 0.58),
+      spin: seed2 * Math.PI * 2,
+      wave: seed3 * Math.PI * 2,
+    };
+  });
+}
+
+function createSignatureVeils(config: AtmosphereConfig, count: number): SignatureVeil[] {
+  return Array.from({ length: count }, (_, i) => {
+    const seed = (i * 16807 % 9973) / 9973;
+    const seed2 = (i * 48271 % 7919) / 7919;
+    const seed3 = (i * 69621 % 6151) / 6151;
+    return {
+      seed,
+      angle: seed * Math.PI * 2,
+      radius: config.signature.radius * (0.4 + seed2 * 0.6),
+      height: config.signature.heightMin + seed3 * (config.signature.heightMax - config.signature.heightMin),
+      speed: config.signature.speed * (0.75 + seed2 * 0.58),
+      width: config.signature.width * (0.72 + seed * 0.58),
+      length: config.signature.length * (0.74 + seed3 * 0.54),
       spin: seed2 * Math.PI * 2,
       wave: seed3 * Math.PI * 2,
     };
@@ -397,6 +511,7 @@ function setMotionOffset(
 
 const sharedSphereGeometry = new THREE.SphereGeometry(1, 8, 6);
 const sharedWeatherGeometry = new THREE.PlaneGeometry(1, 1);
+const sharedSignatureGeometry = new THREE.PlaneGeometry(1, 1);
 
 function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: string }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -571,6 +686,122 @@ function BiomeWeatherRibbons({ config, phase }: { config: AtmosphereConfig; phas
   );
 }
 
+function BiomeSignatureVeil({ config, phase }: { config: AtmosphereConfig; phase: string }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const dummyRef = useRef(new THREE.Object3D());
+  const { camera } = useThree();
+  const veils = useMemo(
+    () => createSignatureVeils(config, getEffectiveSignatureCount(config)),
+    [config],
+  );
+  const primaryColor = useMemo(() => new THREE.Color(config.signature.color), [config.signature.color]);
+  const secondaryColor = useMemo(() => new THREE.Color(config.signature.secondaryColor), [config.signature.secondaryColor]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || phase !== 'playing') return;
+
+    const elapsed = clock.getElapsedTime();
+    const mesh = meshRef.current;
+    const dummy = dummyRef.current;
+    const pulse = 0.5 + Math.sin(elapsed * 0.42) * 0.5;
+    _cameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _cameraForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    _cameraForward.y *= config.signature.kind === 'aurora' ? 0.01 : 0.16;
+    if (_cameraForward.lengthSq() > 0.001) _cameraForward.normalize();
+
+    if (materialRef.current) {
+      materialRef.current.color.copy(primaryColor).lerp(secondaryColor, 0.28 + pulse * 0.22);
+      const pulseScale = config.signature.kind === 'aurora'
+        ? 0.74 + pulse * 0.18
+        : 0.78 + pulse * 0.28;
+      materialRef.current.opacity = config.signature.opacity * pulseScale;
+    }
+
+    for (let i = 0; i < veils.length; i++) {
+      const veil = veils[i];
+      const orbit = veil.angle + elapsed * veil.speed * 0.05;
+      const wave = elapsed * (0.72 + veil.seed * 0.5) + veil.wave;
+      let localX = Math.cos(orbit) * veil.radius;
+      let localZ = Math.sin(orbit) * veil.radius;
+      let y = veil.height;
+      let width = veil.width;
+      let length = veil.length;
+      let rotationZ = veil.spin;
+
+      if (config.signature.kind === 'aurora') {
+        const lane = i - (veils.length - 1) / 2;
+        localX = lane * (config.signature.width * 0.78)
+          + Math.sin(wave * 0.44) * config.signature.driftStrength
+          + (veil.seed - 0.5) * 4.5;
+        localZ = config.signature.radius * (0.92 + veil.seed * 0.18);
+        y += Math.sin(wave * 0.36) * 1.1;
+        width *= 0.88 + Math.sin(wave * 0.55) * 0.1;
+        length *= 0.72 + Math.max(0, Math.sin(wave * 0.28 + lane)) * 0.34;
+        rotationZ = Math.sin(wave * 0.38) * 0.08;
+      } else if (config.signature.kind === 'forestShaft') {
+        localX += Math.sin(wave * 0.42) * config.signature.driftStrength;
+        localZ += Math.cos(wave * 0.37) * config.signature.driftStrength * 0.5;
+        y += Math.sin(wave * 0.35) * 0.65;
+        width *= 0.82 + Math.sin(wave * 0.58) * 0.08;
+        rotationZ = -0.16 + Math.sin(wave * 0.3) * 0.12;
+      } else if (config.signature.kind === 'lagoonGlint') {
+        const shimmer = Math.max(0, Math.sin(wave * 1.7));
+        localX += Math.sin(wave * 0.82) * config.signature.driftStrength;
+        localZ += Math.cos(wave * 0.64) * config.signature.driftStrength * 0.55;
+        y += shimmer * 0.55;
+        width *= 0.78 + shimmer * 0.42;
+        length *= 0.75 + shimmer * 0.85;
+        rotationZ = Math.sin(wave * 0.9) * 0.35;
+      } else {
+        const sweep = ((elapsed * veil.speed + veil.seed * 13) % 1 - 0.5) * config.signature.radius;
+        localX += sweep + Math.sin(wave * 0.7) * config.signature.driftStrength;
+        localZ += Math.cos(wave * 0.45) * config.signature.driftStrength;
+        y += Math.abs(Math.sin(wave * 0.52)) * 0.6;
+        width *= 0.9 + Math.sin(wave) * 0.16;
+        length *= 0.76 + Math.abs(Math.cos(wave * 0.8)) * 0.35;
+        rotationZ = Math.sin(wave * 0.45) * 0.12;
+      }
+
+      dummy.position
+        .copy(camera.position)
+        .addScaledVector(_cameraRight, localX)
+        .addScaledVector(_cameraForward, localZ);
+      dummy.position.y += y;
+      dummy.quaternion.copy(camera.quaternion);
+      dummy.rotateZ(rotationZ);
+      dummy.scale.set(width, length, 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    }
+
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  if (phase !== 'playing') return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[sharedSignatureGeometry, undefined, veils.length]}
+      frustumCulled={false}
+      renderOrder={1}
+    >
+      <meshBasicMaterial
+        ref={materialRef}
+        color={primaryColor}
+        depthTest={config.signature.kind === 'aurora'}
+        depthWrite={false}
+        opacity={config.signature.opacity}
+        transparent
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        blending={config.signature.kind === 'heatMirage' ? THREE.NormalBlending : THREE.AdditiveBlending}
+      />
+    </instancedMesh>
+  );
+}
+
 /** 選んだマップの気候を、プレイ中の視界に薄く重ねる */
 export function StageAtmosphereFX() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -620,6 +851,7 @@ export function StageAtmosphereFX() {
   return (
     <>
       <BiomeHorizon config={config} phase={phase} />
+      <BiomeSignatureVeil config={config} phase={phase} />
       <BiomeWeatherRibbons config={config} phase={phase} />
       <instancedMesh
         ref={meshRef}

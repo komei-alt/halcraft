@@ -34,30 +34,30 @@ interface ConditionFxParticle {
 const CONFIGS: Record<ConditionFxKind, ConditionFxConfig> = {
   resource: {
     count: 36,
-    opacity: 0.54,
+    opacity: 0.32,
     radius: 0.95,
     height: 2.3,
-    distance: 2.7,
+    distance: 3.25,
     speed: 1.12,
-    size: 0.052,
+    size: 0.034,
   },
   regen: {
     count: 30,
-    opacity: 0.44,
+    opacity: 0.3,
     radius: 1.15,
     height: 1.55,
-    distance: 2.5,
+    distance: 3.05,
     speed: 0.88,
-    size: 0.06,
+    size: 0.036,
   },
   rocket_ready: {
     count: 42,
-    opacity: 0.6,
+    opacity: 0.36,
     radius: 0.82,
     height: 1.7,
-    distance: 3.1,
+    distance: 3.5,
     speed: 1.85,
-    size: 0.07,
+    size: 0.042,
   },
 };
 
@@ -144,7 +144,7 @@ export function StageConditionFX() {
       : 9999;
     const burst = Math.max(0, 1 - activationAge / 900);
     material.opacity = Math.min(
-      0.78,
+      0.46,
       config.opacity * fade * (0.76 + Math.sin(elapsed * 7) * 0.1 + burst * 0.42),
     );
 
@@ -218,6 +218,7 @@ export function StageConditionFX() {
         opacity={config.opacity}
         transparent
         toneMapped={false}
+        blending={THREE.AdditiveBlending}
       />
     </instancedMesh>
   );
