@@ -9,6 +9,7 @@ import { isTouchDevice } from '../utils/device';
 import { getPerformanceProfile } from '../utils/performance';
 
 type MotionKind = 'flutter' | 'sparkle' | 'snow' | 'dust';
+type HorizonKind = 'dunes' | 'forestLine' | 'islands' | 'mountains';
 
 interface AtmosphereConfig {
   count: number;
@@ -22,6 +23,15 @@ interface AtmosphereConfig {
   verticalSpeed: number;
   driftStrength: number;
   motion: MotionKind;
+  horizon: {
+    kind: HorizonKind;
+    color: number;
+    accentColor: number;
+    opacity: number;
+    radius: number;
+    yOffset: number;
+    height: number;
+  };
 }
 
 interface AtmosphereParticle {
@@ -47,6 +57,15 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
     verticalSpeed: 0.12,
     driftStrength: 1.4,
     motion: 'flutter',
+    horizon: {
+      kind: 'forestLine',
+      color: 0x163a22,
+      accentColor: 0x2f7b3c,
+      opacity: 0.42,
+      radius: 145,
+      yOffset: -18,
+      height: 18,
+    },
   },
   tropical: {
     count: 48,
@@ -60,6 +79,15 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
     verticalSpeed: 0.18,
     driftStrength: 1.8,
     motion: 'sparkle',
+    horizon: {
+      kind: 'islands',
+      color: 0x0c5470,
+      accentColor: 0x2fcf9f,
+      opacity: 0.34,
+      radius: 158,
+      yOffset: -20,
+      height: 14,
+    },
   },
   snow: {
     count: 76,
@@ -73,6 +101,15 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
     verticalSpeed: 0.62,
     driftStrength: 1.1,
     motion: 'snow',
+    horizon: {
+      kind: 'mountains',
+      color: 0xa7bfd5,
+      accentColor: 0xf4fbff,
+      opacity: 0.48,
+      radius: 166,
+      yOffset: -20,
+      height: 34,
+    },
   },
   desert: {
     count: 58,
@@ -86,6 +123,15 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
     verticalSpeed: 0.05,
     driftStrength: 2.6,
     motion: 'dust',
+    horizon: {
+      kind: 'dunes',
+      color: 0xc58b47,
+      accentColor: 0xffcf7a,
+      opacity: 0.36,
+      radius: 172,
+      yOffset: -22,
+      height: 16,
+    },
   },
 };
 
@@ -93,6 +139,16 @@ const LOW_TIER_SCALE = 0.55;
 const BALANCED_TIER_SCALE = 0.78;
 const TOUCH_SCALE = 0.62;
 const _motionOffset = new THREE.Vector3();
+const _horizonPosition = new THREE.Vector3();
+const _horizonRotation = new THREE.Euler();
+
+interface HorizonPanel {
+  angle: number;
+  radiusOffset: number;
+  yOffset: number;
+  widthScale: number;
+  heightScale: number;
+}
 
 function getEffectiveCount(config: AtmosphereConfig): number {
   const profile = getPerformanceProfile();
@@ -118,6 +174,68 @@ function createParticles(config: AtmosphereConfig, count: number): AtmospherePar
       speed: config.speed * (0.65 + seed2 * 0.7),
       size: config.size * (0.65 + seed3 * 0.8),
       wave: seed3 * Math.PI * 2,
+    };
+  });
+}
+
+function skylineNoise(index: number, seed: number): number {
+  const x = Math.sin((index + 1) * 12.9898 + seed * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function createSkylineGeometry(kind: HorizonKind, width: number, height: number, seed: number): THREE.BufferGeometry {
+  const segments = 12;
+  const vertices: number[] = [];
+  const indices: number[] = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const x = (t - 0.5) * width;
+    const noise = skylineNoise(i, seed);
+    let top: number;
+
+    if (kind === 'mountains') {
+      const ridge = Math.max(
+        0,
+        1 - Math.abs(((t * 3.2 + seed * 0.37) % 1) * 2 - 1),
+      );
+      top = height * (0.34 + ridge * 0.78 + noise * 0.22);
+    } else if (kind === 'forestLine') {
+      const canopy = Math.sin(t * Math.PI * 8 + seed) * 0.18 + noise * 0.28;
+      top = height * (0.58 + canopy);
+    } else if (kind === 'islands') {
+      const island = Math.max(0, Math.sin(t * Math.PI * 2.7 + seed * 2.1));
+      top = height * (0.16 + island * 0.54 + noise * 0.16);
+    } else {
+      const dune = Math.sin(t * Math.PI * 2.2 + seed) * 0.28 + Math.sin(t * Math.PI * 4.4 + seed * 0.7) * 0.14;
+      top = height * (0.42 + dune + noise * 0.1);
+    }
+
+    vertices.push(x, 0, 0, x, Math.max(height * 0.12, top), 0);
+  }
+
+  for (let i = 0; i < segments; i++) {
+    const base = i * 2;
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createHorizonPanels(): HorizonPanel[] {
+  const count = 14;
+  return Array.from({ length: count }, (_, i) => {
+    const seed = skylineNoise(i, 2.5);
+    return {
+      angle: (i / count) * Math.PI * 2,
+      radiusOffset: (seed - 0.5) * 16,
+      yOffset: (skylineNoise(i, 5.1) - 0.5) * 3,
+      widthScale: 0.88 + skylineNoise(i, 8.7) * 0.28,
+      heightScale: 0.82 + skylineNoise(i, 11.3) * 0.36,
     };
   });
 }
@@ -169,6 +287,76 @@ function setMotionOffset(
 
 const sharedSphereGeometry = new THREE.SphereGeometry(1, 8, 6);
 
+function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: string }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const panels = useMemo(() => createHorizonPanels(), []);
+  const skylineGeometry = useMemo(
+    () => createSkylineGeometry(config.horizon.kind, 48, config.horizon.height, config.horizon.color),
+    [config.horizon.color, config.horizon.height, config.horizon.kind],
+  );
+  const accentGeometry = useMemo(
+    () => createSkylineGeometry(config.horizon.kind, 42, config.horizon.height * 0.55, config.horizon.accentColor),
+    [config.horizon.accentColor, config.horizon.height, config.horizon.kind],
+  );
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current || phase !== 'playing') return;
+    const drift = Math.sin(clock.getElapsedTime() * 0.05) * 0.02;
+    groupRef.current.position.set(camera.position.x, camera.position.y + config.horizon.yOffset, camera.position.z);
+    groupRef.current.rotation.y = drift;
+  });
+
+  if (phase !== 'playing') return null;
+
+  return (
+    <group ref={groupRef} frustumCulled={false}>
+      {panels.map((panel, index) => {
+        const radius = config.horizon.radius + panel.radiusOffset;
+        const x = Math.cos(panel.angle) * radius;
+        const z = Math.sin(panel.angle) * radius;
+        _horizonPosition.set(x, panel.yOffset, z);
+        _horizonRotation.set(0, -panel.angle + Math.PI / 2, 0);
+        return (
+          <group
+            key={`${config.horizon.kind}-${index}`}
+            position={_horizonPosition.toArray()}
+            rotation={[_horizonRotation.x, _horizonRotation.y, _horizonRotation.z]}
+          >
+            <mesh
+              geometry={skylineGeometry}
+              scale={[panel.widthScale, panel.heightScale, 1]}
+              renderOrder={-20}
+            >
+              <meshBasicMaterial
+                color={config.horizon.color}
+                transparent
+                opacity={config.horizon.opacity}
+                depthWrite={false}
+                fog
+              />
+            </mesh>
+            <mesh
+              geometry={accentGeometry}
+              position={[0, config.horizon.height * 0.06, -0.45]}
+              scale={[panel.widthScale * 0.82, panel.heightScale, 1]}
+              renderOrder={-19}
+            >
+              <meshBasicMaterial
+                color={config.horizon.accentColor}
+                transparent
+                opacity={config.horizon.opacity * 0.34}
+                depthWrite={false}
+                fog
+              />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 /** 選んだマップの気候を、プレイ中の視界に薄く重ねる */
 export function StageAtmosphereFX() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -216,19 +404,22 @@ export function StageAtmosphereFX() {
   if (!config || phase !== 'playing') return null;
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[sharedSphereGeometry, undefined, particles.length]}
-      frustumCulled={false}
-      renderOrder={2}
-    >
-      <meshBasicMaterial
-        color={config.color}
-        depthWrite={false}
-        opacity={config.opacity}
-        transparent
-        toneMapped={false}
-      />
-    </instancedMesh>
+    <>
+      <BiomeHorizon config={config} phase={phase} />
+      <instancedMesh
+        ref={meshRef}
+        args={[sharedSphereGeometry, undefined, particles.length]}
+        frustumCulled={false}
+        renderOrder={2}
+      >
+        <meshBasicMaterial
+          color={config.color}
+          depthWrite={false}
+          opacity={config.opacity}
+          transparent
+          toneMapped={false}
+        />
+      </instancedMesh>
+    </>
   );
 }
