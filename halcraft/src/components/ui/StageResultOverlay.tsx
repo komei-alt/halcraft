@@ -22,6 +22,7 @@ import {
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { formatStageMasteryPerkLabel, getStageMasteryPerk, getStageMasterySummary } from '../../types/stageMastery';
+import { getStageRecordGoal } from '../../types/stageRecordGoals';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -138,7 +139,6 @@ export function StageResultOverlay() {
   const medal = getStageChallengeMedal(completedIds.length, challenges.length);
   const medalLabel = getStageChallengeMedalLabel(medal);
   const medalColor = getMedalColor(medal);
-  const incomplete = challenges.find((challenge) => !completedIds.includes(challenge.id));
   const resultTitle = isGold
     ? 'チャレンジ制覇'
     : stage.category === 'war'
@@ -146,15 +146,15 @@ export function StageResultOverlay() {
       : buildScoreCleared
         ? '作品評価達成'
         : '制作完了';
-  const actionHint = incomplete
-    ? `${incomplete.title} もねらえる`
-    : stage.category === 'war'
-      ? '別の戦場でも金メダルをねらえる'
-      : '別のマップでも作品を増やせる';
   const nextRunBonus = getStageRunBonusForProgress(stage.id, medal, buildScore);
   const targetCount = stage.rules.objective.targetCount;
   const runBest = bestByStage[stage.id];
   const buildBest = buildBestByStage[stage.id];
+  const nextRecordGoal = getStageRecordGoal({
+    stage,
+    runBest,
+    buildBest,
+  });
   const mastery = getStageMasterySummary({
     stage,
     completedCount: completedIds.length,
@@ -754,18 +754,111 @@ export function StageResultOverlay() {
 
         <div
           style={{
-            marginBottom: 16,
-            padding: '9px 10px',
+            marginBottom: 14,
+            padding: '11px 12px',
             borderRadius: 11,
-            color: 'rgba(255,255,255,0.78)',
-            background: `${stage.color}22`,
-            border: `1px solid ${stage.color}44`,
-            fontSize: isCompact ? 12 : 13,
-            fontWeight: 800,
-            lineHeight: '18px',
+            color: '#fff',
+            background: `linear-gradient(135deg, ${nextRecordGoal.accent}22, rgba(255,255,255,0.055))`,
+            border: `1px solid ${nextRecordGoal.accent}66`,
+            boxShadow: `0 0 20px ${nextRecordGoal.accent}22, inset 0 1px 0 rgba(255,255,255,0.11)`,
           }}
         >
-          次: {actionHint}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+              minWidth: 0,
+            }}
+          >
+            <span
+              style={{
+                flex: '0 0 auto',
+                width: isCompact ? 34 : 38,
+                height: isCompact ? 34 : 38,
+                borderRadius: 9,
+                display: 'grid',
+                placeItems: 'center',
+                background: `${nextRecordGoal.accent}24`,
+                border: `1px solid ${nextRecordGoal.accent}66`,
+                boxShadow: `0 0 14px ${nextRecordGoal.accent}33`,
+                fontSize: isCompact ? 18 : 21,
+              }}
+            >
+              {nextRecordGoal.icon}
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  color: nextRecordGoal.accent,
+                  fontSize: isCompact ? 10 : 11,
+                  lineHeight: '13px',
+                  fontWeight: 950,
+                  letterSpacing: 1,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {nextRecordGoal.completed ? 'やり込みMASTER' : '次のやり込み目標'} / {nextRecordGoal.trophyLabel}
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  color: '#fff',
+                  fontSize: isCompact ? 14 : 16,
+                  lineHeight: isCompact ? '18px' : '20px',
+                  fontWeight: 950,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {nextRecordGoal.title}
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '0 0 auto',
+                color: nextRecordGoal.accent,
+                fontSize: isCompact ? 11 : 12,
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                textAlign: 'right',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {nextRecordGoal.progressLabel}
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 9,
+              height: 6,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.13)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(nextRecordGoal.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${nextRecordGoal.accent}, ${stage.color})`,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 7,
+              color: 'rgba(255,255,255,0.76)',
+              fontSize: isCompact ? 11 : 12,
+              lineHeight: '17px',
+              fontWeight: 850,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {nextRecordGoal.detail}
+          </div>
         </div>
 
         {nextRunBonus && (
