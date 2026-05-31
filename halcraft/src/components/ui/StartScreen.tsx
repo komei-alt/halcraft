@@ -223,16 +223,21 @@ function TerrainLayer({
   height,
   opacity,
   points,
+  delay,
+  duration,
 }: {
   color: string;
   top: number;
   height: number;
   opacity: number;
   points: string;
+  delay: number;
+  duration: number;
 }) {
   return (
     <span
       aria-hidden
+      className="stage-scenery-preview__terrain"
       style={{
         position: 'absolute',
         left: 0,
@@ -242,6 +247,8 @@ function TerrainLayer({
         background: color,
         opacity,
         clipPath: `polygon(${points})`,
+        animationDelay: `${delay}s`,
+        animationDuration: `${duration}s`,
       }}
     />
   );
@@ -266,6 +273,7 @@ function StageSceneryPreview({
     borderRadius: large ? 14 : 7,
     border: `1px solid ${stage.color}55`,
     background: scenery.sky,
+    backgroundSize: '118% 100%',
     boxShadow: large
       ? `inset 0 1px 0 rgba(255,255,255,0.2), 0 0 22px ${stage.color}22`
       : `inset 0 1px 0 rgba(255,255,255,0.16), 0 0 10px ${stage.color}18`,
@@ -276,9 +284,10 @@ function StageSceneryPreview({
   const isWar = stage.category === 'war';
 
   return (
-    <div aria-label={`${stage.name}の景色プレビュー`} style={style}>
+    <div aria-label={`${stage.name}の景色プレビュー`} className="stage-scenery-preview" style={style}>
       <span
         aria-hidden
+        className="stage-scenery-preview__light"
         style={{
           position: 'absolute',
           inset: 0,
@@ -291,6 +300,8 @@ function StageSceneryPreview({
         height={height * 0.26}
         opacity={0.44}
         points="0 70%, 9% 42%, 18% 64%, 29% 28%, 42% 68%, 56% 35%, 70% 62%, 84% 24%, 100% 64%, 100% 100%, 0 100%"
+        delay={-1.2}
+        duration={large ? 9.5 : 10.5}
       />
       <TerrainLayer
         color={scenery.mid}
@@ -298,9 +309,12 @@ function StageSceneryPreview({
         height={height * 0.34}
         opacity={0.68}
         points="0 58%, 11% 35%, 22% 52%, 36% 20%, 49% 55%, 62% 30%, 76% 56%, 90% 26%, 100% 48%, 100% 100%, 0 100%"
+        delay={-3.4}
+        duration={large ? 7.5 : 8.6}
       />
       <span
         aria-hidden
+        className="stage-scenery-preview__terrain"
         style={{
           position: 'absolute',
           left: 0,
@@ -309,11 +323,14 @@ function StageSceneryPreview({
           height: height * 0.34,
           background: scenery.ground,
           clipPath: 'polygon(0 42%, 15% 25%, 29% 34%, 43% 16%, 58% 30%, 74% 12%, 100% 28%, 100% 100%, 0 100%)',
+          animationDelay: '-2.1s',
+          animationDuration: large ? '6.4s' : '7.2s',
         }}
       />
       {scenery.water && (
         <span
           aria-hidden
+          className="stage-scenery-preview__water"
           style={{
             position: 'absolute',
             left: '8%',
@@ -322,6 +339,7 @@ function StageSceneryPreview({
             height: Math.max(4, height * 0.08),
             borderRadius: 999,
             background: scenery.water,
+            backgroundSize: '180% 100%',
             opacity: 0.7,
             boxShadow: '0 0 16px rgba(120,255,235,0.38)',
           }}
@@ -334,6 +352,7 @@ function StageSceneryPreview({
           <span
             key={`stage-scenery-marker-${stage.id}-${i}`}
             aria-hidden
+            className="stage-scenery-preview__marker"
             style={{
               position: 'absolute',
               left: `${x}%`,
@@ -344,6 +363,7 @@ function StageSceneryPreview({
               background: isWar ? scenery.near : scenery.mid,
               boxShadow: `0 0 ${large ? 10 : 7}px ${scenery.near}66`,
               transform: isWar ? 'skewX(-8deg)' : 'none',
+              animationDelay: `${-0.45 * i}s`,
             }}
           />
         );
@@ -352,6 +372,7 @@ function StageSceneryPreview({
         <span
           key={`stage-scenery-particle-${stage.id}-${i}`}
           aria-hidden
+          className="stage-scenery-preview__particle"
           style={{
             position: 'absolute',
             left: `${9 + i * (large ? 11 : 17)}%`,
@@ -363,6 +384,7 @@ function StageSceneryPreview({
             opacity: 0.7,
             transform: `rotate(${i % 2 === 0 ? -10 : 8}deg)`,
             boxShadow: `0 0 ${large ? 12 : 8}px ${scenery.particles}`,
+            animationDelay: `${-0.35 * i}s`,
           }}
         />
       ))}
@@ -1548,19 +1570,24 @@ export function StartScreen() {
                   width: isTouch ? 154 : 188,
                   minHeight: isTouch ? 132 : 150,
                   padding: isTouch ? '8px 9px' : '10px 12px',
-                  background: isSelected ? `${stage.color}55` : 'rgba(0,0,0,0.5)',
-                  backdropFilter: 'blur(8px)',
+                  background: isSelected
+                    ? `linear-gradient(180deg, ${stage.color}66 0%, rgba(8,12,18,0.9) 100%)`
+                    : 'linear-gradient(180deg, rgba(22,29,40,0.86) 0%, rgba(5,8,13,0.82) 100%)',
+                  backdropFilter: 'blur(14px) saturate(1.14)',
+                  WebkitBackdropFilter: 'blur(14px) saturate(1.14)',
                   border: '2px solid',
-                  borderColor: isSelected ? `${stage.color}cc` : 'rgba(255,255,255,0.2)',
+                  borderColor: isSelected ? `${stage.color}ee` : 'rgba(255,255,255,0.24)',
                   borderRadius: 8,
-                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.7)',
+                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.86)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: 5,
-                  boxShadow: isSelected ? `0 0 18px ${stage.color}66` : 'none',
+                  boxShadow: isSelected
+                    ? `0 12px 28px rgba(0,0,0,0.45), 0 0 22px ${stage.color}77, inset 0 1px 0 rgba(255,255,255,0.18)`
+                    : '0 10px 24px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.1)',
                   textAlign: 'center',
                 }}
               >
@@ -1571,7 +1598,7 @@ export function StartScreen() {
                   minHeight: isTouch ? 26 : 30,
                   fontSize: isTouch ? 9 : 10,
                   lineHeight: isTouch ? '13px' : '15px',
-                  color: 'rgba(255,255,255,0.68)',
+                  color: 'rgba(255,255,255,0.8)',
                 }}>
                   {stage.rules.shortPitch}
                 </div>
@@ -1587,8 +1614,8 @@ export function StartScreen() {
                       style={{
                         padding: '1px 5px',
                         borderRadius: 4,
-                        background: 'rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.74)',
+                        background: 'rgba(255,255,255,0.14)',
+                        color: 'rgba(255,255,255,0.86)',
                         fontSize: isTouch ? 8 : 9,
                         fontWeight: 800,
                         whiteSpace: 'nowrap',
@@ -1601,7 +1628,7 @@ export function StartScreen() {
                 <div style={{
                   fontSize: isTouch ? 9 : 11,
                   marginTop: 'auto',
-                  color: players > 0 ? '#4caf50' : 'rgba(255,255,255,0.4)',
+                  color: players > 0 ? '#77f29a' : 'rgba(255,255,255,0.54)',
                 }}>
                   {players > 0 ? `🟢 ${players}人` : '○ 0人'}
                 </div>

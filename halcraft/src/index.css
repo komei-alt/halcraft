@@ -117,6 +117,89 @@ body {
   animation: sgRise 0.5s var(--sg-ease) both;
 }
 
+/* マップ選択カード内の小さな景色に、環境が息づくような動きを足す */
+.stage-scenery-preview {
+  animation: stageSceneryGlow 9s ease-in-out infinite alternate;
+}
+
+.stage-scenery-preview__light {
+  animation: stageSceneryLight 6.8s ease-in-out infinite alternate;
+}
+
+.stage-scenery-preview__terrain {
+  animation-name: stageSceneryDrift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  will-change: transform;
+}
+
+.stage-scenery-preview__water {
+  animation: stageSceneryWater 3.8s linear infinite;
+}
+
+.stage-scenery-preview__marker {
+  animation: stageSceneryBeacon 2.9s ease-in-out infinite;
+}
+
+.stage-scenery-preview__particle {
+  animation: stageSceneryParticle 3.6s ease-in-out infinite;
+}
+
+@keyframes stageSceneryGlow {
+  0% {
+    filter: saturate(1) brightness(1);
+    background-position: 0 50%;
+  }
+
+  100% {
+    filter: saturate(1.12) brightness(1.06);
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes stageSceneryLight {
+  0% { opacity: 0.88; }
+  100% { opacity: 1; }
+}
+
+@keyframes stageSceneryDrift {
+  0% { transform: translateX(-1.8%); }
+  100% { transform: translateX(1.8%); }
+}
+
+@keyframes stageSceneryWater {
+  0% { background-position: 0 50%; }
+  100% { background-position: 180% 50%; }
+}
+
+@keyframes stageSceneryBeacon {
+  0%, 100% {
+    filter: brightness(1);
+  }
+
+  52% {
+    filter: brightness(1.36);
+  }
+}
+
+@keyframes stageSceneryParticle {
+  0%, 100% {
+    opacity: 0.44;
+  }
+
+  50% {
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-scenery-preview,
+  .stage-scenery-preview * {
+    animation: none !important;
+  }
+}
+
 /* パルスアニメーション（スタート画面用） */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
