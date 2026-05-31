@@ -255,10 +255,16 @@ class VoiceChatManager {
     const sendingSame = senders.some((s) => s.track === track);
     if (sendingSame) return;
 
-    // 送信トラックが空の sender（recvonly transceiver由来）を再利用
-    const freeSender = senders.find((s) => s.track === null);
-    if (freeSender) {
-      void freeSender.replaceTrack(track);
+    // recvonly で確保済みの transceiver（sender が空）を再利用してトラックを載せる
+    const transceiver = pc.getTransceivers().find((t) => t.sender.track === null);
+    if (transceiver) {
+      void transceiver.sender.replaceTrack(track);
+      // replaceTrack だけでは onnegotiationneeded が発火しない。direction が recvonly の
+      // ままだと SDP 上は受信専用扱いになり、相手にこちらの音声が届かない。sendrecv へ
+      // 変更して再ネゴシエーションを明示的に駆動する（マイクON後に声が届かない主因の修正）。
+      if (transceiver.direction === 'recvonly' || transceiver.direction === 'inactive') {
+        transceiver.direction = 'sendrecv';
+      }
       return;
     }
 
@@ -619,10 +625,10 @@ class VoiceChatManager {
     pc.onnegotiationneeded = async () => {
       try {
         peer.makingOffer = true;
-        const offer = await pc.createOffer();
-        // 競合中に状態が変わっていたら中断
-        if (pc.signalingState !== 'stable') return;
-        await pc.setLocalDescription(offer);
+        // 引数なし setLocalDescription は createOffer + setLocalDescription を原子的に行い、
+        // createOffer の await 中に状態が変わってオファーを取りこぼす競合を防ぐ（Perfect
+        // Negotiation 推奨形）。マイクON時の direction 変更でここが確実に走る必要がある。
+        await pc.setLocalDescription();
         const socket = getSocket();
         socket?.emit('voice:offer', { targetId: peerId, offer: pc.localDescription });
       } catch (err) {
