@@ -16,6 +16,7 @@ import { getStageCombatStyle, getStageCombatStyleForItem } from '../types/stageC
 import type { StageCategory } from '../types/stages';
 import {
   playBuildFocusPlaceSound,
+  playCombatFocusHitSound,
   playModeFlowSurgeSound,
   playStageRewardSound,
 } from '../utils/sounds';
@@ -27,6 +28,7 @@ import type { VehicleType } from './useVehicleStore';
 const MODE_FLOW_MAX_RANK = 3;
 const BUILD_FOCUS_MINING_SPEED_MULTIPLIER = 1.32;
 const BUILD_FOCUS_PLACEMENT_INTERVAL_MULTIPLIER = 0.68;
+const COMBAT_FOCUS_CHAIN_WINDOW_MS = 1180;
 
 export interface ModeFlowActivation {
   id: string;
@@ -73,6 +75,9 @@ interface ModeFlowState {
   combatFocusItem: EquippedItem | null;
   combatFocusRank: number;
   combatFocusLabel: string | null;
+  combatFocusChain: number;
+  bestCombatFocusChain: number;
+  combatFocusChainExpiresAt: number;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
   grantOpeningBuildFocus: (durationMs: number, sourceLabel: string) => void;
@@ -330,6 +335,9 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   combatFocusItem: null,
   combatFocusRank: 0,
   combatFocusLabel: null,
+  combatFocusChain: 0,
+  bestCombatFocusChain: 0,
+  combatFocusChainExpiresAt: 0,
   recentActivation: null,
 
   startRun: (stageId) => {
@@ -354,6 +362,9 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       combatFocusItem: null,
       combatFocusRank: 0,
       combatFocusLabel: null,
+      combatFocusChain: 0,
+      bestCombatFocusChain: 0,
+      combatFocusChainExpiresAt: 0,
       recentActivation: null,
     });
   },
@@ -447,28 +458,49 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const style = getStageCombatStyleForItem(stageId, item);
     if (!stageId || !rule || rule.category !== 'war' || !style) return;
 
-    const gain = getCombatStyleHitGain(item, amount, critical);
-    if (gain <= 0) return;
+    const baseGain = getCombatStyleHitGain(item, amount, critical);
+    if (baseGain <= 0) return;
 
+    const createdAt = nowMs();
+    const focusActiveBeforeHit = state.combatFocusItem === item && state.combatFocusUntil > createdAt;
+    const nextCombatFocusChain = focusActiveBeforeHit
+      ? createdAt <= state.combatFocusChainExpiresAt
+        ? state.combatFocusChain + 1
+        : 1
+      : 0;
+    const combatFocusRank = Math.max(1, Math.min(MODE_FLOW_MAX_RANK, state.combatFocusRank || 1));
+    const focusBonusGain = focusActiveBeforeHit
+      ? Math.min(18, 4 + combatFocusRank * 2 + Math.min(8, nextCombatFocusChain))
+      : 0;
+    const gain = baseGain + focusBonusGain;
     const nextRawMeter = state.meter + gain;
     const reached = nextRawMeter >= rule.threshold;
     const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
-    const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
     const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
+    const nextBestCombatFocusChain = Math.max(state.bestCombatFocusChain, nextCombatFocusChain);
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
-      lastGainLabel: `${style.shortLabel} +${gain}`,
+      lastGainLabel: focusActiveBeforeHit
+        ? `FOCUSx${nextCombatFocusChain} +${gain}`
+        : `${style.shortLabel} +${baseGain}`,
       lastGainAt: createdAt,
       lastCombatStyleItem: item,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
       ...combatFocusPatch,
+      combatFocusChain: nextCombatFocusChain,
+      bestCombatFocusChain: nextBestCombatFocusChain,
+      combatFocusChainExpiresAt: focusActiveBeforeHit ? createdAt + COMBAT_FOCUS_CHAIN_WINDOW_MS : 0,
     });
+
+    if (focusActiveBeforeHit) {
+      playCombatFocusHitSound(nextCombatFocusChain, combatFocusRank);
+    }
   },
 
   recordVehicleHit: (vehicleType, amount = 1, critical = false) => {
@@ -498,6 +530,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       flowRank,
       activationCount: nextActivationCount,
       ...combatFocusPatch,
+      combatFocusChain: reached ? 0 : state.combatFocusChain,
+      combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,
     });
   },
 
@@ -533,6 +567,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       flowRank,
       activationCount: nextActivationCount,
       ...combatFocusPatch,
+      combatFocusChain: reached ? 0 : state.combatFocusChain,
+      combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,
     });
   },
 
@@ -561,6 +597,8 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       flowRank,
       activationCount: nextActivationCount,
       ...combatFocusPatch,
+      combatFocusChain: reached ? 0 : state.combatFocusChain,
+      combatFocusChainExpiresAt: reached ? 0 : state.combatFocusChainExpiresAt,
     });
   },
 

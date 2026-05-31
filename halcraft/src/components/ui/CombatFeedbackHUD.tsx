@@ -280,6 +280,11 @@ function getStageTacticFeedback(
   modeLastGainAt: number,
   modeLastCombatStyleItem: EquippedItem | null,
   modeFlowRank: number,
+  combatFocusUntil: number,
+  combatFocusItem: EquippedItem | null,
+  combatFocusRank: number,
+  combatFocusChain: number,
+  combatFocusChainExpiresAt: number,
 ): StageTacticFeedback | null {
   const rule = getStageModeRule(currentStageId);
   const recommendedStyle = getStageCombatStyle(currentStageId);
@@ -307,6 +312,22 @@ function getStageTacticFeedback(
   const hasRecentGain = modeLastCombatStyleItem === feedback.item
     && modeLastGainAt >= feedback.createdAt - 24
     && modeLastGainAt <= feedback.createdAt + 700;
+  const focusHit = combatFocusItem === feedback.item && combatFocusUntil >= feedback.createdAt;
+  const focusChain = combatFocusChainExpiresAt >= feedback.createdAt ? combatFocusChain : 0;
+  if (focusHit) {
+    return {
+      accent: matchedStyle.accent,
+      glow: `${matchedStyle.accent}72`,
+      eyebrow: `${matchedStyle.shortLabel}集中`,
+      label: focusChain >= 2 ? `追撃x${focusChain}` : '作戦集中HIT',
+      detail: `FOCUS Lv.${Math.max(1, combatFocusRank)} / 戦意ボーナス込みで次の発動へつなぐ / ${formatStageCombatBonus(matchedStyle)}`,
+      meterLabel: 'FOCUS',
+      meterText: focusChain >= 2 ? `x${focusChain}` : 'ON',
+      ratio,
+      matched: true,
+    };
+  }
+
   const gainText = hasRecentGain && modeLastGain > 0 ? `+${modeLastGain}` : '進行';
   const nextText = Math.max(0, threshold - modeMeter);
   return {
@@ -403,6 +424,11 @@ export function CombatFeedbackHUD() {
   const modeLastGainAt = useModeFlowStore((s) => s.lastGainAt);
   const modeLastCombatStyleItem = useModeFlowStore((s) => s.lastCombatStyleItem);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
+  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
+  const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
+  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
+  const combatFocusChainExpiresAt = useModeFlowStore((s) => s.combatFocusChainExpiresAt);
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const [feedback, setFeedback] = useState<CombatFeedback | null>(null);
@@ -479,6 +505,11 @@ export function CombatFeedbackHUD() {
     modeLastGainAt,
     modeLastCombatStyleItem,
     modeFlowRank,
+    combatFocusUntil,
+    combatFocusItem,
+    combatFocusRank,
+    combatFocusChain,
+    combatFocusChainExpiresAt,
   );
   const challenge = getChallengeFeedback(
     feedback,

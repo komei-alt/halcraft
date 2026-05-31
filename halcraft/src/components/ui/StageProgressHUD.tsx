@@ -843,6 +843,10 @@ export function StageProgressHUD() {
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
+  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
+  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
+  const combatFocusChainExpiresAt = useModeFlowStore((s) => s.combatFocusChainExpiresAt);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const playerPosition = usePlayerStore((s) => s.worldPosition);
   const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
@@ -940,6 +944,13 @@ export function StageProgressHUD() {
       ? getModeFlowRankLabel(modeRule.category, modeFlowRank)
       : `次${getModeFlowRankLabel(modeRule.category, compactNextModeRank)}`
     : '';
+  const compactCombatFocusActive = modeRule?.category === 'war' && combatFocusUntil > eventNow;
+  const compactCombatFocusChain = combatFocusChainExpiresAt > eventNow ? combatFocusChain : 0;
+  const compactModeActionLabel = compactCombatFocusActive
+    ? compactCombatFocusChain >= 2
+      ? `作戦集中 追撃x${compactCombatFocusChain}`
+      : `作戦集中 Lv.${Math.max(1, combatFocusRank)}`
+    : modeRule?.actionLabel;
   const opportunityCue = getStageOpportunityCue({
     stage,
     stats: challengeStats,
@@ -1740,7 +1751,7 @@ export function StageProgressHUD() {
               whiteSpace: 'nowrap',
             }}
           >
-            {modeRule.actionLabel}
+            {compactModeActionLabel}
           </div>
         </div>
       )}

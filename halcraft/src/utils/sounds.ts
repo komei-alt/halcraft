@@ -1877,6 +1877,51 @@ export function playBuildFocusPlaceSound(chain: number): void {
   sparkle.stop(now + 0.16);
 }
 
+/** 作戦集中の追撃SE — 推奨武器を当て続ける短いごほうび */
+export function playCombatFocusHitSound(chain: number, rank: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('combatFocusHit', 105)) return;
+  const now = ctx.currentTime;
+  const safeChain = Math.max(1, Math.min(12, Math.round(chain)));
+  const safeRank = Math.max(1, Math.min(3, Math.round(rank)));
+  const base = 220 + safeRank * 44 + safeChain * 10;
+
+  const strike = ctx.createOscillator();
+  strike.type = 'sawtooth';
+  strike.frequency.setValueAtTime(base * 2.2, now);
+  strike.frequency.exponentialRampToValueAtTime(base, now + 0.14);
+
+  const strikeFilter = ctx.createBiquadFilter();
+  strikeFilter.type = 'bandpass';
+  strikeFilter.frequency.setValueAtTime(980 + safeRank * 160 + safeChain * 34, now);
+  strikeFilter.Q.setValueAtTime(2.2, now);
+
+  const strikeGain = ctx.createGain();
+  strikeGain.gain.setValueAtTime(0.026 + safeRank * 0.006 + Math.min(0.018, safeChain * 0.002), now);
+  strikeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  strike.connect(strikeFilter);
+  strikeFilter.connect(strikeGain);
+  strikeGain.connect(ctx.destination);
+  strike.start(now);
+  strike.stop(now + 0.16);
+
+  if (safeChain < 3) return;
+
+  const ping = ctx.createOscillator();
+  ping.type = 'triangle';
+  ping.frequency.setValueAtTime(base * 3.1, now + 0.035);
+
+  const pingGain = ctx.createGain();
+  pingGain.gain.setValueAtTime(0.012 + safeRank * 0.004, now + 0.035);
+  pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  ping.connect(pingGain);
+  pingGain.connect(ctx.destination);
+  ping.start(now + 0.035);
+  ping.stop(now + 0.18);
+}
+
 /** ランドマーク到着SE — マップの起点を見つけた達成感を返す */
 export function playStageLandmarkSound(kind: StageStartSoundKind): void {
   const ctx = getAudioContext();

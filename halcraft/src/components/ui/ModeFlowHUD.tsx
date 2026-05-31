@@ -36,6 +36,9 @@ export function ModeFlowHUD() {
   const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
   const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
   const combatFocusLabel = useModeFlowStore((s) => s.combatFocusLabel);
+  const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
+  const bestCombatFocusChain = useModeFlowStore((s) => s.bestCombatFocusChain);
+  const combatFocusChainExpiresAt = useModeFlowStore((s) => s.combatFocusChainExpiresAt);
   const recentActivation = useModeFlowStore((s) => s.recentActivation);
   const clearRecentActivation = useModeFlowStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
@@ -64,6 +67,7 @@ export function ModeFlowHUD() {
   const buildFocusActive = buildFocusRemainingMs > 0;
   const combatFocusActive = combatFocusRemainingMs > 0;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
+  const activeCombatFocusChain = combatFocusChainExpiresAt > now ? combatFocusChain : 0;
   const activeActivation = recentActivation?.stageId === stage.id ? recentActivation : null;
   const activeTitle = activeActivation ? activeActivation.title : rule.title;
   const visibleRank = activeActivation ? activeActivation.flowRank : flowRank;
@@ -83,7 +87,9 @@ export function ModeFlowHUD() {
           : `高速建築中 / 残り${formatSeconds(buildFocusRemainingMs)}`
         : rule.actionLabel
       : combatFocusActive
-        ? `${combatFocusLabel ?? '作戦'}集中中 / 残り${formatSeconds(combatFocusRemainingMs)}`
+        ? activeCombatFocusChain >= 2
+          ? `${combatFocusLabel ?? '作戦'}集中中 / 追撃x${activeCombatFocusChain} / 残り${formatSeconds(combatFocusRemainingMs)}`
+          : `${combatFocusLabel ?? '作戦'}集中中 / 残り${formatSeconds(combatFocusRemainingMs)}`
         : streak > 0
         ? `連続${streak}体 / 残り${formatSeconds(streakRemainingMs)}`
         : rule.actionLabel;
@@ -189,7 +195,9 @@ export function ModeFlowHUD() {
               ? `PLACE x${activeBuildFocusChain}`
               : 'BUILD x1.32'
             : combatFocusActive
-              ? `FOCUS Lv.${Math.max(1, combatFocusRank)}`
+              ? activeCombatFocusChain >= 2
+                ? `FOCUS x${activeCombatFocusChain}`
+                : `FOCUS Lv.${Math.max(1, combatFocusRank)}`
             : lastGainLabel ?? (rule.category === 'war' && bestStreak > 0 ? `BEST x${bestStreak}` : `${activationCount}回`)}
         </span>
       </div>
@@ -231,6 +239,7 @@ export function ModeFlowHUD() {
           次発動: {getModeFlowRankLabel(rule.category, nextRank)} / {formatStageModeRewardDetail(previewReward)}
           {rule.category === 'build' && bestBuildFocusChain > 1 ? ` / 連置BEST x${bestBuildFocusChain}` : ''}
           {rule.category === 'war' && combatFocusActive ? ` / 作戦集中 ${formatSeconds(combatFocusRemainingMs)}` : ''}
+          {rule.category === 'war' && bestCombatFocusChain > 1 ? ` / 追撃BEST x${bestCombatFocusChain}` : ''}
         </div>
       )}
     </div>
