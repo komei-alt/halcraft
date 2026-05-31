@@ -225,10 +225,42 @@ function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: Stage
   }
 }
 
+function placeDesertWarSpawnRift(chunk: ChunkData, cx: number, cz: number, stage: StageDefinition): void {
+  if (stage.id !== 'war-desert') return;
+
+  // 開始地点の少し前方に、遠距離火力マップらしい危険地形を見せる。
+  for (let wx = 2; wx <= 14; wx++) {
+    const centerZ = 3 + Math.round(Math.sin((wx - 2) * 0.65) * 1.4);
+    for (let dz = -1; dz <= 1; dz++) {
+      const wz = centerZ + dz;
+      const local = worldToLocal(wx, wz, cx, cz);
+      if (!local) continue;
+
+      const surfaceY = getTerrainHeight(wx, wz);
+      const isLavaCore = dz === 0 || (wx % 5 === 0 && Math.abs(dz) === 1);
+      setWorldBlock(chunk, cx, cz, wx, surfaceY - 1, wz, BLOCK_IDS.STONE);
+      setWorldBlock(chunk, cx, cz, wx, surfaceY, wz, isLavaCore ? BLOCK_IDS.LAVA : BLOCK_IDS.NETHERRACK);
+      for (let y = surfaceY + 1; y <= Math.min(WORLD_HEIGHT - 1, surfaceY + 4); y++) {
+        setWorldBlock(chunk, cx, cz, wx, y, wz, BLOCK_IDS.AIR);
+      }
+    }
+  }
+
+  for (const glow of [
+    { x: 3, z: 1 },
+    { x: 13, z: 5 },
+  ]) {
+    const y = getTerrainHeight(glow.x, glow.z);
+    setWorldBlock(chunk, cx, cz, glow.x, y, glow.z, BLOCK_IDS.GLOWSTONE);
+  }
+}
+
 /** 現在のステージに応じたランドマークを配置する */
 export function placeStageLandmarks(chunk: ChunkData, cx: number, cz: number): void {
   const stage = getCurrentTerrainStage();
   if (!stage) return;
+
+  placeDesertWarSpawnRift(chunk, cx, cz, stage);
 
   const chunkMinX = cx * CHUNK_SIZE;
   const chunkMaxX = chunkMinX + CHUNK_SIZE;

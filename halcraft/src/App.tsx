@@ -23,7 +23,7 @@ import { TurretRenderer } from './components/TurretRenderer';
 import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from './components/DecorBlocks';
 import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
-import { WaterRenderer } from './components/WaterRenderer';
+import { LavaRenderer, WaterRenderer } from './components/WaterRenderer';
 import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
@@ -177,6 +177,7 @@ function GameCanvas() {
           <RailRenderer />
           <CoasterCart />
           <WaterRenderer />
+          <LavaRenderer />
           <StageConditionSystem />
           <StageEventSystem />
           <StagePressureSystem />

@@ -484,7 +484,7 @@ export const STAGES: StageDefinition[] = [
       objectiveDescription: '開けた砂地で遠くから敵を見つけ、戦車や飛行機の火力で押し切ろう。',
       targetCount: 30,
       prompts: ['戦車を確保', '砂丘の高台', 'TNTで待ち伏せ'],
-      featureTags: ['開けた地形', '乗り物向き', '爆発多め', '夜が速い'],
+      featureTags: ['開けた地形', '乗り物向き', '爆発多め', '溶岩トラップ'],
       landmarkName: '砂漠の戦闘ピラミッド',
       dayDurationSeconds: 900,
       startTime: 0.48,
@@ -492,6 +492,7 @@ export const STAGES: StageDefinition[] = [
       extraBlocks: {
         [BLOCK_IDS.SAND]: 64,
         [BLOCK_IDS.TNT]: 10,
+        [BLOCK_IDS.LAVA]: 8,
         [BLOCK_IDS.ELECTRIC]: 8,
       },
       extraTools: ['iron_pickaxe'],

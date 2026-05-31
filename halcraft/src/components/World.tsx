@@ -112,7 +112,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
           const blockDef = BLOCK_DEFS[blockId];
-          if (blockId === BLOCK_IDS.WATER) continue;
+          if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
           counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
@@ -135,7 +135,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockId = chunkData[lx][ly][lz];
           if (blockId === BLOCK_IDS.AIR) continue;
           const blockDef = BLOCK_DEFS[blockId];
-          if (blockId === BLOCK_IDS.WATER) continue;
+          if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
           if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
 
