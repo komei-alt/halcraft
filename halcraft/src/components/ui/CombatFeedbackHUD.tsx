@@ -13,6 +13,14 @@ import {
   useMasteryStore,
 } from '../../stores/useMasteryStore';
 import type { EquippedItem } from '../../stores/usePlayerStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import {
+  getStageChallengeProgress,
+  getStageChallenges,
+  type StageChallengeDefinition,
+  type StageChallengeMetric,
+  type StageChallengeStats,
+} from '../../types/stageChallenges';
 import {
   formatStageCombatBonus,
   getStageCombatStyle,
@@ -59,6 +67,17 @@ interface StageTacticFeedback {
   meterText: string;
   ratio: number;
   matched: boolean;
+}
+
+interface ChallengeFeedback {
+  icon: string;
+  eyebrow: string;
+  title: string;
+  detail: string;
+  progressText: string;
+  ratio: number;
+  accent: string;
+  advanced: boolean;
 }
 
 const DISPLAY_MS = 1120;
@@ -287,6 +306,79 @@ function getStageTacticFeedback(
   };
 }
 
+function getCombatChallengeMetric(item: EquippedItem): StageChallengeMetric | null {
+  if (item === 'machine_gun') return 'machine_gun_hits';
+  if (item === 'rocket_launcher') return 'rocket_hits';
+  if (item === 'lightsaber') return 'lightsaber_hits';
+  return null;
+}
+
+function getDirectChallengeMetrics(feedback: CombatFeedback): StageChallengeMetric[] {
+  const metrics: StageChallengeMetric[] = [];
+  const combatMetric = getCombatChallengeMetric(feedback.item);
+  if (combatMetric) metrics.push(combatMetric);
+  if (feedback.kind === 'defeat') {
+    metrics.push('enemies_defeated', 'boss_defeated');
+  }
+  return metrics;
+}
+
+function getChallengePriority(feedback: CombatFeedback): StageChallengeMetric[] {
+  const directMetrics = getDirectChallengeMetrics(feedback);
+  return [
+    ...directMetrics,
+    'enemies_defeated',
+    'boss_defeated',
+    'detonations',
+    'vehicle_hits',
+    'block_group_placed',
+  ];
+}
+
+function pickChallenge(
+  challenges: StageChallengeDefinition[],
+  completedIds: string[],
+  priority: StageChallengeMetric[],
+): StageChallengeDefinition | null {
+  if (challenges.length === 0) return null;
+
+  for (const metric of priority) {
+    const matched = challenges.find((challenge) => challenge.metric === metric);
+    if (matched) return matched;
+  }
+
+  return challenges.find((challenge) => !completedIds.includes(challenge.id)) ?? challenges[0] ?? null;
+}
+
+function getChallengeFeedback(
+  feedback: CombatFeedback,
+  currentStageId: string | null,
+  stats: StageChallengeStats,
+  completedIds: string[],
+): ChallengeFeedback | null {
+  const challenge = pickChallenge(
+    getStageChallenges(currentStageId),
+    completedIds,
+    getChallengePriority(feedback),
+  );
+  if (!challenge) return null;
+
+  const progress = getStageChallengeProgress(challenge, stats);
+  const directMetrics = getDirectChallengeMetrics(feedback);
+  const advanced = progress.completed || directMetrics.includes(challenge.metric);
+  const current = Math.min(progress.current, progress.target);
+  return {
+    icon: challenge.icon,
+    eyebrow: progress.completed ? 'チャレンジ達成' : advanced ? 'チャレンジ進行' : '次の目標',
+    title: challenge.title,
+    detail: advanced ? challenge.description : `次: ${challenge.description}`,
+    progressText: progress.completed ? 'CLEAR' : `${current}/${progress.target}`,
+    ratio: progress.ratio,
+    accent: challenge.accent,
+    advanced,
+  };
+}
+
 export function CombatFeedbackHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
@@ -295,6 +387,8 @@ export function CombatFeedbackHUD() {
   const modeLastGainAt = useModeFlowStore((s) => s.lastGainAt);
   const modeLastCombatStyleItem = useModeFlowStore((s) => s.lastCombatStyleItem);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
+  const challengeStats = useStageChallengeStore((s) => s.stats);
+  const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const [feedback, setFeedback] = useState<CombatFeedback | null>(null);
   const clearTimerRef = useRef<number | null>(null);
   const lastEventIdRef = useRef<number | null>(null);
@@ -365,6 +459,12 @@ export function CombatFeedbackHUD() {
     modeLastGainAt,
     modeLastCombatStyleItem,
     modeFlowRank,
+  );
+  const challenge = getChallengeFeedback(
+    feedback,
+    currentStageId,
+    challengeStats,
+    completedChallengeIds,
   );
   const accent = stageTactic?.matched ? stageTactic.accent : def.accent;
   const glow = stageTactic?.matched ? stageTactic.glow : def.glow;
@@ -609,6 +709,84 @@ export function CombatFeedbackHUD() {
               }}
             >
               {stageTactic.detail}
+            </div>
+          </div>
+        )}
+        {challenge && (
+          <div
+            style={{
+              marginTop: 5,
+              padding: isCompact ? '5px 6px' : '6px 7px',
+              borderRadius: 5,
+              background: challenge.advanced
+                ? `linear-gradient(90deg, ${challenge.accent}20, rgba(255,255,255,0.05))`
+                : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${challenge.accent}${challenge.advanced ? '5c' : '34'}`,
+              boxShadow: challenge.advanced ? `0 0 10px ${challenge.accent}33` : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span
+                style={{
+                  minWidth: 0,
+                  color: challenge.accent,
+                  fontSize: isCompact ? 8 : 9,
+                  lineHeight: '11px',
+                  fontWeight: 950,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {challenge.icon} {challenge.eyebrow}: {challenge.title}
+              </span>
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  color: challenge.advanced ? '#fff4b0' : 'rgba(255,255,255,0.62)',
+                  fontSize: isCompact ? 8 : 9,
+                  lineHeight: '11px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {challenge.progressText}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                height: 3,
+                borderRadius: 999,
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.12)',
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.round(challenge.ratio * 100)}%`,
+                  height: '100%',
+                  borderRadius: 999,
+                  background: challenge.advanced
+                    ? `linear-gradient(90deg, ${challenge.accent}, #fff4b0)`
+                    : `linear-gradient(90deg, ${challenge.accent}, rgba(255,255,255,0.5))`,
+                  boxShadow: `0 0 8px ${challenge.accent}44`,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                marginTop: 3,
+                color: challenge.advanced ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.56)',
+                fontSize: isCompact ? 8 : 9,
+                lineHeight: '11px',
+                fontWeight: 780,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {challenge.detail}
             </div>
           </div>
         )}
