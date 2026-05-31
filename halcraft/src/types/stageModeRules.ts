@@ -19,6 +19,7 @@ export interface StageModeReward {
   shieldMs: number;
   rocketReady: boolean;
   buildFocusMs: number;
+  combatFocusMs: number;
 }
 
 export interface StageModeRule {
@@ -44,6 +45,7 @@ const EMPTY_REWARD: StageModeReward = {
   shieldMs: 0,
   rocketReady: false,
   buildFocusMs: 0,
+  combatFocusMs: 0,
 };
 
 function reward(overrides: Partial<StageModeReward>): StageModeReward {
@@ -158,6 +160,7 @@ export const STAGE_MODE_RULES: Record<string, StageModeRule> = {
       blocks: [{ blockId: BLOCK_IDS.TURRET, count: 1 }],
       heal: 2,
       shieldMs: 3500,
+      combatFocusMs: 4200,
     }),
   },
   'war-tropical': {
@@ -176,6 +179,7 @@ export const STAGE_MODE_RULES: Record<string, StageModeRule> = {
     reward: reward({
       blocks: [{ blockId: BLOCK_IDS.TNT, count: 2 }],
       hunger: 2,
+      combatFocusMs: 4600,
     }),
   },
   'war-snow': {
@@ -195,6 +199,7 @@ export const STAGE_MODE_RULES: Record<string, StageModeRule> = {
       blocks: [{ blockId: BLOCK_IDS.CAMPFIRE, count: 1 }],
       heal: 4,
       shieldMs: 3000,
+      combatFocusMs: 5200,
     }),
   },
   'war-desert': {
@@ -213,6 +218,7 @@ export const STAGE_MODE_RULES: Record<string, StageModeRule> = {
     reward: reward({
       blocks: [{ blockId: BLOCK_IDS.TNT, count: 2 }],
       rocketReady: true,
+      combatFocusMs: 4800,
     }),
   },
 };
@@ -272,6 +278,7 @@ export function formatStageModeRewardDetail(reward: StageModeReward): string {
     reward.shieldMs > 0 ? `安全 +${Math.round(reward.shieldMs / 1000)}s` : '',
     reward.rocketReady ? 'ロケット即応' : '',
     reward.buildFocusMs > 0 ? `高速建築 +${Math.round(reward.buildFocusMs / 1000)}s` : '',
+    reward.combatFocusMs > 0 ? `作戦集中 +${Math.round(reward.combatFocusMs / 1000)}s` : '',
   ].filter(Boolean);
 
   return parts.join(' / ');

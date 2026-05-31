@@ -13,7 +13,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
-import { useModeFlowStore } from '../stores/useModeFlowStore';
+import { getCombatFocusModifier, useModeFlowStore } from '../stores/useModeFlowStore';
 import { useGameStore } from '../stores/useGameStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
@@ -149,9 +149,11 @@ export function PlayerMachineGun() {
     const now = performance.now() / 1000;
     const stageStyle = getStageCombatModifier(useGameStore.getState().currentStageId, 'machine_gun');
     const techniqueBonus = getMachineGunTechniqueBonus();
+    const combatFocus = getCombatFocusModifier('machine_gun');
     const fireCooldown = FIRE_COOLDOWN
       * stageStyle.machineGunCooldownMultiplier
-      * techniqueBonus.machineGunCooldownMultiplier;
+      * techniqueBonus.machineGunCooldownMultiplier
+      * combatFocus.machineGunCooldownMultiplier;
     if (now - lastFireTime.current < fireCooldown) return;
     if (useVehicleStore.getState().isInVehicle()) return;
     lastFireTime.current = now;
@@ -199,7 +201,8 @@ export function PlayerMachineGun() {
     const spread = (isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD)
       * masteryBonus.machineGunSpreadMultiplier
       * techniqueBonus.machineGunSpreadMultiplier
-      * stageStyle.machineGunSpreadMultiplier;
+      * stageStyle.machineGunSpreadMultiplier
+      * combatFocus.machineGunSpreadMultiplier;
     shootDir.current.x += (Math.random() - 0.5) * spread;
     shootDir.current.y += (Math.random() - 0.5) * spread;
     shootDir.current.z += (Math.random() - 0.5) * spread;
@@ -215,7 +218,7 @@ export function PlayerMachineGun() {
       createdAt: now,
     }]);
 
-    flashTimer.current = 0.065;
+    flashTimer.current = combatFocus.active ? 0.09 : 0.065;
     playMachineGunSound(startPos.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
@@ -276,7 +279,10 @@ export function PlayerMachineGun() {
     }
     if (flashLightRef.current) {
       flashLightRef.current.color.copy(muzzleGlowColor);
-      flashLightRef.current.intensity = flashTimer.current > 0 ? (stageVisualStyle ? 4.6 : 3.5) : 0;
+      const combatFocusVisual = getCombatFocusModifier('machine_gun');
+      flashLightRef.current.intensity = flashTimer.current > 0
+        ? (stageVisualStyle ? 4.6 : 3.5) * (combatFocusVisual.active ? 1.25 : 1)
+        : 0;
     }
 
     const canFire = visible && (
@@ -291,9 +297,12 @@ export function PlayerMachineGun() {
     const remotePlayers = useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>;
     const masteryBonus = getMachineGunMasteryBonus();
     const techniqueBonus = getMachineGunTechniqueBonus();
-    const bulletDamage = BULLET_DAMAGE
+    const combatFocus = getCombatFocusModifier('machine_gun');
+    const bulletDamage = Math.max(1, Math.round((
+      BULLET_DAMAGE
       + masteryBonus.machineGunDamageBonus
-      + techniqueBonus.machineGunDamageBonus;
+      + techniqueBonus.machineGunDamageBonus
+    ) * combatFocus.damageMultiplier));
 
     setBullets((prev) => {
       const alive: BulletProjectile[] = [];

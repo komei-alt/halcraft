@@ -64,10 +64,14 @@ export function Crosshair() {
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
+  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
+  const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
+  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
   const [now, setNow] = useState(() => performance.now());
 
   useEffect(() => {
-    if (buildFocusUntil <= performance.now()) return undefined;
+    const currentNow = performance.now();
+    if (buildFocusUntil <= currentNow && combatFocusUntil <= currentNow) return undefined;
     const updateNow = () => setNow(performance.now());
     const firstTick = window.setTimeout(updateNow, 0);
     const timer = window.setInterval(updateNow, 120);
@@ -75,7 +79,7 @@ export function Crosshair() {
       window.clearTimeout(firstTick);
       window.clearInterval(timer);
     };
-  }, [buildFocusUntil]);
+  }, [buildFocusUntil, combatFocusUntil]);
   const modeRule = useMemo(() => getStageModeRule(currentStageId), [currentStageId]);
 
   // 乗り物搭乗中は専用照準に任せる
@@ -86,10 +90,16 @@ export function Crosshair() {
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
   const buildFocusActive = isBuilder && modeRule?.category === 'build' && buildFocusUntil > now;
+  const combatFocusActive = !isBuilder && combatFocusItem === equippedItem && combatFocusUntil > now;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const builderFocusAccent = buildFocusActive ? modeRule.accent : profile.color;
-  const activeColor = buildFocusActive ? builderFocusAccent : profile.color;
-  const activeGlow = buildFocusActive ? `${builderFocusAccent}88` : profile.glow;
+  const combatFocusAccent = combatFocusActive ? (stageStyle?.accent ?? profile.color) : profile.color;
+  const activeColor = buildFocusActive ? builderFocusAccent : combatFocusActive ? combatFocusAccent : profile.color;
+  const activeGlow = buildFocusActive
+    ? `${builderFocusAccent}88`
+    : combatFocusActive
+      ? `${combatFocusAccent}aa`
+      : profile.glow;
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
   const isRocketReloading = equippedItem === 'rocket_launcher' && charge < 1;
   const ringSize = equippedItem === 'machine_gun' ? 42 : 36;
@@ -119,9 +129,11 @@ export function Crosshair() {
       transform: `translate(-50%, ${profile.gap}px)`,
     },
   ];
-  const label = stageStyle
-    ? `${profile.code} MAP`
-    : isRocketReloading
+  const label = combatFocusActive
+    ? `${profile.code} FOCUS${Math.max(1, combatFocusRank)}`
+    : stageStyle
+      ? `${profile.code} MAP`
+      : isRocketReloading
       ? `${profile.code} ${Math.round(charge * 100)}%`
       : profile.code;
 
@@ -147,11 +159,12 @@ export function Crosshair() {
             height: ringSize,
             transform: 'translate(-50%, -50%)',
             borderRadius: '50%',
-            background: `conic-gradient(${profile.color} ${Math.round(charge * 360)}deg, rgba(255,255,255,0.16) 0deg)`,
+            background: `conic-gradient(${activeColor} ${Math.round(charge * 360)}deg, rgba(255,255,255,0.16) 0deg)`,
             WebkitMask: 'radial-gradient(circle, transparent 55%, #000 58%)',
             mask: 'radial-gradient(circle, transparent 55%, #000 58%)',
-            filter: `drop-shadow(0 0 5px ${profile.glow})`,
-            opacity: equippedItem === 'machine_gun' ? 0.68 : 0.82,
+            filter: `drop-shadow(0 0 ${combatFocusActive ? 9 : 5}px ${activeGlow})`,
+            opacity: combatFocusActive ? 0.92 : equippedItem === 'machine_gun' ? 0.68 : 0.82,
+            animation: combatFocusActive ? 'builderFocusReticle 0.66s ease-in-out infinite alternate' : undefined,
           }}
         />
       )}
@@ -264,9 +277,9 @@ export function Crosshair() {
                 transform: 'translate(-50%, 22px)',
                 padding: '1px 5px',
                 borderRadius: 4,
-                border: `1px solid ${profile.color}55`,
-                background: 'rgba(0,0,0,0.42)',
-                color: profile.color,
+                border: `1px solid ${activeColor}55`,
+                background: combatFocusActive ? 'rgba(30, 20, 6, 0.56)' : 'rgba(0,0,0,0.42)',
+                color: activeColor,
                 fontSize: 8,
                 lineHeight: '10px',
                 fontWeight: 900,

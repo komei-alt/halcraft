@@ -13,7 +13,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
-import { useModeFlowStore } from '../stores/useModeFlowStore';
+import { getCombatFocusModifier, useModeFlowStore } from '../stores/useModeFlowStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -152,11 +152,13 @@ function createRadialTexture(stops: Array<{ offset: number; color: string }>): T
   return texture;
 }
 
-function calculateExplosionDamage(distance: number): number {
-  if (distance >= EXPLOSION_RADIUS) return 0;
-  const falloff = 1 - distance / EXPLOSION_RADIUS;
+function calculateExplosionDamage(distance: number, radius = EXPLOSION_RADIUS, damageMultiplier = 1): number {
+  if (distance >= radius) return 0;
+  const falloff = 1 - distance / radius;
   const eased = falloff * falloff;
-  return Math.max(1, Math.round(EXPLOSION_MIN_DAMAGE + (EXPLOSION_DAMAGE - EXPLOSION_MIN_DAMAGE) * eased));
+  return Math.max(1, Math.round(
+    (EXPLOSION_MIN_DAMAGE + (EXPLOSION_DAMAGE - EXPLOSION_MIN_DAMAGE) * eased) * damageMultiplier,
+  ));
 }
 
 function createExplosion(pos: THREE.Vector3): ExplosionEffect {
@@ -365,16 +367,16 @@ export function RocketLauncher() {
     setProjectiles(next);
   }, []);
 
-  const destroyExplosionBlocks = useCallback((center: THREE.Vector3) => {
+  const destroyExplosionBlocks = useCallback((center: THREE.Vector3, radius = EXPLOSION_BLOCK_RADIUS) => {
     const world = useWorldStore.getState();
     const multi = useMultiplayerStore.getState();
-    const radiusSq = EXPLOSION_BLOCK_RADIUS * EXPLOSION_BLOCK_RADIUS;
-    const minX = Math.floor(center.x - EXPLOSION_BLOCK_RADIUS);
-    const maxX = Math.floor(center.x + EXPLOSION_BLOCK_RADIUS);
-    const minY = Math.floor(center.y - EXPLOSION_BLOCK_RADIUS);
-    const maxY = Math.floor(center.y + EXPLOSION_BLOCK_RADIUS);
-    const minZ = Math.floor(center.z - EXPLOSION_BLOCK_RADIUS);
-    const maxZ = Math.floor(center.z + EXPLOSION_BLOCK_RADIUS);
+    const radiusSq = radius * radius;
+    const minX = Math.floor(center.x - radius);
+    const maxX = Math.floor(center.x + radius);
+    const minY = Math.floor(center.y - radius);
+    const maxY = Math.floor(center.y + radius);
+    const minZ = Math.floor(center.z - radius);
+    const maxZ = Math.floor(center.z + radius);
     const candidates: ExplosionBlockCandidate[] = [];
 
     for (let x = minX; x <= maxX; x++) {
@@ -407,6 +409,9 @@ export function RocketLauncher() {
   const applyExplosionDamage = useCallback((center: THREE.Vector3) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
+    const combatFocus = getCombatFocusModifier('rocket_launcher');
+    const explosionRadius = EXPLOSION_RADIUS * combatFocus.rocketRadiusMultiplier;
+    const damageMultiplier = combatFocus.damageMultiplier;
     let masteryHits = 0;
 
     playerCenter.current.set(camera.position.x, camera.position.y - 0.85, camera.position.z);
@@ -423,7 +428,7 @@ export function RocketLauncher() {
     for (const mob of mobStore.mobs) {
       const mobCenter = new THREE.Vector3(mob.x, mob.y + 0.9, mob.z);
       const distance = mobCenter.distanceTo(center);
-      const damage = calculateExplosionDamage(distance);
+      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier);
       if (damage <= 0) continue;
       masteryHits += 1;
 
@@ -444,9 +449,9 @@ export function RocketLauncher() {
         impactDir.x,
         Math.max(0.2, impactDir.y),
         impactDir.z,
-        damage >= EXPLOSION_DAMAGE * 0.7,
+        damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.7,
       );
-      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
+      spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * damageMultiplier * 0.75);
     }
 
     for (const [, player] of multi.remotePlayers) {
@@ -458,7 +463,7 @@ export function RocketLauncher() {
         player.position[2],
       );
       const distance = playerBody.distanceTo(center);
-      const damage = calculateExplosionDamage(distance);
+      const damage = calculateExplosionDamage(distance, explosionRadius, damageMultiplier);
       if (damage <= 0) continue;
       masteryHits += 1;
 
@@ -497,7 +502,8 @@ export function RocketLauncher() {
 
   const spawnExplosionAt = useCallback((pos: THREE.Vector3, applyGameplay: boolean = true) => {
     if (applyGameplay) {
-      destroyExplosionBlocks(pos);
+      const combatFocus = getCombatFocusModifier('rocket_launcher');
+      destroyExplosionBlocks(pos, EXPLOSION_BLOCK_RADIUS * combatFocus.rocketRadiusMultiplier);
       applyExplosionDamage(pos);
       useStageChallengeStore.getState().recordDetonation();
       useStageConditionStore.getState().recordDetonation();

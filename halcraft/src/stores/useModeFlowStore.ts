@@ -12,7 +12,7 @@ import {
   type StageModeReward,
   type StageModeRule,
 } from '../types/stageModeRules';
-import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
+import { getStageCombatStyle, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import type { StageCategory } from '../types/stages';
 import {
   playBuildFocusPlaceSound,
@@ -69,6 +69,10 @@ interface ModeFlowState {
   buildFocusChain: number;
   bestBuildFocusChain: number;
   buildFocusChainExpiresAt: number;
+  combatFocusUntil: number;
+  combatFocusItem: EquippedItem | null;
+  combatFocusRank: number;
+  combatFocusLabel: string | null;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
   grantOpeningBuildFocus: (durationMs: number, sourceLabel: string) => void;
@@ -79,6 +83,32 @@ interface ModeFlowState {
   recordPressureRelief: (gain: number, label: string) => void;
   clearRecentActivation: () => void;
 }
+
+export interface CombatFocusModifier {
+  active: boolean;
+  remainingMs: number;
+  rank: number;
+  label: string | null;
+  damageMultiplier: number;
+  machineGunCooldownMultiplier: number;
+  machineGunSpreadMultiplier: number;
+  rocketRadiusMultiplier: number;
+  lightsaberReachBonus: number;
+  lightsaberComboWindowMultiplier: number;
+}
+
+export const DEFAULT_COMBAT_FOCUS_MODIFIER: CombatFocusModifier = {
+  active: false,
+  remainingMs: 0,
+  rank: 0,
+  label: null,
+  damageMultiplier: 1,
+  machineGunCooldownMultiplier: 1,
+  machineGunSpreadMultiplier: 1,
+  rocketRadiusMultiplier: 1,
+  lightsaberReachBonus: 0,
+  lightsaberComboWindowMultiplier: 1,
+};
 
 function nowMs(): number {
   if (typeof performance !== 'undefined') return performance.now();
@@ -126,6 +156,27 @@ export function getBuildFocusPlacementIntervalMultiplier(now = nowMs()): number 
   return getBuildFocusRemainingMs(now) > 0 ? BUILD_FOCUS_PLACEMENT_INTERVAL_MULTIPLIER : 1;
 }
 
+export function getCombatFocusModifier(item: EquippedItem, now = nowMs()): CombatFocusModifier {
+  const state = useModeFlowStore.getState();
+  const remainingMs = Math.max(0, state.combatFocusUntil - now);
+  if (remainingMs <= 0 || state.combatFocusItem !== item) return DEFAULT_COMBAT_FOCUS_MODIFIER;
+
+  const safeRank = Math.max(1, Math.min(MODE_FLOW_MAX_RANK, state.combatFocusRank || 1));
+  const rankBonus = safeRank - 1;
+  return {
+    active: true,
+    remainingMs,
+    rank: safeRank,
+    label: state.combatFocusLabel,
+    damageMultiplier: 1.12 + rankBonus * 0.07,
+    machineGunCooldownMultiplier: 0.86 - rankBonus * 0.04,
+    machineGunSpreadMultiplier: 0.82 - rankBonus * 0.05,
+    rocketRadiusMultiplier: 1.1 + rankBonus * 0.08,
+    lightsaberReachBonus: 0.16 + rankBonus * 0.08,
+    lightsaberComboWindowMultiplier: 1.18 + rankBonus * 0.1,
+  };
+}
+
 function getCombatStyleHitGain(item: EquippedItem, amount: number, critical: boolean): number {
   const safeAmount = Math.max(1, Math.round(amount));
   if (item === 'machine_gun') return Math.min(18, safeAmount * 5 + (critical ? 4 : 0));
@@ -147,6 +198,24 @@ export function getScaledStageModeReward(rule: StageModeRule, rank: number): Sta
     shieldMs: rule.reward.shieldMs > 0 ? rule.reward.shieldMs + (safeRank - 1) * 1200 : 0,
     rocketReady: rule.reward.rocketReady,
     buildFocusMs: rule.reward.buildFocusMs > 0 ? rule.reward.buildFocusMs + (safeRank - 1) * 1600 : 0,
+    combatFocusMs: rule.reward.combatFocusMs > 0 ? rule.reward.combatFocusMs + (safeRank - 1) * 1400 : 0,
+  };
+}
+
+function getCombatFocusPatch(
+  rule: StageModeRule,
+  flowRank: number,
+  createdAt: number,
+): Partial<Pick<ModeFlowState, 'combatFocusUntil' | 'combatFocusItem' | 'combatFocusRank' | 'combatFocusLabel'>> {
+  if (rule.category !== 'war') return {};
+  const style = getStageCombatStyle(rule.stageId);
+  const reward = getScaledStageModeReward(rule, flowRank);
+  if (!style || reward.combatFocusMs <= 0) return {};
+  return {
+    combatFocusUntil: createdAt + reward.combatFocusMs,
+    combatFocusItem: style.weapon,
+    combatFocusRank: flowRank,
+    combatFocusLabel: style.shortLabel,
   };
 }
 
@@ -257,6 +326,10 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   buildFocusChain: 0,
   bestBuildFocusChain: 0,
   buildFocusChainExpiresAt: 0,
+  combatFocusUntil: 0,
+  combatFocusItem: null,
+  combatFocusRank: 0,
+  combatFocusLabel: null,
   recentActivation: null,
 
   startRun: (stageId) => {
@@ -277,6 +350,10 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       buildFocusChain: 0,
       bestBuildFocusChain: 0,
       buildFocusChainExpiresAt: 0,
+      combatFocusUntil: 0,
+      combatFocusItem: null,
+      combatFocusRank: 0,
+      combatFocusLabel: null,
       recentActivation: null,
     });
   },
@@ -379,6 +456,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -389,6 +467,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      ...combatFocusPatch,
     });
   },
 
@@ -407,6 +486,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -417,6 +497,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      ...combatFocusPatch,
     });
   },
 
@@ -437,6 +518,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -450,6 +532,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      ...combatFocusPatch,
     });
   },
 
@@ -466,6 +549,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const combatFocusPatch = reached ? getCombatFocusPatch(rule, flowRank, createdAt) : {};
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -476,6 +560,7 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
+      ...combatFocusPatch,
     });
   },
 

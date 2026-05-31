@@ -13,7 +13,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
-import { useModeFlowStore } from '../stores/useModeFlowStore';
+import { getCombatFocusModifier, useModeFlowStore } from '../stores/useModeFlowStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
@@ -262,13 +262,18 @@ export function Lightsaber() {
     const masteryBonus = getMasteryBonus('lightsaber', masteryLevel);
     const techniqueBonus = getLightsaberTechniqueBonus();
     const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
-    const attackReach = ATTACK_REACH + masteryBonus.lightsaberReachBonus + styleBonus.lightsaberReachBonus;
+    const combatFocus = getCombatFocusModifier('lightsaber');
+    const attackReach = ATTACK_REACH
+      + masteryBonus.lightsaberReachBonus
+      + styleBonus.lightsaberReachBonus
+      + combatFocus.lightsaberReachBonus;
     const damage = Math.max(1, Math.round(
       LIGHTSABER_BASE_DAMAGE
       * step.damageMultiplier
       * masteryBonus.lightsaberDamageMultiplier
       * techniqueBonus.lightsaberDamageMultiplier
-      * styleBonus.lightsaberDamageMultiplier,
+      * styleBonus.lightsaberDamageMultiplier
+      * combatFocus.damageMultiplier,
     ));
 
     attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -392,10 +397,12 @@ export function Lightsaber() {
     if (isSwinging.current) return;
     const now = performance.now() / 1000;
     const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
+    const combatFocus = getCombatFocusModifier('lightsaber');
     const techniqueBonus = getLightsaberTechniqueBonus();
     const comboResetTime = COMBO_RESET_TIME
       * techniqueBonus.lightsaberComboWindowMultiplier
-      * styleBonus.lightsaberComboWindowMultiplier;
+      * styleBonus.lightsaberComboWindowMultiplier
+      * combatFocus.lightsaberComboWindowMultiplier;
 
     // コンボリセット判定
     if (now - lastComboTime.current > comboResetTime) {
@@ -591,8 +598,15 @@ export function Lightsaber() {
     }
 
     if (visible) {
+      const combatFocus = getCombatFocusModifier('lightsaber');
       const stageHumBoost = stageVisualStyle ? 0.12 : 0;
-      setLightsaberHumIntensity((isSwinging.current ? 0.82 : 0.22) + lightBoost.current * 0.45 + stageHumBoost);
+      const combatFocusHumBoost = combatFocus.active ? 0.14 + combatFocus.rank * 0.03 : 0;
+      setLightsaberHumIntensity(
+        (isSwinging.current ? 0.82 : 0.22)
+        + lightBoost.current * 0.45
+        + stageHumBoost
+        + combatFocusHumBoost,
+      );
     }
   });
 
