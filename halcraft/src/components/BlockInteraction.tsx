@@ -4,10 +4,10 @@
 // デスクトップ（マウス）とモバイル（タッチ）両対応
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
-import { usePlayerStore } from '../stores/usePlayerStore';
+import { usePlayerStore, type EquippedItem } from '../stores/usePlayerStore';
 import { useInventoryStore } from '../stores/useInventoryStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
@@ -51,7 +51,11 @@ import {
 } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
-import type { BlockUseFeedbackContent, BlockUseFeedbackContext } from '../utils/blockUseFeedback';
+import {
+  getBlockUseProfile,
+  type BlockUseFeedbackContent,
+  type BlockUseFeedbackContext,
+} from '../utils/blockUseFeedback';
 
 /** ブロック操作のリーチ距離 */
 const REACH = 6;
@@ -142,15 +146,12 @@ interface SmeltResult {
   count: number;
 }
 
-/** ブロック選択ハイライト用の共有ジオメトリ */
-const highlightGeometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
-const highlightMaterial = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  wireframe: true,
-  transparent: true,
-  opacity: 0.5,
-  depthTest: false,
-});
+/** ブロック操作プレビュー用の共有ジオメトリ */
+const highlightGeometry = new THREE.BoxGeometry(1.012, 1.012, 1.012);
+const placementGhostGeometry = new THREE.BoxGeometry(0.86, 0.86, 0.86);
+const placementRingGeometry = new THREE.RingGeometry(0.34, 0.5, 48);
+const PLACEMENT_INVALID_COLOR = '#ff5f6d';
+const TARGET_OUTLINE_COLOR = '#ffffff';
 
 const INTERACTIVE_PASS_THROUGH_BLOCKS = new Set<BlockId>([
   BLOCK_IDS.BED,
@@ -286,15 +287,126 @@ function pickPlacementChallenge(
   return genericPlacement ?? challenges.find((challenge) => isPlacementChallengeMatch(challenge, blockId)) ?? null;
 }
 
-/** ブロック選択ハイライトの表示 */
-function BlockHighlight({ target }: { target: TargetBlock | null }) {
+interface BlockHighlightProps {
+  target: TargetBlock | null;
+  selectedBlock: BlockId;
+  selectedCount: number;
+  currentStageId: string | null;
+  equippedItem: EquippedItem;
+  canPlace: boolean;
+}
+
+/** ブロック選択・設置プレビューの表示 */
+function BlockHighlight({
+  target,
+  selectedBlock,
+  selectedCount,
+  currentStageId,
+  equippedItem,
+  canPlace,
+}: BlockHighlightProps) {
+  const outlineMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const ghostMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const ringMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const pulseTimeRef = useRef(0);
+  const blockProfile = useMemo(
+    () => getBlockUseProfile(selectedBlock, currentStageId),
+    [currentStageId, selectedBlock],
+  );
+  const previewColor = useMemo(
+    () => new THREE.Color(canPlace || !target?.hasPlaceTarget ? blockProfile.accent : PLACEMENT_INVALID_COLOR),
+    [blockProfile.accent, canPlace, target?.hasPlaceTarget],
+  );
+  const targetOutlineColor = useMemo(
+    () => new THREE.Color(equippedItem === 'builder' ? previewColor : TARGET_OUTLINE_COLOR),
+    [equippedItem, previewColor],
+  );
+  const showPlacementPreview = equippedItem === 'builder' && Boolean(target?.hasPlaceTarget);
+  const hasStock = selectedCount > 0;
+
+  useFrame((_, delta) => {
+    pulseTimeRef.current += delta;
+    const wave = (Math.sin(pulseTimeRef.current * 5.2) + 1) * 0.5;
+    if (outlineMaterialRef.current) {
+      outlineMaterialRef.current.opacity = equippedItem === 'builder' ? 0.5 + wave * 0.18 : 0.34 + wave * 0.1;
+    }
+    if (ghostMaterialRef.current) {
+      ghostMaterialRef.current.opacity = canPlace ? 0.18 + wave * 0.08 : 0.08 + wave * 0.04;
+    }
+    if (ringMaterialRef.current) {
+      ringMaterialRef.current.opacity = canPlace ? 0.5 + wave * 0.22 : 0.28 + wave * 0.14;
+    }
+  });
+
   if (!target) return null;
+
   return (
-    <mesh
-      position={[target.x + 0.5, target.y + 0.5, target.z + 0.5]}
-      geometry={highlightGeometry}
-      material={highlightMaterial}
-    />
+    <group>
+      <mesh
+        position={[target.x + 0.5, target.y + 0.5, target.z + 0.5]}
+        geometry={highlightGeometry}
+        renderOrder={210}
+      >
+        <meshBasicMaterial
+          ref={outlineMaterialRef}
+          color={targetOutlineColor}
+          wireframe
+          transparent
+          opacity={equippedItem === 'builder' ? 0.58 : 0.42}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+      {showPlacementPreview && (
+        <group position={[target.placeX + 0.5, target.placeY + 0.5, target.placeZ + 0.5]}>
+          <mesh
+            geometry={placementGhostGeometry}
+            renderOrder={208}
+            scale={canPlace && hasStock ? 1 : 0.9}
+          >
+            <meshBasicMaterial
+              ref={ghostMaterialRef}
+              color={previewColor}
+              transparent
+              opacity={canPlace ? 0.2 : 0.1}
+              depthTest={false}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh
+            geometry={highlightGeometry}
+            renderOrder={211}
+            scale={0.96}
+          >
+            <meshBasicMaterial
+              color={previewColor}
+              wireframe
+              transparent
+              opacity={canPlace ? 0.42 : 0.24}
+              depthTest={false}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh
+            position={[0, -0.48, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            geometry={placementRingGeometry}
+            renderOrder={212}
+            scale={canPlace ? 1.04 : 0.86}
+          >
+            <meshBasicMaterial
+              ref={ringMaterialRef}
+              color={previewColor}
+              transparent
+              opacity={canPlace ? 0.58 : 0.34}
+              depthTest={false}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      )}
+    </group>
   );
 }
 
@@ -331,6 +443,9 @@ export function BlockInteraction() {
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const setBlock = useWorldStore((s) => s.setBlock);
   const getSelectedBlock = usePlayerStore((s) => s.getSelectedBlock);
+  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
+  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const inventoryItems = useInventoryStore((s) => s.items);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
   const damageMob = useMobStore((s) => s.damageMob);
   const spawnMob = useMobStore((s) => s.spawnMob);
@@ -339,6 +454,7 @@ export function BlockInteraction() {
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const recordBuilderAction = useMasteryStore((s) => s.recordBuilderAction);
   const recordItemHit = useMasteryStore((s) => s.recordItemHit);
   const recordStageBlockPlace = useStageChallengeStore((s) => s.recordBlockPlace);
@@ -382,6 +498,15 @@ export function BlockInteraction() {
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
+  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
+  const selectedCount = inventoryItems[selectedBlock] ?? 0;
+  const canPlaceAtTarget = Boolean(
+    target?.hasPlaceTarget
+    && equippedItem === 'builder'
+    && selectedCount > 0
+    && getBlock(target.placeX, target.placeY, target.placeZ) === BLOCK_IDS.AIR
+    && !wouldBlockOverlapPlayer(target.placeX, target.placeY, target.placeZ),
+  );
 
   // タッチデバイス判定（初回のみ）
   const isTouch = useRef(isTouchDevice());
@@ -1143,7 +1268,17 @@ export function BlockInteraction() {
     setTarget((prev) => {
       if (!found && !prev) return prev;
       if (!found || !prev) return found;
-      if (found.x === prev.x && found.y === prev.y && found.z === prev.z) return prev;
+      if (
+        found.x === prev.x
+        && found.y === prev.y
+        && found.z === prev.z
+        && found.placeX === prev.placeX
+        && found.placeY === prev.placeY
+        && found.placeZ === prev.placeZ
+        && found.hasPlaceTarget === prev.hasPlaceTarget
+      ) {
+        return prev;
+      }
       return found;
     });
     publishMiningFocus(found);
@@ -1446,7 +1581,14 @@ export function BlockInteraction() {
 
   return (
     <>
-      <BlockHighlight target={target} />
+      <BlockHighlight
+        target={target}
+        selectedBlock={selectedBlock}
+        selectedCount={selectedCount}
+        currentStageId={currentStageId}
+        equippedItem={equippedItem}
+        canPlace={canPlaceAtTarget}
+      />
       <BlockBreakProgressOverlay breakProgress={breakProgressState} />
     </>
   );
