@@ -44,6 +44,10 @@ interface CombatFeedback {
   xp: number;
   streak: number;
   techniqueRecordUpdated: boolean;
+  techniqueTierUnlocked: boolean;
+  techniqueTier: number;
+  techniqueTierLabel: string;
+  techniqueBonusLabel: string;
   createdAt: number;
 }
 
@@ -98,6 +102,18 @@ function getFeedbackLabel(feedback: CombatFeedback): string {
 }
 
 function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
+  if (feedback.techniqueTierUnlocked) {
+    return {
+      eyebrow: 'TECH特典解放',
+      label: `${MASTERY_DEFS[feedback.item].shortLabel} ${feedback.techniqueTierLabel}`,
+      detail: feedback.techniqueBonusLabel || '次の操作が強くなった',
+      meterLabel: 'TECH',
+      meterText: feedback.techniqueTier > 0 ? `${feedback.techniqueTier}` : 'UP',
+      ratio: 1,
+      soundKind: 'ready',
+    };
+  }
+
   if (feedback.item === 'rocket_launcher') {
     if (feedback.techniqueRecordUpdated) {
       return {
@@ -416,6 +432,10 @@ export function CombatFeedbackHUD() {
         xp: event.xp,
         streak: event.streak,
         techniqueRecordUpdated: event.techniqueRecordUpdated,
+        techniqueTierUnlocked: event.techniqueTierUnlocked,
+        techniqueTier: event.techniqueTier,
+        techniqueTierLabel: event.techniqueTierLabel,
+        techniqueBonusLabel: event.techniqueBonusLabel,
         createdAt: event.createdAt,
       };
       setFeedback(nextFeedback);

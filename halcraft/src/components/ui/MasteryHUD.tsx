@@ -635,8 +635,18 @@ export function MasteryHUD() {
           style={{
             marginTop: 7,
             paddingLeft: 9,
-            borderLeft: `3px solid ${recentEvent.leveledUp ? '#ffe678' : 'rgba(255,255,255,0.5)'}`,
-            color: recentEvent.leveledUp ? '#fff0a8' : 'rgba(255,255,255,0.82)',
+            borderLeft: `3px solid ${
+              recentEvent.techniqueTierUnlocked
+                ? def.accent
+                : recentEvent.leveledUp
+                  ? '#ffe678'
+                  : 'rgba(255,255,255,0.5)'
+            }`,
+            color: recentEvent.techniqueTierUnlocked
+              ? def.accent
+              : recentEvent.leveledUp
+                ? '#fff0a8'
+                : 'rgba(255,255,255,0.82)',
             fontSize: isTouch ? 10 : 11,
             lineHeight: '14px',
             fontWeight: 900,
@@ -647,7 +657,9 @@ export function MasteryHUD() {
           }}
         >
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {recentEvent.leveledUp
+            {recentEvent.techniqueTierUnlocked
+              ? `${recentEvent.techniqueTierLabel} 解放！ ${recentEvent.techniqueBonusLabel}`
+              : recentEvent.leveledUp
               ? 'レベルアップ！'
               : recentEvent.techniqueRecordUpdated
                 ? '技記録更新！'

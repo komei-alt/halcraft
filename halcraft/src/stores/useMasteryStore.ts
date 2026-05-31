@@ -5,6 +5,11 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { EquippedItem } from './usePlayerStore';
 import { isMasteryPerkUpgradeLevel } from '../types/masteryPerks';
+import {
+  formatMasteryTechniqueBonus,
+  getMasteryTechniqueBonus,
+  getMasteryTechniqueProgress,
+} from '../types/masteryTechniquePerks';
 import { playLevelUpSound, playPerkUnlockSound, playXPGainSound } from '../utils/sounds';
 
 export type MasteryEventKind =
@@ -51,6 +56,10 @@ export interface MasteryEvent {
   critical: boolean;
   streak: number;
   techniqueRecordUpdated: boolean;
+  techniqueTierUnlocked: boolean;
+  techniqueTier: number;
+  techniqueTierLabel: string;
+  techniqueBonusLabel: string;
   createdAt: number;
 }
 
@@ -249,6 +258,7 @@ export const useMasteryStore = create<MasteryState>()(
         const techniqueScore = getTechniqueScore(kind, gainedXp, streak, Boolean(options?.critical));
         const techniqueActivation = isTechniqueActivation(kind, streak, Boolean(options?.critical));
         const techniqueRecordUpdated = techniqueActivation && techniqueScore > (current.bestTechniqueScore ?? 0);
+        const previousTechniqueTier = getMasteryTechniqueProgress(item, current).currentTier;
 
         let nextLevel = current.level;
         let nextXp = current.xp + gainedXp;
@@ -282,6 +292,9 @@ export const useMasteryStore = create<MasteryState>()(
           bestTechniqueStreak: Math.max(current.bestTechniqueStreak ?? 0, streak),
           lastLeveledAt: leveledUp ? now : current.lastLeveledAt,
         };
+        const nextTechniqueBonus = getMasteryTechniqueBonus(item, nextItem);
+        const nextTechniqueProgress = getMasteryTechniqueProgress(item, nextItem);
+        const techniqueTierUnlocked = nextTechniqueProgress.currentTier > previousTechniqueTier;
         const nextSequence = state.eventSequence + 1;
         const nextEvent: MasteryEvent = {
           id: nextSequence,
@@ -294,6 +307,10 @@ export const useMasteryStore = create<MasteryState>()(
           critical: Boolean(options?.critical),
           streak,
           techniqueRecordUpdated,
+          techniqueTierUnlocked,
+          techniqueTier: nextTechniqueProgress.currentTier,
+          techniqueTierLabel: nextTechniqueBonus.tierLabel,
+          techniqueBonusLabel: formatMasteryTechniqueBonus(item, nextTechniqueBonus),
           createdAt: now,
         };
         const nextItems: MasteryItems = {
@@ -312,7 +329,9 @@ export const useMasteryStore = create<MasteryState>()(
           lastCombatAt: isCombatKind(kind) ? now : state.lastCombatAt,
         });
 
-        if (leveledUp) {
+        if (techniqueTierUnlocked) {
+          playPerkUnlockSound();
+        } else if (leveledUp) {
           if (isMasteryPerkUpgradeLevel(item, nextLevel)) {
             playPerkUnlockSound();
           } else {
