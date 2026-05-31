@@ -25,10 +25,7 @@ function applyStageEvent(event: StageTimedEvent): void {
   }
 
   if (event.effect.rocketReady) {
-    usePlayerStore.setState({
-      rocketCooldown: 0,
-      rocketCharge: 1,
-    });
+    usePlayerStore.getState().grantRocketReady({ pulseMs: 1100 });
   }
 
   if (event.effect.shieldMs > 0) {

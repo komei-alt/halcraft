@@ -29,10 +29,7 @@ function applyReward(reward: StageChallengeRewardDefinition): void {
   }
 
   if (reward.rocketReady) {
-    usePlayerStore.setState({
-      rocketCooldown: 0,
-      rocketCharge: 1,
-    });
+    usePlayerStore.getState().grantRocketReady({ pulseMs: 1100 });
   }
 
   playStageRewardSound(reward.kind);

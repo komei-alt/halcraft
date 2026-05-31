@@ -42,6 +42,8 @@ const FALL_DAMAGE_PER_BLOCK = 1;
 const ATTACK_COOLDOWN = 0.4;
 /** ロケットランチャーのクールダウン時間（秒） */
 const ROCKET_COOLDOWN = 2.8;
+/** ロケット再装填完了を知らせるHUDパルス時間（ミリ秒） */
+const ROCKET_READY_PULSE_MS = 820;
 /** HP自然回復の待機時間（最後にダメージを受けてから、秒） */
 const REGEN_DELAY = 30;
 /** HP自然回復量（毎秒） */
@@ -177,6 +179,9 @@ interface PlayerState {
 
   /** ロケットランチャーを発射し、成功時 true を返す */
   fireRocket: () => boolean;
+
+  /** 報酬やイベントでロケットを即応状態にする */
+  grantRocketReady: (options?: { pulseMs?: number; sound?: boolean; shake?: number }) => void;
 
   /** ダメージを受ける（knockbackDir: ダメージ源からプレイヤーへの方向XZ）。実際に通った場合 true */
   takeDamage: (amount: number, knockbackDirX?: number, knockbackDirZ?: number) => boolean;
@@ -334,7 +339,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const rocketJustReady = state.equippedItem === 'rocket_launcher'
       && state.rocketCooldown > 0
       && newRocketCooldown <= 0;
-    const rocketReadyPulseUntil = rocketJustReady ? performance.now() + 820 : state.rocketReadyPulseUntil;
+    const rocketReadyPulseUntil = rocketJustReady
+      ? performance.now() + ROCKET_READY_PULSE_MS
+      : state.rocketReadyPulseUntil;
     // 変更がある場合のみ更新
     if (
       newCooldown !== state.attackCooldown ||
@@ -357,9 +364,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           if (get().rocketReadyPulseUntil === rocketReadyPulseUntil) {
             set({ rocketReadyPulseUntil: 0 });
           }
-        }, 820);
+        }, ROCKET_READY_PULSE_MS);
       }
     }
+  },
+
+  grantRocketReady: (options) => {
+    const pulseMs = Math.max(1, options?.pulseMs ?? ROCKET_READY_PULSE_MS);
+    const rocketReadyPulseUntil = performance.now() + pulseMs;
+    const shake = Math.max(0, options?.shake ?? 0);
+    set((state) => ({
+      rocketCooldown: 0,
+      rocketCharge: 1,
+      rocketReadyPulseUntil,
+      cameraShake: shake > 0 ? Math.max(state.cameraShake, shake) : state.cameraShake,
+    }));
+
+    if (options?.sound !== false) {
+      playRocketReadySound();
+    }
+
+    window.setTimeout(() => {
+      if (get().rocketReadyPulseUntil === rocketReadyPulseUntil) {
+        set({ rocketReadyPulseUntil: 0 });
+      }
+    }, pulseMs);
   },
 
   fireRocket: () => {

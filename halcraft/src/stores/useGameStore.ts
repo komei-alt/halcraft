@@ -259,6 +259,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         })
       : null;
     const signaturePerk = getStageSignaturePerkForAward(currentStage, signatureAward);
+    const openingRocketReady = Boolean(masteryPerk?.rocketReady || signaturePerk?.rocketReady);
 
     const starterItems: Record<number, number> = {};
     for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {
@@ -341,7 +342,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       rocketCooldown: 0,
       rocketCooldownDuration: 2.8,
       rocketCharge: 1,
-      rocketReadyPulseUntil: masteryPerk?.rocketReady || signaturePerk?.rocketReady ? Date.now() + 1800 : 0,
+      rocketReadyPulseUntil: 0,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,
       hunger: Math.min(
@@ -358,6 +359,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 建築カテゴリは無敵（クリエイティブ的）
       invincibleUntil: openingInvincibleUntil,
     });
+
+    if (openingRocketReady) {
+      usePlayerStore.getState().grantRocketReady({ pulseMs: 1800, shake: 0.18 });
+    }
 
     if (masteryPerk?.buildFocusMs && masteryPerk.buildFocusMs > 0) {
       useModeFlowStore.getState().grantOpeningBuildFocus(

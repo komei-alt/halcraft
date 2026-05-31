@@ -32,7 +32,7 @@ export function StageConditionSystem() {
     }
 
     if (condition.effect.kind === 'rocket_ready') {
-      usePlayerStore.setState({ rocketCooldown: 0, rocketCharge: 1 });
+      usePlayerStore.getState().grantRocketReady({ pulseMs: 1100 });
     }
   }, [recentActivation, stage?.id]);
 
