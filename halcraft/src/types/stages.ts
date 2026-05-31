@@ -271,7 +271,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'tropical',
     color: '#ff9800',
     resetPolicy: { autoReset: false },
-    terrain: { noiseSeed: 0.70, terrainShape: 'islands', heightVariation: 9 },
+    // 島とラグーンだが、建築しやすいよう陸地を広めに（水没を抑える）
+    terrain: { noiseSeed: 0.70, terrainShape: 'islands', baseHeight: 21, heightVariation: 8 },
     rules: buildRules({
       modeLabel: '建築 / 南国リゾート',
       shortPitch: '水辺とガラスを活かして、明るいリゾートを作るステージ',

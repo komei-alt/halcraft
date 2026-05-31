@@ -24,7 +24,7 @@ const RUNWAY_WIDTH = 13;
  */
 const STAGE_TERRAIN = {
   'build-forest':   { baseHeight: 20, heightVariation: 10, detailVariation: 3, noiseFrequency: 0.01,  detailFrequency: 0.05, noiseSeed: 0.50, terrainShape: 'rolling' },
-  'build-tropical': { baseHeight: 18, heightVariation: 9,  detailVariation: 2, noiseFrequency: 0.008, detailFrequency: 0.04, noiseSeed: 0.70, terrainShape: 'islands' },
+  'build-tropical': { baseHeight: 21, heightVariation: 8,  detailVariation: 2, noiseFrequency: 0.008, detailFrequency: 0.04, noiseSeed: 0.70, terrainShape: 'islands' },
   'build-snow':     { baseHeight: 22, heightVariation: 12, detailVariation: 4, noiseFrequency: 0.012, detailFrequency: 0.06, noiseSeed: 0.30, terrainShape: 'hills' },
   'build-desert':   { baseHeight: 18, heightVariation: 3,  detailVariation: 2, noiseFrequency: 0.006, detailFrequency: 0.03, noiseSeed: 0.90, terrainShape: 'plains' },
   'war-forest':     { baseHeight: 20, heightVariation: 13, detailVariation: 3, noiseFrequency: 0.01,  detailFrequency: 0.05, noiseSeed: 0.18, terrainShape: 'hills' },
