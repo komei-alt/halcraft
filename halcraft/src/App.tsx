@@ -66,6 +66,7 @@ import { AttackIndicator } from './components/ui/AttackIndicator';
 import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator';
 import { TimeDisplay } from './components/ui/TimeDisplay';
 import { StageProgressHUD } from './components/ui/StageProgressHUD';
+import { StageLandmarkMomentHUD } from './components/ui/StageLandmarkMomentHUD';
 import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
 import { StageConditionHUD } from './components/ui/StageConditionHUD';
 import { StageEventHUD } from './components/ui/StageEventHUD';
@@ -302,6 +303,7 @@ export default function App() {
           <XPBar />
           <TimeDisplay />
           <StageProgressHUD />
+          <StageLandmarkMomentHUD />
           <StageChallengeHUD />
           <StageConditionHUD />
           <StageEventHUD />

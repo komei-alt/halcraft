@@ -1803,6 +1803,53 @@ export function playBuildFocusPlaceSound(chain: number): void {
   sparkle.stop(now + 0.16);
 }
 
+/** ランドマーク到着SE — マップの起点を見つけた達成感を返す */
+export function playStageLandmarkSound(kind: StageStartSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`stageLandmark:${kind}`, 1200)) return;
+  const now = ctx.currentTime;
+  const notes = kind === 'build'
+    ? [523.25, 659.25, 783.99, 1046.5]
+    : [196, 261.63, 392, 523.25];
+  const wave: OscillatorType = kind === 'build' ? 'triangle' : 'sawtooth';
+
+  notes.forEach((note, index) => {
+    const t = now + index * 0.05;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'build' ? 1.1 : 0.92), t + 0.2);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'build' ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(kind === 'build' ? 3200 : 880, t);
+    filter.Q.setValueAtTime(kind === 'build' ? 0.7 : 2.1, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'build' ? 0.05 : 0.058, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.26);
+  });
+
+  const pulse = ctx.createOscillator();
+  pulse.type = kind === 'build' ? 'sine' : 'square';
+  pulse.frequency.setValueAtTime(kind === 'build' ? 1318.51 : 98, now + 0.11);
+
+  const pulseGain = ctx.createGain();
+  pulseGain.gain.setValueAtTime(kind === 'build' ? 0.025 : 0.04, now + 0.11);
+  pulseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+  pulse.connect(pulseGain);
+  pulseGain.connect(ctx.destination);
+  pulse.start(now + 0.11);
+  pulse.stop(now + 0.32);
+}
+
 /** ボス出現SE — 決戦開始を画面外からでも気づける重い合図 */
 export function playBossSpawnSound(): void {
   const ctx = getAudioContext();
