@@ -49,15 +49,16 @@ export function StageChallengeHUD() {
         maxHeight: isCompact ? 'max(132px, calc(100vh - 548px))' : 'none',
         overflow: 'hidden',
         padding: isCompact ? '8px 9px' : '10px 12px',
-        borderRadius: 8,
-        border: `1px solid ${stage.color}55`,
-        background: 'rgba(5, 8, 13, 0.52)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        borderRadius: 14,
+        border: `1px solid ${stage.color}3a`,
+        background: 'rgba(8, 11, 17, 0.3)',
+        backdropFilter: 'blur(11px)',
+        WebkitBackdropFilter: 'blur(11px)',
         color: '#fff',
         pointerEvents: 'none',
-        boxShadow: `0 0 14px ${stage.color}22`,
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        boxShadow: '0 6px 22px rgba(0,0,0,0.3)',
+        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
       }}
     >
       <div

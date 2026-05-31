@@ -196,15 +196,16 @@ export function MasteryHUD() {
         zIndex: 101,
         width: isTouch ? 'max(136px, min(166px, calc(100vw - 224px)))' : 252,
         padding: isTouch ? '7px 8px' : '10px 12px',
-        borderRadius: 8,
-        border: `1px solid ${def.accent}66`,
-        background: 'rgba(9, 12, 18, 0.58)',
-        boxShadow: `0 0 18px ${def.glow}`,
-        backdropFilter: 'blur(9px)',
-        WebkitBackdropFilter: 'blur(9px)',
+        borderRadius: 14,
+        border: `1px solid ${def.accent}44`,
+        background: 'rgba(8, 11, 17, 0.32)',
+        boxShadow: `0 6px 22px rgba(0,0,0,0.3), 0 0 16px ${def.glow}`,
+        backdropFilter: 'blur(11px)',
+        WebkitBackdropFilter: 'blur(11px)',
         color: '#fff',
         pointerEvents: 'none',
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>

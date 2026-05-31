@@ -307,15 +307,16 @@ export function StageProgressHUD() {
         zIndex: 96,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
         padding: isCompact ? '9px 10px' : '11px 13px',
-        borderRadius: 8,
-        border: `1px solid ${stage.color}77`,
-        background: 'rgba(0,0,0,0.46)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        borderRadius: 14,
+        border: `1px solid ${stage.color}40`,
+        background: 'rgba(8, 11, 17, 0.32)',
+        backdropFilter: 'blur(11px)',
+        WebkitBackdropFilter: 'blur(11px)',
         color: '#fff',
         pointerEvents: 'none',
-        boxShadow: `0 0 18px ${stage.color}26`,
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        boxShadow: '0 6px 22px rgba(0,0,0,0.3)',
+        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

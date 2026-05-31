@@ -171,10 +171,11 @@ export function Hotbar() {
           display: 'flex',
           gap: 6,
           padding: 4,
-          background: 'rgba(0, 0, 0, 0.55)',
+          background: 'rgba(8, 11, 17, 0.4)',
           borderRadius: 999,
           border: '1px solid rgba(255,255,255,0.14)',
-          backdropFilter: 'blur(6px)',
+          backdropFilter: 'blur(11px)',
+          WebkitBackdropFilter: 'blur(11px)',
         }}
       >
         {([
@@ -233,10 +234,11 @@ export function Hotbar() {
           maxWidth: 'calc(100vw - 24px)',
           overflowX: 'auto',
           boxSizing: 'border-box',
-          background: 'rgba(0,0,0,0.55)',
-          borderRadius: 6,
-          border: '2px solid rgba(255,255,255,0.15)',
-          backdropFilter: 'blur(6px)',
+          background: 'rgba(8, 11, 17, 0.42)',
+          borderRadius: 12,
+          border: '1px solid rgba(255,255,255,0.15)',
+          backdropFilter: 'blur(11px)',
+          WebkitBackdropFilter: 'blur(11px)',
           scrollbarWidth: 'none',
         }}
       >

@@ -41,15 +41,16 @@ export function StageEventHUD() {
         zIndex: 96,
         width: 276,
         padding: '9px 11px',
-        borderRadius: 8,
-        border: `1px solid ${display.accent}5f`,
-        background: 'rgba(8, 11, 16, 0.5)',
-        boxShadow: display.active ? `0 0 20px ${display.accent}44` : `0 0 12px ${display.accent}1f`,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        borderRadius: 14,
+        border: `1px solid ${display.accent}${display.active ? '5f' : '3a'}`,
+        background: 'rgba(8, 11, 17, 0.32)',
+        boxShadow: display.active ? `0 0 20px ${display.accent}44` : '0 6px 22px rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(11px)',
+        WebkitBackdropFilter: 'blur(11px)',
         color: '#fff',
         pointerEvents: 'none',
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

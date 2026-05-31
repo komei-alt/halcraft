@@ -81,17 +81,18 @@ export function ModeFlowHUD() {
         zIndex: 95,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,
         padding: isCompact ? '8px 10px' : '10px 12px',
-        borderRadius: 8,
-        border: `1px solid ${rule.accent}66`,
-        background: 'rgba(7, 10, 15, 0.55)',
+        borderRadius: 14,
+        border: `1px solid ${rule.accent}40`,
+        background: 'rgba(8, 11, 17, 0.32)',
         boxShadow: recentActivation?.stageId === stage.id
           ? `0 0 22px ${rule.glow}`
-          : `0 0 14px ${rule.accent}20`,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+          : '0 6px 22px rgba(0,0,0,0.3)',
+        backdropFilter: 'blur(11px)',
+        WebkitBackdropFilter: 'blur(11px)',
         color: '#fff',
         pointerEvents: 'none',
-        fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
