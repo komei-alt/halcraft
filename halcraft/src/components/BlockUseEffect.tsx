@@ -23,12 +23,20 @@ interface UseEffectBurst {
   id: string;
   kind: BlockUseFeedbackKind;
   particles: Particle[];
+  originX: number;
+  originY: number;
+  originZ: number;
+  accent: THREE.Color;
+  life: number;
+  totalLife: number;
+  spin: number;
 }
 
 const MAX_EFFECTS = 18;
 const PARTICLES_PER_EFFECT = 22;
 const MAX_PARTICLES = MAX_EFFECTS * PARTICLES_PER_EFFECT;
 const BASE_LIFETIME = 0.78;
+const RING_LIFETIME = 0.64;
 
 let effectSequence = 0;
 
@@ -92,8 +100,49 @@ function tintParticle(base: THREE.Color, kind: BlockUseFeedbackKind, index: numb
   return color;
 }
 
+function getRingLife(kind: BlockUseFeedbackKind): number {
+  if (kind === 'explosive' || kind === 'summon') return 0.92;
+  if (kind === 'condition' || kind === 'defense') return 0.76;
+  return RING_LIFETIME;
+}
+
+function getRingScale(kind: BlockUseFeedbackKind, progress: number): number {
+  const base = kind === 'explosive'
+    ? 1.1
+    : kind === 'summon'
+      ? 0.95
+      : kind === 'liquid'
+        ? 0.72
+        : 0.58;
+  const spread = kind === 'explosive'
+    ? 2.45
+    : kind === 'summon'
+      ? 1.75
+      : kind === 'rail'
+        ? 1.95
+        : 1.24;
+  return base + progress * spread;
+}
+
 export function BlockUseEffect() {
   const effectsRef = useRef<UseEffectBurst[]>([]);
+  const floorRingRef = useRef<THREE.InstancedMesh>(null);
+  const haloRingRef = useRef<THREE.InstancedMesh>(null);
+
+  const floorRingGeometry = useMemo(() => new THREE.RingGeometry(0.38, 0.53, 56), []);
+  const haloRingGeometry = useMemo(() => new THREE.RingGeometry(0.28, 0.42, 56), []);
+  const ringMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.96,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  }), []);
+  const haloMaterial = useMemo(() => ringMaterial.clone(), [ringMaterial]);
+  const dummyObject = useMemo(() => new THREE.Object3D(), []);
+  const tempColor = useMemo(() => new THREE.Color(), []);
 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -125,6 +174,7 @@ export function BlockUseEffect() {
     const baseColor = new THREE.Color(accent);
     const count = getParticleCount(kind);
     const particles: Particle[] = [];
+    const ringLife = getRingLife(kind);
 
     for (let i = 0; i < count; i++) {
       const velocity = getVelocity(kind, i, count);
@@ -143,7 +193,18 @@ export function BlockUseEffect() {
     }
 
     const effects = effectsRef.current;
-    effects.push({ id: `use_${effectSequence++}`, kind, particles });
+    effects.push({
+      id: `use_${effectSequence++}`,
+      kind,
+      particles,
+      originX: centerX,
+      originY: y + 0.5,
+      originZ: centerZ,
+      accent: baseColor,
+      life: ringLife,
+      totalLife: ringLife,
+      spin: Math.random() * Math.PI * 2,
+    });
     if (effects.length > MAX_EFFECTS) {
       effects.splice(0, effects.length - MAX_EFFECTS);
     }
@@ -154,16 +215,19 @@ export function BlockUseEffect() {
     return () => registerBlockUseEffectSpawner(() => {});
   }, [spawnEffect]);
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const effects = effectsRef.current;
     if (effects.length === 0) {
       geometry.setDrawRange(0, 0);
+      if (floorRingRef.current) floorRingRef.current.count = 0;
+      if (haloRingRef.current) haloRingRef.current.count = 0;
       return;
     }
 
     const dt = Math.min(delta, 0.05);
     for (let i = effects.length - 1; i >= 0; i--) {
-      if (effects[i].particles.every((particle) => particle.life <= 0)) {
+      effects[i].life -= dt;
+      if (effects[i].life <= 0 && effects[i].particles.every((particle) => particle.life <= 0)) {
         effects.splice(i, 1);
       }
     }
@@ -173,8 +237,39 @@ export function BlockUseEffect() {
     const positions = posAttr.array as Float32Array;
     const colors = colorAttr.array as Float32Array;
     let particleIndex = 0;
+    let ringIndex = 0;
+    let haloIndex = 0;
 
     for (const effect of effects) {
+      if (effect.life > 0) {
+        const progress = 1 - Math.max(0, effect.life / effect.totalLife);
+        const fade = Math.max(0, effect.life / effect.totalLife);
+        const bloom = Math.sin(Math.min(1, progress) * Math.PI);
+        const ringScale = getRingScale(effect.kind, progress);
+        const colorPower = 0.22 + fade * 0.9 + bloom * 0.22;
+        tempColor.copy(effect.accent).multiplyScalar(colorPower);
+
+        if (floorRingRef.current && ringIndex < MAX_EFFECTS) {
+          dummyObject.position.set(effect.originX, effect.originY - 0.46, effect.originZ);
+          dummyObject.rotation.set(-Math.PI / 2, 0, effect.spin + progress * 1.6);
+          dummyObject.scale.setScalar(ringScale);
+          dummyObject.updateMatrix();
+          floorRingRef.current.setMatrixAt(ringIndex, dummyObject.matrix);
+          floorRingRef.current.setColorAt(ringIndex, tempColor);
+          ringIndex++;
+        }
+
+        if (haloRingRef.current && haloIndex < MAX_EFFECTS) {
+          dummyObject.position.set(effect.originX, effect.originY + 0.2 + bloom * 0.16, effect.originZ);
+          dummyObject.quaternion.copy(camera.quaternion);
+          dummyObject.scale.setScalar((0.5 + progress * 0.85) * (effect.kind === 'summon' ? 1.22 : 1));
+          dummyObject.updateMatrix();
+          haloRingRef.current.setMatrixAt(haloIndex, dummyObject.matrix);
+          haloRingRef.current.setColorAt(haloIndex, tempColor);
+          haloIndex++;
+        }
+      }
+
       const gravity = effect.kind === 'liquid' ? -3.2 : effect.kind === 'explosive' ? -4.5 : -1.2;
       const drag = effect.kind === 'rail' ? 0.93 : 0.96;
       for (const particle of effect.particles) {
@@ -202,7 +297,34 @@ export function BlockUseEffect() {
     geometry.setDrawRange(0, particleIndex);
     posAttr.needsUpdate = true;
     colorAttr.needsUpdate = true;
+
+    if (floorRingRef.current) {
+      floorRingRef.current.count = ringIndex;
+      floorRingRef.current.instanceMatrix.needsUpdate = true;
+      if (floorRingRef.current.instanceColor) floorRingRef.current.instanceColor.needsUpdate = true;
+    }
+    if (haloRingRef.current) {
+      haloRingRef.current.count = haloIndex;
+      haloRingRef.current.instanceMatrix.needsUpdate = true;
+      if (haloRingRef.current.instanceColor) haloRingRef.current.instanceColor.needsUpdate = true;
+    }
   });
 
-  return <points geometry={geometry} material={material} />;
+  return (
+    <>
+      <instancedMesh
+        ref={floorRingRef}
+        args={[floorRingGeometry, ringMaterial, MAX_EFFECTS]}
+        renderOrder={225}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={haloRingRef}
+        args={[haloRingGeometry, haloMaterial, MAX_EFFECTS]}
+        renderOrder={226}
+        frustumCulled={false}
+      />
+      <points geometry={geometry} material={material} renderOrder={227} frustumCulled={false} />
+    </>
+  );
 }
