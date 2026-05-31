@@ -149,6 +149,8 @@ interface SmeltResult {
 /** ブロック操作プレビュー用の共有ジオメトリ */
 const highlightGeometry = new THREE.BoxGeometry(1.012, 1.012, 1.012);
 const placementGhostGeometry = new THREE.BoxGeometry(0.86, 0.86, 0.86);
+const highlightEdgeGeometry = new THREE.EdgesGeometry(highlightGeometry, 15);
+const placementEdgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.98, 0.98, 0.98), 15);
 const placementRingGeometry = new THREE.RingGeometry(0.34, 0.5, 48);
 const PLACEMENT_INVALID_COLOR = '#ff5f6d';
 const TARGET_OUTLINE_COLOR = '#ffffff';
@@ -305,36 +307,41 @@ function BlockHighlight({
   equippedItem,
   canPlace,
 }: BlockHighlightProps) {
-  const outlineMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const outlineMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
   const ghostMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const placementEdgeMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
   const pulseTimeRef = useRef(0);
   const blockProfile = useMemo(
     () => getBlockUseProfile(selectedBlock, currentStageId),
     [currentStageId, selectedBlock],
   );
+  const hasStock = selectedCount > 0;
+  const isPlacementReady = canPlace && hasStock;
   const previewColor = useMemo(
-    () => new THREE.Color(canPlace || !target?.hasPlaceTarget ? blockProfile.accent : PLACEMENT_INVALID_COLOR),
-    [blockProfile.accent, canPlace, target?.hasPlaceTarget],
+    () => new THREE.Color(isPlacementReady || !target?.hasPlaceTarget ? blockProfile.accent : PLACEMENT_INVALID_COLOR),
+    [blockProfile.accent, isPlacementReady, target?.hasPlaceTarget],
   );
   const targetOutlineColor = useMemo(
     () => new THREE.Color(equippedItem === 'builder' ? previewColor : TARGET_OUTLINE_COLOR),
     [equippedItem, previewColor],
   );
   const showPlacementPreview = equippedItem === 'builder' && Boolean(target?.hasPlaceTarget);
-  const hasStock = selectedCount > 0;
 
   useFrame((_, delta) => {
     pulseTimeRef.current += delta;
     const wave = (Math.sin(pulseTimeRef.current * 5.2) + 1) * 0.5;
     if (outlineMaterialRef.current) {
-      outlineMaterialRef.current.opacity = equippedItem === 'builder' ? 0.5 + wave * 0.18 : 0.34 + wave * 0.1;
+      outlineMaterialRef.current.opacity = equippedItem === 'builder' ? 0.42 + wave * 0.14 : 0.3 + wave * 0.08;
     }
     if (ghostMaterialRef.current) {
-      ghostMaterialRef.current.opacity = canPlace ? 0.18 + wave * 0.08 : 0.08 + wave * 0.04;
+      ghostMaterialRef.current.opacity = isPlacementReady ? 0.16 + wave * 0.07 : 0.06 + wave * 0.03;
+    }
+    if (placementEdgeMaterialRef.current) {
+      placementEdgeMaterialRef.current.opacity = isPlacementReady ? 0.7 + wave * 0.18 : 0.32 + wave * 0.12;
     }
     if (ringMaterialRef.current) {
-      ringMaterialRef.current.opacity = canPlace ? 0.5 + wave * 0.22 : 0.28 + wave * 0.14;
+      ringMaterialRef.current.opacity = isPlacementReady ? 0.48 + wave * 0.22 : 0.24 + wave * 0.12;
     }
   });
 
@@ -342,63 +349,62 @@ function BlockHighlight({
 
   return (
     <group>
-      <mesh
+      <lineSegments
         position={[target.x + 0.5, target.y + 0.5, target.z + 0.5]}
-        geometry={highlightGeometry}
+        geometry={highlightEdgeGeometry}
         renderOrder={210}
       >
-        <meshBasicMaterial
+        <lineBasicMaterial
           ref={outlineMaterialRef}
           color={targetOutlineColor}
-          wireframe
           transparent
           opacity={equippedItem === 'builder' ? 0.58 : 0.42}
           depthTest={false}
           depthWrite={false}
         />
-      </mesh>
+      </lineSegments>
       {showPlacementPreview && (
         <group position={[target.placeX + 0.5, target.placeY + 0.5, target.placeZ + 0.5]}>
           <mesh
             geometry={placementGhostGeometry}
             renderOrder={208}
-            scale={canPlace && hasStock ? 1 : 0.9}
+            scale={isPlacementReady ? 1 : 0.9}
           >
             <meshBasicMaterial
               ref={ghostMaterialRef}
               color={previewColor}
               transparent
-              opacity={canPlace ? 0.2 : 0.1}
+              opacity={isPlacementReady ? 0.2 : 0.08}
               depthTest={false}
               depthWrite={false}
             />
           </mesh>
-          <mesh
-            geometry={highlightGeometry}
+          <lineSegments
+            geometry={placementEdgeGeometry}
             renderOrder={211}
-            scale={0.96}
+            scale={isPlacementReady ? 1.02 : 0.92}
           >
-            <meshBasicMaterial
+            <lineBasicMaterial
+              ref={placementEdgeMaterialRef}
               color={previewColor}
-              wireframe
               transparent
-              opacity={canPlace ? 0.42 : 0.24}
+              opacity={isPlacementReady ? 0.72 : 0.32}
               depthTest={false}
               depthWrite={false}
             />
-          </mesh>
+          </lineSegments>
           <mesh
             position={[0, -0.48, 0]}
             rotation={[-Math.PI / 2, 0, 0]}
             geometry={placementRingGeometry}
             renderOrder={212}
-            scale={canPlace ? 1.04 : 0.86}
+            scale={isPlacementReady ? 1.04 : 0.86}
           >
             <meshBasicMaterial
               ref={ringMaterialRef}
               color={previewColor}
               transparent
-              opacity={canPlace ? 0.58 : 0.34}
+              opacity={isPlacementReady ? 0.58 : 0.28}
               depthTest={false}
               depthWrite={false}
               side={THREE.DoubleSide}
