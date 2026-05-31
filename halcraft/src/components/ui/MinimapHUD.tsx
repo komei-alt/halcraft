@@ -8,6 +8,11 @@ import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { useWorldStore } from '../../stores/useWorldStore';
+import { useGameStore } from '../../stores/useGameStore';
+import {
+  getStageLandmarkBriefing,
+  STAGE_LANDMARK_WORLD_CENTER,
+} from '../../types/stageLandmarks';
 
 /** ミニマップの設定 */
 const MAP_CONFIG = {
@@ -28,6 +33,7 @@ const MAP_CONFIG = {
 
 export function MinimapHUD() {
   const helicopter = useVehicleStore((s) => s.helicopter);
+  const stageId = useGameStore((s) => s.currentStageId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastUpdateRef = useRef(0);
 
@@ -50,6 +56,7 @@ export function MinimapHUD() {
       lastUpdateRef.current = now;
 
       const heli = useVehicleStore.getState().helicopter;
+      const stage = useGameStore.getState().currentStage;
       const size = MAP_CONFIG.SIZE;
       const range = MAP_CONFIG.RANGE;
       const scale = size / (range * 2);
@@ -157,6 +164,32 @@ export function MinimapHUD() {
         ctx.stroke();
       }
 
+      if (stage) {
+        const landmark = getStageLandmarkBriefing(stage);
+        const dx = STAGE_LANDMARK_WORLD_CENTER.x - centerX;
+        const dz = STAGE_LANDMARK_WORLD_CENTER.z - centerZ;
+        if (Math.abs(dx) <= range && Math.abs(dz) <= range) {
+          const px = (dx + range) * scale;
+          const pz = (dz + range) * scale;
+
+          ctx.save();
+          ctx.translate(px, pz);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = stage.color;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.4;
+          ctx.fillRect(-5, -5, 10, 10);
+          ctx.strokeRect(-5, -5, 10, 10);
+          ctx.restore();
+
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(landmark.modeLabel, px, pz + 8);
+        }
+      }
+
       // ヘリコプター自機（中央に大きな三角形）
       const heliScreenX = size / 2;
       const heliScreenZ = size / 2;
@@ -203,7 +236,7 @@ export function MinimapHUD() {
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [isInHelicopter]);
+  }, [isInHelicopter, stageId]);
 
   if (!isInHelicopter) return null;
 

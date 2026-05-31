@@ -51,6 +51,9 @@ const CREATIVE_DOUBLE_JUMP_MS = 350;
 const MOUSE_SENSITIVITY = 0.002;
 const PLAYER_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.25;
+const WORLD_POSITION_REPORT_INTERVAL_MS = 160;
+const WORLD_POSITION_MIN_MOVE_DELTA_SQ = 0.25;
+const WORLD_POSITION_MIN_VERTICAL_DELTA = 0.45;
 /** 水中の移動速度倍率 */
 const WATER_SPEED_MULT = 0.45;
 /** 水中の重力倍率 */
@@ -116,6 +119,12 @@ export function Player() {
   const position = useRef(new THREE.Vector3(SPAWN_X, initialY, SPAWN_Z));
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const onGround = useRef(false);
+  const lastWorldPositionReport = useRef({
+    time: 0,
+    x: Number.POSITIVE_INFINITY,
+    y: Number.POSITIVE_INFINITY,
+    z: Number.POSITIVE_INFINITY,
+  });
 
   // カメラY座標スムージング用（接地振動によるブレを吸収）
   const smoothCameraY = useRef(initialY + PLAYER_HEIGHT - 0.1);
@@ -196,6 +205,24 @@ export function Player() {
   const respawn = usePlayerStore((s) => s.respawn);
   const updateAttackCooldown = usePlayerStore((s) => s.updateAttackCooldown);
   const consumeKnockback = usePlayerStore((s) => s.consumeKnockback);
+
+  const reportWorldPosition = useCallback((x: number, y: number, z: number) => {
+    const now = performance.now();
+    const last = lastWorldPositionReport.current;
+    const dx = x - last.x;
+    const dy = y - last.y;
+    const dz = z - last.z;
+    const movedEnough = dx * dx + dz * dz >= WORLD_POSITION_MIN_MOVE_DELTA_SQ
+      || Math.abs(dy) >= WORLD_POSITION_MIN_VERTICAL_DELTA;
+    if (!movedEnough) return;
+    if (last.time !== 0 && now - last.time < WORLD_POSITION_REPORT_INTERVAL_MS) return;
+
+    last.time = now;
+    last.x = x;
+    last.y = y;
+    last.z = z;
+    usePlayerStore.setState({ worldPosition: { x, y, z } });
+  }, []);
 
   // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定
   const checkCollision = useCallback((px: number, py: number, pz: number): boolean =>
@@ -367,6 +394,7 @@ export function Player() {
     const pos = position.current;
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
+    reportWorldPosition(pos.x, camera.position.y || pos.y, pos.z);
     const isBuildMode = gameState.isBuildMode;
     let creativeFlying = isBuildMode && gameState.creativeFlying;
 

@@ -302,6 +302,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const player = usePlayerStore.getState();
     usePlayerStore.setState({
       hp: player.maxHp,
+      worldPosition: { x: 8, y: 0, z: 8 },
       isDead: false,
       isDamageFlash: false,
       damageDirection: null,

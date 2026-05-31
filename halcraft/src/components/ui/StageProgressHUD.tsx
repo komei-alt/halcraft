@@ -38,6 +38,12 @@ import {
 } from '../../types/stageCombatStyles';
 import { getStageEvent } from '../../types/stageEvents';
 import type { StageDefinition } from '../../types/stages';
+import {
+  formatStageLandmarkNavigation,
+  getStageLandmarkBriefing,
+  getStageLandmarkDistance,
+  STAGE_LANDMARK_RADIUS,
+} from '../../types/stageLandmarks';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 import { getStageEventHudDisplay } from './stageEventDisplay';
@@ -610,6 +616,7 @@ export function StageProgressHUD() {
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const playerPosition = usePlayerStore((s) => s.worldPosition);
   const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
   const recentStageEvent = useStageEventStore((s) => s.recentEvent);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
@@ -625,6 +632,10 @@ export function StageProgressHUD() {
   if (phase !== 'playing' || !stage) return null;
 
   const target = stage.rules.objective.targetCount;
+  const landmarkBriefing = getStageLandmarkBriefing(stage);
+  const landmarkDistance = getStageLandmarkDistance(playerPosition);
+  const landmarkNavigation = formatStageLandmarkNavigation(playerPosition);
+  const landmarkReached = landmarkDistance !== null && landmarkDistance <= STAGE_LANDMARK_RADIUS;
   const buildStyle = getStageBuildStyle(stage.id);
   const bossEncounter = getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(stage.id);
   const modeRule = getStageModeRule(stage.id);
@@ -882,6 +893,52 @@ export function StageProgressHUD() {
         >
           {guidance.detail}
         </div>
+      </div>
+
+      <div
+        id="stage-landmark-route"
+        style={{
+          marginTop: 6,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+          color: 'rgba(255,255,255,0.78)',
+          fontSize: isCompact ? 9 : 10,
+          lineHeight: isCompact ? '12px' : '13px',
+          fontWeight: 900,
+        }}
+      >
+        <span
+          style={{
+            flex: '0 0 auto',
+            color: stage.color,
+          }}
+        >
+          {landmarkBriefing.modeLabel}
+        </span>
+        <span
+          style={{
+            minWidth: 0,
+            flex: 1,
+            color: 'rgba(255,255,255,0.88)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {landmarkBriefing.name}: {landmarkReached ? landmarkBriefing.arrivalLabel : landmarkBriefing.actionLabel}
+        </span>
+        <span
+          style={{
+            flex: '0 0 auto',
+            color: landmarkReached ? '#fff1a8' : 'rgba(255,255,255,0.62)',
+            fontFamily: 'monospace',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {landmarkNavigation}
+        </span>
       </div>
 
       {routeSteps.length > 0 && (
@@ -1465,7 +1522,13 @@ export function StageProgressHUD() {
             fontWeight: 800,
           }}
         >
-          <span style={{ color: 'rgba(255,255,255,0.72)' }}>{stage.rules.landmarkName}</span>
+          <span style={{ color: 'rgba(255,255,255,0.72)' }}>{landmarkBriefing.name}</span>
+          <span style={{ color: stage.color, fontWeight: 900 }}>
+            <span style={{ opacity: 0.4 }}>· </span>{landmarkBriefing.shortRole}
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.72)', fontWeight: 900 }}>
+            <span style={{ opacity: 0.4 }}>· </span>{landmarkNavigation}
+          </span>
           {enemyProfile && (
             <span style={{ color: enemyProfile.accent, fontWeight: 900 }}>
               <span style={{ opacity: 0.4 }}>· </span>敵: {enemyProfile.shortLabel}

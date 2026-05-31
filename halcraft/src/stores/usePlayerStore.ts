@@ -10,6 +10,7 @@ import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
+import type { StageWorldPosition } from '../types/stageLandmarks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { playItemSwitchSound, playRocketReadySound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
@@ -70,6 +71,9 @@ interface PlayerState {
   /** 体力 */
   hp: number;
   maxHp: number;
+
+  /** HUDやナビゲーションで使う現在位置 */
+  worldPosition: StageWorldPosition | null;
 
   /** ホットバーの選択インデックス (0-8) */
   selectedSlot: number;
@@ -230,6 +234,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   skinId: loadSkinId(),
   hp: 20,
   maxHp: 20,
+  worldPosition: null,
   selectedSlot: 0,
   hotbarSlots: [...HOTBAR_BLOCKS] as BlockId[],
   equippedItem: 'builder',

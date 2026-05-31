@@ -3,12 +3,10 @@
 
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../../../types/blocks';
 import type { BiomeId, StageDefinition } from '../../../types/stages';
+import { STAGE_LANDMARK_CENTER, STAGE_LANDMARK_RADIUS } from '../../../types/stageLandmarks';
 import { getTerrainHeight } from '../heightmap';
 import { getCurrentTerrainStage } from '../stageConfig';
 import type { ChunkData } from '../types';
-
-const LANDMARK_CENTER = { x: -18, z: 22 };
-const SITE_RADIUS = 12;
 
 function biomeFloorBlock(biome: BiomeId): BlockId {
   switch (biome) {
@@ -61,25 +59,25 @@ function setWorldBlock(
 }
 
 function prepareLandmarkSite(chunk: ChunkData, cx: number, cz: number, stage: StageDefinition): number {
-  const baseY = getTerrainHeight(LANDMARK_CENTER.x, LANDMARK_CENTER.z);
+  const baseY = getTerrainHeight(STAGE_LANDMARK_CENTER.x, STAGE_LANDMARK_CENTER.z);
   const floorBlock = biomeFloorBlock(stage.biome);
 
-  for (let wx = LANDMARK_CENTER.x - SITE_RADIUS; wx <= LANDMARK_CENTER.x + SITE_RADIUS; wx++) {
-    for (let wz = LANDMARK_CENTER.z - SITE_RADIUS; wz <= LANDMARK_CENTER.z + SITE_RADIUS; wz++) {
+  for (let wx = STAGE_LANDMARK_CENTER.x - STAGE_LANDMARK_RADIUS; wx <= STAGE_LANDMARK_CENTER.x + STAGE_LANDMARK_RADIUS; wx++) {
+    for (let wz = STAGE_LANDMARK_CENTER.z - STAGE_LANDMARK_RADIUS; wz <= STAGE_LANDMARK_CENTER.z + STAGE_LANDMARK_RADIUS; wz++) {
       const local = worldToLocal(wx, wz, cx, cz);
       if (!local) continue;
 
-      const dx = wx - LANDMARK_CENTER.x;
-      const dz = wz - LANDMARK_CENTER.z;
+      const dx = wx - STAGE_LANDMARK_CENTER.x;
+      const dz = wz - STAGE_LANDMARK_CENTER.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > SITE_RADIUS) continue;
+      if (dist > STAGE_LANDMARK_RADIUS) continue;
 
       const terrainY = getTerrainHeight(wx, wz);
       for (let y = Math.max(1, baseY - 4); y < baseY; y++) {
         chunk[local.lx][y][local.lz] = floorBlock;
       }
 
-      const isOuterRing = dist > SITE_RADIUS - 2;
+      const isOuterRing = dist > STAGE_LANDMARK_RADIUS - 2;
       chunk[local.lx][baseY][local.lz] = isOuterRing ? BLOCK_IDS.STONE : floorBlock;
 
       const clearTop = Math.min(WORLD_HEIGHT - 1, Math.max(terrainY + 8, baseY + 8));
@@ -109,7 +107,7 @@ function placeColumn(
 
 function placeBuildLandmark(chunk: ChunkData, cx: number, cz: number, stage: StageDefinition, baseY: number): void {
   const accent = biomeAccentBlock(stage.biome);
-  const center = LANDMARK_CENTER;
+  const center = STAGE_LANDMARK_CENTER;
 
   for (let dx = -4; dx <= 4; dx++) {
     for (let dz = -4; dz <= 4; dz++) {
@@ -167,7 +165,7 @@ function placeBuildLandmark(chunk: ChunkData, cx: number, cz: number, stage: Sta
 }
 
 function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: StageDefinition, baseY: number): void {
-  const center = LANDMARK_CENTER;
+  const center = STAGE_LANDMARK_CENTER;
   const wallBlock = stage.biome === 'snow' ? BLOCK_IDS.SNOW : stage.biome === 'desert' ? BLOCK_IDS.SAND : BLOCK_IDS.IRON_MOSSY;
 
   for (let dx = -8; dx <= 8; dx++) {
@@ -237,10 +235,10 @@ export function placeStageLandmarks(chunk: ChunkData, cx: number, cz: number): v
   const chunkMinZ = cz * CHUNK_SIZE;
   const chunkMaxZ = chunkMinZ + CHUNK_SIZE;
   if (
-    chunkMaxX < LANDMARK_CENTER.x - SITE_RADIUS ||
-    chunkMinX > LANDMARK_CENTER.x + SITE_RADIUS ||
-    chunkMaxZ < LANDMARK_CENTER.z - SITE_RADIUS ||
-    chunkMinZ > LANDMARK_CENTER.z + SITE_RADIUS
+    chunkMaxX < STAGE_LANDMARK_CENTER.x - STAGE_LANDMARK_RADIUS ||
+    chunkMinX > STAGE_LANDMARK_CENTER.x + STAGE_LANDMARK_RADIUS ||
+    chunkMaxZ < STAGE_LANDMARK_CENTER.z - STAGE_LANDMARK_RADIUS ||
+    chunkMinZ > STAGE_LANDMARK_CENTER.z + STAGE_LANDMARK_RADIUS
   ) {
     return;
   }
