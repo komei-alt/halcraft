@@ -1,7 +1,7 @@
 // 乗り物の走行・飛行に、風圧・砂ぼこり・尾流の手ざわりを足す共通エフェクト
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   type AirplaneState,
@@ -28,11 +28,13 @@ interface TrailBudgets {
   airRibbons: number;
 }
 
+const MAX_CONTACT_SHADOWS = 4;
 const MAX_GROUND_RINGS = 56;
 const MAX_AIR_RIBBONS = 48;
 const LOW_TIER_SCALE = 0.44;
 const BALANCED_TIER_SCALE = 0.72;
 const TOUCH_SCALE = 0.62;
+const CONTACT_SHADOW_RENDER_ORDER = 88;
 const GROUND_RING_RENDER_ORDER = 112;
 const AIR_RIBBON_RENDER_ORDER = 113;
 
@@ -50,6 +52,7 @@ const BIOME_DUST_PALETTES: Record<BiomeId, FxPalette> = {
   desert: { primary: 0xffd187, secondary: 0xf09645, accent: 0xfff2b4 },
 };
 
+const sharedContactShadowGeometry = new THREE.PlaneGeometry(1, 1);
 const sharedGroundRingGeometry = new THREE.RingGeometry(0.44, 0.74, 42);
 const sharedAirRibbonGeometry = new THREE.PlaneGeometry(1, 1);
 const _vehicleForward = new THREE.Vector3();
@@ -101,6 +104,28 @@ function getGroundHeight(x: number, z: number): number {
   return getTerrainHeight(Math.round(x), Math.round(z)) + 0.08;
 }
 
+function createSoftShadowTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const gradient = ctx.createRadialGradient(64, 64, 5, 64, 64, 62);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.78)');
+  gradient.addColorStop(0.42, 'rgba(255,255,255,0.32)');
+  gradient.addColorStop(0.78, 'rgba(255,255,255,0.08)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function getVehicleBasePower(vehicle: Pick<HelicopterState | TankState | AirplaneState | CarState, 'engineOn' | 'speed'>, maxSpeed: number): number {
   const speedPower = Math.abs(vehicle.speed) / maxSpeed;
   return clampMotionPower(vehicle.engineOn ? Math.max(0.28, speedPower) : speedPower * 0.7);
@@ -124,6 +149,24 @@ function setInstanceColor(
   _fxColor.lerp(_fxPrimaryColor.set(palette.accent), Math.max(0, strength - 0.9) * 0.35);
   _fxColor.multiplyScalar(THREE.MathUtils.clamp(strength, 0.16, 1.35));
   mesh.setColorAt(index, _fxColor);
+}
+
+function setContactShadowMatrix(
+  dummy: THREE.Object3D,
+  mesh: THREE.InstancedMesh,
+  index: number,
+  x: number,
+  y: number,
+  z: number,
+  rotationY: number,
+  width: number,
+  length: number,
+): void {
+  dummy.position.set(x, y, z);
+  dummy.rotation.set(-Math.PI / 2, 0, rotationY);
+  dummy.scale.set(width, length, 1);
+  dummy.updateMatrix();
+  mesh.setMatrixAt(index, dummy.matrix);
 }
 
 function setFlatRingMatrix(
@@ -164,18 +207,26 @@ function setCameraRibbonMatrix(
 }
 
 export function VehicleMotionTrailFX() {
+  const shadowMeshRef = useRef<THREE.InstancedMesh>(null);
   const groundMeshRef = useRef<THREE.InstancedMesh>(null);
   const airMeshRef = useRef<THREE.InstancedMesh>(null);
   const groundMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const airMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const dummyRef = useRef(new THREE.Object3D());
+  const elapsedRef = useRef(0);
   const phase = useGameStore((s) => s.phase);
   const biomeId = useGameStore((s) => s.currentStage?.biome ?? null);
   const { camera } = useThree();
 
   const budgets = useMemo(() => resolveBudgets(), []);
+  const shadowTexture = useMemo(() => createSoftShadowTexture(), []);
 
-  useFrame(({ clock }) => {
+  useEffect(() => () => {
+    shadowTexture?.dispose();
+  }, [shadowTexture]);
+
+  useFrame((_, delta) => {
+    const shadowMesh = shadowMeshRef.current;
     const groundMesh = groundMeshRef.current;
     const airMesh = airMeshRef.current;
     if (!groundMesh || !airMesh || phase !== 'playing') return;
@@ -186,10 +237,42 @@ export function VehicleMotionTrailFX() {
       airplane,
       car,
     } = useVehicleStore.getState();
-    const elapsed = clock.getElapsedTime();
+    elapsedRef.current += Math.min(delta, 0.05);
+    const elapsed = elapsedRef.current;
     const dummy = dummyRef.current;
+    let shadowIndex = 0;
     let groundIndex = 0;
     let airIndex = 0;
+
+    const addContactShadow = (
+      vehicle: HelicopterState | TankState | AirplaneState | CarState,
+      baseWidth: number,
+      baseLength: number,
+      maxAltitude: number,
+      groundLift: number,
+    ) => {
+      if (!shadowMesh || !vehicle.spawned || vehicle.destroyed || shadowIndex >= MAX_CONTACT_SHADOWS) return;
+
+      const groundY = getGroundHeight(vehicle.x, vehicle.z);
+      const altitude = Math.max(0, vehicle.y - groundY);
+      if (altitude > maxAltitude) return;
+
+      const altitudeRatio = altitude / maxAltitude;
+      const spread = 1 + altitudeRatio * 1.35;
+      const squeeze = 1 - altitudeRatio * 0.28;
+      setContactShadowMatrix(
+        dummy,
+        shadowMesh,
+        shadowIndex,
+        vehicle.x,
+        groundY + groundLift,
+        vehicle.z,
+        vehicle.rotationY,
+        baseWidth * spread,
+        baseLength * Math.max(0.58, squeeze),
+      );
+      shadowIndex += 1;
+    };
 
     const addGroundRing = (
       x: number,
@@ -223,6 +306,11 @@ export function VehicleMotionTrailFX() {
       setInstanceColor(airMesh, airIndex, palette, tint, strength);
       airIndex += 1;
     };
+
+    addContactShadow(helicopter, 4.6, 6.4, 16, 0.015);
+    addContactShadow(tank, 3.8, 5.4, 4.6, 0.018);
+    addContactShadow(airplane, 6.6, 8.6, 10, 0.014);
+    addContactShadow(car, 2.7, 4.5, 3.6, 0.018);
 
     if (helicopter.spawned && !helicopter.destroyed) {
       const groundY = getGroundHeight(helicopter.x, helicopter.z);
@@ -350,6 +438,10 @@ export function VehicleMotionTrailFX() {
 
     groundMesh.count = groundIndex;
     airMesh.count = airIndex;
+    if (shadowMesh) {
+      shadowMesh.count = shadowIndex;
+      shadowMesh.instanceMatrix.needsUpdate = true;
+    }
     groundMesh.instanceMatrix.needsUpdate = true;
     airMesh.instanceMatrix.needsUpdate = true;
     if (groundMesh.instanceColor) groundMesh.instanceColor.needsUpdate = true;
@@ -367,6 +459,26 @@ export function VehicleMotionTrailFX() {
 
   return (
     <>
+      {shadowTexture && (
+        <instancedMesh
+          ref={shadowMeshRef}
+          args={[sharedContactShadowGeometry, undefined, MAX_CONTACT_SHADOWS]}
+          frustumCulled={false}
+          renderOrder={CONTACT_SHADOW_RENDER_ORDER}
+        >
+          <meshBasicMaterial
+            alphaMap={shadowTexture}
+            color={0x05060a}
+            transparent
+            opacity={0.28}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
+        </instancedMesh>
+      )}
       <instancedMesh
         ref={groundMeshRef}
         args={[sharedGroundRingGeometry, undefined, budgets.groundRings]}
