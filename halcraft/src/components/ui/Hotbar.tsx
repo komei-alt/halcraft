@@ -47,6 +47,12 @@ interface ItemTacticBadge {
   matched: boolean;
 }
 
+interface ItemReadinessBadge {
+  label: string;
+  ratio: number;
+  accent: string;
+}
+
 function clampRatio(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -177,12 +183,57 @@ function getItemTacticBadge(
   };
 }
 
+function getItemReadinessBadge(args: {
+  item: EquippedItem;
+  rocketCharge: number;
+  attackCharge: number;
+  tactic: ItemTacticBadge | null;
+}): ItemReadinessBadge | null {
+  if (args.item === 'rocket_launcher') {
+    const ratio = clampRatio(args.rocketCharge);
+    return {
+      label: ratio >= 1 ? 'READY' : `${Math.round(ratio * 100)}%`,
+      ratio,
+      accent: args.tactic?.accent ?? '#ffc06d',
+    };
+  }
+
+  if (args.item === 'lightsaber') {
+    const ratio = clampRatio(args.attackCharge);
+    return {
+      label: ratio >= 1 ? 'COMBO' : `${Math.round(ratio * 100)}%`,
+      ratio,
+      accent: args.tactic?.accent ?? '#c8b0ff',
+    };
+  }
+
+  if (args.item === 'machine_gun') {
+    return {
+      label: args.tactic?.matched ? 'MAP' : 'BURST',
+      ratio: 1,
+      accent: args.tactic?.accent ?? '#ffe28a',
+    };
+  }
+
+  if (args.tactic?.matched) {
+    return {
+      label: args.tactic.label,
+      ratio: 1,
+      accent: args.tactic.accent,
+    };
+  }
+
+  return null;
+}
+
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
+  const rocketCharge = usePlayerStore((s) => s.rocketCharge);
+  const attackCharge = usePlayerStore((s) => s.attackCharge);
   const items = useInventoryStore((s) => s.items);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const currentStage = useGameStore((s) => s.currentStage);
@@ -488,6 +539,15 @@ export function Hotbar() {
           const isSelected = equippedItem === item.id;
           const tactic = getItemTacticBadge(item.id, currentStage);
           const isMatchedTactic = Boolean(tactic?.matched);
+          const readiness = getItemReadinessBadge({
+            item: item.id,
+            rocketCharge,
+            attackCharge,
+            tactic,
+          });
+          const showReadinessLabel = Boolean(
+            readiness && (!tactic?.matched || item.id === 'rocket_launcher' || item.id === 'lightsaber'),
+          );
           return (
             <button
               key={item.id}
@@ -497,6 +557,8 @@ export function Hotbar() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
+                position: 'relative',
+                overflow: 'hidden',
                 padding: isTouch ? '7px 10px' : '6px 10px',
                 borderRadius: 999,
                 border: isSelected
@@ -523,6 +585,32 @@ export function Hotbar() {
                   : undefined,
               }}
             >
+              {readiness && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: 6,
+                    right: 6,
+                    bottom: 3,
+                    height: 2,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.12)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: `${Math.round(readiness.ratio * 100)}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: readiness.accent,
+                      boxShadow: `0 0 8px ${readiness.accent}88`,
+                    }}
+                  />
+                </span>
+              )}
               <span>{item.icon}</span>
               <span>{item.label}</span>
               {!isTouch && tactic && (
@@ -540,6 +628,23 @@ export function Hotbar() {
                   }}
                 >
                   {tactic.label}
+                </span>
+              )}
+              {!isTouch && readiness && showReadinessLabel && (
+                <span
+                  style={{
+                    padding: '1px 4px',
+                    borderRadius: 999,
+                    color: readiness.accent,
+                    background: `${readiness.accent}16`,
+                    border: `1px solid ${readiness.accent}44`,
+                    fontSize: 8,
+                    lineHeight: '10px',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {readiness.label}
                 </span>
               )}
               {!isTouch && item.id !== 'builder' && (
