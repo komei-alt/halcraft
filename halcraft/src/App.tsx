@@ -27,6 +27,7 @@ import { CoasterCart } from './components/CoasterCart';
 import { LavaRenderer, WaterRenderer } from './components/WaterRenderer';
 import { StageAtmosphereFX } from './components/StageAtmosphereFX';
 import { StageSurfaceDetailFX } from './components/StageSurfaceDetailFX';
+import { StageSkyDetailFX } from './components/StageSkyDetailFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
@@ -139,6 +140,7 @@ function GameCanvas() {
         <Suspense fallback={null}>
           <Environment />
           <StageAtmosphereFX />
+          <StageSkyDetailFX />
           <StageSurfaceDetailFX />
           <StageConditionFX />
           <StageEventFX />
