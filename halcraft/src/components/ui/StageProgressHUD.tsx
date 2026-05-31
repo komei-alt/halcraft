@@ -3,8 +3,8 @@
 
 import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
-import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { useStageBuildScoreStore, type StageBuildScoreBest } from '../../stores/useStageBuildScoreStore';
+import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
 import {
@@ -41,6 +41,7 @@ import type { StageDefinition } from '../../types/stages';
 import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 import { getStageEventHudDisplay } from './stageEventDisplay';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -55,6 +56,15 @@ interface StageGuidance {
   detail: string;
   accent: string;
   progressText: string;
+}
+
+interface StageRecordTarget {
+  icon: string;
+  label: string;
+  detail: string;
+  accent: string;
+  valueText: string;
+  ratio: number;
 }
 
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
@@ -205,6 +215,77 @@ function getStageGuidance(
   return combatStyleGuidance ?? challengeGuidance ?? getObjectiveGuidance(stage, enemiesDefeated, bossSpawned);
 }
 
+function getStageRecordTarget(args: {
+  stage: StageDefinition;
+  elapsedSeconds: number;
+  enemiesDefeated: number;
+  targetCount: number | null;
+  buildScore: number;
+  buildBest: StageBuildScoreBest | undefined;
+  runBest: StageChallengeBest | undefined;
+  modeRule: ReturnType<typeof getStageModeRule>;
+  modeFlowRank: number;
+}): StageRecordTarget {
+  if (args.stage.category === 'build') {
+    const bestScore = args.buildBest?.score ?? 0;
+    if (bestScore > 0) {
+      const isNewBest = args.buildScore > bestScore;
+      const remaining = Math.max(0, bestScore - args.buildScore);
+      return {
+        icon: isNewBest ? '🏆' : '📐',
+        label: isNewBest ? '作品BEST更新中' : '作品BESTを追う',
+        detail: `記録 ${bestScore}pt / 今回 ${args.buildScore}pt`,
+        accent: isNewBest ? '#fff1a8' : '#9bdcff',
+        valueText: isNewBest ? 'NEW' : `あと${remaining}pt`,
+        ratio: bestScore > 0 ? Math.min(1, args.buildScore / bestScore) : 0,
+      };
+    }
+
+    return {
+      icon: '📐',
+      label: '初回作品記録',
+      detail: 'テーマ素材を置くと、このマップの作品BESTが残る',
+      accent: '#9bdcff',
+      valueText: `${args.buildScore}pt`,
+      ratio: Math.min(1, args.buildScore / FINAL_BUILD_SCORE),
+    };
+  }
+
+  const bestSeconds = args.runBest?.bestClearSeconds;
+  const clearCount = args.runBest?.clearCount ?? 0;
+  if (typeof bestSeconds === 'number' && clearCount > 0) {
+    const delta = bestSeconds - args.elapsedSeconds;
+    const isBestPace = delta >= 0;
+    const bestModeRank = args.runBest?.bestModeFlowRank ?? 0;
+    const bestRankLabel = args.modeRule && bestModeRank > 0
+      ? getModeFlowRankLabel(args.modeRule.category, bestModeRank)
+      : '未点火';
+    const currentRankLabel = args.modeRule && args.modeFlowRank > 0
+      ? getModeFlowRankLabel(args.modeRule.category, args.modeFlowRank)
+      : null;
+
+    return {
+      icon: isBestPace ? '🏁' : '⏱️',
+      label: isBestPace ? 'BEST更新ペース' : 'リベンジ目標',
+      detail: currentRankLabel
+        ? `BEST ${formatElapsed(bestSeconds)} / 最高${bestRankLabel} / 今回${currentRankLabel}`
+        : `BEST ${formatElapsed(bestSeconds)} / 最高${bestRankLabel} / クリア${clearCount}回`,
+      accent: isBestPace ? '#fff1a8' : '#ffb36d',
+      valueText: isBestPace ? `残り${formatElapsed(delta)}` : `+${formatElapsed(-delta)}`,
+      ratio: args.targetCount ? Math.min(1, args.enemiesDefeated / args.targetCount) : 0,
+    };
+  }
+
+  return {
+    icon: '🏁',
+    label: '初回クリア記録',
+    detail: 'ボス撃破まで進めると、このマップのBESTタイムが残る',
+    accent: '#ffb36d',
+    valueText: `${args.enemiesDefeated}/${args.targetCount ?? '-'}`,
+    ratio: args.targetCount ? Math.min(1, args.enemiesDefeated / args.targetCount) : 0,
+  };
+}
+
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -215,9 +296,11 @@ export function StageProgressHUD() {
   const boss = useMobStore((s) => s.mobs.find((mob) => mob.type === 'boss_giant') ?? null);
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
+  const stageBestByStage = useStageChallengeStore((s) => s.bestByStage);
   const conditionCharge = useStageConditionStore((s) => s.charge);
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
+  const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
@@ -241,6 +324,17 @@ export function StageProgressHUD() {
   const buildStyle = getStageBuildStyle(stage.id);
   const bossEncounter = getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(stage.id);
   const modeRule = getStageModeRule(stage.id);
+  const recordTarget = getStageRecordTarget({
+    stage,
+    elapsedSeconds: stageElapsedSeconds,
+    enemiesDefeated,
+    targetCount: target,
+    buildScore,
+    buildBest: buildBestByStage[stage.id],
+    runBest: stageBestByStage[stage.id],
+    modeRule,
+    modeFlowRank,
+  });
   const bossHpRatio = boss ? Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp))) : null;
   const bossHpPercent = bossHpRatio === null ? null : Math.ceil(bossHpRatio * 100);
   const hasProgressBar = Boolean(target) || Boolean(buildStyle);
@@ -306,21 +400,20 @@ export function StageProgressHUD() {
         left: isCompact ? 14 : 64,
         zIndex: 96,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
-        padding: isCompact ? '9px 10px' : '11px 13px',
-        borderRadius: 14,
-        border: `1px solid ${stage.color}40`,
-        background: 'rgba(8, 11, 17, 0.32)',
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        boxShadow: '0 6px 22px rgba(0,0,0,0.3)',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        boxShadow: 'none',
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <span style={{ fontSize: isCompact ? 18 : 20 }}>{stage.icon}</span>
+        <span style={{ fontSize: isCompact ? 20 : 23, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))' }}>{stage.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
@@ -378,11 +471,8 @@ export function StageProgressHUD() {
       <div
         style={{
           marginTop: 8,
-          padding: '7px 8px',
-          borderRadius: 6,
-          background: 'rgba(255,255,255,0.075)',
-          border: `1px solid ${guidance.accent}44`,
-          boxShadow: `inset 0 0 12px ${guidance.accent}12`,
+          paddingLeft: 9,
+          borderLeft: `3px solid ${guidance.accent}`,
         }}
       >
         <div
@@ -478,16 +568,98 @@ export function StageProgressHUD() {
         </div>
       )}
 
+      <div
+        id="stage-record-target"
+        style={{
+          marginTop: 7,
+          paddingLeft: 9,
+          borderLeft: `3px solid ${recordTarget.accent}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
+            minWidth: 0,
+          }}
+        >
+          <span style={{ flex: '0 0 auto', fontSize: isCompact ? 12 : 13 }}>
+            {recordTarget.icon}
+          </span>
+          <span
+            style={{
+              minWidth: 0,
+              flex: 1,
+              color: recordTarget.accent,
+              fontSize: isCompact ? 9 : 10,
+              lineHeight: '12px',
+              fontWeight: 950,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            記録: {recordTarget.label}
+          </span>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: isCompact ? 9 : 10,
+              lineHeight: '12px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {recordTarget.valueText}
+          </span>
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            height: 3,
+            borderRadius: 999,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.12)',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(recordTarget.ratio * 100)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${recordTarget.accent}, #ffffff)`,
+              transition: 'width 0.25s ease',
+            }}
+          />
+        </div>
+        {!isCompact && (
+          <div
+            style={{
+              marginTop: 3,
+              color: 'rgba(255,255,255,0.52)',
+              fontSize: 10,
+              lineHeight: '13px',
+              fontWeight: 760,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {recordTarget.detail}
+          </div>
+        )}
+      </div>
+
       {compactStageEvent && (
         <div
           id="stage-event-mini-hud"
           style={{
             marginTop: 7,
-            padding: '5px 7px',
-            borderRadius: 6,
-            background: `${compactStageEvent.accent}16`,
-            border: `1px solid ${compactStageEvent.accent}44`,
-            boxShadow: compactStageEvent.active ? `0 0 14px ${compactStageEvent.accent}28` : 'none',
+            paddingLeft: 9,
+            borderLeft: `3px solid ${compactStageEvent.accent}`,
           }}
         >
           <div
@@ -602,63 +774,28 @@ export function StageProgressHUD() {
           style={{
             marginTop: 8,
             display: 'flex',
-            gap: 5,
+            gap: 4,
+            rowGap: 2,
             flexWrap: 'wrap',
+            alignItems: 'center',
+            fontSize: 10,
+            fontWeight: 800,
           }}
         >
-          <span
-            style={{
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.75)',
-              fontSize: 10,
-              fontWeight: 800,
-            }}
-          >
-            {stage.rules.landmarkName}
-          </span>
+          <span style={{ color: 'rgba(255,255,255,0.72)' }}>{stage.rules.landmarkName}</span>
           {enemyProfile && (
-            <span
-              style={{
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: `${enemyProfile.accent}24`,
-                color: enemyProfile.accent,
-                fontSize: 10,
-                fontWeight: 900,
-              }}
-            >
-              敵: {enemyProfile.shortLabel}
+            <span style={{ color: enemyProfile.accent, fontWeight: 900 }}>
+              <span style={{ opacity: 0.4 }}>· </span>敵: {enemyProfile.shortLabel}
             </span>
           )}
           {buildStyle && (
-            <span
-              style={{
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: `${buildStyle.accent}24`,
-                color: buildStyle.accent,
-                fontSize: 10,
-                fontWeight: 900,
-              }}
-            >
-              作品: {buildStyle.shortLabel} {buildScore}pt
+            <span style={{ color: buildStyle.accent, fontWeight: 900 }}>
+              <span style={{ opacity: 0.4 }}>· </span>作品: {buildStyle.shortLabel} {buildScore}pt
             </span>
           )}
           {(isBuildMode ? stage.rules.objective.prompts : stage.rules.featureTags).slice(0, 3).map((text) => (
-            <span
-              key={text}
-              style={{
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: `${stage.color}24`,
-                color: 'rgba(255,255,255,0.78)',
-                fontSize: 10,
-                fontWeight: 800,
-              }}
-            >
-              {text}
+            <span key={text} style={{ color: 'rgba(255,255,255,0.74)' }}>
+              <span style={{ opacity: 0.4 }}>· </span>{text}
             </span>
           ))}
         </div>

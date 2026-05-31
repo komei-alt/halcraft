@@ -22,6 +22,7 @@ import {
 } from '../../types/stageCombatStyles';
 import { getBlockUseHint } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 interface ItemActionStatus {
   label: string;
@@ -195,32 +196,24 @@ export function MasteryHUD() {
         transform: isTouch ? 'translateX(-50%)' : 'none',
         zIndex: 101,
         width: isTouch ? 'max(136px, min(166px, calc(100vw - 224px)))' : 252,
-        padding: isTouch ? '7px 8px' : '10px 12px',
-        borderRadius: 14,
-        border: `1px solid ${def.accent}44`,
-        background: 'rgba(8, 11, 17, 0.32)',
-        boxShadow: `0 6px 22px rgba(0,0,0,0.3), 0 0 16px ${def.glow}`,
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        boxShadow: 'none',
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         <div
           style={{
-            width: isTouch ? 30 : 34,
-            height: isTouch ? 30 : 34,
-            borderRadius: 7,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: def.glow,
-            border: `1px solid ${def.accent}66`,
-            fontSize: isTouch ? 17 : 19,
+            fontSize: isTouch ? 18 : 21,
             flex: '0 0 auto',
+            filter: `drop-shadow(0 0 7px ${def.accent})`,
           }}
         >
           {def.icon}
@@ -314,11 +307,8 @@ export function MasteryHUD() {
       <div
         style={{
           marginTop: 7,
-          padding: isTouch ? '6px 7px' : '7px 8px',
-          borderRadius: 6,
-          background: `${actionStatus.meterColor}14`,
-          border: `1px solid ${actionStatus.meterColor}42`,
-          boxShadow: `inset 0 0 12px ${actionStatus.meterColor}10`,
+          paddingLeft: 9,
+          borderLeft: `3px solid ${actionStatus.meterColor}`,
         }}
       >
         <div
@@ -450,11 +440,8 @@ export function MasteryHUD() {
           key={recentEvent.id}
           style={{
             marginTop: 7,
-            padding: '5px 7px',
-            borderRadius: 5,
-            background: recentEvent.leveledUp
-              ? 'rgba(255, 230, 120, 0.22)'
-              : 'rgba(255,255,255,0.08)',
+            paddingLeft: 9,
+            borderLeft: `3px solid ${recentEvent.leveledUp ? '#ffe678' : 'rgba(255,255,255,0.5)'}`,
             color: recentEvent.leveledUp ? '#fff0a8' : 'rgba(255,255,255,0.82)',
             fontSize: isTouch ? 10 : 11,
             lineHeight: '14px',

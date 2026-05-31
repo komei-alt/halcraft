@@ -7,6 +7,7 @@ import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { getStageCondition, getStageConditionProgress } from '../../types/stageConditions';
 import { isTouchDevice } from '../../utils/device';
 import { STAGE_MOBILE_RAIL_TOP, STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 export function StageConditionHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -48,33 +49,22 @@ export function StageConditionHUD() {
         right: isCompact ? 14 : 16,
         zIndex: 97,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,
-        padding: isCompact ? '9px 10px' : '10px 12px',
-        borderRadius: 14,
-        border: `1px solid ${condition.accent}${active ? '66' : '40'}`,
-        background: 'rgba(8, 11, 17, 0.32)',
-        boxShadow: active
-          ? `0 0 22px ${condition.accent}55`
-          : '0 6px 22px rgba(0,0,0,0.3)',
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        boxShadow: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div
           style={{
-            width: isCompact ? 30 : 34,
-            height: isCompact ? 30 : 34,
-            borderRadius: 7,
-            display: 'grid',
-            placeItems: 'center',
-            background: `${condition.accent}24`,
-            border: `1px solid ${condition.accent}66`,
-            fontSize: isCompact ? 17 : 19,
+            fontSize: isCompact ? 19 : 22,
             flex: '0 0 auto',
+            filter: active ? `drop-shadow(0 0 7px ${condition.accent})` : 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))',
           }}
         >
           {condition.icon}

@@ -13,6 +13,7 @@ import { formatStageModeRewardDetail, getStageModeRule } from '../../types/stage
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
 import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 function formatSeconds(ms: number): string {
   return `${Math.max(0, Math.ceil(ms / 1000))}s`;
@@ -80,33 +81,24 @@ export function ModeFlowHUD() {
         right: isCompact ? 14 : 16,
         zIndex: 95,
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 276,
-        padding: isCompact ? '8px 10px' : '10px 12px',
-        borderRadius: 14,
-        border: `1px solid ${rule.accent}40`,
-        background: 'rgba(8, 11, 17, 0.32)',
-        boxShadow: recentActivation?.stageId === stage.id
-          ? `0 0 22px ${rule.glow}`
-          : '0 6px 22px rgba(0,0,0,0.3)',
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        boxShadow: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div
           style={{
-            width: isCompact ? 28 : 32,
-            height: isCompact ? 28 : 32,
-            borderRadius: 7,
-            display: 'grid',
-            placeItems: 'center',
-            background: `${rule.accent}22`,
-            border: `1px solid ${rule.accent}66`,
-            fontSize: isCompact ? 16 : 18,
+            fontSize: isCompact ? 18 : 21,
             flex: '0 0 auto',
+            filter: recentActivation?.stageId === stage.id
+              ? `drop-shadow(0 0 8px ${rule.accent})`
+              : 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))',
           }}
         >
           {rule.icon}

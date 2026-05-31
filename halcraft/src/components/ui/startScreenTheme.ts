@@ -66,21 +66,28 @@ export function glassPanel(accentGlow?: string): CSSProperties {
 }
 
 /**
- * ゲーム中 HUD の軽量フロステッドガラス。
- * 不透明カードで世界を覆わないよう、低不透明度＋強めの blur で「透けて見える」面にする。
- * テキスト側で textShadow を併用して可読性を確保すること。
+ * ゲーム中 HUD はカードを廃止し、世界の上に直接テキスト/アイコン/バーを浮かべる。
+ * カード背景の代わりに、この強いテキストシャドウ（縁取り＋影）で
+ * どんな背景でも読めるようにする。HUD のルート要素に textShadow として与え、
+ * 子テキストへ継承させるのが基本。
  */
-export function hudGlass(accent?: string): CSSProperties {
+export const HUD_TEXT_SHADOW =
+  '0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.9), 0 0 9px rgba(0,0,0,0.55)';
+
+/**
+ * カードレイアウト廃止後の HUD ルート用スタイル。
+ * 背景・枠・blur を持たず（= カードにしない）、可読性は HUD_TEXT_SHADOW で担保する。
+ * カードが本当に妥当な集中モーダル（設定/クラフト等）にはこれを使わない。
+ */
+export function hudCardless(): CSSProperties {
   return {
-    background: 'rgba(9,12,18,0.34)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    border: `1px solid ${accent ? `${accent}3a` : 'rgba(255,255,255,0.1)'}`,
-    borderRadius: 'var(--sg-r-md)',
-    boxShadow: '0 6px 22px rgba(0,0,0,0.3)',
+    background: 'none',
+    border: 'none',
+    boxShadow: 'none',
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
+    borderRadius: 0,
+    textShadow: HUD_TEXT_SHADOW,
     fontFamily: SG.font,
   };
 }
-
-/** HUD テキストの可読性を保つ標準シャドウ（透過面の上でも読める） */
-export const HUD_TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.7)';

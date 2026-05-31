@@ -11,6 +11,7 @@ import {
 } from '../../types/stageChallenges';
 import { isTouchDevice } from '../../utils/device';
 import { STAGE_MOBILE_RAIL_TOP } from './stageHudLayout';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 export function StageChallengeHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -48,17 +49,16 @@ export function StageChallengeHUD() {
         width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
         maxHeight: isCompact ? 'max(132px, calc(100vh - 548px))' : 'none',
         overflow: 'hidden',
-        padding: isCompact ? '8px 9px' : '10px 12px',
-        borderRadius: 14,
-        border: `1px solid ${stage.color}3a`,
-        background: 'rgba(8, 11, 17, 0.3)',
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        boxShadow: '0 6px 22px rgba(0,0,0,0.3)',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        boxShadow: 'none',
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div
@@ -168,10 +168,8 @@ export function StageChallengeHUD() {
           key={recentCompletion.id}
           style={{
             marginTop: 8,
-            padding: '6px 7px',
-            borderRadius: 6,
-            background: 'rgba(255, 230, 120, 0.18)',
-            border: '1px solid rgba(255, 230, 120, 0.22)',
+            paddingLeft: 9,
+            borderLeft: '3px solid #ffe678',
             color: '#fff2a6',
             fontSize: isCompact ? 10 : 11,
             lineHeight: '14px',

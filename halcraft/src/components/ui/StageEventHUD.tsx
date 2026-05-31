@@ -8,6 +8,7 @@ import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
 import { getStageEventHudDisplay } from './stageEventDisplay';
 import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
+import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 export function StageEventHUD() {
   const phase = useGameStore((s) => s.phase);
@@ -40,31 +41,22 @@ export function StageEventHUD() {
         right: 16,
         zIndex: 96,
         width: 276,
-        padding: '9px 11px',
-        borderRadius: 14,
-        border: `1px solid ${display.accent}${display.active ? '5f' : '3a'}`,
-        background: 'rgba(8, 11, 17, 0.32)',
-        boxShadow: display.active ? `0 0 20px ${display.accent}44` : '0 6px 22px rgba(0,0,0,0.3)',
-        backdropFilter: 'blur(11px)',
-        WebkitBackdropFilter: 'blur(11px)',
+        padding: 0,
+        background: 'none',
+        border: 'none',
+        boxShadow: 'none',
         color: '#fff',
         pointerEvents: 'none',
-        textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-        fontFamily: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
+        textShadow: HUD_TEXT_SHADOW,
+        fontFamily: SG.font,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 7,
-            display: 'grid',
-            placeItems: 'center',
-            background: `${display.accent}24`,
-            border: `1px solid ${display.accent}66`,
-            fontSize: 18,
+            fontSize: 21,
             flex: '0 0 auto',
+            filter: display.active ? `drop-shadow(0 0 7px ${display.accent})` : 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))',
           }}
         >
           {display.icon}
