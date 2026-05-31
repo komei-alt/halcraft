@@ -2,11 +2,12 @@
 // 色管理・ポストエフェクトを設定値に合わせて軽量に切り替える
 
 import { useEffect } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, HueSaturation, N8AO, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { useGameStore } from '../stores/useGameStore';
 import { isTouchDevice } from '../utils/device';
 import { getPerformanceProfile } from '../utils/performance';
 
@@ -56,6 +57,16 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
   };
 }
 
+function getDarkSceneLift(gameTime: number, dimension: string): number {
+  if (dimension === 'nether') return 0.45;
+  if (gameTime < 0.35) return 0;
+  if (gameTime < 0.55) {
+    const t = THREE.MathUtils.clamp((gameTime - 0.35) / 0.2, 0, 1);
+    return t * t * (3 - 2 * t) * 0.78;
+  }
+  return 1;
+}
+
 /** Three.jsレンダラー側の色空間と基本トーンを整える */
 export function RendererColorPipeline() {
   const { gl } = useThree();
@@ -75,6 +86,18 @@ export function RendererColorPipeline() {
     gl.toneMapping = THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = exposure;
   }, [gl, exposure]);
+
+  useFrame(() => {
+    const gameState = useGameStore.getState();
+    const stageBoost = gameState.dimension === 'overworld'
+      ? gameState.currentStage?.rules.ambientIntensity ?? 1
+      : 1;
+    const darkLift = getDarkSceneLift(gameState.gameTime, gameState.dimension);
+    const dynamicExposure = exposure
+      * (1 + darkLift * 0.24)
+      * (1 + Math.max(0, stageBoost - 1) * 0.08);
+    gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, dynamicExposure, 0.08);
+  });
   /* eslint-enable react-hooks/immutability */
 
   return null;

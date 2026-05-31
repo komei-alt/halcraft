@@ -179,6 +179,7 @@ export function Environment() {
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const viewFillRef = useRef<THREE.PointLight>(null);
   const celestialGroupRef = useRef<THREE.Group>(null);
   const sunDiscRef = useRef<THREE.Mesh>(null);
   const sunHaloRef = useRef<THREE.Mesh>(null);
@@ -276,6 +277,12 @@ export function Environment() {
       ambientIntensity = 0.3;
     }
 
+    const stageAmbientBoost = gameState.dimension === 'overworld'
+      ? gameState.currentStage?.rules.ambientIntensity ?? 1
+      : 1;
+    ambientIntensity *= stageAmbientBoost;
+    sunIntensity *= THREE.MathUtils.lerp(1, stageAmbientBoost, 0.35);
+
     // 太陽の位置を時間に連動（円弧を描く）
     const sunAngle = gameTime * Math.PI * 2;
     _sunPosition.set(
@@ -365,6 +372,15 @@ export function Environment() {
     }
     if (hemiRef.current) {
       hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.7);
+    }
+    if (viewFillRef.current) {
+      const playingFill = gameState.phase === 'playing' ? 1 : 0;
+      const tierScale = performanceProfile.tier === 'low' ? 0.55 : performanceProfile.tier === 'balanced' ? 0.78 : 1;
+      const dimensionBoost = gameState.dimension === 'nether' ? 1.22 : 1;
+      viewFillRef.current.position.copy(camera.position);
+      viewFillRef.current.color.copy(_fogColor).lerp(_sunColor, 0.38);
+      viewFillRef.current.intensity = playingFill * tierScale * dimensionBoost * (0.12 + nightMix * 0.48);
+      viewFillRef.current.distance = 18 + nightMix * 10;
     }
   });
   /* eslint-enable react-hooks/immutability */
@@ -482,6 +498,15 @@ export function Environment() {
       <hemisphereLight
         ref={hemiRef}
         args={[0x87ceeb, 0x6b8e23, 0.4]}
+      />
+
+      {/* 暗い時間帯でも足元と前方の素材感を失わない、影を落とさない補助光 */}
+      <pointLight
+        ref={viewFillRef}
+        intensity={0}
+        distance={22}
+        decay={2}
+        castShadow={false}
       />
     </>
   );

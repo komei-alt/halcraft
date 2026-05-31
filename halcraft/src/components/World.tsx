@@ -23,7 +23,7 @@ function getBlockTexture(textureName: string): THREE.Texture {
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestMipmapNearestFilter;
   texture.generateMipmaps = true;
-  texture.anisotropy = 2;
+  texture.anisotropy = 4;
   texture.colorSpace = THREE.SRGBColorSpace;
 
   textureCache.set(textureName, texture);
@@ -36,13 +36,43 @@ const faceMaterialCache = new Map<string, THREE.MeshStandardMaterial[]>();
 
 /** 共有boxGeometry（全InstancedMeshで再利用） */
 const sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+const _blockTintColor = new THREE.Color();
 
-function getMaterialProps(blockDef: BlockInfo): Record<string, unknown> {
-  const props: Record<string, unknown> = {
+function hashUnit(x: number, y: number, z: number, salt: number): number {
+  const value = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + salt * 19.193) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function isMetallicBlock(blockId: BlockId): boolean {
+  return blockId === BLOCK_IDS.IRON
+    || blockId === BLOCK_IDS.IRON_CRACKED
+    || blockId === BLOCK_IDS.IRON_MOSSY
+    || blockId === BLOCK_IDS.IRON_INGOT
+    || blockId === BLOCK_IDS.GOLD_INGOT;
+}
+
+function isGemBlock(blockId: BlockId): boolean {
+  return blockId === BLOCK_IDS.DIAMOND_GEM
+    || blockId === BLOCK_IDS.DIAMOND_ORE
+    || blockId === BLOCK_IDS.GOLD_ORE;
+}
+
+function getMaterialProps(blockDef: BlockInfo): THREE.MeshStandardMaterialParameters {
+  const isMetallic = isMetallicBlock(blockDef.id);
+  const isGem = isGemBlock(blockDef.id);
+  const isGlass = blockDef.id === BLOCK_IDS.GLASS || blockDef.id === BLOCK_IDS.NETHER_PORTAL;
+  const props: THREE.MeshStandardMaterialParameters = {
     transparent: blockDef.transparent,
-    opacity: blockDef.transparent ? 0.6 : 1,
-    roughness: 0.85,
+    opacity: blockDef.transparent ? (isGlass ? 0.56 : 0.68) : 1,
+    roughness: isMetallic ? 0.34 : isGem ? 0.42 : isGlass ? 0.08 : 0.82,
+    metalness: isMetallic ? 0.56 : isGem ? 0.14 : 0,
+    envMapIntensity: isGlass || isMetallic || isGem ? 0.55 : 0.18,
+    vertexColors: true,
   };
+  if (blockDef.transparent) {
+    props.depthWrite = false;
+    props.alphaTest = isGlass ? 0.03 : 0.08;
+  }
   if (blockDef.emissiveColor) {
     props.emissive = blockDef.emissiveColor;
     props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
@@ -54,7 +84,7 @@ function getMaterialProps(blockDef: BlockInfo): Record<string, unknown> {
 }
 
 function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
-  const key = blockDef.texture;
+  const key = `${blockDef.id}:${blockDef.texture}`;
   if (materialCache.has(key)) return materialCache.get(key)!;
   const mat = new THREE.MeshStandardMaterial({
     map: getBlockTexture(blockDef.texture),
@@ -66,7 +96,7 @@ function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
 
 function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
   if (!blockDef.faceTextures) return null;
-  const key = `${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
+  const key = `${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
   if (faceMaterialCache.has(key)) return faceMaterialCache.get(key)!;
 
   const { top, side, bottom } = blockDef.faceTextures;
@@ -85,6 +115,74 @@ function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial
   ];
   faceMaterialCache.set(key, mats);
   return mats;
+}
+
+function getBlockInstanceTint(
+  blockDef: BlockInfo,
+  x: number,
+  y: number,
+  z: number,
+  target: THREE.Color,
+): THREE.Color {
+  const noise = hashUnit(x, y, z, blockDef.id);
+  const smallNoise = (noise - 0.5) * 0.09;
+  const heightLift = THREE.MathUtils.clamp((y - 10) / (WORLD_HEIGHT - 10), 0, 1) * 0.055;
+  const light = 0.96 + smallNoise + heightLift;
+
+  switch (blockDef.id) {
+    case BLOCK_IDS.GRASS:
+    case BLOCK_IDS.LEAVES:
+      target.setRGB(0.92 + smallNoise * 0.5, 1.02 + heightLift, 0.88 + noise * 0.08);
+      break;
+    case BLOCK_IDS.WOOD:
+    case BLOCK_IDS.RAW_WOOD:
+    case BLOCK_IDS.CHEST:
+      target.setRGB(1.04 + smallNoise, 0.96 + heightLift * 0.4, 0.84 + noise * 0.08);
+      break;
+    case BLOCK_IDS.SAND:
+    case BLOCK_IDS.SOUL_SAND:
+      target.setRGB(1.04 + heightLift, 0.98 + smallNoise, 0.84 + noise * 0.08);
+      break;
+    case BLOCK_IDS.SNOW:
+      target.setRGB(0.93 + smallNoise * 0.4, 0.99 + heightLift, 1.07 + noise * 0.05);
+      break;
+    case BLOCK_IDS.GLASS:
+      target.setRGB(0.88 + heightLift, 1.04, 1.12 + noise * 0.04);
+      break;
+    case BLOCK_IDS.IRON:
+    case BLOCK_IDS.IRON_CRACKED:
+    case BLOCK_IDS.IRON_MOSSY:
+    case BLOCK_IDS.IRON_INGOT:
+      target.setRGB(0.94 + heightLift, 0.97 + noise * 0.04, 1.03 + smallNoise);
+      break;
+    case BLOCK_IDS.GOLD_INGOT:
+    case BLOCK_IDS.GOLD_ORE:
+      target.setRGB(1.12 + heightLift, 1.0 + noise * 0.05, 0.72 + smallNoise);
+      break;
+    case BLOCK_IDS.DIAMOND_GEM:
+    case BLOCK_IDS.DIAMOND_ORE:
+    case BLOCK_IDS.ELECTRIC:
+      target.setRGB(0.86 + heightLift, 1.06 + noise * 0.04, 1.12 + smallNoise);
+      break;
+    case BLOCK_IDS.LAVA:
+    case BLOCK_IDS.GLOWSTONE:
+    case BLOCK_IDS.ENCHANT:
+    case BLOCK_IDS.CORE:
+    case BLOCK_IDS.NETHER_PORTAL:
+    case BLOCK_IDS.SPAWNER:
+      target.setRGB(1.04 + heightLift, 1.02 + noise * 0.04, 1.0 + smallNoise);
+      break;
+    default:
+      if (blockDef.blockCategory === 'stone' || blockDef.blockCategory === 'ore') {
+        target.setRGB(0.94 + heightLift, 0.96 + smallNoise, 1.0 + noise * 0.035);
+      } else if (blockDef.blockCategory === 'dirt') {
+        target.setRGB(1.02 + smallNoise, 0.95 + heightLift * 0.35, 0.86 + noise * 0.04);
+      } else {
+        target.setScalar(light);
+      }
+  }
+
+  return target;
 }
 
 interface ChunkRendererProps {
@@ -197,9 +295,16 @@ function BlockTypeInstances({
       dummy.position.set(positionData[off] + 0.5, positionData[off + 1] + 0.5, positionData[off + 2] + 0.5);
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
+      meshRef.current!.setColorAt(
+        i,
+        getBlockInstanceTint(blockDef, positionData[off], positionData[off + 1], positionData[off + 2], _blockTintColor),
+      );
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [positionData, count]);
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+  }, [blockDef, positionData, count]);
 
   return (
     <instancedMesh

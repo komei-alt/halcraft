@@ -25,10 +25,12 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       uniform float uTime;
       varying vec3 vWorldPos;
       varying float vWave;
+      varying float vTopSurface;
 
       void main() {
         vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
         vWorldPos = worldPos.xyz;
+        vTopSurface = smoothstep(0.32, 0.5, position.y);
 
         // 水面の波（上面の頂点のみ動かす）
         float wave = 0.0;
@@ -49,6 +51,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       uniform float uTime;
       varying vec3 vWorldPos;
       varying float vWave;
+      varying float vTopSurface;
 
       void main() {
         // 深さによる色の変化（浅い = 明るい、深い = 暗い）
@@ -56,15 +59,25 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         vec3 shallowColor = vec3(0.15, 0.55, 0.75);
         vec3 deepColor = vec3(0.05, 0.2, 0.35);
         vec3 color = mix(deepColor, shallowColor, depth);
+        color = mix(color * 0.72, color, 0.72 + vTopSurface * 0.28);
 
         // 波の頂点でハイライト
-        float highlight = smoothstep(0.02, 0.06, vWave) * 0.15;
+        float highlight = smoothstep(0.02, 0.06, vWave) * 0.16 * vTopSurface;
         color += highlight;
 
-        // 時間で微妙にきらめき
+        // 時間で微妙にきらめき、浅瀬に細い光筋を重ねる
         float sparkle = sin(vWorldPos.x * 8.0 + uTime * 3.0)
                        * sin(vWorldPos.z * 8.0 + uTime * 2.0) * 0.03;
-        color += max(sparkle, 0.0);
+        float causticA = sin(vWorldPos.x * 5.2 + vWorldPos.z * 1.8 + uTime * 1.25) * 0.5 + 0.5;
+        float causticB = sin(vWorldPos.z * 6.1 - vWorldPos.x * 1.2 - uTime * 1.05) * 0.5 + 0.5;
+        float caustic = pow(max(causticA * causticB - 0.52, 0.0), 2.0) * 0.36 * vTopSurface;
+        float whiteRibbon = smoothstep(0.86, 1.0, sin((vWorldPos.x + vWorldPos.z) * 2.4 + uTime * 0.85) * 0.5 + 0.5)
+                          * smoothstep(0.0, 0.045, abs(vWave))
+                          * 0.08
+                          * vTopSurface;
+        color += max(sparkle, 0.0) * (0.65 + vTopSurface * 0.9);
+        color += vec3(0.42, 0.95, 1.0) * caustic;
+        color += vec3(0.78, 1.0, 0.95) * whiteRibbon;
 
         gl_FragColor = vec4(color, uOpacity);
       }
