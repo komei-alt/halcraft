@@ -4,7 +4,7 @@
 // デバイスに応じて操作説明を切り替え
 // スマホ縦・横両対応（スクロール可能）
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice, requestFullscreen } from '../../utils/device';
@@ -113,6 +113,17 @@ interface StagePrepCue {
   accent: string;
 }
 
+interface StageSceneryProfile {
+  sky: string;
+  ground: string;
+  far: string;
+  mid: string;
+  near: string;
+  water?: string;
+  particles: string;
+  mood: string;
+}
+
 /** グループの表示順とラベル（ゾーンの見出し） */
 const BRIEFING_GROUPS: Array<{
   id: BriefingGroup;
@@ -124,6 +135,275 @@ const BRIEFING_GROUPS: Array<{
   { id: 'style', label: '戦い方・つくり方', icon: '⚔️', tint: 'rgba(255, 150, 110, 0.95)' },
   { id: 'loadout', label: 'もちもの', icon: '🎒', tint: 'rgba(255, 224, 130, 0.98)' },
 ];
+
+const STAGE_SCENERY: Record<string, StageSceneryProfile> = {
+  'build-forest': {
+    sky: 'linear-gradient(180deg, #8fd7ff 0%, #d9f6ff 52%, #9ee789 100%)',
+    ground: 'linear-gradient(180deg, #5ebf5e 0%, #2e7d3d 100%)',
+    far: '#245c32',
+    mid: '#3d9852',
+    near: '#b8f06c',
+    particles: 'rgba(225,255,145,0.72)',
+    mood: '森の木かげ',
+  },
+  'build-tropical': {
+    sky: 'linear-gradient(180deg, #78e8ff 0%, #e4fff6 48%, #93e9be 100%)',
+    ground: 'linear-gradient(180deg, #f7d482 0%, #56c58f 100%)',
+    far: '#16708b',
+    mid: '#2fcf9f',
+    near: '#fff0a6',
+    water: 'linear-gradient(90deg, #5df4ff, #7affd2)',
+    particles: 'rgba(255,255,255,0.78)',
+    mood: '海と島',
+  },
+  'build-snow': {
+    sky: 'linear-gradient(180deg, #b7d7ff 0%, #f9feff 54%, #dceeff 100%)',
+    ground: 'linear-gradient(180deg, #f8feff 0%, #adcbe9 100%)',
+    far: '#8bb1d2',
+    mid: '#d8f2ff',
+    near: '#ffffff',
+    particles: 'rgba(255,255,255,0.86)',
+    mood: '雪山の光',
+  },
+  'build-desert': {
+    sky: 'linear-gradient(180deg, #ffd092 0%, #fff0bf 52%, #f2bd67 100%)',
+    ground: 'linear-gradient(180deg, #f6bf69 0%, #bb7a37 100%)',
+    far: '#c58b47',
+    mid: '#f2ad5a',
+    near: '#fff0a6',
+    particles: 'rgba(255,227,154,0.75)',
+    mood: '砂丘の熱気',
+  },
+  'war-forest': {
+    sky: 'linear-gradient(180deg, #6ca8c6 0%, #264f3a 55%, #142419 100%)',
+    ground: 'linear-gradient(180deg, #436b37 0%, #172415 100%)',
+    far: '#12321e',
+    mid: '#46602c',
+    near: '#ffad63',
+    particles: 'rgba(255,180,96,0.72)',
+    mood: '森の防衛戦',
+  },
+  'war-tropical': {
+    sky: 'linear-gradient(180deg, #62d6e8 0%, #2a6f72 55%, #162a24 100%)',
+    ground: 'linear-gradient(180deg, #54b47d 0%, #16392d 100%)',
+    far: '#0c5470',
+    mid: '#23b995',
+    near: '#ffcf67',
+    water: 'linear-gradient(90deg, #44dbff, #7cf0c4)',
+    particles: 'rgba(255,210,120,0.76)',
+    mood: '海辺の制圧',
+  },
+  'war-snow': {
+    sky: 'linear-gradient(180deg, #8cb6e6 0%, #526a8d 52%, #172139 100%)',
+    ground: 'linear-gradient(180deg, #dfefff 0%, #546f8d 100%)',
+    far: '#6e91b4',
+    mid: '#c7ebff',
+    near: '#8df7ff',
+    particles: 'rgba(220,250,255,0.82)',
+    mood: '吹雪の迎撃',
+  },
+  'war-desert': {
+    sky: 'linear-gradient(180deg, #ffab62 0%, #7e3f24 58%, #20100d 100%)',
+    ground: 'linear-gradient(180deg, #d58a45 0%, #5c2b1c 100%)',
+    far: '#a76632',
+    mid: '#ff9b4f',
+    near: '#ffef87',
+    particles: 'rgba(255,180,92,0.8)',
+    mood: '熱砂の決戦',
+  },
+};
+
+function getStageScenery(stage: StageDefinition): StageSceneryProfile {
+  return STAGE_SCENERY[stage.id] ?? STAGE_SCENERY[`${stage.category}-${stage.biome}`] ?? STAGE_SCENERY['build-forest'];
+}
+
+function TerrainLayer({
+  color,
+  top,
+  height,
+  opacity,
+  points,
+}: {
+  color: string;
+  top: number;
+  height: number;
+  opacity: number;
+  points: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: top,
+        height,
+        background: color,
+        opacity,
+        clipPath: `polygon(${points})`,
+      }}
+    />
+  );
+}
+
+function StageSceneryPreview({
+  stage,
+  compact,
+  large = false,
+}: {
+  stage: StageDefinition;
+  compact: boolean;
+  large?: boolean;
+}) {
+  const scenery = getStageScenery(stage);
+  const height = large ? (compact ? 72 : 92) : (compact ? 42 : 52);
+  const style: CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height,
+    overflow: 'hidden',
+    borderRadius: large ? 14 : 7,
+    border: `1px solid ${stage.color}55`,
+    background: scenery.sky,
+    boxShadow: large
+      ? `inset 0 1px 0 rgba(255,255,255,0.2), 0 0 22px ${stage.color}22`
+      : `inset 0 1px 0 rgba(255,255,255,0.16), 0 0 10px ${stage.color}18`,
+  };
+
+  const particleCount = large ? 8 : 5;
+  const stationCount = large ? 5 : 3;
+  const isWar = stage.category === 'war';
+
+  return (
+    <div aria-label={`${stage.name}の景色プレビュー`} style={style}>
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.18), transparent 44%, rgba(0,0,0,0.26))',
+        }}
+      />
+      <TerrainLayer
+        color={scenery.far}
+        top={height * 0.32}
+        height={height * 0.26}
+        opacity={0.44}
+        points="0 70%, 9% 42%, 18% 64%, 29% 28%, 42% 68%, 56% 35%, 70% 62%, 84% 24%, 100% 64%, 100% 100%, 0 100%"
+      />
+      <TerrainLayer
+        color={scenery.mid}
+        top={height * 0.18}
+        height={height * 0.34}
+        opacity={0.68}
+        points="0 58%, 11% 35%, 22% 52%, 36% 20%, 49% 55%, 62% 30%, 76% 56%, 90% 26%, 100% 48%, 100% 100%, 0 100%"
+      />
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: height * 0.34,
+          background: scenery.ground,
+          clipPath: 'polygon(0 42%, 15% 25%, 29% 34%, 43% 16%, 58% 30%, 74% 12%, 100% 28%, 100% 100%, 0 100%)',
+        }}
+      />
+      {scenery.water && (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: '8%',
+            right: '7%',
+            bottom: height * 0.23,
+            height: Math.max(4, height * 0.08),
+            borderRadius: 999,
+            background: scenery.water,
+            opacity: 0.7,
+            boxShadow: '0 0 16px rgba(120,255,235,0.38)',
+          }}
+        />
+      )}
+      {Array.from({ length: stationCount }).map((_, i) => {
+        const x = 12 + i * (large ? 17 : 26);
+        const towerHeight = height * (isWar ? 0.2 + (i % 2) * 0.05 : 0.15 + (i % 2) * 0.04);
+        return (
+          <span
+            key={`stage-scenery-marker-${stage.id}-${i}`}
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: `${x}%`,
+              bottom: height * 0.28,
+              width: isWar ? 3 : 4,
+              height: towerHeight,
+              borderRadius: isWar ? 1 : 999,
+              background: isWar ? scenery.near : scenery.mid,
+              boxShadow: `0 0 ${large ? 10 : 7}px ${scenery.near}66`,
+              transform: isWar ? 'skewX(-8deg)' : 'none',
+            }}
+          />
+        );
+      })}
+      {Array.from({ length: particleCount }).map((_, i) => (
+        <span
+          key={`stage-scenery-particle-${stage.id}-${i}`}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: `${9 + i * (large ? 11 : 17)}%`,
+            top: `${18 + ((i * 13) % 30)}%`,
+            width: large ? 15 : 9,
+            height: 2,
+            borderRadius: 999,
+            background: scenery.particles,
+            opacity: 0.7,
+            transform: `rotate(${i % 2 === 0 ? -10 : 8}deg)`,
+            boxShadow: `0 0 ${large ? 12 : 8}px ${scenery.particles}`,
+          }}
+        />
+      ))}
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 8,
+          bottom: 6,
+          maxWidth: '72%',
+          padding: large ? '3px 8px' : '2px 6px',
+          borderRadius: 999,
+          background: 'rgba(0,0,0,0.34)',
+          color: 'rgba(255,255,255,0.82)',
+          fontSize: large ? (compact ? 8 : 10) : 8,
+          fontWeight: 900,
+          lineHeight: 1.2,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          textShadow: '0 1px 3px rgba(0,0,0,0.75)',
+        }}
+      >
+        {scenery.mood}
+      </span>
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          right: 7,
+          top: 6,
+          color: stage.color,
+          fontSize: large ? (compact ? 13 : 16) : 12,
+          filter: `drop-shadow(0 0 8px ${stage.color})`,
+        }}
+      >
+        {stage.icon}
+      </span>
+    </div>
+  );
+}
 
 function loadCategory(): StageCategory {
   try {
@@ -1284,6 +1564,7 @@ export function StartScreen() {
                   textAlign: 'center',
                 }}
               >
+                <StageSceneryPreview stage={stage} compact={isTouch} />
                 <div style={{ fontSize: isTouch ? 20 : 24 }}>{stage.icon}</div>
                 <div style={{ fontSize: isTouch ? 12 : 14, fontWeight: 900, lineHeight: '16px' }}>{stage.name}</div>
                 <div style={{
@@ -1486,6 +1767,8 @@ export function StartScreen() {
             animationDelay: '0.24s',
           }}
         >
+          <StageSceneryPreview stage={activeStage} compact={compactLayout} large />
+
           {/* ── ヒーローヘッダー（マップ名 + 目的） ── */}
           <div
             style={{
