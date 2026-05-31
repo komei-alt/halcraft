@@ -1,6 +1,8 @@
 // 乗り物用の照準HUD
 
 import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useGameStore } from '../../stores/useGameStore';
+import { getStageModeRule } from '../../types/stageModeRules';
 import type { CSSProperties } from 'react';
 
 const panelBase: CSSProperties = {
@@ -27,9 +29,17 @@ function Tick({ axis }: { axis: 'horizontal' | 'vertical' }) {
 
 export function VehicleAimHUD() {
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   if (activeVehicle !== 'tank' && activeVehicle !== 'airplane') return null;
 
   const isTank = activeVehicle === 'tank';
+  const modeRule = getStageModeRule(currentStageId);
+  const desertFirepowerActive = currentStageId === 'war-desert' && modeRule?.category === 'war';
+  const accent = desertFirepowerActive
+    ? modeRule.accent
+    : isTank
+      ? '#ff9a40'
+      : '#75dfff';
 
   return (
     <div style={{
@@ -44,10 +54,12 @@ export function VehicleAimHUD() {
         height: isTank ? 112 : 82,
         transform: 'translate(-50%, -50%)',
         borderRadius: '50%',
-        border: `2px solid ${isTank ? 'rgba(255, 154, 64, 0.78)' : 'rgba(117, 223, 255, 0.82)'}`,
-        boxShadow: isTank
-          ? '0 0 12px rgba(255, 125, 40, 0.35), inset 0 0 12px rgba(255, 125, 40, 0.18)'
-          : '0 0 10px rgba(80, 215, 255, 0.3), inset 0 0 10px rgba(80, 215, 255, 0.16)',
+        border: `2px solid ${desertFirepowerActive ? `${accent}d8` : isTank ? 'rgba(255, 154, 64, 0.78)' : 'rgba(117, 223, 255, 0.82)'}`,
+        boxShadow: desertFirepowerActive
+          ? `0 0 14px ${accent}66, inset 0 0 16px ${accent}33`
+          : isTank
+            ? '0 0 12px rgba(255, 125, 40, 0.35), inset 0 0 12px rgba(255, 125, 40, 0.18)'
+            : '0 0 10px rgba(80, 215, 255, 0.3), inset 0 0 10px rgba(80, 215, 255, 0.16)',
       }}>
         <Tick axis="horizontal" />
         <Tick axis="vertical" />
@@ -92,6 +104,11 @@ export function VehicleAimHUD() {
       }}>
         <span>{isTank ? 'ガトリング' : '機銃'}</span>
         {isTank && <span style={{ color: 'rgba(255, 167, 97, 0.95)' }}>主砲 右クリック</span>}
+        {desertFirepowerActive && (
+          <span style={{ color: accent }}>
+            決戦火力: 戦意+
+          </span>
+        )}
       </div>
     </div>
   );

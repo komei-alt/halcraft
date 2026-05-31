@@ -17,6 +17,8 @@ import {
 import { useWorldStore } from '../../stores/useWorldStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
@@ -107,6 +109,12 @@ interface BombProjectile {
 }
 
 let nextProjectileId = 0;
+
+function recordVehicleStrike(type: VehicleType, amount = 1, critical = false): void {
+  const delta = Math.max(1, Math.round(amount));
+  useStageChallengeStore.getState().recordVehicleHit(delta);
+  useModeFlowStore.getState().recordVehicleHit(type, delta, critical);
+}
 
 interface ExplosionBlockCandidate {
   x: number;
@@ -367,6 +375,7 @@ export function VehicleWeapons() {
       mobStore.damageMob(mob.id, damage, dirX, dirZ);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= EXPLOSION_DAMAGE * 0.7);
+      recordVehicleStrike('tank', 1, damage >= EXPLOSION_DAMAGE * 0.7);
     }
 
     for (const [, player] of multi.remotePlayers) {
@@ -411,6 +420,7 @@ export function VehicleWeapons() {
       mobStore.damageMob(mob.id, damage, dirX, dirZ);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= BOMB_EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
+      recordVehicleStrike('airplane', 1, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
     }
 
     for (const [, player] of multi.remotePlayers) {
@@ -697,6 +707,7 @@ export function VehicleWeapons() {
             useMultiplayerStore.getState().sendMobDamage(hit.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
             useMobStore.getState().damageMob(hit.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
             spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
+            recordVehicleStrike(bullet.type);
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
           playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');

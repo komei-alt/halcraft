@@ -12,6 +12,7 @@ export type StageChallengeMetric =
   | 'machine_gun_hits'
   | 'rocket_hits'
   | 'lightsaber_hits'
+  | 'vehicle_hits'
   | 'detonations'
   | 'block_group_placed';
 
@@ -37,6 +38,7 @@ export interface StageChallengeStats {
   machineGunHits: number;
   rocketHits: number;
   lightsaberHits: number;
+  vehicleHits: number;
   detonations: number;
   placedBlockCounts: Partial<Record<BlockId, number>>;
 }
@@ -57,6 +59,7 @@ export const EMPTY_STAGE_CHALLENGE_STATS: StageChallengeStats = {
   machineGunHits: 0,
   rocketHits: 0,
   lightsaberHits: 0,
+  vehicleHits: 0,
   detonations: 0,
   placedBlockCounts: {},
 };
@@ -311,11 +314,11 @@ export const STAGE_CHALLENGES: Record<string, StageChallengeDefinition[]> = {
     },
     {
       id: 'desert-rockets',
-      icon: '🚀',
-      title: '爆風制圧',
-      description: 'ロケットを10回命中させる',
-      metric: 'rocket_hits',
-      target: 10,
+      icon: '🛞',
+      title: '乗り物火力制圧',
+      description: '戦車や飛行機で8回命中させる',
+      metric: 'vehicle_hits',
+      target: 8,
       accent: '#ffc06d',
     },
     {
@@ -366,6 +369,9 @@ export function getStageChallengeProgress(
       break;
     case 'lightsaber_hits':
       current = stats.lightsaberHits;
+      break;
+    case 'vehicle_hits':
+      current = stats.vehicleHits;
       break;
     case 'detonations':
       current = stats.detonations;

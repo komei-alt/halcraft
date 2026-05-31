@@ -8,6 +8,7 @@ import {
   getStageModeBuildGain,
   getStageModeEnemyGain,
   getStageModeRule,
+  getStageModeVehicleGain,
   type StageModeReward,
   type StageModeRule,
 } from '../types/stageModeRules';
@@ -17,6 +18,7 @@ import { playModeFlowSurgeSound, playStageRewardSound } from '../utils/sounds';
 import { useInventoryStore } from './useInventoryStore';
 import type { MobType } from './useMobStore';
 import { usePlayerStore, type EquippedItem } from './usePlayerStore';
+import type { VehicleType } from './useVehicleStore';
 
 const MODE_FLOW_MAX_RANK = 3;
 const BUILD_FOCUS_MINING_SPEED_MULTIPLIER = 1.32;
@@ -52,6 +54,7 @@ interface ModeFlowState {
   startRun: (stageId: string | null) => void;
   recordBuildBlockPlace: (blockId: BlockId) => void;
   recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
+  recordVehicleHit: (vehicleType: VehicleType, amount?: number, critical?: boolean) => void;
   recordEnemyDefeat: (mobType: MobType) => void;
   recordPressureRelief: (gain: number, label: string) => void;
   clearRecentActivation: () => void;
@@ -279,6 +282,32 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `${style.shortLabel} +${gain}`,
+      recentActivation: activation,
+      flowRank,
+      activationCount: nextActivationCount,
+    });
+  },
+
+  recordVehicleHit: (vehicleType, amount = 1, critical = false) => {
+    const state = get();
+    const stageId = state.currentStageId;
+    const rule = getStageModeRule(stageId);
+    if (!stageId || !rule || rule.category !== 'war') return;
+
+    const gain = getStageModeVehicleGain(stageId, vehicleType, amount, critical);
+    if (gain <= 0) return;
+
+    const nextRawMeter = state.meter + gain;
+    const reached = nextRawMeter >= rule.threshold;
+    const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
+    const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
+    const createdAt = nowMs();
+    const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+
+    set({
+      meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
+      lastGain: gain,
+      lastGainLabel: `${vehicleType === 'airplane' ? '空爆' : '戦車'} +${gain}`,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,

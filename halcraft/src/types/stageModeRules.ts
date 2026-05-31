@@ -5,6 +5,7 @@ import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from './blocks';
 import { getStageBuildBlockScore } from './stageBuildStyles';
 import { getStageById, type StageCategory } from './stages';
 import type { MobType } from '../stores/useMobStore';
+import type { VehicleType } from '../stores/useVehicleStore';
 
 export interface StageModeRewardBlock {
   blockId: BlockId;
@@ -203,8 +204,8 @@ export const STAGE_MODE_RULES: Record<string, StageModeRule> = {
     title: '決戦テンション',
     shortLabel: '連続撃破で火力窓',
     meterLabel: '戦意',
-    actionLabel: '遠距離撃破・ロケット命中',
-    detail: '開けた砂地で倒し続けるほど、ロケット再装填と爆発補給が戻る。',
+    actionLabel: '遠距離撃破・ロケット/乗り物火力命中',
+    detail: '開けた砂地で倒し続けるほど、ロケット再装填と戦車・飛行機の火力補給が戻る。',
     accent: '#ffc06d',
     glow: 'rgba(255, 192, 109, 0.34)',
     threshold: 100,
@@ -243,6 +244,20 @@ export function getStageModeEnemyGain(stageId: string | null | undefined, mobTyp
   if (mobType === 'boss_giant') return rule.threshold;
   const streakBonus = Math.min(18, Math.max(0, streak - 1) * 3);
   return 22 + streakBonus;
+}
+
+export function getStageModeVehicleGain(
+  stageId: string | null | undefined,
+  vehicleType: VehicleType,
+  amount: number,
+  critical: boolean,
+): number {
+  const rule = getStageModeRule(stageId);
+  if (!rule || rule.category !== 'war' || stageId !== 'war-desert') return 0;
+  if (vehicleType !== 'tank' && vehicleType !== 'airplane') return 0;
+  const safeAmount = Math.max(1, Math.round(amount));
+  const base = vehicleType === 'airplane' ? 15 : 13;
+  return Math.min(46, base + (safeAmount - 1) * 9 + (critical ? 8 : 0));
 }
 
 export function formatStageModeRewardDetail(reward: StageModeReward): string {

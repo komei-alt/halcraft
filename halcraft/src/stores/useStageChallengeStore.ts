@@ -66,6 +66,7 @@ interface StageChallengeState {
   recordBlockBreak: (blockId: BlockId, options?: BlockBreakOptions) => void;
   recordEnemyDefeat: (mobType: MobType) => void;
   recordWeaponHit: (item: EquippedItem, amount?: number) => void;
+  recordVehicleHit: (amount?: number) => void;
   recordDetonation: (amount?: number) => void;
   recordStageClear: (record: StageClearRecordInput) => void;
   clearRecentCompletion: () => void;
@@ -222,6 +223,14 @@ export const useStageChallengeStore = create<StageChallengeState>()(
             machineGunHits: stats.machineGunHits + (item === 'machine_gun' ? delta : 0),
             rocketHits: stats.rocketHits + (item === 'rocket_launcher' ? delta : 0),
             lightsaberHits: stats.lightsaberHits + (item === 'lightsaber' ? delta : 0),
+          }));
+        },
+
+        recordVehicleHit: (amount = 1) => {
+          const delta = Math.max(1, Math.round(amount));
+          updateStats((stats) => ({
+            ...stats,
+            vehicleHits: stats.vehicleHits + delta,
           }));
         },
 
