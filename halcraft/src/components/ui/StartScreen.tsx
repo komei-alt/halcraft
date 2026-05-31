@@ -35,6 +35,7 @@ import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../..
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
+import { getStageRecordGoal } from '../../types/stageRecordGoals';
 import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
@@ -534,6 +535,7 @@ export function StartScreen() {
   const activeRunBest = bestByStage[activeStage.id];
   const activeMedal = getStageChallengeMedal(activeCompletedCount, activeChallengeCount);
   const activeMedalLabel = getStageChallengeMedalLabel(activeMedal);
+  const activeBuildBest = buildBestByStage[activeStage.id];
   const stageMasteries = useMemo<Record<string, StageMasterySummary>>(
     () => Object.fromEntries(STAGES.map((stage) => {
       const challenges = getStageChallenges(stage.id);
@@ -567,6 +569,14 @@ export function StartScreen() {
     () => getStageRunBonus(activeStage.id, activeMedal),
     [activeStage.id, activeMedal],
   );
+  const activeRecordGoal = useMemo(
+    () => getStageRecordGoal({
+      stage: activeStage,
+      runBest: activeRunBest,
+      buildBest: activeBuildBest,
+    }),
+    [activeBuildBest, activeRunBest, activeStage],
+  );
   const activeBriefingSections = useMemo(
     () => getStageBriefingSections(
       activeStage,
@@ -594,7 +604,7 @@ export function StartScreen() {
 
   // 進捗バンド「あなたの記録」に出す値（戦争=BESTタイム / 建築=作品スコア）
   const isWarStage = activeStage.category === 'war';
-  const activeBuildBestScore = buildBestByStage[activeStage.id]?.score ?? 0;
+  const activeBuildBestScore = activeBuildBest?.score ?? 0;
   const activeBestClearLabel = activeRunBest?.clearCount
     ? formatRunTime(activeRunBest.bestClearSeconds)
     : null;
@@ -1029,6 +1039,11 @@ export function StartScreen() {
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
             const runBonus = getStageRunBonus(stage.id, medal);
+            const recordGoal = getStageRecordGoal({
+              stage,
+              runBest: best,
+              buildBest: buildBestByStage[stage.id],
+            });
             const mastery = stageMasteries[stage.id]
               ?? getStageMasterySummary({
                 stage,
@@ -1115,6 +1130,19 @@ export function StartScreen() {
                     {condition.icon} {condition.triggerLabel}→{condition.effect.label}
                   </div>
                 )}
+                <div
+                  style={{
+                    width: '100%',
+                    color: recordGoal.accent,
+                    fontSize: isTouch ? 8 : 9,
+                    fontWeight: 950,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {recordGoal.icon} {recordGoal.trophyLabel}: {recordGoal.progressLabel}
+                </div>
                 {best?.clearCount && (
                   <div
                     style={{
@@ -1471,6 +1499,112 @@ export function StartScreen() {
                 >
                   {bestSubLabel}
                 </div>
+              </div>
+            </div>
+            <div
+              id="stage-record-goal"
+              style={{
+                marginTop: compactLayout ? 8 : 10,
+                padding: compactLayout ? '8px 9px' : '9px 11px',
+                borderRadius: 10,
+                background: activeRecordGoal.completed
+                  ? 'linear-gradient(135deg, rgba(166,255,207,0.18), rgba(255,230,128,0.10))'
+                  : 'rgba(0,0,0,0.28)',
+                border: `1px solid ${activeRecordGoal.accent}55`,
+                boxShadow: activeRecordGoal.completed
+                  ? `0 0 18px ${activeRecordGoal.accent}24, inset 0 1px 0 rgba(255,255,255,0.08)`
+                  : 'inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: compactLayout ? 7 : 9,
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    flex: '0 0 auto',
+                    fontSize: compactLayout ? 14 : 16,
+                    filter: `drop-shadow(0 0 8px ${activeRecordGoal.accent}66)`,
+                  }}
+                >
+                  {activeRecordGoal.icon}
+                </span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      color: activeRecordGoal.accent,
+                      fontSize: compactLayout ? 9 : 10,
+                      lineHeight: '13px',
+                      fontWeight: 950,
+                      letterSpacing: 1,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    次の記録 / {activeRecordGoal.trophyLabel}
+                  </div>
+                  <div
+                    style={{
+                      color: '#fff',
+                      fontSize: compactLayout ? 11 : 12,
+                      lineHeight: '15px',
+                      fontWeight: 950,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {activeRecordGoal.title}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    flex: '0 0 auto',
+                    color: activeRecordGoal.accent,
+                    fontSize: compactLayout ? 10 : 11,
+                    fontWeight: 950,
+                    fontFamily: 'monospace',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeRecordGoal.progressLabel}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  height: 5,
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.12)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.round(activeRecordGoal.ratio * 100)}%`,
+                    height: '100%',
+                    borderRadius: 999,
+                    background: `linear-gradient(90deg, ${activeRecordGoal.accent}, ${activeStage.color})`,
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  marginTop: 5,
+                  color: 'rgba(255,255,255,0.62)',
+                  fontSize: compactLayout ? 8 : 9,
+                  lineHeight: compactLayout ? '12px' : '13px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {activeRecordGoal.detail}
               </div>
             </div>
           </div>
