@@ -66,9 +66,12 @@ function formatReticleSeconds(remainingMs: number): string {
 export function Crosshair() {
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const currentStageId = useGameStore((s) => s.currentStageId);
+  const isBuildMode = useGameStore((s) => s.isBuildMode);
+  const creativeFlying = useGameStore((s) => s.creativeFlying);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
+  const worldPosition = usePlayerStore((s) => s.worldPosition);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
@@ -100,6 +103,8 @@ export function Crosshair() {
   const isBuilder = equippedItem === 'builder';
   const buildFocusActive = isBuilder && modeRule?.category === 'build' && buildFocusUntil > now;
   const combatFocusActive = !isBuilder && combatFocusItem === equippedItem && combatFocusUntil > now;
+  const buildFlightActive = isBuilder && isBuildMode && creativeFlying;
+  const flightAltitude = Math.max(0, Math.round(worldPosition?.y ?? 0));
   const buildFocusSeconds = formatReticleSeconds(buildFocusUntil - now);
   const combatFocusSeconds = formatReticleSeconds(combatFocusUntil - now);
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
@@ -255,6 +260,78 @@ export function Crosshair() {
               }}
             />
           ))}
+        </>
+      )}
+
+      {buildFlightActive && (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: buildFocusActive ? 58 : 50,
+              height: buildFocusActive ? 58 : 50,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              border: `1px solid ${(modeRule?.accent ?? '#9bdcff')}66`,
+              boxShadow: `0 0 12px ${(modeRule?.accent ?? '#9bdcff')}44, inset 0 0 10px rgba(255,255,255,0.08)`,
+              opacity: buildFocusActive ? 0.44 : 0.7,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: isCompact
+                ? `translate(-50%, ${buildFocusActive ? 38 : 24}px)`
+                : 'translate(22px, -50%)',
+              width: isCompact ? 58 : 72,
+              height: 16,
+              borderRadius: 4,
+              border: `1px solid ${(modeRule?.accent ?? '#9bdcff')}55`,
+              background: 'rgba(8, 17, 24, 0.52)',
+              color: modeRule?.accent ?? '#9bdcff',
+              fontSize: 8,
+              lineHeight: '16px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              letterSpacing: 0,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+              textShadow: '0 1px 2px rgba(0,0,0,0.84)',
+              boxShadow: `0 0 9px ${(modeRule?.accent ?? '#9bdcff')}33`,
+            }}
+          >
+            FLY Y{flightAltitude}
+          </div>
+          {!isCompact && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -42px)',
+                height: 14,
+                padding: '0 6px',
+                borderRadius: 4,
+                border: '1px solid rgba(155, 220, 255, 0.32)',
+                background: 'rgba(8, 15, 22, 0.44)',
+                color: 'rgba(220, 245, 255, 0.92)',
+                fontSize: 8,
+                lineHeight: '14px',
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                letterSpacing: 0,
+                textAlign: 'center',
+                whiteSpace: 'nowrap',
+                textShadow: '0 1px 2px rgba(0,0,0,0.86)',
+              }}
+            >
+              SPACE UP / SHIFT DOWN
+            </div>
+          )}
         </>
       )}
 
