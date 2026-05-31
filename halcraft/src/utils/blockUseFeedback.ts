@@ -38,6 +38,13 @@ export type BlockUseFeedbackSoundKind =
 export interface BlockUseFeedbackContext {
   detonatedCount?: number;
   spawnedIronGolem?: boolean;
+  stageChallengeProgress?: {
+    icon: string;
+    title: string;
+    current: number;
+    target: number;
+    completed: boolean;
+  };
 }
 
 export interface BlockUseFeedbackContent {
@@ -428,6 +435,15 @@ function getConditionFeedback(blockId: BlockId, stageId: string | null | undefin
   };
 }
 
+function formatStageChallengeProgress(context: BlockUseFeedbackContext): string | null {
+  const progress = context.stageChallengeProgress;
+  if (!progress) return null;
+  const current = Math.min(progress.current, progress.target);
+  return progress.completed
+    ? `${progress.icon} ${progress.title}: CLEAR`
+    : `${progress.icon} ${progress.title}: ${current}/${progress.target}`;
+}
+
 function getExplosionConditionDetail(stageId: string | null | undefined): string | null {
   const condition = getStageCondition(stageId);
   if (!condition?.countsDetonations) return null;
@@ -437,6 +453,7 @@ function getExplosionConditionDetail(stageId: string | null | undefined): string
 function getStagePlacementFeedback(
   blockId: BlockId,
   stageId: string | null | undefined,
+  context: BlockUseFeedbackContext = {},
 ): BlockUseFeedbackContent | null {
   const style = getStageBuildStyle(stageId);
   const blockScore = getStageBuildBlockScore(stageId, blockId);
@@ -448,13 +465,14 @@ function getStagePlacementFeedback(
   const modeGain = modeRule?.category === 'build'
     ? getStageModeBuildGain(stageId, blockId)
     : 0;
+  const stageChallengeProgress = formatStageChallengeProgress(context);
 
-  if (!blockScore && !groupChallenge && modeGain <= 0) return null;
+  if (!blockScore && !groupChallenge && modeGain <= 0 && !stageChallengeProgress) return null;
 
   const accent = groupChallenge?.accent ?? style?.accent ?? modeRule?.accent ?? '#9bdcff';
   const detailParts = [
     blockScore && style ? `${style.shortLabel}: ${blockScore.label}+${blockScore.points}pt` : '',
-    groupChallenge ? `${groupChallenge.title}: ${groupChallenge.target}個目標` : '',
+    stageChallengeProgress ?? (groupChallenge ? `${groupChallenge.title}: ${groupChallenge.target}個目標` : ''),
     modeRule?.category === 'build' && modeGain > 0 ? `${modeRule.meterLabel}+${modeGain}` : '',
   ].filter(Boolean);
 
@@ -463,6 +481,8 @@ function getStagePlacementFeedback(
     eyebrow: 'マップ貢献',
     title: blockScore
       ? `${BLOCK_DEFS[blockId]?.name ?? 'ブロック'} +${blockScore.points}pt`
+      : context.stageChallengeProgress
+        ? `${context.stageChallengeProgress.title} ${context.stageChallengeProgress.completed ? 'CLEAR' : `${Math.min(context.stageChallengeProgress.current, context.stageChallengeProgress.target)}/${context.stageChallengeProgress.target}`}`
       : groupChallenge
         ? `${groupChallenge.title}の対象`
         : `${modeRule?.meterLabel ?? 'マップ'} +${modeGain}`,
@@ -478,11 +498,12 @@ function withStagePlacementDetail(
   feedback: BlockUseFeedbackContent,
   blockId: BlockId,
   stageId: string | null | undefined,
+  context: BlockUseFeedbackContext = {},
   includeStagePlacement = true,
 ): BlockUseFeedbackContent {
   if (!includeStagePlacement) return feedback;
 
-  const stageFeedback = getStagePlacementFeedback(blockId, stageId);
+  const stageFeedback = getStagePlacementFeedback(blockId, stageId, context);
   if (!stageFeedback) return feedback;
 
   return {
@@ -546,7 +567,7 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 209, 102, 0.35)',
       kind: 'switch',
       soundKind: count > 0 ? 'explosive' : 'switch',
-    }, blockId, stageId, count <= 0);
+    }, blockId, stageId, context, count <= 0);
   }
 
   if (blockId === BLOCK_IDS.TNT) {
@@ -562,7 +583,7 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 112, 67, 0.38)',
       kind: 'explosive',
       soundKind: count > 0 ? 'explosive' : 'utility',
-    }, blockId, stageId, count <= 0);
+    }, blockId, stageId, context, count <= 0);
   }
 
   if (blockId === BLOCK_IDS.SPAWNER) {
@@ -575,7 +596,7 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 120, 80, 0.35)',
       kind: 'summon',
       soundKind: 'summon',
-    }, blockId, stageId);
+    }, blockId, stageId, context);
   }
 
   if (blockId === BLOCK_IDS.TURRET) {
@@ -588,10 +609,10 @@ export function getBlockUseFeedback(
       glow: 'rgba(255, 90, 120, 0.34)',
       kind: 'defense',
       soundKind: 'defense',
-    }, blockId, stageId);
+    }, blockId, stageId, context);
   }
 
-  const stagePlacementFeedback = getStagePlacementFeedback(blockId, stageId);
+  const stagePlacementFeedback = getStagePlacementFeedback(blockId, stageId, context);
   if (stagePlacementFeedback) return stagePlacementFeedback;
 
   if (LIGHT_BLOCKS.has(blockId)) {

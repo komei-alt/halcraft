@@ -31,6 +31,11 @@ import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
+import {
+  getStageChallengeProgress,
+  getStageChallenges,
+  type StageChallengeDefinition,
+} from '../types/stageChallenges';
 import { isEffectiveTool, TOOL_DEFS, type ToolType } from '../types/tools';
 import { isTouchDevice } from '../utils/device';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -249,6 +254,36 @@ function getBuilderMasteryBonus() {
 
 function getBuilderTechniqueBonus() {
   return getMasteryTechniqueBonus('builder', useMasteryStore.getState().items.builder);
+}
+
+function isPlacementChallengeMatch(challenge: StageChallengeDefinition, blockId: BlockId): boolean {
+  if (challenge.metric === 'block_group_placed') return Boolean(challenge.blockIds?.includes(blockId));
+  return challenge.metric === 'blocks_placed';
+}
+
+function pickPlacementChallenge(
+  challenges: StageChallengeDefinition[],
+  blockId: BlockId,
+  completedIds: string[],
+): StageChallengeDefinition | null {
+  const directGroup = challenges.find((challenge) => (
+    challenge.metric === 'block_group_placed'
+    && challenge.blockIds?.includes(blockId)
+    && !completedIds.includes(challenge.id)
+  ));
+  if (directGroup) return directGroup;
+
+  const anyGroup = challenges.find((challenge) => (
+    challenge.metric === 'block_group_placed'
+    && challenge.blockIds?.includes(blockId)
+  ));
+  if (anyGroup) return anyGroup;
+
+  const genericPlacement = challenges.find((challenge) => (
+    isPlacementChallengeMatch(challenge, blockId)
+    && !completedIds.includes(challenge.id)
+  ));
+  return genericPlacement ?? challenges.find((challenge) => isPlacementChallengeMatch(challenge, blockId)) ?? null;
 }
 
 /** ブロック選択ハイライトの表示 */
@@ -651,6 +686,58 @@ export function BlockInteraction() {
     return useModeFlowStore.getState().recordBuildBlockPlace(blockId);
   }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
+  const getPlacementChallengeProgressContext = useCallback((blockId: BlockId): BlockUseFeedbackContext['stageChallengeProgress'] => {
+    const challengeState = useStageChallengeStore.getState();
+    const challenge = pickPlacementChallenge(
+      getStageChallenges(challengeState.currentStageId),
+      blockId,
+      challengeState.completedIds,
+    );
+    if (!challenge) return undefined;
+
+    const progress = getStageChallengeProgress(challenge, challengeState.stats);
+    return {
+      icon: challenge.icon,
+      title: challenge.title,
+      current: progress.current,
+      target: progress.target,
+      completed: progress.completed || challengeState.completedIds.includes(challenge.id),
+    };
+  }, []);
+
+  const emitInventoryEmptyFeedback = useCallback((
+    blockId: BlockId,
+    x: number,
+    y: number,
+    z: number,
+  ) => {
+    const game = useGameStore.getState();
+    const stageProgress = getPlacementChallengeProgressContext(blockId);
+    const blockName = getBlockShortName(blockId);
+    const modeHint = game.currentStage?.category === 'war'
+      ? '補給箱・戦意発動・敵撃破報酬で立て直そう'
+      : '補給箱・マップイベント・ひらめき発動で素材を増やそう';
+    const progressHint = stageProgress
+      ? `${stageProgress.icon} ${stageProgress.title}: ${stageProgress.completed ? 'CLEAR' : `${Math.min(stageProgress.current, stageProgress.target)}/${stageProgress.target}`}`
+      : '別の素材に切り替えるか補給を探そう';
+
+    const emitted = useItemFeedbackStore.getState().emitFeedback(blockId, {
+      icon: '🎒',
+      eyebrow: '素材切れ',
+      title: `${blockName}が足りない`,
+      detail: `${progressHint} / ${modeHint}`,
+      accent: '#ffd166',
+      glow: 'rgba(255, 190, 90, 0.32)',
+      kind: 'utility',
+      soundKind: 'utility',
+    }, {
+      rateLimitKey: `inventory-empty:${game.currentStageId ?? 'none'}:${blockId}`,
+      rateLimitMs: 950,
+    });
+    if (!emitted) return;
+    spawnBlockUseEffect(emitted.kind, x, y, z, emitted.accent);
+  }, [getPlacementChallengeProgressContext]);
+
   const detonateExplosiveBlock = useCallback((x: number, y: number, z: number): boolean => {
     const blockId = getBlock(x, y, z);
     if (!BLOCK_DEFS[blockId]?.explosive) return false;
@@ -875,6 +962,7 @@ export function BlockInteraction() {
     const selectedBlock = getSelectedBlock();
     const inventory = useInventoryStore.getState();
     if (!inventory.removeItem(selectedBlock, 1)) {
+      emitInventoryEmptyFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ);
       playInventoryEmptySound();
       return false;
     }
@@ -884,16 +972,21 @@ export function BlockInteraction() {
     playBlockPlaceSound();
     const modeFlowPlacement = recordBlockPlaceMastery(selectedBlock);
     const specialPlacement = applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
-    emitBlockUseFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ, specialPlacement);
+    emitBlockUseFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ, {
+      ...specialPlacement,
+      stageChallengeProgress: getPlacementChallengeProgressContext(selectedBlock),
+    });
     if (modeFlowPlacement?.focused && !modeFlowPlacement.activated) {
       spawnBlockUseEffect('light', t.placeX, t.placeY, t.placeZ, modeFlowPlacement.accent);
     }
     return true;
   }, [
     applySpecialPlacement,
+    emitInventoryEmptyFeedback,
     emitBlockUseFeedback,
     getBlock,
     getSelectedBlock,
+    getPlacementChallengeProgressContext,
     recordBlockPlaceMastery,
     sendBlockPlace,
     setBlock,
