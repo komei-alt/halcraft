@@ -62,6 +62,10 @@ function formatElapsed(seconds: number): string {
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
 }
 
+function formatCompactSeconds(ms: number): string {
+  return `${Math.max(1, Math.ceil(ms / 1000))}s`;
+}
+
 interface StageGuidance {
   icon: string;
   label: string;
@@ -1068,10 +1072,12 @@ export function StageProgressHUD() {
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
   const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
+  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
   const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
   const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const combatFocusLabel = useModeFlowStore((s) => s.combatFocusLabel);
   const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
   const combatFocusChainExpiresAt = useModeFlowStore((s) => s.combatFocusChainExpiresAt);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
@@ -1172,16 +1178,31 @@ export function StageProgressHUD() {
       ? getModeFlowRankLabel(modeRule.category, modeFlowRank)
       : `次${getModeFlowRankLabel(modeRule.category, compactNextModeRank)}`
     : '';
+  const compactModeProgressRatio = modeRule
+    ? Math.max(0, Math.min(1, modeMeter / modeRule.threshold))
+    : 0;
+  const compactModeAlmostReady = compactModeProgressRatio >= 0.72;
+  const compactModeMeterText = modeRule
+    ? `${Math.floor(modeMeter)}/${modeRule.threshold}`
+    : '';
+  const compactBuildFocusActive = modeRule?.category === 'build' && buildFocusUntil > eventNow;
   const compactCombatFocusActive = modeRule?.category === 'war' && combatFocusUntil > eventNow;
   const compactCombatFocusChain = combatFocusChainExpiresAt > eventNow ? combatFocusChain : 0;
   const activeBuildFocusChain = modeRule?.category === 'build' && buildFocusChainExpiresAt > eventNow
     ? buildFocusChain
     : 0;
-  const compactModeActionLabel = compactCombatFocusActive
+  const compactModeActionLabel = compactBuildFocusActive
+    ? activeBuildFocusChain >= 2
+      ? `高速建築 連置x${activeBuildFocusChain} / ${formatCompactSeconds(buildFocusUntil - eventNow)}`
+      : `高速建築 ${formatCompactSeconds(buildFocusUntil - eventNow)}`
+    : compactCombatFocusActive
     ? compactCombatFocusChain >= 2
-      ? `作戦集中 追撃x${compactCombatFocusChain}`
-      : `作戦集中 Lv.${Math.max(1, combatFocusRank)}`
+      ? `${combatFocusLabel ?? '作戦'} 追撃x${compactCombatFocusChain} / ${formatCompactSeconds(combatFocusUntil - eventNow)}`
+      : `${combatFocusLabel ?? '作戦'}集中 Lv.${Math.max(1, combatFocusRank)} / ${formatCompactSeconds(combatFocusUntil - eventNow)}`
     : modeRule?.actionLabel;
+  const compactModeRewardText = modeRule
+    ? formatStageModeReward(modeRule)
+    : '';
   const signatureAward = getStageSignatureAward({
     stage,
     runBest: stageBestByStage[stage.id],
@@ -1974,7 +1995,9 @@ export function StageProgressHUD() {
           id="stage-mode-flow-mini"
           style={{
             marginTop: 7,
-            color: 'rgba(255,255,255,0.7)',
+            paddingTop: 6,
+            borderTop: `1px solid ${modeRule.accent}26`,
+            color: 'rgba(255,255,255,0.74)',
             fontSize: 9,
             lineHeight: '12px',
             fontWeight: 900,
@@ -1992,29 +2015,71 @@ export function StageProgressHUD() {
             <span
               style={{
                 minWidth: 0,
-                color: modeRule.accent,
+                color: compactModeAlmostReady ? '#fff1a8' : modeRule.accent,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                textShadow: compactModeAlmostReady ? `0 0 7px ${modeRule.accent}` : undefined,
               }}
             >
               {modeRule.icon} {compactModeRankLabel}: {modeRule.shortLabel}
             </span>
-            <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
-              {Math.floor(modeMeter)}/{modeRule.threshold}
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: compactModeAlmostReady ? '#fff1a8' : 'rgba(255,255,255,0.72)',
+                fontFamily: 'monospace',
+              }}
+            >
+              {compactModeMeterText}
               {modeLastGainLabel ? ` ${modeLastGainLabel}` : ''}
             </span>
           </div>
           <div
             style={{
-              marginTop: 3,
-              color: 'rgba(255,255,255,0.58)',
+              marginTop: 4,
+              height: compactModeAlmostReady ? 5 : 4,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.12)',
+              boxShadow: compactModeAlmostReady ? `0 0 8px ${modeRule.glow}` : undefined,
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(compactModeProgressRatio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: compactModeAlmostReady
+                  ? `linear-gradient(90deg, ${modeRule.accent}, #fff1a8, #ffffff)`
+                  : `linear-gradient(90deg, ${stage.color}, ${modeRule.accent})`,
+                transition: 'width 0.24s ease',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              color: compactBuildFocusActive || compactCombatFocusActive
+                ? '#fff1a8'
+                : 'rgba(255,255,255,0.6)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
           >
             {compactModeActionLabel}
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              color: 'rgba(255,255,255,0.46)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            次: {compactModeRewardText}
           </div>
         </div>
       )}
