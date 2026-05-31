@@ -67,7 +67,28 @@ interface StageRecordTarget {
   ratio: number;
 }
 
+interface StageOpportunityCue {
+  icon: string;
+  label: string;
+  detail: string;
+  accent: string;
+  valueText: string;
+  ratio: number;
+}
+
+interface StageOpportunityCandidate {
+  cue: StageOpportunityCue;
+  priority: number;
+}
+
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
+const OPPORTUNITY_RATIO = 0.68;
+
+function isCloseToTarget(current: number, target: number): boolean {
+  if (target <= 0 || current <= 0) return false;
+  const remaining = Math.max(0, target - current);
+  return current / target >= OPPORTUNITY_RATIO || remaining <= Math.max(1, Math.ceil(target * 0.22));
+}
 
 function getChallengeGuidance(
   stage: StageDefinition,
@@ -306,6 +327,160 @@ function getStageRecordTarget(args: {
   };
 }
 
+function getStageOpportunityCue(args: {
+  stage: StageDefinition;
+  stats: StageChallengeStats;
+  completedIds: string[];
+  modeRule: ReturnType<typeof getStageModeRule>;
+  modeMeter: number;
+  modeActivationCount: number;
+  elapsedSeconds: number;
+  buildScore: number;
+  buildMilestones: number[];
+  buildComboChain: number;
+  enemiesDefeated: number;
+  targetCount: number | null;
+  bossSpawned: boolean;
+  bossHpRatio: number | null;
+  bossWeakness: string | null;
+  bossAccent: string | null;
+}): StageOpportunityCue | null {
+  const candidates: StageOpportunityCandidate[] = [];
+
+  if (args.bossHpRatio !== null && args.bossHpRatio <= 0.35) {
+    const bossPercent = Math.ceil(args.bossHpRatio * 100);
+    candidates.push({
+      priority: 100,
+      cue: {
+        icon: '👑',
+        label: 'ボス撃破チャンス',
+        detail: args.bossWeakness ? `弱点「${args.bossWeakness}」へ火力を集中` : 'いま押し切ればクリア記録が伸びる',
+        accent: args.bossAccent ?? '#ffdd66',
+        valueText: `${bossPercent}%`,
+        ratio: 1 - args.bossHpRatio,
+      },
+    });
+  }
+
+  const challenge = getStageChallenges(args.stage.id)
+    .map((definition, index) => ({
+      definition,
+      index,
+      progress: getStageChallengeProgress(definition, args.stats),
+    }))
+    .filter(({ definition, progress }) => {
+      if (args.completedIds.includes(definition.id) || progress.completed) return false;
+      return isCloseToTarget(progress.current, progress.target);
+    })
+    .sort((a, b) => b.progress.ratio - a.progress.ratio || a.index - b.index)[0];
+
+  if (challenge) {
+    const remaining = Math.max(0, challenge.progress.target - challenge.progress.current);
+    candidates.push({
+      priority: 80,
+      cue: {
+        icon: challenge.definition.icon,
+        label: 'チャレンジ目前',
+        detail: `${challenge.definition.title}: ${challenge.definition.description}`,
+        accent: challenge.definition.accent,
+        valueText: `あと${remaining}`,
+        ratio: challenge.progress.ratio,
+      },
+    });
+  }
+
+  if (args.modeRule) {
+    const remaining = Math.max(0, Math.ceil(args.modeRule.threshold - args.modeMeter));
+    const ratio = Math.max(0, Math.min(1, args.modeMeter / args.modeRule.threshold));
+    if (isCloseToTarget(args.modeMeter, args.modeRule.threshold)) {
+      const nextRank = getModeFlowRank(args.modeActivationCount + 1) || 1;
+      candidates.push({
+        priority: 70,
+        cue: {
+          icon: args.modeRule.icon,
+          label: `${args.modeRule.meterLabel}発動目前`,
+          detail: `${args.modeRule.actionLabel}で${getModeFlowRankLabel(args.modeRule.category, nextRank)}へ`,
+          accent: args.modeRule.accent,
+          valueText: `あと${remaining}`,
+          ratio,
+        },
+      });
+    }
+  }
+
+  if (args.stage.category === 'build') {
+    const style = getStageBuildStyle(args.stage.id);
+    const nextMilestone = getNextStageBuildMilestone(args.buildScore, args.buildMilestones);
+    if (style && nextMilestone && isCloseToTarget(args.buildScore, nextMilestone)) {
+      const remaining = Math.max(0, nextMilestone - args.buildScore);
+      candidates.push({
+        priority: args.buildComboChain >= 3 ? 75 : 60,
+        cue: {
+          icon: style.icon,
+          label: '作品節目前',
+          detail: `${style.shortLabel}を重ねて${nextMilestone}ptの作品記録へ`,
+          accent: style.accent,
+          valueText: args.buildComboChain > 0 ? `コンボx${args.buildComboChain}` : `あと${remaining}pt`,
+          ratio: Math.min(1, args.buildScore / nextMilestone),
+        },
+      });
+    }
+  }
+
+  if (
+    args.stage.category === 'war' &&
+    args.targetCount &&
+    !args.bossSpawned &&
+    isCloseToTarget(args.enemiesDefeated, args.targetCount)
+  ) {
+    const remaining = Math.max(0, args.targetCount - args.enemiesDefeated);
+    candidates.push({
+      priority: 55,
+      cue: {
+        icon: args.stage.icon,
+        label: 'ボス出現目前',
+        detail: args.stage.rules.objective.description,
+        accent: '#ffdd66',
+        valueText: `あと${remaining}体`,
+        ratio: Math.min(1, args.enemiesDefeated / args.targetCount),
+      },
+    });
+  }
+
+  if (candidates.length === 0 && args.elapsedSeconds <= 12) {
+    if (args.stage.category === 'build') {
+      const style = getStageBuildStyle(args.stage.id);
+      candidates.push({
+        priority: 10,
+        cue: {
+          icon: style?.icon ?? args.stage.icon,
+          label: '初回作品チャンス',
+          detail: style
+            ? `${formatStageBuildFocus(style, 3)}を置いて作品記録を作る`
+            : `${args.stage.rules.landmarkName}を育てて作品記録を作る`,
+          accent: style?.accent ?? args.stage.color,
+          valueText: 'START',
+          ratio: 0.08,
+        },
+      });
+    } else {
+      candidates.push({
+        priority: 10,
+        cue: {
+          icon: args.stage.icon,
+          label: '初回クリアチャンス',
+          detail: `${args.stage.rules.objective.title}を進めてBESTタイムの基準を作る`,
+          accent: '#ffdd66',
+          valueText: args.targetCount ? `0/${args.targetCount}` : 'START',
+          ratio: 0.08,
+        },
+      });
+    }
+  }
+
+  return candidates.sort((a, b) => b.priority - a.priority || b.cue.ratio - a.cue.ratio)[0]?.cue ?? null;
+}
+
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -423,6 +598,24 @@ export function StageProgressHUD() {
       ? getModeFlowRankLabel(modeRule.category, modeFlowRank)
       : `次${getModeFlowRankLabel(modeRule.category, compactNextModeRank)}`
     : '';
+  const opportunityCue = getStageOpportunityCue({
+    stage,
+    stats: challengeStats,
+    completedIds: completedChallengeIds,
+    modeRule,
+    modeMeter,
+    modeActivationCount,
+    elapsedSeconds: stageElapsedSeconds,
+    buildScore,
+    buildMilestones,
+    buildComboChain,
+    enemiesDefeated,
+    targetCount: target,
+    bossSpawned,
+    bossHpRatio,
+    bossWeakness: bossEncounter?.weakness ?? null,
+    bossAccent: bossEncounter?.accent ?? null,
+  });
 
   return (
     <div
@@ -574,6 +767,107 @@ export function StageProgressHUD() {
           {guidance.detail}
         </div>
       </div>
+
+      {opportunityCue && (
+        <div
+          id="stage-opportunity-cue"
+          style={{
+            marginTop: 7,
+            padding: isCompact ? '6px 7px 6px 9px' : '7px 8px 7px 10px',
+            borderLeft: `3px solid ${opportunityCue.accent}`,
+            borderRadius: 7,
+            background: `linear-gradient(90deg, ${opportunityCue.accent}24, rgba(255,255,255,0.04))`,
+            boxShadow: `0 0 18px ${opportunityCue.accent}22`,
+            animation: 'stageOpportunityPulse 1.1s ease-in-out infinite alternate',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ flex: '0 0 auto', fontSize: isCompact ? 13 : 14 }}>
+              {opportunityCue.icon}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: opportunityCue.accent,
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              記録チャンス
+            </span>
+            <span
+              style={{
+                minWidth: 0,
+                flex: 1,
+                color: 'rgba(255,255,255,0.94)',
+                fontSize: isCompact ? 10 : 11,
+                lineHeight: '13px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {opportunityCue.label}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: '#fff1a8',
+                fontSize: isCompact ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {opportunityCue.valueText}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              color: 'rgba(255,255,255,0.62)',
+              fontSize: isCompact ? 9 : 10,
+              lineHeight: '13px',
+              fontWeight: 800,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {opportunityCue.detail}
+          </div>
+          <div
+            style={{
+              marginTop: 5,
+              height: 3,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.14)',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(opportunityCue.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${opportunityCue.accent}, #fff1a8)`,
+                transition: 'width 0.25s ease',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {hasProgressBar && (
         <div

@@ -93,6 +93,28 @@
   }
 }
 
+@keyframes stageOpportunityPulse {
+  0% {
+    opacity: 0.88;
+    filter: saturate(1);
+  }
+
+  100% {
+    opacity: 1;
+    filter: saturate(1.2) brightness(1.08);
+  }
+}
+
+@keyframes stageOpportunityGlow {
+  0% {
+    opacity: 0.78;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
 @keyframes stageOpeningBriefing {
   0% {
     opacity: 0;

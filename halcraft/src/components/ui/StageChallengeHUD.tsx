@@ -13,6 +13,14 @@ import { isTouchDevice } from '../../utils/device';
 import { STAGE_MOBILE_RAIL_TOP } from './stageHudLayout';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
+const CHALLENGE_OPPORTUNITY_RATIO = 0.68;
+
+function isNearChallengeGoal(current: number, target: number): boolean {
+  if (target <= 0 || current <= 0) return false;
+  const remaining = Math.max(0, target - current);
+  return current / target >= CHALLENGE_OPPORTUNITY_RATIO || remaining <= Math.max(1, Math.ceil(target * 0.22));
+}
+
 export function StageChallengeHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -97,19 +105,35 @@ export function StageChallengeHUD() {
         {challenges.map((challenge) => {
           const progress = getStageChallengeProgress(challenge, stats);
           const isCompleted = completedIds.includes(challenge.id);
+          const remaining = Math.max(0, progress.target - progress.current);
+          const isNearGoal = !isCompleted && !progress.completed && isNearChallengeGoal(progress.current, progress.target);
+          const progressText = isNearGoal
+            ? `あと${remaining}`
+            : `${Math.min(progress.current, progress.target)}/${progress.target}`;
           return (
-            <div key={challenge.id}>
+            <div
+              key={challenge.id}
+              style={{
+                animation: isNearGoal ? 'stageOpportunityGlow 0.9s ease-in-out infinite alternate' : undefined,
+              }}
+            >
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
                   minWidth: 0,
-                  color: isCompleted ? '#fff5b5' : 'rgba(255,255,255,0.82)',
+                  color: isCompleted ? '#fff5b5' : isNearGoal ? '#fff1a8' : 'rgba(255,255,255,0.82)',
                 }}
               >
-                <span style={{ flex: '0 0 auto', fontSize: isCompact ? 12 : 13 }}>
-                  {isCompleted ? '✓' : challenge.icon}
+                <span
+                  style={{
+                    flex: '0 0 auto',
+                    fontSize: isCompact ? 12 : 13,
+                    filter: isNearGoal ? `drop-shadow(0 0 6px ${challenge.accent})` : undefined,
+                  }}
+                >
+                  {isCompleted ? '✓' : isNearGoal ? '!' : challenge.icon}
                 </span>
                 <span
                   style={{
@@ -131,16 +155,16 @@ export function StageChallengeHUD() {
                     fontSize: isCompact ? 9 : 10,
                     fontWeight: 900,
                     fontFamily: 'monospace',
-                    color: isCompleted ? '#fff1a8' : 'rgba(255,255,255,0.58)',
+                    color: isCompleted || isNearGoal ? '#fff1a8' : 'rgba(255,255,255,0.58)',
                   }}
                 >
-                  {Math.min(progress.current, progress.target)}/{progress.target}
+                  {progressText}
                 </span>
               </div>
               <div
                 style={{
                   marginTop: 3,
-                  height: 4,
+                  height: isNearGoal ? 5 : 4,
                   borderRadius: 999,
                   background: 'rgba(255,255,255,0.11)',
                   overflow: 'hidden',
@@ -153,6 +177,8 @@ export function StageChallengeHUD() {
                     borderRadius: 999,
                     background: isCompleted
                       ? 'linear-gradient(90deg, #ffdd66, #ffffff)'
+                      : isNearGoal
+                        ? `linear-gradient(90deg, ${challenge.accent}, #fff1a8, #ffffff)`
                       : `linear-gradient(90deg, ${challenge.accent}, ${stage.color})`,
                     transition: 'width 0.25s ease',
                   }}
