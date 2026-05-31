@@ -2,7 +2,7 @@
 // 画面下部にマイクラ風のブロック選択バーを表示
 // モバイルではタップで選択可能
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useGameStore } from '../../stores/useGameStore';
@@ -193,6 +193,8 @@ export function Hotbar() {
   const modeMeter = useModeFlowStore((s) => s.meter);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
+  const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
+  const [now, setNow] = useState(() => performance.now());
 
   const isTouch = isTouchDevice();
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
@@ -200,7 +202,8 @@ export function Hotbar() {
   const selectedCount = items[selectedBlock] ?? 0;
   const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
   const modeRule = getStageModeRule(currentStageId);
-  const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > performance.now();
+  const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > now;
+  const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const buildFocusAccent = modeRule?.accent ?? selectedProfile.accent;
   const selectedStageHint = getSelectedBlockStageHint({
     stage: currentStage,
@@ -215,6 +218,12 @@ export function Hotbar() {
   // セルサイズ（モバイルではやや小さめ）
   const cellSize = isTouch ? 40 : 48;
   const imgSize = isTouch ? 28 : 36;
+
+  useEffect(() => {
+    if (currentStage?.category !== 'build') return undefined;
+    const timer = window.setInterval(() => setNow(performance.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [currentStage?.category]);
 
   // テクスチャをdata URLに変換して表示用に準備（hotbarSlotsが変わるたび再計算）
   const textures = useMemo(() => {
@@ -413,7 +422,7 @@ export function Hotbar() {
                   置くテンポUP
                 </span>
                 <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
-                  x{Math.max(1, buildFocusChain)}
+                  x{Math.max(1, activeBuildFocusChain)}
                 </span>
               </span>
             )}

@@ -32,6 +32,7 @@ export function ModeFlowHUD() {
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const bestBuildFocusChain = useModeFlowStore((s) => s.bestBuildFocusChain);
+  const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
   const recentActivation = useModeFlowStore((s) => s.recentActivation);
   const clearRecentActivation = useModeFlowStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
@@ -57,6 +58,7 @@ export function ModeFlowHUD() {
   const streakRemainingMs = rule.category === 'war' ? Math.max(0, streakExpiresAt - now) : 0;
   const buildFocusRemainingMs = rule.category === 'build' ? Math.max(0, buildFocusUntil - now) : 0;
   const buildFocusActive = buildFocusRemainingMs > 0;
+  const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const activeTitle = recentActivation?.stageId === stage.id ? recentActivation.title : rule.title;
   const visibleRank = recentActivation?.stageId === stage.id ? recentActivation.flowRank : flowRank;
   const nextRank = getModeFlowRank(activationCount + 1) || 1;
@@ -68,7 +70,9 @@ export function ModeFlowHUD() {
     ? recentActivation.detail
     : rule.category === 'build'
       ? buildFocusActive
-        ? `高速建築中 / 連置x${Math.max(1, buildFocusChain)} / 残り${formatSeconds(buildFocusRemainingMs)}`
+        ? activeBuildFocusChain >= 2
+          ? `高速建築中 / 連置x${activeBuildFocusChain} / 残り${formatSeconds(buildFocusRemainingMs)}`
+          : `高速建築中 / 残り${formatSeconds(buildFocusRemainingMs)}`
         : rule.actionLabel
       : streak > 0
         ? `連続${streak}体 / 残り${formatSeconds(streakRemainingMs)}`
@@ -171,8 +175,8 @@ export function ModeFlowHUD() {
         </span>
         <span style={{ flex: '0 0 auto', color: rule.accent, fontFamily: 'monospace', fontWeight: 950 }}>
           {buildFocusActive
-            ? buildFocusChain >= 2
-              ? `PLACE x${buildFocusChain}`
+            ? activeBuildFocusChain >= 2
+              ? `PLACE x${activeBuildFocusChain}`
               : 'BUILD x1.32'
             : lastGainLabel ?? (rule.category === 'war' && bestStreak > 0 ? `BEST x${bestStreak}` : `${activationCount}回`)}
         </span>

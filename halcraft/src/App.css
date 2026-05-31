@@ -175,6 +175,28 @@
   }
 }
 
+@keyframes builderFocusPanel {
+  0% {
+    filter: saturate(1) brightness(1);
+  }
+
+  100% {
+    filter: saturate(1.22) brightness(1.08);
+  }
+}
+
+@keyframes builderFocusReticle {
+  0% {
+    opacity: 0.52;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+
+  100% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
 #hotbar::-webkit-scrollbar {
   display: none;
 }

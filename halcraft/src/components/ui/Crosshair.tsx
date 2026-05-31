@@ -1,10 +1,13 @@
 // クロスヘア（照準）UIコンポーネント
 // 乗り物搭乗中は非表示
 
+import { useEffect, useMemo, useState } from 'react';
 import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { getStageCombatStyleForItem } from '../../types/stageCombatStyles';
+import { getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 
 interface CrosshairProfile {
@@ -58,6 +61,22 @@ export function Crosshair() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
+  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
+  const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
+  const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
+  const [now, setNow] = useState(() => performance.now());
+
+  useEffect(() => {
+    if (buildFocusUntil <= performance.now()) return undefined;
+    const updateNow = () => setNow(performance.now());
+    const firstTick = window.setTimeout(updateNow, 0);
+    const timer = window.setInterval(updateNow, 120);
+    return () => {
+      window.clearTimeout(firstTick);
+      window.clearInterval(timer);
+    };
+  }, [buildFocusUntil]);
+  const modeRule = useMemo(() => getStageModeRule(currentStageId), [currentStageId]);
 
   // 乗り物搭乗中は専用照準に任せる
   if (activeVehicle !== null) return null;
@@ -66,6 +85,11 @@ export function Crosshair() {
   const charge = Math.max(0, Math.min(1, getChargeForItem(equippedItem, rocketCharge, attackCharge)));
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
+  const buildFocusActive = isBuilder && modeRule?.category === 'build' && buildFocusUntil > now;
+  const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
+  const builderFocusAccent = buildFocusActive ? modeRule.accent : profile.color;
+  const activeColor = buildFocusActive ? builderFocusAccent : profile.color;
+  const activeGlow = buildFocusActive ? `${builderFocusAccent}88` : profile.glow;
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
   const isRocketReloading = equippedItem === 'rocket_launcher' && charge < 1;
   const ringSize = equippedItem === 'machine_gun' ? 42 : 36;
@@ -132,6 +156,50 @@ export function Crosshair() {
         />
       )}
 
+      {isBuilder && buildFocusActive && (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: 44,
+              height: 44,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              border: `1px solid ${builderFocusAccent}aa`,
+              boxShadow: `0 0 10px ${builderFocusAccent}66, inset 0 0 8px ${builderFocusAccent}33`,
+              opacity: 0.82,
+              animation: 'builderFocusReticle 0.72s ease-in-out infinite alternate',
+            }}
+          />
+          {!isCompact && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, 24px)',
+                padding: '1px 6px',
+                borderRadius: 4,
+                border: `1px solid ${builderFocusAccent}66`,
+                background: 'rgba(13, 22, 12, 0.52)',
+                color: builderFocusAccent,
+                fontSize: 8,
+                lineHeight: '10px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                letterSpacing: 0,
+                whiteSpace: 'nowrap',
+                textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+              }}
+            >
+              FAST x{Math.max(1, activeBuildFocusChain)}
+            </div>
+          )}
+        </>
+      )}
+
       {arms.map((arm) => (
         <div
           key={arm.key}
@@ -139,11 +207,11 @@ export function Crosshair() {
             position: 'absolute',
             width: arm.width,
             height: arm.height,
-            background: profile.color,
+            background: activeColor,
             left: '50%',
             top: '50%',
             transform: arm.transform,
-            boxShadow: `0 0 2px rgba(0,0,0,0.6), 0 0 8px ${profile.glow}`,
+            boxShadow: `0 0 2px rgba(0,0,0,0.6), 0 0 8px ${activeGlow}`,
           }}
         />
       ))}
