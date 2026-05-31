@@ -36,7 +36,7 @@ import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCo
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
-import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { TOOL_DEFS, type ToolId } from '../../types/tools';
@@ -538,8 +538,6 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
-      activeMastery,
-      activeRunBest,
       compactLayout,
     ),
     [
@@ -551,11 +549,33 @@ export function StartScreen() {
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
-      activeMastery,
-      activeRunBest,
       compactLayout,
     ],
   );
+
+  // 進捗バンド「あなたの記録」に出す値（戦争=BESTタイム / 建築=作品スコア）
+  const isWarStage = activeStage.category === 'war';
+  const activeBuildBestScore = buildBestByStage[activeStage.id]?.score ?? 0;
+  const activeBestClearLabel = activeRunBest?.clearCount
+    ? formatRunTime(activeRunBest.bestClearSeconds)
+    : null;
+  const activeModeRankLabel = activeRunBest?.clearCount
+    ? getModeFlowRankLabel(activeStage.category, activeRunBest.bestModeFlowRank ?? 0)
+    : null;
+  const hasBestRecord = isWarStage ? !!activeBestClearLabel : activeBuildBestScore > 0;
+  const bestBigValue = isWarStage
+    ? (activeBestClearLabel ?? '—')
+    : (activeBuildBestScore > 0 ? `${activeBuildBestScore}` : '—');
+  const bestUnit = isWarStage ? '' : (activeBuildBestScore > 0 ? 'pt' : '');
+  const bestSubLabel = isWarStage
+    ? (activeRunBest?.clearCount
+        ? `クリア${activeRunBest.clearCount}回 / ${activeModeRankLabel}`
+        : 'クリアでBESTタイム記録')
+    : (activeBuildBestScore > 0 ? '作品スコア BEST' : 'つくってスコアを伸ばそう');
+  const challengeRatio = activeChallengeCount > 0
+    ? Math.round((activeCompletedCount / activeChallengeCount) * 100)
+    : 0;
+  const progressColumns = viewportSize.w < 360 ? '1fr' : 'repeat(3, minmax(0, 1fr))';
 
   // 定期的にステージのプレイヤー数を取得
   useEffect(() => {
@@ -716,7 +736,8 @@ export function StartScreen() {
           flexDirection: 'column',
           alignItems: 'center',
           paddingBottom: isTouch ? 24 : 40,
-          paddingLeft: isTouch ? 12 : 0,
+          // アップデートログ表示時、中間幅ではコンテンツ列を右に寄せてログとの重なりを防ぐ
+          paddingLeft: isTouch ? 12 : (showUpdateLog && viewportSize.w < 1280 ? 296 : 0),
           paddingRight: isTouch ? 12 : 0,
           gap: 0,
         }}
@@ -993,160 +1014,360 @@ export function StartScreen() {
           style={{
             width: briefingPanelWidth,
             marginBottom: isTouch ? 12 : 16,
-            padding: isTouch ? '9px 10px' : '12px 14px',
-            background: 'rgba(0,0,0,0.56)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: 8,
+            padding: isTouch ? '10px 11px' : '14px 16px',
+            background: 'rgba(8,12,18,0.62)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.16)',
+            borderRadius: 14,
             color: '#fff',
-            boxShadow: `0 0 22px ${activeStage.color}33`,
+            boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 26px ${activeStage.color}26`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: isTouch ? 10 : 12,
           }}
         >
+          {/* ── ヒーローヘッダー（マップ名 + 目的） ── */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: isTouch ? 8 : 10,
-              marginBottom: isTouch ? 8 : 10,
+              gap: isTouch ? 9 : 12,
               minWidth: 0,
+              paddingBottom: isTouch ? 9 : 11,
+              borderBottom: `1px solid ${activeStage.color}33`,
             }}
           >
-            <span style={{ fontSize: isTouch ? 18 : 22, flexShrink: 0 }}>{activeStage.icon}</span>
+            <span
+              style={{
+                fontSize: isTouch ? 26 : 34,
+                flexShrink: 0,
+                lineHeight: 1,
+                filter: `drop-shadow(0 0 10px ${activeStage.color}99)`,
+              }}
+            >
+              {activeStage.icon}
+            </span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div
                 style={{
                   color: activeStage.color,
-                  fontSize: isTouch ? 11 : 13,
+                  fontSize: isTouch ? 14 : 17,
                   fontWeight: 900,
-                  lineHeight: '16px',
+                  lineHeight: '20px',
+                  letterSpacing: 0.5,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                {activeStage.rules.modeLabel}
+                {activeStage.name}
               </div>
               <div
                 style={{
-                  color: 'rgba(255,255,255,0.82)',
+                  color: 'rgba(255,255,255,0.7)',
                   fontSize: isTouch ? 10 : 12,
                   lineHeight: isTouch ? '14px' : '16px',
+                  marginTop: 2,
                   overflow: 'hidden',
                   display: '-webkit-box',
-                  WebkitLineClamp: compactLayout ? 2 : 1,
+                  WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                 }}
               >
                 {activeStage.rules.objective.description}
               </div>
             </div>
+          </div>
+
+          {/* ── あなたの記録（進捗バンド・エメラルド） ── */}
+          <div
+            style={{
+              padding: compactLayout ? '9px 10px' : '11px 13px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(46,170,118,0.26) 0%, rgba(24,70,56,0.16) 100%)',
+              border: '1px solid rgba(120,235,182,0.34)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}
+          >
             <div
               style={{
-                flexShrink: 0,
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 5,
-                alignItems: 'stretch',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: compactLayout ? 7 : 9,
               }}
             >
-              <div
+              <span style={{ fontSize: compactLayout ? 12 : 13 }}>🏆</span>
+              <span
                 style={{
-                  padding: isTouch ? '4px 6px' : '5px 8px',
-                  borderRadius: 6,
-                  border: `1px solid ${activeMastery.mastered ? 'rgba(166,255,207,0.75)' : 'rgba(255,255,255,0.2)'}`,
-                  color: activeMastery.accent,
-                  background: activeMastery.mastered ? 'rgba(90,220,150,0.14)' : 'rgba(255,255,255,0.08)',
-                  fontSize: isTouch ? 8 : 10,
+                  fontSize: compactLayout ? 10 : 11,
                   fontWeight: 900,
-                  fontFamily: 'monospace',
-                  textAlign: 'center',
-                  whiteSpace: 'nowrap',
+                  letterSpacing: 1.5,
+                  color: 'rgba(190,255,222,0.95)',
                 }}
               >
-                熟練 {activeMastery.score}%
+                あなたの記録
+              </span>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: progressColumns,
+                gap: compactLayout ? 7 : 9,
+              }}
+            >
+              {/* 熟練度 */}
+              <div
+                style={{
+                  minWidth: 0,
+                  padding: compactLayout ? '8px 9px' : '9px 11px',
+                  borderRadius: 9,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: `1px solid ${activeMastery.mastered ? 'rgba(166,255,207,0.55)' : 'rgba(255,255,255,0.12)'}`,
+                }}
+              >
+                <div style={{ fontSize: compactLayout ? 8 : 9, fontWeight: 800, letterSpacing: 1, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>
+                  マップ熟練
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 2, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: compactLayout ? 20 : 26, fontWeight: 900, lineHeight: 1, color: activeMastery.accent, fontFamily: 'monospace' }}>
+                    {activeMastery.score}
+                  </span>
+                  <span style={{ fontSize: compactLayout ? 9 : 10, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>/100</span>
+                  <span style={{ marginLeft: 'auto', fontSize: compactLayout ? 9 : 10, fontWeight: 900, color: activeMastery.accent, flexShrink: 0 }}>
+                    {activeMastery.rankLabel}
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, height: 6, borderRadius: 999, overflow: 'hidden', background: 'rgba(255,255,255,0.12)' }}>
+                  <div
+                    style={{
+                      width: `${activeMastery.score}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: `linear-gradient(90deg, ${activeMastery.accent}, ${activeStage.color})`,
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: compactLayout ? 8 : 9,
+                    color: 'rgba(255,255,255,0.55)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {activeMastery.mastered ? `👑 ${activeMastery.title}` : activeMastery.nextLabel}
+                </div>
               </div>
+
+              {/* チャレンジ + メダル */}
               <div
                 style={{
-                  padding: isTouch ? '4px 6px' : '5px 8px',
-                  borderRadius: 6,
-                  border: `1px solid ${activeMedal === 'gold' ? 'rgba(255,230,128,0.75)' : 'rgba(255,255,255,0.2)'}`,
-                  color: activeMedal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.72)',
-                  background: activeMedal === 'gold' ? 'rgba(255,200,60,0.14)' : 'rgba(255,255,255,0.08)',
-                  fontSize: isTouch ? 8 : 10,
-                  fontWeight: 900,
-                  fontFamily: 'monospace',
-                  textAlign: 'center',
+                  minWidth: 0,
+                  padding: compactLayout ? '8px 9px' : '9px 11px',
+                  borderRadius: 9,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: `1px solid ${activeMedal === 'gold' ? 'rgba(255,230,128,0.55)' : 'rgba(255,255,255,0.12)'}`,
                 }}
               >
-                {activeMedalLabel}
+                <div style={{ fontSize: compactLayout ? 8 : 9, fontWeight: 800, letterSpacing: 1, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>
+                  チャレンジ
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 2, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: compactLayout ? 20 : 26, fontWeight: 900, lineHeight: 1, fontFamily: 'monospace', color: '#fff' }}>
+                    {activeCompletedCount}
+                  </span>
+                  <span style={{ fontSize: compactLayout ? 10 : 12, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+                    /{activeChallengeCount}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      fontSize: compactLayout ? 9 : 10,
+                      fontWeight: 900,
+                      color: activeMedal === 'gold' ? '#ffe680' : 'rgba(255,255,255,0.72)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {activeMedalLabel}
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, height: 6, borderRadius: 999, overflow: 'hidden', background: 'rgba(255,255,255,0.12)' }}>
+                  <div
+                    style={{
+                      width: `${challengeRatio}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: activeMedal === 'gold'
+                        ? 'linear-gradient(90deg, #ffe680, #ffb74d)'
+                        : 'linear-gradient(90deg, #7fe3ff, #5aa9ff)',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: compactLayout ? 8 : 9,
+                    color: 'rgba(255,255,255,0.55)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {activeCompletedCount >= activeChallengeCount && activeChallengeCount > 0
+                    ? '🎖 全クリア達成'
+                    : `あと${Math.max(0, activeChallengeCount - activeCompletedCount)}個で金メダル`}
+                </div>
+              </div>
+
+              {/* ベスト記録 */}
+              <div
+                style={{
+                  minWidth: 0,
+                  padding: compactLayout ? '8px 9px' : '9px 11px',
+                  borderRadius: 9,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: `1px solid ${hasBestRecord ? 'rgba(168,255,205,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                }}
+              >
+                <div style={{ fontSize: compactLayout ? 8 : 9, fontWeight: 800, letterSpacing: 1, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>
+                  {isWarStage ? (compactLayout ? 'ベスト' : 'ベストタイム') : (compactLayout ? 'スコア' : '作品スコア')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2, flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                  <span
+                    style={{
+                      fontSize: compactLayout ? 20 : 26,
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      fontFamily: 'monospace',
+                      color: hasBestRecord ? 'rgba(168,255,205,0.95)' : 'rgba(255,255,255,0.4)',
+                    }}
+                  >
+                    {bestBigValue}
+                  </span>
+                  {bestUnit && (
+                    <span style={{ fontSize: compactLayout ? 10 : 12, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>{bestUnit}</span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    marginTop: compactLayout ? 10 : 12,
+                    fontSize: compactLayout ? 8 : 9,
+                    color: 'rgba(255,255,255,0.55)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {bestSubLabel}
+                </div>
               </div>
             </div>
           </div>
 
-          <div
-            className="stage-briefing-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: briefingColumns,
-              gap: isTouch ? 6 : 8,
-            }}
-          >
-            {activeBriefingSections.map((section) => (
-              <div
-                key={section.title}
-                style={{
-                  minWidth: 0,
-                  padding: isTouch ? '7px 7px' : '8px 9px',
-                  borderLeft: `3px solid ${section.accent}`,
-                  background: 'rgba(255,255,255,0.07)',
-                  borderRadius: 5,
-                }}
-              >
+          {/* ── マップ情報（ルール / 戦い方 / もちもの でゾーン分け） ── */}
+          {BRIEFING_GROUPS.map((group) => {
+            const items = activeBriefingSections.filter((s) => s.group === group.id);
+            if (items.length === 0) return null;
+            return (
+              <div key={group.id}>
                 <div
                   style={{
-                    color: 'rgba(255,255,255,0.5)',
-                    fontSize: isTouch ? 8 : 9,
-                    fontWeight: 900,
-                    letterSpacing: 1,
-                    marginBottom: 3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    marginBottom: isTouch ? 6 : 7,
                   }}
                 >
-                  {section.title}
-                </div>
-                <div
-                  style={{
-                    color: '#fff',
-                    fontSize: isTouch ? 9 : 10,
-                    fontWeight: 900,
-                    lineHeight: isTouch ? '13px' : '14px',
-                    minHeight: isTouch ? 25 : 28,
-                    overflow: 'hidden',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  }}
-                >
-                  {section.value}
-                </div>
-                {section.details.map((detail) => (
-                  <div
-                    key={detail}
+                  <span style={{ fontSize: isTouch ? 11 : 12 }}>{group.icon}</span>
+                  <span
                     style={{
-                      color: 'rgba(255,255,255,0.68)',
-                      fontSize: isTouch ? 8 : 9,
-                      lineHeight: isTouch ? '12px' : '13px',
+                      fontSize: isTouch ? 10 : 11,
+                      fontWeight: 900,
+                      letterSpacing: 1.2,
+                      color: group.tint,
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
                     }}
                   >
-                    {detail}
-                  </div>
-                ))}
+                    {group.label}
+                  </span>
+                  <span
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: `linear-gradient(90deg, ${group.tint}55, transparent)`,
+                    }}
+                  />
+                </div>
+                <div
+                  className="stage-briefing-grid"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: briefingColumns,
+                    gap: isTouch ? 6 : 8,
+                  }}
+                >
+                  {items.map((section) => (
+                    <div
+                      key={section.title}
+                      style={{
+                        minWidth: 0,
+                        padding: isTouch ? '7px 8px' : '8px 10px',
+                        borderLeft: `3px solid ${section.accent}`,
+                        background: 'rgba(255,255,255,0.055)',
+                        borderRadius: '4px 8px 8px 4px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: 'rgba(255,255,255,0.45)',
+                          fontSize: isTouch ? 8 : 9,
+                          fontWeight: 900,
+                          letterSpacing: 1,
+                          marginBottom: 3,
+                        }}
+                      >
+                        {section.title}
+                      </div>
+                      <div
+                        style={{
+                          color: '#fff',
+                          fontSize: isTouch ? 9 : 11,
+                          fontWeight: 900,
+                          lineHeight: isTouch ? '13px' : '15px',
+                          minHeight: isTouch ? 25 : 30,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}
+                      >
+                        {section.value}
+                      </div>
+                      {section.details.map((detail) => (
+                        <div
+                          key={detail}
+                          style={{
+                            color: 'rgba(255,255,255,0.62)',
+                            fontSize: isTouch ? 8 : 9,
+                            lineHeight: isTouch ? '12px' : '14px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {detail}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
         {/* 名前入力 */}
