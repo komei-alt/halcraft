@@ -86,7 +86,7 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const SPAWN_X = 8;
 const SPAWN_Z = 8;
 const INITIAL_LANDMARK_YAW = Math.atan2(-(STAGE_LANDMARK_CENTER.x - SPAWN_X), -(STAGE_LANDMARK_CENTER.z - SPAWN_Z));
-const INITIAL_LANDMARK_PITCH = -0.48;
+const INITIAL_LANDMARK_PITCH = -0.32;
 // プレイヤーの家の基準高さ（x=7, z=7 の地形高さ）を取得し、床(y=floorY)の上(空気ブロック)にスポーンさせる
 const getSpawnY = () => getTerrainHeight(7, 7) + 1.1;
 
