@@ -21,6 +21,8 @@ import { getStageOpeningItem, getStageRunBonusForProgress } from '../types/stage
 import { getStageMasteryPerkForProgress } from '../types/stageMastery';
 import { getStageChallenges } from '../types/stageChallenges';
 import { getStageHotbarSlots } from '../types/stageHotbars';
+import { getStageSignatureAward } from '../types/stageSignatureAwards';
+import { getStageSignaturePerkForAward } from '../types/stageSignaturePerks';
 import { resolveBiomeConfig, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
 import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
@@ -237,6 +239,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     const buildBestScore = currentStage
       ? useStageBuildScoreStore.getState().bestByStage[currentStage.id]?.score ?? 0
       : 0;
+    const stageBuildBest = currentStage
+      ? useStageBuildScoreStore.getState().bestByStage[currentStage.id]
+      : undefined;
     const runBonus = getStageRunBonusForProgress(currentStage?.id, bestMedal, buildBestScore);
     const masteryPerk = currentStage
       ? getStageMasteryPerkForProgress({
@@ -246,6 +251,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           buildScore: buildBestScore,
         })
       : null;
+    const signatureAward = currentStage
+      ? getStageSignatureAward({
+          stage: currentStage,
+          runBest: stageChallengeBest ?? undefined,
+          buildBest: stageBuildBest,
+        })
+      : null;
+    const signaturePerk = getStageSignaturePerkForAward(currentStage, signatureAward);
 
     const starterItems: Record<number, number> = {};
     for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {
@@ -255,6 +268,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
     for (const block of masteryPerk?.blocks ?? []) {
+      starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
+    }
+    for (const block of signaturePerk?.blocks ?? []) {
       starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
     const stageHotbarSlots = getStageHotbarSlots(currentStage?.id, starterItems);
@@ -282,9 +298,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       const def = TOOL_DEFS[toolId];
       if (def) startingTools[toolId] = def.maxDurability;
     }
+    for (const toolId of signaturePerk?.tools ?? []) {
+      const def = TOOL_DEFS[toolId];
+      if (def) startingTools[toolId] = def.maxDurability;
+    }
     const openingInvincibleUntil = isBuildMode
       ? Number.POSITIVE_INFINITY
-      : Date.now() + 5000 + (runBonus?.shieldMs ?? 0) + (masteryPerk?.shieldMs ?? 0);
+      : Date.now()
+        + 5000
+        + (runBonus?.shieldMs ?? 0)
+        + (masteryPerk?.shieldMs ?? 0)
+        + (signaturePerk?.shieldMs ?? 0);
 
     set({
       phase: 'playing',
@@ -317,10 +341,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       rocketCooldown: 0,
       rocketCooldownDuration: 2.8,
       rocketCharge: 1,
-      rocketReadyPulseUntil: masteryPerk?.rocketReady ? Date.now() + 1800 : 0,
+      rocketReadyPulseUntil: masteryPerk?.rocketReady || signaturePerk?.rocketReady ? Date.now() + 1800 : 0,
       equippedToolId: starterKit?.equippedToolId ?? null,
       tools: startingTools,
-      hunger: Math.min(20, (starterKit?.hunger ?? 20) + (runBonus?.hunger ?? 0) + (masteryPerk?.hunger ?? 0)),
+      hunger: Math.min(
+        20,
+        (starterKit?.hunger ?? 20)
+          + (runBonus?.hunger ?? 0)
+          + (masteryPerk?.hunger ?? 0)
+          + (signaturePerk?.hunger ?? 0),
+      ),
       hungerExhaustion: 0,
       airSupply: 15,
       isSubmerged: false,
@@ -333,6 +363,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       useModeFlowStore.getState().grantOpeningBuildFocus(
         masteryPerk.buildFocusMs,
         masteryPerk.shortLabel,
+      );
+    }
+    if (signaturePerk?.buildFocusMs && signaturePerk.buildFocusMs > 0) {
+      useModeFlowStore.getState().grantOpeningBuildFocus(
+        signaturePerk.buildFocusMs,
+        signaturePerk.shortLabel,
+      );
+    }
+    if (signaturePerk?.combatFocusMs && signaturePerk.combatFocusMs > 0) {
+      useModeFlowStore.getState().grantOpeningCombatFocus(
+        signaturePerk.combatFocusMs,
+        signaturePerk.shortLabel,
       );
     }
   },

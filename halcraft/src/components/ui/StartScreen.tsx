@@ -45,6 +45,11 @@ import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stage
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStageRecordGoal, type StageRecordGoal } from '../../types/stageRecordGoals';
 import { getStageSignatureAward, type StageSignatureAward } from '../../types/stageSignatureAwards';
+import {
+  formatStageSignaturePerkLabel,
+  getStageSignaturePerkForAward,
+  type StageSignaturePerk,
+} from '../../types/stageSignaturePerks';
 import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
@@ -247,6 +252,7 @@ function getStageBriefingSections(
   event: ReturnType<typeof getStageEvent>,
   runBonus: StageRunBonus | null,
   masteryPerk: StageMasteryPerk | null,
+  signaturePerk: StageSignaturePerk | null,
   challenges: ReturnType<typeof getStageChallenges>,
   completedCount: number,
   challengeCount: number,
@@ -262,7 +268,7 @@ function getStageBriefingSections(
   );
   const hotbarPreview = formatStageHotbarPreview(
     stage.id,
-    getStageStarterHotbarItemCounts(stage, runBonus, masteryPerk),
+    getStageStarterHotbarItemCounts(stage, runBonus, masteryPerk, signaturePerk),
     compact ? 3 : 4,
   );
   const challengePreview = challenges
@@ -462,6 +468,19 @@ function getStageBriefingSections(
     });
   }
 
+  if (signaturePerk) {
+    sections.push({
+      title: 'マップ称号特典',
+      value: `${signaturePerk.icon} ${signaturePerk.title}`,
+      details: [
+        signaturePerk.detail,
+        formatStageSignaturePerkLabel(signaturePerk),
+      ],
+      accent: signaturePerk.accent,
+      group: 'loadout',
+    });
+  }
+
   return sections;
 }
 
@@ -481,8 +500,18 @@ function getStagePrepCues(args: {
   runBonus: StageRunBonus | null;
   masteryPerk: StageMasteryPerk | null;
   signatureAward: StageSignatureAward;
+  signaturePerk: StageSignaturePerk | null;
 }): StagePrepCue[] {
-  const { stage, recordGoal, challenges, completedIds, runBonus, masteryPerk, signatureAward } = args;
+  const {
+    stage,
+    recordGoal,
+    challenges,
+    completedIds,
+    runBonus,
+    masteryPerk,
+    signatureAward,
+    signaturePerk,
+  } = args;
   const modeRule = getStageModeRule(stage.id);
   const challenge = getFirstUnfinishedChallenge(challenges, completedIds);
   const cues: StagePrepCue[] = [
@@ -525,14 +554,16 @@ function getStagePrepCues(args: {
   }
 
   cues.push({
-    icon: challenge?.icon ?? runBonus?.icon ?? masteryPerk?.icon ?? '🎁',
-    label: challenge ? '寄り道チャレンジ' : runBonus ? '開始特典' : '熟練特典',
-    value: challenge?.title ?? runBonus?.shortLabel ?? masteryPerk?.shortLabel ?? 'マップを極める',
-    detail: challenge?.description
+    icon: signaturePerk?.icon ?? challenge?.icon ?? runBonus?.icon ?? masteryPerk?.icon ?? '🎁',
+    label: signaturePerk ? '称号特典' : challenge ? '寄り道チャレンジ' : runBonus ? '開始特典' : '熟練特典',
+    value: signaturePerk?.title ?? challenge?.title ?? runBonus?.shortLabel ?? masteryPerk?.shortLabel ?? 'マップを極める',
+    detail: signaturePerk
+      ? formatStageSignaturePerkLabel(signaturePerk)
+      : challenge?.description
       ?? (runBonus ? formatStageRunBonusLabel(runBonus) : null)
       ?? (masteryPerk ? formatStageMasteryPerkLabel(masteryPerk) : null)
       ?? stage.rules.objective.description,
-    accent: challenge?.accent ?? runBonus?.accent ?? masteryPerk?.accent ?? stage.color,
+    accent: signaturePerk?.accent ?? challenge?.accent ?? runBonus?.accent ?? masteryPerk?.accent ?? stage.color,
   });
 
   return cues;
@@ -707,6 +738,10 @@ export function StartScreen() {
     }),
     [activeBuildBest, activeRunBest, activeStage],
   );
+  const activeSignaturePerk = useMemo(
+    () => getStageSignaturePerkForAward(activeStage, activeSignatureAward),
+    [activeSignatureAward, activeStage],
+  );
   const activeBriefingSections = useMemo(
     () => getStageBriefingSections(
       activeStage,
@@ -715,6 +750,7 @@ export function StartScreen() {
       activeEvent,
       activeRunBonus,
       activeMasteryPerk,
+      activeSignaturePerk,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
@@ -728,6 +764,7 @@ export function StartScreen() {
       activeEvent,
       activeRunBonus,
       activeMasteryPerk,
+      activeSignaturePerk,
       activeChallenges,
       activeCompletedCount,
       activeChallengeCount,
@@ -744,10 +781,12 @@ export function StartScreen() {
       runBonus: activeRunBonus,
       masteryPerk: activeMasteryPerk,
       signatureAward: activeSignatureAward,
+      signaturePerk: activeSignaturePerk,
     }),
     [
       activeChallenges,
       activeMasteryPerk,
+      activeSignaturePerk,
       activeRecordGoal,
       activeRunBest?.completedIds,
       activeRunBonus,
@@ -1200,6 +1239,12 @@ export function StartScreen() {
             const condition = getStageCondition(stage.id);
             const buildBestScore = buildBestByStage[stage.id]?.score ?? 0;
             const runBonus = getStageRunBonusForProgress(stage.id, medal, buildBestScore);
+            const signatureAward = getStageSignatureAward({
+              stage,
+              runBest: best,
+              buildBest: buildBestByStage[stage.id],
+            });
+            const signaturePerk = getStageSignaturePerkForAward(stage, signatureAward);
             const recordGoal = getStageRecordGoal({
               stage,
               runBest: best,
@@ -1336,6 +1381,21 @@ export function StartScreen() {
                     }}
                   >
                     {runBonus.icon} {runBonus.shortLabel}: {formatStageRunBonusLabel(runBonus)}
+                  </div>
+                )}
+                {signaturePerk && (
+                  <div
+                    style={{
+                      width: '100%',
+                      color: signaturePerk.accent,
+                      fontSize: isTouch ? 8 : 9,
+                      fontWeight: 950,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {signaturePerk.icon} 称号特典: {formatStageSignaturePerkLabel(signaturePerk)}
                   </div>
                 )}
                 <div

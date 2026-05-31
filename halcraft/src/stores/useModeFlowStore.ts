@@ -81,6 +81,7 @@ interface ModeFlowState {
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
   grantOpeningBuildFocus: (durationMs: number, sourceLabel: string) => void;
+  grantOpeningCombatFocus: (durationMs: number, sourceLabel: string) => void;
   recordBuildBlockPlace: (blockId: BlockId) => ModeFlowBuildPlacementResult | null;
   recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
   recordVehicleHit: (vehicleType: VehicleType, amount?: number, critical?: boolean) => void;
@@ -315,6 +316,30 @@ function createOpeningBuildFocusActivation(
   };
 }
 
+function createOpeningCombatFocusActivation(
+  rule: StageModeRule,
+  durationMs: number,
+  sourceLabel: string,
+  createdAt: number,
+): ModeFlowActivation {
+  const style = getStageCombatStyle(rule.stageId);
+  const seconds = Math.max(1, Math.round(durationMs / 1000));
+  return {
+    id: `${rule.stageId}-opening-combat-focus-${Math.round(createdAt)}`,
+    stageId: rule.stageId,
+    category: 'war',
+    icon: style?.icon ?? rule.icon,
+    eyebrow: 'マップ称号特典',
+    title: '開幕作戦集中',
+    detail: `${sourceLabel} / ${style?.shortLabel ?? rule.meterLabel} +${seconds}s`,
+    flowRank: 2,
+    rankLabel: '称号作戦',
+    accent: style?.accent ?? rule.accent,
+    glow: rule.glow,
+    createdAt,
+  };
+}
+
 export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   currentStageId: null,
   meter: 0,
@@ -386,6 +411,33 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       buildFocusChainExpiresAt: 0,
     });
     playStageRewardSound('build_supply');
+  },
+
+  grantOpeningCombatFocus: (durationMs, sourceLabel) => {
+    const state = get();
+    const rule = getStageModeRule(state.currentStageId);
+    if (!rule || rule.category !== 'war' || durationMs <= 0) return;
+
+    const style = getStageCombatStyle(rule.stageId);
+    if (!style) return;
+
+    const createdAt = nowMs();
+    const activation = createOpeningCombatFocusActivation(rule, durationMs, sourceLabel, createdAt);
+    set({
+      lastGain: 0,
+      lastGainLabel: '称号BOOST',
+      lastGainAt: createdAt,
+      lastCombatStyleItem: style.weapon,
+      recentActivation: activation,
+      combatFocusUntil: Math.max(state.combatFocusUntil, createdAt + durationMs),
+      combatFocusItem: style.weapon,
+      combatFocusRank: 2,
+      combatFocusLabel: style.shortLabel,
+      combatFocusChain: 0,
+      combatFocusChainExpiresAt: 0,
+    });
+    playStageRewardSound('war_supply');
+    playModeFlowSurgeSound('war', 2);
   },
 
   recordBuildBlockPlace: (blockId) => {

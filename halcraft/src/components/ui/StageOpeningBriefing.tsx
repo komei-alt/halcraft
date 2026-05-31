@@ -19,6 +19,11 @@ import { getStagePressure } from '../../types/stagePressures';
 import { getStageRecordGoal } from '../../types/stageRecordGoals';
 import { getStageSignatureAward } from '../../types/stageSignatureAwards';
 import {
+  formatStageSignaturePerkLabel,
+  getStageSignaturePerkForAward,
+  type StageSignaturePerk,
+} from '../../types/stageSignaturePerks';
+import {
   formatStageRunBonusLabel,
   getStageOpeningItemLabel,
   getStageRunBonusForProgress,
@@ -48,6 +53,7 @@ function getBriefingPoints(
   compact: boolean,
   runBonus: StageRunBonus | null,
   masteryPerk: StageMasteryPerk | null,
+  signaturePerk: StageSignaturePerk | null,
 ): BriefingPoint[] {
   const condition = getStageCondition(stage.id);
   const event = getStageEvent(stage.id);
@@ -64,6 +70,15 @@ function getBriefingPoints(
       title: modeRule.category === 'build' ? '建築モード' : '戦争モード',
       detail: `${modeRule.shortLabel} / ${formatStageModeReward(modeRule)}`,
       accent: modeRule.accent,
+    });
+  }
+
+  if (signaturePerk) {
+    points.push({
+      icon: signaturePerk.icon,
+      title: 'マップ称号特典',
+      detail: `${signaturePerk.title}: ${formatStageSignaturePerkLabel(signaturePerk)}`,
+      accent: signaturePerk.accent,
     });
   }
 
@@ -138,6 +153,7 @@ function getBriefingRouteSteps(
   runBest: StageChallengeBest | undefined,
   buildBest: StageBuildScoreBest | undefined,
   masteryPerk: StageMasteryPerk | null,
+  signaturePerk: StageSignaturePerk | null,
 ): BriefingRouteStep[] {
   const modeRule = getStageModeRule(stage.id);
   const buildStyle = getStageBuildStyle(stage.id);
@@ -156,10 +172,14 @@ function getBriefingRouteSteps(
       icon: stage.category === 'build' ? '🧰' : '⚔️',
       label: '初動装備',
       detail: stage.category === 'build'
-        ? masteryPerk?.buildFocusMs
+        ? signaturePerk?.buildFocusMs
+          ? `${signaturePerk.shortLabel}で開幕高速建築`
+          : masteryPerk?.buildFocusMs
           ? `${masteryPerk.shortLabel}で開幕高速建築`
           : '建築テンポを作って作品点へつなげる'
-        : masteryPerk?.shieldMs
+        : signaturePerk?.combatFocusMs
+          ? `${signaturePerk.shortLabel}で作戦集中`
+          : masteryPerk?.shieldMs
           ? `${masteryPerk.shortLabel}で安全時間を上乗せ`
           : 'マップ推奨の戦い方で戦意をためる',
       accent: stage.category === 'build' ? '#9bdcff' : '#ffb36d',
@@ -226,9 +246,21 @@ export function StageOpeningBriefing() {
     });
   }, [bestByStage, buildBestByStage, stage]);
 
+  const signaturePerk = useMemo(() => {
+    if (!stage) return null;
+    return getStageSignaturePerkForAward(
+      stage,
+      getStageSignatureAward({
+        stage,
+        runBest: bestByStage[stage.id],
+        buildBest: buildBestByStage[stage.id],
+      }),
+    );
+  }, [bestByStage, buildBestByStage, stage]);
+
   const points = useMemo(
-    () => (stage ? getBriefingPoints(stage, isCompact, runBonus, masteryPerk) : []),
-    [isCompact, masteryPerk, runBonus, stage],
+    () => (stage ? getBriefingPoints(stage, isCompact, runBonus, masteryPerk, signaturePerk) : []),
+    [isCompact, masteryPerk, runBonus, signaturePerk, stage],
   );
   const routeSteps = useMemo(
     () => (stage
@@ -237,9 +269,10 @@ export function StageOpeningBriefing() {
           bestByStage[stage.id],
           buildBestByStage[stage.id],
           masteryPerk,
+          signaturePerk,
         )
       : []),
-    [bestByStage, buildBestByStage, masteryPerk, stage],
+    [bestByStage, buildBestByStage, masteryPerk, signaturePerk, stage],
   );
 
   if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;

@@ -151,6 +151,7 @@ export function getStageStarterHotbarItemCounts(
   stage: StageDefinition,
   runBonus: HotbarBonusBlocks | null,
   masteryPerk: HotbarBonusBlocks | null = null,
+  signaturePerk: HotbarBonusBlocks | null = null,
 ): Record<number, number> {
   const items: Record<number, number> = {};
 
@@ -161,7 +162,7 @@ export function getStageStarterHotbarItemCounts(
     }
   }
 
-  for (const bonus of [runBonus, masteryPerk]) {
+  for (const bonus of [runBonus, masteryPerk, signaturePerk]) {
     for (const block of bonus?.blocks ?? []) {
       items[block.blockId] = (items[block.blockId] ?? 0) + block.count;
     }

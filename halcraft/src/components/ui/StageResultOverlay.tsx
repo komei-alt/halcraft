@@ -24,6 +24,10 @@ import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRu
 import { formatStageMasteryPerkLabel, getStageMasteryPerk, getStageMasterySummary } from '../../types/stageMastery';
 import { getStageRecordGoal } from '../../types/stageRecordGoals';
 import { getStageSignatureAward } from '../../types/stageSignatureAwards';
+import {
+  formatStageSignaturePerkLabel,
+  getStageSignaturePerkForAward,
+} from '../../types/stageSignaturePerks';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
 import { playLevelUpSound } from '../../utils/sounds';
@@ -164,6 +168,7 @@ export function StageResultOverlay() {
     runBest,
     buildBest,
   });
+  const signaturePerk = getStageSignaturePerkForAward(stage, signatureAward);
   const mastery = getStageMasterySummary({
     stage,
     completedCount: completedIds.length,
@@ -738,6 +743,20 @@ export function StageResultOverlay() {
           >
             {signatureAward.requirementLabel} / 次: {signatureAward.nextLabel}
           </div>
+          {signaturePerk && (
+            <div
+              style={{
+                marginTop: 6,
+                color: signaturePerk.accent,
+                fontSize: isCompact ? 10 : 11,
+                lineHeight: '15px',
+                fontWeight: 950,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              次回: {signaturePerk.title} / {formatStageSignaturePerkLabel(signaturePerk)}
+            </div>
+          )}
         </div>
 
         {bossEncounter && (
