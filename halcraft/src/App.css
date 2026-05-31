@@ -197,6 +197,16 @@
   }
 }
 
+@keyframes toolDurabilityWarning {
+  0% {
+    filter: saturate(1) brightness(1);
+  }
+
+  100% {
+    filter: saturate(1.24) brightness(1.12);
+  }
+}
+
 #hotbar::-webkit-scrollbar {
   display: none;
 }

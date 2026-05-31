@@ -19,6 +19,7 @@ import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useStageBuildScoreStore } from '../stores/useStageBuildScoreStore';
+import { useMiningFocusStore } from '../stores/useMiningFocusStore';
 import {
   getBuildFocusMiningSpeedMultiplier,
   getBuildFocusPlacementIntervalMultiplier,
@@ -30,6 +31,7 @@ import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
+import { isEffectiveTool, TOOL_DEFS, type ToolType } from '../types/tools';
 import { isTouchDevice } from '../utils/device';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -62,6 +64,8 @@ const PVP_DAMAGE = 3;
 const PLACE_INTERVAL = 0.25;
 /** 右クリック押下から連続設置が始まるまでの初動待機（秒）。単発クリックで複数置かないためのガード */
 const PLACE_INITIAL_DELAY = 0.32;
+/** 採掘HUD更新の最短間隔（毎フレームUI更新しないため） */
+const MINING_FOCUS_PUBLISH_INTERVAL_MS = 120;
 /** プレイヤーの当たり判定サイズ */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -179,6 +183,11 @@ function getBlockBreakBlocker(blockId: BlockId, isBuildMode: boolean, playerTier
   }
 
   return null;
+}
+
+function isEffectiveMiningTool(toolType: ToolType | null, blockCategory?: string): boolean {
+  if (!toolType || !blockCategory) return false;
+  return isEffectiveTool(toolType, blockCategory) || (toolType === 'pickaxe' && blockCategory === 'ore');
 }
 
 function getChestLoot(stageId: string | null, isBuildModeStage: boolean): ChestLootItem[] {
@@ -363,6 +372,95 @@ export function BlockInteraction() {
   const placeRepeatStartedRef = useRef(false);
   // 直前に設置した座標（同じ座標に二重設置しない）
   const lastPlacedRef = useRef<string>('');
+  const miningFocusKeyRef = useRef('');
+  const lastMiningFocusPublishAt = useRef(0);
+
+  const publishMiningFocus = useCallback((found: TargetBlock | null): void => {
+    const playerState = usePlayerStore.getState();
+    const shouldShow = !isBuildMode
+      && !playerState.isDead
+      && !useVehicleStore.getState().isInVehicle()
+      && found !== null;
+
+    if (!shouldShow || !found) {
+      if (miningFocusKeyRef.current) {
+        miningFocusKeyRef.current = '';
+        useMiningFocusStore.getState().clearTarget();
+      }
+      return;
+    }
+
+    const blockId = getBlock(found.x, found.y, found.z);
+    const def = BLOCK_DEFS[blockId];
+    if (!def || def.isLiquid || def.noCollision) {
+      if (miningFocusKeyRef.current) {
+        miningFocusKeyRef.current = '';
+        useMiningFocusStore.getState().clearTarget();
+      }
+      return;
+    }
+
+    const equippedToolId = playerState.equippedToolId;
+    const equippedTool = equippedToolId ? TOOL_DEFS[equippedToolId] : undefined;
+    const blockCategory = def.blockCategory ?? null;
+    const playerTier = playerState.getToolTierLevel();
+    const blocker = getBlockBreakBlocker(blockId, isBuildMode, playerTier);
+    const miningSpeed = playerState.getMiningSpeed(def.blockCategory)
+      * getBuilderMasteryBonus().miningSpeedMultiplier
+      * getBuilderTechniqueBonus().builderMiningSpeedMultiplier
+      * getBuildFocusMiningSpeedMultiplier();
+    const bp = breakProgressRef.current;
+    const progress = bp && bp.x === found.x && bp.y === found.y && bp.z === found.z
+      ? Math.max(0, Math.min(1, bp.progress))
+      : 0;
+    const progressBucket = Math.round(progress * 100);
+    const speedBucket = Math.round(miningSpeed * 10);
+    const key = [
+      blockId,
+      found.x,
+      found.y,
+      found.z,
+      progressBucket,
+      equippedToolId ?? 'hand',
+      playerTier,
+      blocker?.reason ?? 'ok',
+      speedBucket,
+    ].join(':');
+    const now = performance.now();
+    if (
+      key === miningFocusKeyRef.current &&
+      now - lastMiningFocusPublishAt.current < MINING_FOCUS_PUBLISH_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    miningFocusKeyRef.current = key;
+    lastMiningFocusPublishAt.current = now;
+    useMiningFocusStore.getState().setTarget({
+      blockId,
+      blockName: getBlockShortName(blockId),
+      x: found.x,
+      y: found.y,
+      z: found.z,
+      progress,
+      hardness: isBuildMode ? 0 : (def.hardness ?? 0.5),
+      canBreak: blocker === null,
+      blockerReason: blocker?.reason ?? null,
+      requiredTier: blocker?.requiredTier ?? (def.minToolTier ?? 0),
+      playerTier,
+      miningSpeed,
+      effective: isEffectiveMiningTool(equippedTool?.type ?? null, blockCategory ?? undefined),
+      blockCategory,
+      equippedToolId,
+      equippedToolName: equippedTool?.name ?? '素手',
+      equippedToolType: equippedTool?.type ?? null,
+      updatedAt: now,
+    });
+  }, [getBlock, isBuildMode]);
+
+  useEffect(() => () => {
+    useMiningFocusStore.getState().clearTarget();
+  }, []);
 
   // 照準先のリモートプレイヤーを検索
   const getAttackDistanceLimit = useCallback((): number => {
@@ -954,6 +1052,7 @@ export function BlockInteraction() {
       if (found.x === prev.x && found.y === prev.y && found.z === prev.z) return prev;
       return found;
     });
+    publishMiningFocus(found);
 
     // --- 段階的ブロック破壊の進行（デスクトップ 左クリック押しっぱなし） ---
     if (isBreakingRef.current && found && !isTouch.current) {
