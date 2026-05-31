@@ -387,7 +387,7 @@ export function WeaponSwitchPopover() {
               }}
             >
               {tacticMatched
-                ? formatStageCombatBonus(tacticStyle)
+                ? `${formatStageCombatBonus(tacticStyle)} / マップ色エフェクト`
                 : `${tacticStyle.shortLabel}: ${formatStageCombatBonus(tacticStyle)}`}
             </div>
           </div>

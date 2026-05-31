@@ -21,6 +21,7 @@ import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectile
 import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
+import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { checkProjectileHitVehicle } from '../utils/vehicleCombat';
 
 const FIRE_KEY = 'KeyR';
@@ -299,12 +300,20 @@ function createTrailPuff(pos: THREE.Vector3, vel: THREE.Vector3): TrailPuff {
 export function RocketLauncher() {
   const { camera } = useThree();
   const phase = useGameStore((s) => s.phase);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const isDead = usePlayerStore((s) => s.isDead);
   const fireRocket = usePlayerStore((s) => s.fireRocket);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const getBlock = useWorldStore((s) => s.getBlock);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const stageVisualStyle = useMemo(
+    () => getStageCombatStyleForItem(currentStageId, 'rocket_launcher'),
+    [currentStageId],
+  );
+  const rocketAccent = stageVisualStyle?.accent ?? '#ffb566';
+  const rocketAccentSoft = stageVisualStyle ? '#fff0bd' : '#ffd7a6';
+  const rocketTailColor = stageVisualStyle?.accent ?? '#ff9248';
 
   const isTouch = useRef(isTouchDevice());
   const fireRequested = useRef(false);
@@ -971,7 +980,7 @@ export function RocketLauncher() {
           >
             <spriteMaterial
               map={glowTexture}
-              color="#ffb566"
+              color={rocketAccent}
               transparent
               opacity={clamp01(muzzleFlashTimer.current * 8)}
               depthWrite={false}
@@ -990,7 +999,7 @@ export function RocketLauncher() {
           >
             <spriteMaterial
               map={glowTexture}
-              color="#ff7a42"
+              color={rocketTailColor}
               transparent
               opacity={clamp01(backblastTimer.current * 6)}
               depthWrite={false}
@@ -1029,7 +1038,7 @@ export function RocketLauncher() {
           <sprite position={[0, 0, 0.22]} scale={[0.26, 0.26, 1]}>
             <spriteMaterial
               map={glowTexture}
-              color="#ff9248"
+              color={rocketTailColor}
               transparent
               opacity={0.88}
               depthWrite={false}
@@ -1050,7 +1059,7 @@ export function RocketLauncher() {
             >
               <spriteMaterial
                 map={glowTexture}
-                color="#ffb261"
+                color={rocketAccent}
                 transparent
                 opacity={0.12 + ratio * 0.24}
                 depthWrite={false}
@@ -1093,8 +1102,8 @@ export function RocketLauncher() {
         return (
           <group key={explosion.id} position={[explosion.pos.x, explosion.pos.y, explosion.pos.z]}>
             <pointLight
-              color="#ffb56d"
-              intensity={ratio * 11}
+              color={rocketAccent}
+              intensity={ratio * (stageVisualStyle ? 13 : 11)}
               distance={20}
               decay={2.1}
             />
@@ -1102,7 +1111,7 @@ export function RocketLauncher() {
             <mesh scale={[flashScale, flashScale, flashScale]}>
               <sphereGeometry args={[0.42, 24, 24]} />
               <meshBasicMaterial
-                color="#ffd7a6"
+                color={rocketAccentSoft}
                 transparent
                 opacity={flashOpacity}
                 depthWrite={false}
@@ -1123,7 +1132,7 @@ export function RocketLauncher() {
             <mesh scale={[2.1 + progress * 2.8, 2.1 + progress * 2.8, 2.1 + progress * 2.8]}>
               <sphereGeometry args={[0.18, 20, 20]} />
               <meshBasicMaterial
-                color="#ff8b3d"
+                color={rocketTailColor}
                 transparent
                 opacity={emberOpacity}
                 depthWrite={false}
@@ -1134,7 +1143,7 @@ export function RocketLauncher() {
             <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[shockwaveScale, shockwaveScale, shockwaveScale]}>
               <ringGeometry args={[0.7, 1, 40]} />
               <meshBasicMaterial
-                color="#ffb46a"
+                color={rocketAccent}
                 transparent
                 opacity={ratio * 0.52}
                 depthWrite={false}
@@ -1145,7 +1154,7 @@ export function RocketLauncher() {
             <mesh rotation={[0, Math.PI / 2, 0]} scale={[shockwaveScale * 0.72, shockwaveScale * 0.72, shockwaveScale * 0.72]}>
               <ringGeometry args={[0.7, 1, 36]} />
               <meshBasicMaterial
-                color="#fff0c4"
+                color={rocketAccentSoft}
                 transparent
                 opacity={ratio * 0.24}
                 depthWrite={false}
@@ -1156,7 +1165,7 @@ export function RocketLauncher() {
             <mesh rotation={[0.7, 0.45, 0.15]} scale={[shockwaveScale * 0.56, shockwaveScale * 0.56, shockwaveScale * 0.56]}>
               <ringGeometry args={[0.6, 1, 32]} />
               <meshBasicMaterial
-                color="#ff7f3d"
+                color={rocketTailColor}
                 transparent
                 opacity={ratio * 0.28}
                 depthWrite={false}
@@ -1176,7 +1185,7 @@ export function RocketLauncher() {
                 >
                   <spriteMaterial
                     map={glowTexture}
-                    color={index % 2 === 0 ? '#fff2b3' : '#ff6f2f'}
+                    color={index % 2 === 0 ? rocketAccentSoft : rocketTailColor}
                     transparent
                     opacity={fireRatio * 0.82}
                     depthWrite={false}
@@ -1198,7 +1207,7 @@ export function RocketLauncher() {
                 >
                   <spriteMaterial
                     map={glowTexture}
-                    color="#ff9f59"
+                    color={rocketAccent}
                     transparent
                     opacity={sparkRatio * 0.9}
                     depthWrite={false}

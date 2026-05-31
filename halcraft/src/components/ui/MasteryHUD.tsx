@@ -586,16 +586,28 @@ export function MasteryHUD() {
           </span>
         )}
         {stageStyle && (
-          <span
-            style={{
-              color: stageStyle.accent,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            マップ: {stageStyle.shortLabel} / {formatStageCombatBonus(stageStyle)}
-          </span>
+          <>
+            <span
+              style={{
+                color: stageStyle.accent,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              マップ: {stageStyle.shortLabel} / {formatStageCombatBonus(stageStyle)}
+            </span>
+            <span
+              style={{
+                color: stageStyle.accent,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              マップ色エフェクト ON
+            </span>
+          </>
         )}
         {!stageStyle && recommendedStageStyle && (
           <span

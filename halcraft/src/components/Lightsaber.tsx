@@ -16,7 +16,7 @@ import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
-import { getStageCombatModifier } from '../types/stageCombatStyles';
+import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 
 import { mobileActions } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
@@ -206,6 +206,7 @@ export function Lightsaber() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isDead = usePlayerStore((s) => s.isDead);
   const phase = useGameStore((s) => s.phase);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const { camera } = useThree();
 
   // ライトセイバーの色（初回マウント時にランダム選択）
@@ -214,12 +215,17 @@ export function Lightsaber() {
     return BLADE_COLORS[idx];
   });
 
-  const bladeColorObj = useMemo(() => new THREE.Color(bladeColor), [bladeColor]);
+  const stageVisualStyle = useMemo(
+    () => getStageCombatStyleForItem(currentStageId, 'lightsaber'),
+    [currentStageId],
+  );
+  const activeBladeColor = stageVisualStyle?.accent ?? bladeColor;
+  const bladeColorObj = useMemo(() => new THREE.Color(activeBladeColor), [activeBladeColor]);
   const coreColor = useMemo(() => {
-    const c = new THREE.Color(bladeColor);
+    const c = new THREE.Color(activeBladeColor);
     c.lerp(new THREE.Color('#ffffff'), 0.65);
     return c;
-  }, [bladeColor]);
+  }, [activeBladeColor]);
 
   // Refs
   const weaponRef = useRef<THREE.Group>(null);
@@ -585,7 +591,8 @@ export function Lightsaber() {
     }
 
     if (visible) {
-      setLightsaberHumIntensity((isSwinging.current ? 0.82 : 0.22) + lightBoost.current * 0.45);
+      const stageHumBoost = stageVisualStyle ? 0.12 : 0;
+      setLightsaberHumIntensity((isSwinging.current ? 0.82 : 0.22) + lightBoost.current * 0.45 + stageHumBoost);
     }
   });
 

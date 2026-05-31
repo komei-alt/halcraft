@@ -17,7 +17,7 @@ import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { useGameStore } from '../stores/useGameStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
-import { getStageCombatModifier } from '../types/stageCombatStyles';
+import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
@@ -69,6 +69,7 @@ function getMachineGunTechniqueBonus() {
 export function PlayerMachineGun() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isDead = usePlayerStore((s) => s.isDead);
+  const currentStageId = useGameStore((s) => s.currentStageId);
   const { camera } = useThree();
   const gltf = useGLTF(MACHINE_GUN_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
@@ -89,6 +90,20 @@ export function PlayerMachineGun() {
   const scopeVisibleRef = useRef(false);
   const [bullets, setBullets] = useState<BulletProjectile[]>([]);
   const [scopeVisible, setScopeVisible] = useState(false);
+  const stageVisualStyle = useMemo(
+    () => getStageCombatStyleForItem(currentStageId, 'machine_gun'),
+    [currentStageId],
+  );
+  const muzzleCoreColor = useMemo(() => {
+    const color = new THREE.Color(stageVisualStyle?.accent ?? '#fff0a0');
+    if (stageVisualStyle) color.lerp(new THREE.Color('#ffffff'), 0.48);
+    return color;
+  }, [stageVisualStyle]);
+  const muzzleGlowColor = useMemo(
+    () => new THREE.Color(stageVisualStyle?.accent ?? '#ff8b2d'),
+    [stageVisualStyle],
+  );
+  const tracerColor = stageVisualStyle?.accent ?? '#ffd36a';
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -248,17 +263,20 @@ export function PlayerMachineGun() {
     if (flashCoreRef.current) {
       const material = flashCoreRef.current.material as THREE.MeshBasicMaterial;
       flashCoreRef.current.visible = flashOpacity > 0.02;
+      material.color.copy(muzzleCoreColor);
       material.opacity = flashOpacity;
       flashCoreRef.current.scale.setScalar(0.85 + flashTimer.current * 8.5);
     }
     if (flashGlowRef.current) {
       const material = flashGlowRef.current.material as THREE.MeshBasicMaterial;
       flashGlowRef.current.visible = flashOpacity > 0.02;
+      material.color.copy(muzzleGlowColor);
       material.opacity = flashOpacity * 0.72;
       flashGlowRef.current.scale.setScalar(0.75 + flashTimer.current * 9);
     }
     if (flashLightRef.current) {
-      flashLightRef.current.intensity = flashTimer.current > 0 ? 3.5 : 0;
+      flashLightRef.current.color.copy(muzzleGlowColor);
+      flashLightRef.current.intensity = flashTimer.current > 0 ? (stageVisualStyle ? 4.6 : 3.5) : 0;
     }
 
     const canFire = visible && (
@@ -435,9 +453,11 @@ export function PlayerMachineGun() {
                 width: 'min(54vw, 54vh)',
                 height: 'min(54vw, 54vh)',
                 transform: 'translate(-50%, -50%)',
-                border: '2px solid rgba(210, 245, 255, 0.72)',
+                border: `2px solid ${stageVisualStyle ? `${stageVisualStyle.accent}cc` : 'rgba(210, 245, 255, 0.72)'}`,
                 borderRadius: '50%',
-                boxShadow: '0 0 0 1px rgba(0,0,0,0.55), inset 0 0 28px rgba(95,180,210,0.22)',
+                boxShadow: stageVisualStyle
+                  ? `0 0 0 1px rgba(0,0,0,0.55), inset 0 0 28px ${stageVisualStyle.accent}55, 0 0 18px ${stageVisualStyle.accent}55`
+                  : '0 0 0 1px rgba(0,0,0,0.55), inset 0 0 28px rgba(95,180,210,0.22)',
               }}
             />
             <div
@@ -480,13 +500,13 @@ export function PlayerMachineGun() {
       )}
 
       {bullets.map((bullet) => (
-        <PlayerGunTracer key={bullet.id} start={bullet.prev} end={bullet.pos} />
+        <PlayerGunTracer key={bullet.id} start={bullet.prev} end={bullet.pos} color={tracerColor} />
       ))}
     </group>
   );
 }
 
-function PlayerGunTracer({ start, end }: { start: THREE.Vector3; end: THREE.Vector3 }) {
+function PlayerGunTracer({ start, end, color }: { start: THREE.Vector3; end: THREE.Vector3; color: string }) {
   const delta = end.clone().sub(start);
   const length = Math.max(0.01, delta.length());
   const midpoint = start.clone().addScaledVector(delta, 0.5);
@@ -498,7 +518,7 @@ function PlayerGunTracer({ start, end }: { start: THREE.Vector3; end: THREE.Vect
   return (
     <mesh position={midpoint} quaternion={quaternion}>
       <cylinderGeometry args={[0.018, 0.01, length, 6]} />
-      <meshBasicMaterial color="#ffd36a" transparent opacity={0.82} />
+      <meshBasicMaterial color={color} transparent opacity={0.86} />
     </mesh>
   );
 }
