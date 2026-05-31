@@ -15,7 +15,12 @@ import { InstallBanner } from './mobile/InstallBanner';
 import { UpdateLog } from './UpdateLog';
 import { SkinSelector } from './SkinSelector';
 import { STAGES, type StageCategory, type StageDefinition } from '../../types/stages';
-import { getStageChallenges, getStageChallengeMedal, getStageChallengeMedalLabel } from '../../types/stageChallenges';
+import {
+  getStageChallenges,
+  getStageChallengeMedal,
+  getStageChallengeMedalLabel,
+  type StageChallengeDefinition,
+} from '../../types/stageChallenges';
 import { getStageCondition } from '../../types/stageConditions';
 import { getStagePressure } from '../../types/stagePressures';
 import { getStageEvent } from '../../types/stageEvents';
@@ -35,10 +40,10 @@ import {
   type StageRunBonus,
 } from '../../types/stageRunBonuses';
 import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../../types/stageHotbars';
-import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
+import { formatStageCombatBonus, getStageCombatStyle, getStageCombatWeaponLabel } from '../../types/stageCombatStyles';
 import { formatStageEnemyProfile, getStageEnemyProfile } from '../../types/stageEnemyProfiles';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
-import { getStageRecordGoal } from '../../types/stageRecordGoals';
+import { getStageRecordGoal, type StageRecordGoal } from '../../types/stageRecordGoals';
 import { getModeFlowRankLabel } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
@@ -92,6 +97,14 @@ interface StageBriefingSection {
   details: string[];
   accent: string;
   group: BriefingGroup;
+}
+
+interface StagePrepCue {
+  icon: string;
+  label: string;
+  value: string;
+  detail: string;
+  accent: string;
 }
 
 /** グループの表示順とラベル（ゾーンの見出し） */
@@ -439,6 +452,71 @@ function getStageBriefingSections(
   return sections;
 }
 
+function getFirstUnfinishedChallenge(
+  challenges: StageChallengeDefinition[],
+  completedIds: string[] | undefined,
+): StageChallengeDefinition | null {
+  const completedSet = new Set(completedIds ?? []);
+  return challenges.find((challenge) => !completedSet.has(challenge.id)) ?? challenges[0] ?? null;
+}
+
+function getStagePrepCues(args: {
+  stage: StageDefinition;
+  recordGoal: StageRecordGoal;
+  challenges: StageChallengeDefinition[];
+  completedIds?: string[];
+  runBonus: StageRunBonus | null;
+  masteryPerk: StageMasteryPerk | null;
+}): StagePrepCue[] {
+  const { stage, recordGoal, challenges, completedIds, runBonus, masteryPerk } = args;
+  const modeRule = getStageModeRule(stage.id);
+  const challenge = getFirstUnfinishedChallenge(challenges, completedIds);
+  const cues: StagePrepCue[] = [
+    {
+      icon: recordGoal.icon,
+      label: '今回のねらい',
+      value: recordGoal.title,
+      detail: recordGoal.detail,
+      accent: recordGoal.accent,
+    },
+  ];
+
+  if (stage.category === 'war') {
+    const combatStyle = getStageCombatStyle(stage.id);
+    cues.push({
+      icon: combatStyle?.icon ?? '⚔️',
+      label: '推奨装備',
+      value: combatStyle ? getStageCombatWeaponLabel(combatStyle.weapon) : '武器を切替',
+      detail: combatStyle
+        ? `${combatStyle.shortLabel}: ${formatStageCombatBonus(combatStyle)}`
+        : modeRule?.actionLabel ?? stage.rules.objective.prompts[0] ?? stage.rules.objective.title,
+      accent: combatStyle?.accent ?? modeRule?.accent ?? stage.color,
+    });
+  } else {
+    const buildStyle = getStageBuildStyle(stage.id);
+    cues.push({
+      icon: buildStyle?.icon ?? '🧱',
+      label: 'つくり方',
+      value: buildStyle?.shortLabel ?? 'テーマ建築',
+      detail: modeRule?.actionLabel ?? buildStyle?.focusLabel ?? stage.rules.objective.prompts[0] ?? stage.rules.objective.title,
+      accent: buildStyle?.accent ?? modeRule?.accent ?? stage.color,
+    });
+  }
+
+  cues.push({
+    icon: challenge?.icon ?? runBonus?.icon ?? masteryPerk?.icon ?? '🎁',
+    label: challenge ? '寄り道チャレンジ' : runBonus ? '開始特典' : '熟練特典',
+    value: challenge?.title ?? runBonus?.shortLabel ?? masteryPerk?.shortLabel ?? 'マップを極める',
+    detail: challenge?.description
+      ?? (runBonus ? formatStageRunBonusLabel(runBonus) : null)
+      ?? (masteryPerk ? formatStageMasteryPerkLabel(masteryPerk) : null)
+      ?? stage.rules.objective.description,
+    accent: challenge?.accent ?? runBonus?.accent ?? masteryPerk?.accent ?? stage.color,
+  });
+
+  return cues;
+}
+
 /** セクションの STEP 見出し（番号バッジ＋ラベル）。子供にも手順が伝わるよう番号を振る */
 function StepLabel({ n, text, accent, compact }: { n: number; text: string; accent: string; compact: boolean }) {
   return (
@@ -624,6 +702,24 @@ export function StartScreen() {
       activeCompletedCount,
       activeChallengeCount,
       compactLayout,
+    ],
+  );
+  const activePrepCues = useMemo(
+    () => getStagePrepCues({
+      stage: activeStage,
+      recordGoal: activeRecordGoal,
+      challenges: activeChallenges,
+      completedIds: activeRunBest?.completedIds,
+      runBonus: activeRunBonus,
+      masteryPerk: activeMasteryPerk,
+    }),
+    [
+      activeChallenges,
+      activeMasteryPerk,
+      activeRecordGoal,
+      activeRunBest?.completedIds,
+      activeRunBonus,
+      activeStage,
     ],
   );
 
@@ -1640,6 +1736,121 @@ export function StartScreen() {
                 }}
               >
                 {activeRecordGoal.detail}
+              </div>
+            </div>
+
+            <div
+              id="stage-prep-plan"
+              style={{
+                marginTop: compactLayout ? 8 : 10,
+                padding: compactLayout ? '8px 9px' : '9px 11px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.075), rgba(0,0,0,0.24))',
+                border: `1px solid ${activeStage.color}55`,
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.07), 0 0 16px ${activeStage.color}16`,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  marginBottom: compactLayout ? 6 : 7,
+                }}
+              >
+                <span style={{ fontSize: compactLayout ? 12 : 13 }}>🧭</span>
+                <span
+                  style={{
+                    color: activeStage.color,
+                    fontSize: compactLayout ? 9 : 10,
+                    lineHeight: '12px',
+                    fontWeight: 950,
+                    letterSpacing: 1.2,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  出発前プラン
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    height: 1,
+                    background: `linear-gradient(90deg, ${activeStage.color}66, transparent)`,
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: viewportSize.w < 390 ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+                  gap: compactLayout ? 6 : 8,
+                }}
+              >
+                {activePrepCues.map((cue) => (
+                  <div
+                    key={`${cue.label}-${cue.value}`}
+                    style={{
+                      minWidth: 0,
+                      padding: compactLayout ? '7px 8px' : '8px 9px',
+                      borderRadius: 8,
+                      background: `${cue.accent}13`,
+                      border: `1px solid ${cue.accent}42`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={{ flex: '0 0 auto', fontSize: compactLayout ? 11 : 12 }}>{cue.icon}</span>
+                      <span
+                        style={{
+                          minWidth: 0,
+                          color: cue.accent,
+                          fontSize: compactLayout ? 8 : 9,
+                          lineHeight: '11px',
+                          fontWeight: 950,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {cue.label}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 3,
+                        color: '#fff',
+                        fontSize: compactLayout ? 10 : 11,
+                        lineHeight: compactLayout ? '13px' : '14px',
+                        fontWeight: 950,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {cue.value}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 3,
+                        color: 'rgba(255,255,255,0.58)',
+                        fontSize: compactLayout ? 8 : 9,
+                        lineHeight: compactLayout ? '11px' : '12px',
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {cue.detail}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
