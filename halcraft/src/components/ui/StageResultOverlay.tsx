@@ -19,7 +19,7 @@ import {
   formatStageBuildFocus,
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
-import { formatStageRunBonusLabel, getStageRunBonus } from '../../types/stageRunBonuses';
+import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStageMasterySummary } from '../../types/stageMastery';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
@@ -151,7 +151,7 @@ export function StageResultOverlay() {
     : stage.category === 'war'
       ? '別の戦場でも金メダルをねらえる'
       : '別のマップでも作品を増やせる';
-  const nextRunBonus = getStageRunBonus(stage.id, medal);
+  const nextRunBonus = getStageRunBonusForProgress(stage.id, medal, buildScore);
   const targetCount = stage.rules.objective.targetCount;
   const runBest = bestByStage[stage.id];
   const buildBest = buildBestByStage[stage.id];

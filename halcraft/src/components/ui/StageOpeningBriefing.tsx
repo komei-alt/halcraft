@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
+import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
+import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
 import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
 import { getStageCondition } from '../../types/stageConditions';
 import { getStageEvent } from '../../types/stageEvents';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
+import {
+  formatStageRunBonusLabel,
+  getStageRunBonusForProgress,
+  type StageRunBonus,
+} from '../../types/stageRunBonuses';
 import type { StageDefinition } from '../../types/stages';
 import { isTouchDevice } from '../../utils/device';
 import { playStageStartSound } from '../../utils/sounds';
@@ -19,7 +26,11 @@ interface BriefingPoint {
   accent: string;
 }
 
-function getBriefingPoints(stage: StageDefinition, compact: boolean): BriefingPoint[] {
+function getBriefingPoints(
+  stage: StageDefinition,
+  compact: boolean,
+  runBonus: StageRunBonus | null,
+): BriefingPoint[] {
   const condition = getStageCondition(stage.id);
   const event = getStageEvent(stage.id);
   const modeRule = getStageModeRule(stage.id);
@@ -35,6 +46,15 @@ function getBriefingPoints(stage: StageDefinition, compact: boolean): BriefingPo
       title: modeRule.category === 'build' ? '建築モード' : '戦争モード',
       detail: `${modeRule.shortLabel} / ${formatStageModeReward(modeRule)}`,
       accent: modeRule.accent,
+    });
+  }
+
+  if (runBonus) {
+    points.push({
+      icon: runBonus.icon,
+      title: runBonus.sourceLabel,
+      detail: `${runBonus.shortLabel}: ${formatStageRunBonusLabel(runBonus)}`,
+      accent: runBonus.accent,
     });
   }
 
@@ -91,6 +111,8 @@ export function StageOpeningBriefing() {
   const stage = useGameStore((s) => s.currentStage);
   const runId = useGameStore((s) => s.runId);
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
+  const bestByStage = useStageChallengeStore((s) => s.bestByStage);
+  const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const shownRunIdRef = useRef<number | null>(null);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
@@ -102,9 +124,18 @@ export function StageOpeningBriefing() {
     return undefined;
   }, [phase, runId, stage]);
 
+  const runBonus = useMemo(() => {
+    if (!stage) return null;
+    return getStageRunBonusForProgress(
+      stage.id,
+      bestByStage[stage.id]?.medal ?? 'none',
+      buildBestByStage[stage.id]?.score ?? 0,
+    );
+  }, [bestByStage, buildBestByStage, stage]);
+
   const points = useMemo(
-    () => (stage ? getBriefingPoints(stage, isCompact) : []),
-    [isCompact, stage],
+    () => (stage ? getBriefingPoints(stage, isCompact, runBonus) : []),
+    [isCompact, runBonus, stage],
   );
 
   if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;

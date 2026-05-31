@@ -17,7 +17,7 @@ import { useModeFlowStore } from './useModeFlowStore';
 import { useFunctionalBlockStore } from './useFunctionalBlockStore';
 import { STAGES, type StageDefinition, type StageCategory } from '../types/stages';
 import { TOOL_DEFS } from '../types/tools';
-import { getStageOpeningItem, getStageRunBonus } from '../types/stageRunBonuses';
+import { getStageOpeningItem, getStageRunBonusForProgress } from '../types/stageRunBonuses';
 import { getStageHotbarSlots } from '../types/stageHotbars';
 import { resolveBiomeConfig, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
@@ -229,7 +229,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const bestMedal = currentStage
       ? useStageChallengeStore.getState().bestByStage[currentStage.id]?.medal ?? 'none'
       : 'none';
-    const runBonus = getStageRunBonus(currentStage?.id, bestMedal);
+    const buildBestScore = currentStage
+      ? useStageBuildScoreStore.getState().bestByStage[currentStage.id]?.score ?? 0
+      : 0;
+    const runBonus = getStageRunBonusForProgress(currentStage?.id, bestMedal, buildBestScore);
 
     const starterItems: Record<number, number> = {};
     for (const [blockId, count] of Object.entries(starterKit?.blocks ?? {})) {

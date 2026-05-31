@@ -28,7 +28,7 @@ import {
 import {
   formatStageRunBonusLabel,
   getStageOpeningItemLabel,
-  getStageRunBonus,
+  getStageRunBonusForProgress,
   type StageRunBonus,
 } from '../../types/stageRunBonuses';
 import { formatStageHotbarPreview, getStageStarterHotbarItemCounts } from '../../types/stageHotbars';
@@ -408,7 +408,7 @@ function getStageBriefingSections(
 
   if (runBonus) {
     sections.push({
-      title: 'メダル特典',
+      title: runBonus.sourceLabel,
       value: `${runBonus.icon} ${runBonus.title}`,
       details: [
         runBonus.shortLabel,
@@ -568,8 +568,8 @@ export function StartScreen() {
     : 0;
   const categoryMasteredCount = categoryMasteries.filter((mastery) => mastery.mastered).length;
   const activeRunBonus = useMemo(
-    () => getStageRunBonus(activeStage.id, activeMedal),
-    [activeStage.id, activeMedal],
+    () => getStageRunBonusForProgress(activeStage.id, activeMedal, activeBuildBest?.score ?? 0),
+    [activeBuildBest?.score, activeStage.id, activeMedal],
   );
   const activeRecordGoal = useMemo(
     () => getStageRecordGoal({
@@ -1046,7 +1046,8 @@ export function StartScreen() {
             const medal = getStageChallengeMedal(completedCount, challengeCount);
             const medalLabel = getStageChallengeMedalLabel(medal);
             const condition = getStageCondition(stage.id);
-            const runBonus = getStageRunBonus(stage.id, medal);
+            const buildBestScore = buildBestByStage[stage.id]?.score ?? 0;
+            const runBonus = getStageRunBonusForProgress(stage.id, medal, buildBestScore);
             const recordGoal = getStageRecordGoal({
               stage,
               runBest: best,

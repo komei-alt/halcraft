@@ -2,6 +2,7 @@
 // やり込み結果を次回プレイの手触りに戻し、マップごとの役割を強める
 
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from './blocks';
+import { BUILD_SCORE_MILESTONES } from './stageBuildStyles';
 import { getStageById } from './stages';
 import type { StageChallengeMedal } from './stageChallenges';
 import { TOOL_DEFS, type ToolId } from './tools';
@@ -18,6 +19,7 @@ export interface StageRunBonus {
   icon: string;
   title: string;
   shortLabel: string;
+  sourceLabel: string;
   detail: string;
   accent: string;
   blocks: StageRunBonusBlock[];
@@ -161,6 +163,28 @@ function getMedalRank(medal: StageChallengeMedal): number {
   return MEDAL_RANKS[medal] ?? 0;
 }
 
+function getHigherMedal(a: StageChallengeMedal, b: StageChallengeMedal): StageChallengeMedal {
+  return getMedalRank(a) >= getMedalRank(b) ? a : b;
+}
+
+export function getBuildScoreMedal(buildScore: number): StageChallengeMedal {
+  const safeScore = Math.max(0, Math.floor(buildScore));
+  if (safeScore >= BUILD_SCORE_MILESTONES[2]) return 'gold';
+  if (safeScore >= BUILD_SCORE_MILESTONES[1]) return 'silver';
+  if (safeScore >= BUILD_SCORE_MILESTONES[0]) return 'bronze';
+  return 'none';
+}
+
+export function getEffectiveStageRunBonusMedal(
+  stageId: string | null | undefined,
+  challengeMedal: StageChallengeMedal,
+  buildScore = 0,
+): StageChallengeMedal {
+  const stage = stageId ? getStageById(stageId) : null;
+  if (!stage || stage.category !== 'build') return challengeMedal;
+  return getHigherMedal(challengeMedal, getBuildScoreMedal(buildScore));
+}
+
 function getShortBlockName(blockId: BlockId): string {
   return (BLOCK_DEFS[blockId]?.name ?? `ID${blockId}`)
     .replace('ブロック', '')
@@ -192,6 +216,7 @@ export function getStageOpeningItemLabel(stageId: string | null | undefined): st
 export function getStageRunBonus(
   stageId: string | null | undefined,
   medal: StageChallengeMedal,
+  sourceLabel = 'メダル特典',
 ): StageRunBonus | null {
   if (!stageId) return null;
   const stage = getStageById(stageId);
@@ -211,6 +236,7 @@ export function getStageRunBonus(
     icon: preset.icon,
     title: preset.title,
     shortLabel: MEDAL_LABELS[medal],
+    sourceLabel,
     detail: preset.detail,
     accent: preset.accent,
     blocks,
@@ -219,6 +245,16 @@ export function getStageRunBonus(
     shieldMs: isWar ? rank * 1500 : 0,
     rocketReady: false,
   };
+}
+
+export function getStageRunBonusForProgress(
+  stageId: string | null | undefined,
+  challengeMedal: StageChallengeMedal,
+  buildScore = 0,
+): StageRunBonus | null {
+  const effectiveMedal = getEffectiveStageRunBonusMedal(stageId, challengeMedal, buildScore);
+  const sourceLabel = effectiveMedal !== challengeMedal ? '作品BEST特典' : 'メダル特典';
+  return getStageRunBonus(stageId, effectiveMedal, sourceLabel);
 }
 
 export function formatStageRunBonusLabel(bonus: StageRunBonus): string {
