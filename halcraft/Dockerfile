@@ -13,7 +13,7 @@
 #   docker run -d -p 4000:80 halcraft:latest
 
 # --- Stage 1: Build ---
-FROM node:22-alpine AS builder
+FROM public.ecr.aws/docker/library/node:22-alpine AS builder
 WORKDIR /app
 
 # 依存関係のインストール（キャッシュ効率化）
@@ -25,7 +25,7 @@ COPY . .
 RUN npm run build
 
 # --- Stage 2: Production (Static server) ---
-FROM node:22-alpine AS runner
+FROM public.ecr.aws/docker/library/node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
