@@ -1113,6 +1113,46 @@ export function playInventoryEmptySound(): void {
   osc.stop(now + 0.13);
 }
 
+/** 採掘不可SE — 道具不足や破壊不可を硬い手応えで知らせる */
+export function playMiningBlockedSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('miningBlocked', 520)) return;
+  const now = ctx.currentTime;
+
+  const clank = ctx.createOscillator();
+  clank.type = 'square';
+  clank.frequency.setValueAtTime(260, now);
+  clank.frequency.exponentialRampToValueAtTime(130, now + 0.12);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(560, now);
+  filter.Q.setValueAtTime(4.5, now);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.055, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+  clank.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  clank.start(now);
+  clank.stop(now + 0.14);
+
+  const knock = ctx.createOscillator();
+  knock.type = 'triangle';
+  knock.frequency.setValueAtTime(95, now + 0.04);
+
+  const knockGain = ctx.createGain();
+  knockGain.gain.setValueAtTime(0.04, now + 0.04);
+  knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+  knock.connect(knockGain);
+  knockGain.connect(ctx.destination);
+  knock.start(now + 0.04);
+  knock.stop(now + 0.17);
+}
+
 type ItemSwitchSoundKind = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
 type StageCombatCueSoundKind = 'match';
 

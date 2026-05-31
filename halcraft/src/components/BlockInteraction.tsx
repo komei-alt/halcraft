@@ -28,7 +28,14 @@ import { isTouchDevice } from '../utils/device';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnBlockUseEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
-import { playHitSound, playBlockBreakSound, playBlockPlaceSound, playInventoryEmptySound, playBlockUseFeedbackSound } from '../utils/sounds';
+import {
+  playHitSound,
+  playBlockBreakSound,
+  playBlockPlaceSound,
+  playInventoryEmptySound,
+  playBlockUseFeedbackSound,
+  playMiningBlockedSound,
+} from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
 import type { BlockUseFeedbackContent, BlockUseFeedbackContext } from '../utils/blockUseFeedback';
@@ -81,6 +88,12 @@ interface BreakProgress {
   hardness: number;
 }
 
+interface BlockBreakBlocker {
+  reason: 'unbreakable' | 'tool-tier';
+  requiredTier: number;
+  playerTier: number;
+}
+
 interface TargetPlayer {
   id: string;
   x: number;
@@ -130,6 +143,37 @@ const INTERACTIVE_PASS_THROUGH_BLOCKS = new Set<BlockId>([
   BLOCK_IDS.LEVER,
   BLOCK_IDS.NETHER_PORTAL,
 ]);
+
+const TOOL_TIER_LABELS: Record<number, string> = {
+  0: '素手',
+  1: '木の道具',
+  2: '石の道具',
+  3: '鉄の道具',
+  4: 'ダイヤの道具',
+};
+
+function getToolTierLabel(tier: number): string {
+  const safeTier = Math.max(0, Math.min(4, Math.floor(tier)));
+  return TOOL_TIER_LABELS[safeTier] ?? '上位の道具';
+}
+
+function getBlockShortName(blockId: BlockId): string {
+  return (BLOCK_DEFS[blockId]?.name ?? 'このブロック').replace('ブロック', '');
+}
+
+function getBlockBreakBlocker(blockId: BlockId, isBuildMode: boolean, playerTier: number): BlockBreakBlocker | null {
+  const def = BLOCK_DEFS[blockId];
+  if (def?.unbreakable) {
+    return { reason: 'unbreakable', requiredTier: 0, playerTier };
+  }
+
+  const requiredTier = def?.minToolTier ?? 0;
+  if (!isBuildMode && requiredTier > 0 && playerTier < requiredTier) {
+    return { reason: 'tool-tier', requiredTier, playerTier };
+  }
+
+  return null;
+}
 
 function getChestLoot(stageId: string | null, isBuildModeStage: boolean): ChestLootItem[] {
   if (stageId === 'build-forest') {
@@ -436,6 +480,46 @@ export function BlockInteraction() {
     if (!emitted) return;
     spawnBlockUseEffect(emitted.kind, x, y, z, emitted.accent);
     playBlockUseFeedbackSound(emitted.soundKind);
+  }, []);
+
+  const emitMiningBlockedFeedback = useCallback((
+    blockId: BlockId,
+    x: number,
+    y: number,
+    z: number,
+    blocker: BlockBreakBlocker,
+  ) => {
+    const blockName = getBlockShortName(blockId);
+    const feedback: BlockUseFeedbackContent = blocker.reason === 'unbreakable'
+      ? {
+          icon: '🛡️',
+          eyebrow: '破壊できない',
+          title: `${blockName}は守られている`,
+          detail: 'このブロックは壊せない。道や拠点は別の素材で広げよう。',
+          accent: '#cfd8dc',
+          glow: 'rgba(190, 210, 220, 0.28)',
+          kind: 'defense',
+          soundKind: 'defense',
+        }
+      : {
+          icon: '⛏️',
+          eyebrow: '道具が足りない',
+          title: `${getToolTierLabel(blocker.requiredTier)}以上が必要`,
+          detail: `${blockName}は${getToolTierLabel(blocker.requiredTier)}で掘れる。いまは${getToolTierLabel(blocker.playerTier)}。`,
+          accent: '#ffd166',
+          glow: 'rgba(255, 190, 90, 0.32)',
+          kind: 'utility',
+          soundKind: 'utility',
+        };
+
+    const emitted = useItemFeedbackStore.getState().emitFeedback(blockId, feedback, {
+      rateLimitKey: `mining-blocked:${blocker.reason}:${x},${y},${z}:${blocker.requiredTier}:${blocker.playerTier}`,
+      rateLimitMs: blocker.reason === 'unbreakable' ? 1200 : 900,
+    });
+    if (!emitted) return;
+
+    spawnBlockUseEffect(emitted.kind, x, y, z, emitted.accent);
+    playMiningBlockedSound();
   }, []);
 
   const recordBlockBreakMastery = useCallback((blockId: BlockId) => {
@@ -868,17 +952,17 @@ export function BlockInteraction() {
       const blockId = getBlock(found.x, found.y, found.z);
       const def = BLOCK_DEFS[blockId];
       const hardness = isBuildMode ? 0 : (def?.hardness ?? 0.5);
-      const minTier = def?.minToolTier ?? 0;
       const playerTier = usePlayerStore.getState().getToolTierLevel();
+      const blocker = getBlockBreakBlocker(blockId, isBuildMode, playerTier);
 
-      // ティア不足でブロックが掘れない（ビルドモード除く）
-      if (!isBuildMode && minTier > 0 && playerTier < minTier) {
+      // 破壊不可・ティア不足でブロックが掘れない
+      if (blocker) {
         // 進行度をリセット（掘れないことを示す）
         if (bp) {
           breakProgressRef.current = null;
           setBreakProgressState(null);
         }
-        // TODO: 掘れない音のフィードバック
+        emitMiningBlockedFeedback(blockId, found.x, found.y, found.z, blocker);
       } else if (hardness <= 0) {
         // hardness <= 0 のブロック（TNT等）は即破壊
         if (breakBlock(found.x, found.y, found.z)) {
@@ -993,7 +1077,14 @@ export function BlockInteraction() {
           const t = targetRef.current;
           if (t) {
             const blockId = getBlock(t.x, t.y, t.z);
-            if (breakBlock(t.x, t.y, t.z)) {
+            const blocker = getBlockBreakBlocker(
+              blockId,
+              isBuildMode,
+              usePlayerStore.getState().getToolTierLevel(),
+            );
+            if (blocker) {
+              emitMiningBlockedFeedback(blockId, t.x, t.y, t.z, blocker);
+            } else if (breakBlock(t.x, t.y, t.z)) {
               // パーティクルエフェクト + ドロップアイテム
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               grantBrokenBlock(blockId, t.x, t.y, t.z);
@@ -1041,7 +1132,14 @@ export function BlockInteraction() {
           const t = targetRef.current;
           if (t) {
             const blockId = getBlock(t.x, t.y, t.z);
-            if (breakBlock(t.x, t.y, t.z)) {
+            const blocker = getBlockBreakBlocker(
+              blockId,
+              isBuildMode,
+              usePlayerStore.getState().getToolTierLevel(),
+            );
+            if (blocker) {
+              emitMiningBlockedFeedback(blockId, t.x, t.y, t.z, blocker);
+            } else if (breakBlock(t.x, t.y, t.z)) {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
@@ -1078,7 +1176,7 @@ export function BlockInteraction() {
         lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
       }
     }
-  }, [breakBlock, camera, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
+  }, [breakBlock, camera, emitMiningBlockedFeedback, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {
