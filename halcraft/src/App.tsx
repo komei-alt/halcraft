@@ -31,6 +31,7 @@ import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
+import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
 import { GraphicsPostFX, RendererColorPipeline } from './components/GraphicsQuality';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
@@ -142,6 +143,7 @@ function GameCanvas() {
           <StageEventFX />
           <StageLandmarkBeaconFX />
           <StageModeFlowFX />
+          <FunctionalBlockAuraFX />
           <World />
           <TorchRenderer />
           <BedRenderer />
