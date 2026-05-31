@@ -1331,6 +1331,63 @@ export function playRocketReadySound(): void {
   playCombatTechniqueSound('ready');
 }
 
+export type VehicleFirepowerSoundKind = 'hit' | 'chain' | 'critical';
+
+/** 乗り物火力SE — 戦車・飛行機の命中チェーンを短く強く返す */
+export function playVehicleFirepowerSound(kind: VehicleFirepowerSoundKind): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`vehicleFirepower:${kind}`, kind === 'hit' ? 130 : 420)) return;
+  const now = ctx.currentTime;
+  const notes: Record<VehicleFirepowerSoundKind, number[]> = {
+    hit: [196, 392],
+    chain: [220, 330, 660],
+    critical: [164.81, 329.63, 659.25, 987.77],
+  };
+  const wave: OscillatorType = kind === 'critical' ? 'sawtooth' : 'square';
+
+  notes[kind].forEach((note, index) => {
+    const t = now + index * 0.036;
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'hit' ? 1.08 : 0.92), t + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'hit' ? 'bandpass' : 'lowpass';
+    filter.frequency.setValueAtTime(kind === 'critical' ? 1150 : 1600, t);
+    filter.Q.setValueAtTime(kind === 'hit' ? 1.6 : 1.05, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'hit' ? 0.025 : 0.044, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
+
+  if (kind === 'hit') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'critical' ? 1500 : 2200, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(kind === 'critical' ? 0.045 : 0.026, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.16);
+}
+
 /** ツール破壊SE — 金属が砕ける音 */
 export function playToolBreakSound(): void {
   const ctx = getAudioContext();

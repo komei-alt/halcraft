@@ -19,6 +19,7 @@ import { useMobStore } from '../../stores/useMobStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import { useVehicleFirepowerStore, type VehicleFirepowerKind } from '../../stores/useVehicleFirepowerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
@@ -32,6 +33,7 @@ import {
   playRocketLaunchSound,
 } from '../../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
+import { getStageModeVehicleGain } from '../../types/stageModeRules';
 import { TANK_TURRET_PIVOT } from './vehicleModelConfig';
 import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 
@@ -110,8 +112,22 @@ interface BombProjectile {
 
 let nextProjectileId = 0;
 
-function recordVehicleStrike(type: VehicleType, amount = 1, critical = false): void {
+function recordVehicleStrike(
+  type: VehicleType,
+  amount = 1,
+  critical = false,
+  kind: VehicleFirepowerKind = 'gatling',
+): void {
   const delta = Math.max(1, Math.round(amount));
+  const stageId = useModeFlowStore.getState().currentStageId;
+  const modeGain = getStageModeVehicleGain(stageId, type, delta, critical);
+  useVehicleFirepowerStore.getState().recordStrike({
+    vehicleType: type,
+    kind,
+    amount: delta,
+    critical,
+    modeGain,
+  });
   useStageChallengeStore.getState().recordVehicleHit(delta);
   useModeFlowStore.getState().recordVehicleHit(type, delta, critical);
 }
@@ -375,7 +391,7 @@ export function VehicleWeapons() {
       mobStore.damageMob(mob.id, damage, dirX, dirZ);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= EXPLOSION_DAMAGE * 0.7);
-      recordVehicleStrike('tank', 1, damage >= EXPLOSION_DAMAGE * 0.7);
+      recordVehicleStrike('tank', 1, damage >= EXPLOSION_DAMAGE * 0.7, 'cannon');
     }
 
     for (const [, player] of multi.remotePlayers) {
@@ -420,7 +436,7 @@ export function VehicleWeapons() {
       mobStore.damageMob(mob.id, damage, dirX, dirZ);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= BOMB_EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
-      recordVehicleStrike('airplane', 1, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
+      recordVehicleStrike('airplane', 1, damage >= BOMB_EXPLOSION_DAMAGE * 0.7, 'bomb');
     }
 
     for (const [, player] of multi.remotePlayers) {

@@ -13,6 +13,7 @@ import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
+import { useVehicleFirepowerStore } from '../../stores/useVehicleFirepowerStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
 import { getStageChallenges } from '../../types/stageChallenges';
 import { formatStageMasteryPerkLabel, getStageMasteryPerkForProgress } from '../../types/stageMastery';
@@ -48,6 +49,7 @@ export function ProgressCelebration() {
   const lastBuildComboIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
   const lastModeFlowIdRef = useRef<string | null>(null);
+  const lastVehicleFirepowerIdRef = useRef<string | null>(null);
   const lastRunBonusKeyRef = useRef<string | null>(null);
   const pendingRunBonusKeyRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
@@ -275,6 +277,23 @@ export function ProgressCelebration() {
       });
     });
 
+    const unsubscribeVehicleFirepower = useVehicleFirepowerStore.subscribe((state, previous) => {
+      const event = state.recentEvent;
+      if (useGameStore.getState().phase !== 'playing' || !event?.celebration) return;
+      if (event.id === previous.recentEvent?.id || lastVehicleFirepowerIdRef.current === event.id) return;
+      lastVehicleFirepowerIdRef.current = event.id;
+
+      addToast({
+        id: event.id,
+        icon: event.icon,
+        eyebrow: event.eyebrow,
+        title: event.title,
+        detail: `${event.detail} / ${event.meterText}`,
+        accent: event.accent,
+        glow: event.glow,
+      });
+    });
+
     return () => {
       unsubscribeMastery();
       unsubscribeChallenge();
@@ -284,6 +303,7 @@ export function ProgressCelebration() {
       unsubscribeBuildCombo();
       unsubscribeItemFeedback();
       unsubscribeModeFlow();
+      unsubscribeVehicleFirepower();
     };
   }, [addToast]);
 

@@ -1,9 +1,10 @@
 // 乗り物用の照準HUD
 
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleFirepowerStore } from '../../stores/useVehicleFirepowerStore';
 import { getStageModeRule } from '../../types/stageModeRules';
-import type { CSSProperties } from 'react';
 
 const panelBase: CSSProperties = {
   position: 'fixed',
@@ -30,11 +31,30 @@ function Tick({ axis }: { axis: 'horizontal' | 'vertical' }) {
 export function VehicleAimHUD() {
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const currentStageId = useGameStore((s) => s.currentStageId);
+  const firepowerEvent = useVehicleFirepowerStore((s) => s.recentEvent);
+  const firepowerEventId = firepowerEvent?.id;
+  const [now, setNow] = useState(() => performance.now());
+
+  useEffect(() => {
+    if (!firepowerEventId) return undefined;
+    const frame = window.requestAnimationFrame(() => setNow(performance.now()));
+    const timer = window.setInterval(() => setNow(performance.now()), 120);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearInterval(timer);
+    };
+  }, [firepowerEventId]);
+
   if (activeVehicle !== 'tank' && activeVehicle !== 'airplane') return null;
 
   const isTank = activeVehicle === 'tank';
   const modeRule = getStageModeRule(currentStageId);
   const desertFirepowerActive = currentStageId === 'war-desert' && modeRule?.category === 'war';
+  const firepowerActive = Boolean(
+    firepowerEvent
+      && firepowerEvent.vehicleType === activeVehicle
+      && now - firepowerEvent.createdAt < 1280,
+  );
   const accent = desertFirepowerActive
     ? modeRule.accent
     : isTank
@@ -110,6 +130,40 @@ export function VehicleAimHUD() {
           </span>
         )}
       </div>
+
+      {firepowerActive && firepowerEvent && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: 'calc(50% + 94px)',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          maxWidth: 'min(320px, calc(100vw - 34px))',
+          padding: '5px 8px',
+          borderRadius: 6,
+          border: `1px solid ${firepowerEvent.accent}88`,
+          background: 'rgba(10, 12, 18, 0.56)',
+          boxShadow: `0 0 14px ${firepowerEvent.glow}`,
+          color: 'rgba(255, 255, 255, 0.92)',
+          fontSize: 10,
+          fontWeight: 900,
+          textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+        }}>
+          <span style={{ flex: '0 0 auto', color: firepowerEvent.accent }}>
+            {firepowerEvent.icon}
+          </span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {firepowerEvent.title}
+          </span>
+          <span style={{ flex: '0 0 auto', color: firepowerEvent.accent }}>
+            {firepowerEvent.meterText}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
