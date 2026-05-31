@@ -227,6 +227,17 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
         soundKind: 'ready',
       };
     }
+    if (feedback.label.includes('ジャスト')) {
+      return {
+        eyebrow: 'ジャストコンボ',
+        label: feedback.kind === 'critical' ? 'タイミング斬り' : 'コンボ接続',
+        detail: '次の斬りを早めにつなぐと火力と戦意が伸びる',
+        meterLabel: 'JUST',
+        meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'SYNC',
+        ratio: Math.min(1, feedback.streak / 5),
+        soundKind: feedback.streak >= 3 ? 'chain' : 'blast',
+      };
+    }
     if (feedback.kind === 'critical') {
       return {
         eyebrow: 'セイバー技',

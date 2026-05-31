@@ -23,6 +23,7 @@ import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHi
 import { spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import {
   playLightsaberIgnite,
+  playLightsaberJustCombo,
   playLightsaberSwing,
   playLightsaberHit,
   setLightsaberHumIntensity,
@@ -60,6 +61,9 @@ const PLAYER_HIT_HEIGHT = 1.7;
 
 /** コンボリセットまでの猶予（秒） */
 const COMBO_RESET_TIME = 0.8;
+/** 次の斬りを早めにつなげた時だけ成立するジャストコンボ判定 */
+const JUST_COMBO_WINDOW_RATIO = 0.62;
+const JUST_COMBO_DAMAGE_BONUS = 0.12;
 
 /** FPS表示オフセット */
 const IDLE_OFFSET = new THREE.Vector3(0.46, -0.48, -0.68);
@@ -252,6 +256,8 @@ export function Lightsaber() {
   const isSwinging = useRef(false);
   const lastComboTime = useRef(0);
   const hasHitThisSwing = useRef(false);
+  const justComboThisSwing = useRef(false);
+  const justComboChain = useRef(0);
   const lightBoost = useRef(0);
   const wasEquipped = useRef(false);
 
@@ -263,6 +269,8 @@ export function Lightsaber() {
     const techniqueBonus = getLightsaberTechniqueBonus();
     const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
     const combatFocus = getCombatFocusModifier('lightsaber');
+    const justCombo = justComboThisSwing.current;
+    const justChainBonus = justCombo ? Math.min(0.12, Math.max(0, justComboChain.current - 1) * 0.03) : 0;
     const attackReach = ATTACK_REACH
       + masteryBonus.lightsaberReachBonus
       + styleBonus.lightsaberReachBonus
@@ -273,7 +281,8 @@ export function Lightsaber() {
       * masteryBonus.lightsaberDamageMultiplier
       * techniqueBonus.lightsaberDamageMultiplier
       * styleBonus.lightsaberDamageMultiplier
-      * combatFocus.damageMultiplier,
+      * combatFocus.damageMultiplier
+      * (justCombo ? 1 + JUST_COMBO_DAMAGE_BONUS + justChainBonus : 1),
     ));
 
     attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -315,20 +324,24 @@ export function Lightsaber() {
 
       if (closestPlayerId && closestPlayerPos) {
         multiState.sendPlayerAttack(closestPlayerId, damage, dir.x, dir.z);
+        const isFinisher = step.damageMultiplier >= 1.5;
+        const isCriticalHit = isFinisher || justCombo;
         spawnHitImpactEffect(
           closestPlayerPos[0], closestPlayerPos[1], closestPlayerPos[2],
-          dir.x, dir.y, dir.z, step.damageMultiplier >= 1.5,
+          dir.x, dir.y, dir.z, isCriticalHit,
         );
         playLightsaberHit();
         useMasteryStore.getState().recordItemHit('lightsaber', {
-          label: step.damageMultiplier >= 1.5 ? 'フィニッシュヒット' : 'セイバーヒット',
-          amount: step.damageMultiplier >= 1.5 ? 15 : 9,
-          critical: step.damageMultiplier >= 1.5,
+          label: isFinisher
+            ? justCombo ? 'ジャストフィニッシュ' : 'フィニッシュヒット'
+            : justCombo ? 'ジャストコンボ斬り' : 'セイバーヒット',
+          amount: isFinisher ? 15 : justCombo ? 12 : 9,
+          critical: isCriticalHit,
         });
         useStageChallengeStore.getState().recordWeaponHit('lightsaber');
         useStageConditionStore.getState().recordWeaponHit('lightsaber');
-        useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, step.damageMultiplier >= 1.5);
-        lightBoost.current = 1;
+        useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, isCriticalHit);
+        lightBoost.current = justCombo ? 1.25 : 1;
         hasHitThisSwing.current = true;
         return true;
       }
@@ -367,7 +380,8 @@ export function Lightsaber() {
     }
 
     if (closestMobId && closestMobPos) {
-      const isCritical = step.damageMultiplier >= 1.5;
+      const isFinisher = step.damageMultiplier >= 1.5;
+      const isCritical = isFinisher || justCombo;
       useMobStore.getState().damageMob(closestMobId, damage, dir.x, dir.z);
       useMultiplayerStore.getState().sendMobDamage(closestMobId, damage, dir.x * 1.5, dir.z * 1.5);
       spawnDamagePopup(damage, closestMobPos.x, closestMobPos.hitY - 1.0, closestMobPos.z, isCritical);
@@ -377,14 +391,16 @@ export function Lightsaber() {
       );
       playLightsaberHit();
       useMasteryStore.getState().recordItemHit('lightsaber', {
-        label: isCritical ? 'フィニッシュヒット' : 'セイバーヒット',
-        amount: isCritical ? 15 : 9,
+        label: isFinisher
+          ? justCombo ? 'ジャストフィニッシュ' : 'フィニッシュヒット'
+          : justCombo ? 'ジャストコンボ斬り' : 'セイバーヒット',
+        amount: isFinisher ? 15 : justCombo ? 12 : 9,
         critical: isCritical,
       });
       useStageChallengeStore.getState().recordWeaponHit('lightsaber');
       useStageConditionStore.getState().recordWeaponHit('lightsaber');
       useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, isCritical);
-      lightBoost.current = 1;
+      lightBoost.current = justCombo ? 1.25 : 1;
       hasHitThisSwing.current = true;
       return true;
     }
@@ -404,17 +420,31 @@ export function Lightsaber() {
       * styleBonus.lightsaberComboWindowMultiplier
       * combatFocus.lightsaberComboWindowMultiplier;
 
+    const comboAge = lastComboTime.current > 0 ? now - lastComboTime.current : Number.POSITIVE_INFINITY;
+
     // コンボリセット判定
-    if (now - lastComboTime.current > comboResetTime) {
+    if (comboAge > comboResetTime) {
       comboIndex.current = 0;
+      justComboChain.current = 0;
     }
+    const justComboWindow = comboResetTime * JUST_COMBO_WINDOW_RATIO;
+    const nextJustCombo = comboIndex.current > 0 && comboAge <= justComboWindow;
+    justComboThisSwing.current = nextJustCombo;
+    justComboChain.current = nextJustCombo ? justComboChain.current + 1 : 0;
 
     isSwinging.current = true;
     swingProgress.current = 0;
     hasHitThisSwing.current = false;
     lastComboTime.current = now;
     playLightsaberSwing(comboIndex.current);
-    useMasteryStore.getState().recordItemUse('lightsaber', { label: 'コンボ開始', amount: 2 });
+    if (nextJustCombo) {
+      playLightsaberJustCombo(justComboChain.current);
+      lightBoost.current = Math.max(lightBoost.current, 0.74);
+    }
+    useMasteryStore.getState().recordItemUse('lightsaber', {
+      label: nextJustCombo ? 'ジャストコンボ開始' : 'コンボ開始',
+      amount: nextJustCombo ? 4 : 2,
+    });
   }, []);
 
   // マウスイベント登録
@@ -457,6 +487,8 @@ export function Lightsaber() {
       isSwinging.current = false;
       swingProgress.current = 0;
       comboIndex.current = 0;
+      justComboThisSwing.current = false;
+      justComboChain.current = 0;
       bladeActivation.current = 0;
       trailSamples.current = [];
       for (const material of trailMaterials.current) {

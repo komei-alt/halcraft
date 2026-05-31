@@ -379,6 +379,41 @@ export function playLightsaberSwing(comboStep: number): void {
 }
 
 // ============================================
+// 3.5. ジャストコンボ音
+// ============================================
+
+export function playLightsaberJustCombo(chain: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('lsJustCombo', 120)) return;
+  resumeIfNeeded(ctx);
+
+  const safeChain = Math.max(1, Math.min(6, chain));
+  const now = ctx.currentTime;
+  const out = getMasterInput(ctx);
+
+  const baseFreq = 620 + safeChain * 58;
+  for (let i = 0; i < 3; i++) {
+    const t = now + i * 0.036;
+    const tone = ctx.createOscillator();
+    tone.type = i === 2 ? 'triangle' : 'sine';
+    tone.frequency.setValueAtTime(baseFreq + i * 145, t);
+    tone.frequency.exponentialRampToValueAtTime(baseFreq + 300 + i * 170, t + 0.08);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(0.075 + safeChain * 0.006, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+
+    tone.connect(gain);
+    gain.connect(out);
+    tone.start(t);
+    tone.stop(t + 0.14);
+  }
+
+  connectFilteredNoise(ctx, now + 0.02, 0.12, 'bandpass', 2200 + safeChain * 120, 2.4, 0.055);
+}
+
+// ============================================
 // 4. ヒット音
 // ============================================
 
