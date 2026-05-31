@@ -14,7 +14,9 @@ import { useStageEventStore } from '../../stores/useStageEventStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { getMasteryPerkSummary, isMasteryPerkUpgradeLevel } from '../../types/masteryPerks';
+import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
 import { isTouchDevice } from '../../utils/device';
+import { playStageRewardSound } from '../../utils/sounds';
 
 interface CelebrationToast {
   id: string;
@@ -31,6 +33,10 @@ const MAX_TOASTS = 3;
 
 export function ProgressCelebration() {
   const phase = useGameStore((s) => s.phase);
+  const stage = useGameStore((s) => s.currentStage);
+  const runId = useGameStore((s) => s.runId);
+  const challengeBestByStage = useStageChallengeStore((s) => s.bestByStage);
+  const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const [toasts, setToasts] = useState<CelebrationToast[]>([]);
   const lastMasteryIdRef = useRef<number | null>(null);
   const lastChallengeIdRef = useRef<string | null>(null);
@@ -40,6 +46,8 @@ export function ProgressCelebration() {
   const lastBuildComboIdRef = useRef<string | null>(null);
   const lastItemFeedbackIdRef = useRef<string | null>(null);
   const lastModeFlowIdRef = useRef<string | null>(null);
+  const lastRunBonusKeyRef = useRef<string | null>(null);
+  const pendingRunBonusKeyRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
@@ -58,6 +66,47 @@ export function ProgressCelebration() {
       window.clearTimeout(timer);
     }
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'playing' || !stage) return;
+
+    const toastKey = `${runId}-${stage.id}`;
+    if (lastRunBonusKeyRef.current === toastKey) return;
+    if (pendingRunBonusKeyRef.current === toastKey) return;
+
+    const challengeMedal = challengeBestByStage[stage.id]?.medal ?? 'none';
+    const buildScore = buildBestByStage[stage.id]?.score ?? 0;
+    const runBonus = getStageRunBonusForProgress(stage.id, challengeMedal, buildScore);
+    if (!runBonus) return;
+
+    pendingRunBonusKeyRef.current = toastKey;
+    const timer = window.setTimeout(() => {
+      pendingRunBonusKeyRef.current = null;
+      if (useGameStore.getState().phase !== 'playing') return;
+      if (useGameStore.getState().currentStage?.id !== stage.id) return;
+      if (lastRunBonusKeyRef.current === toastKey) return;
+
+      lastRunBonusKeyRef.current = toastKey;
+      playStageRewardSound(stage.category === 'build' ? 'build_supply' : 'war_supply');
+      addToast({
+        id: `run-bonus-${toastKey}`,
+        icon: runBonus.icon,
+        eyebrow: runBonus.sourceLabel,
+        title: `${runBonus.shortLabel} ${runBonus.title}`,
+        detail: formatStageRunBonusLabel(runBonus),
+        accent: runBonus.accent,
+        glow: `${runBonus.accent}44`,
+      });
+    }, 260);
+    timersRef.current.push(timer);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (pendingRunBonusKeyRef.current === toastKey) {
+        pendingRunBonusKeyRef.current = null;
+      }
+    };
+  }, [addToast, buildBestByStage, challengeBestByStage, phase, runId, stage]);
 
   useEffect(() => {
     const unsubscribeMastery = useMasteryStore.subscribe((state, previous) => {
