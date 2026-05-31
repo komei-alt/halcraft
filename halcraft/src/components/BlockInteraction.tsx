@@ -24,6 +24,7 @@ import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
 import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { isTouchDevice } from '../utils/device';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
@@ -230,6 +231,10 @@ function formatBlockList(items: ChestLootItem[] | SmeltResult[]): string {
 function getBuilderMasteryBonus() {
   const level = useMasteryStore.getState().items.builder?.level ?? 1;
   return getMasteryBonus('builder', level);
+}
+
+function getBuilderTechniqueBonus() {
+  return getMasteryTechniqueBonus('builder', useMasteryStore.getState().items.builder);
 }
 
 /** ブロック選択ハイライトの表示 */
@@ -984,7 +989,8 @@ export function BlockInteraction() {
       } else {
         // 進行度を加算（ツール速度倍率適用）
         const miningSpeed = usePlayerStore.getState().getMiningSpeed(def?.blockCategory)
-          * getBuilderMasteryBonus().miningSpeedMultiplier;
+          * getBuilderMasteryBonus().miningSpeedMultiplier
+          * getBuilderTechniqueBonus().builderMiningSpeedMultiplier;
         bp.progress += (dt * miningSpeed) / hardness;
 
         if (bp.progress >= 1) {
@@ -1045,7 +1051,9 @@ export function BlockInteraction() {
             // 一度リピートに入った後は通常間隔で連続設置する。
             // 設置直後はレイマーチングで照準先が自分側へずれるため、
             // 照準変化による即時連射はせず常に間隔ベースで判定する（自分方向への暴発防止）。
-            const placeInterval = PLACE_INTERVAL * getBuilderMasteryBonus().placementIntervalMultiplier;
+            const placeInterval = PLACE_INTERVAL
+              * getBuilderMasteryBonus().placementIntervalMultiplier
+              * getBuilderTechniqueBonus().builderPlacementIntervalMultiplier;
             const requiredDelay = placeRepeatStartedRef.current ? placeInterval : PLACE_INITIAL_DELAY;
             if (placeTimerRef.current >= requiredDelay) {
               // TNT右クリック起爆チェック

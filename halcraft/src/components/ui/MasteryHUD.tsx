@@ -13,6 +13,7 @@ import {
 } from '../../stores/useMasteryStore';
 import { BLOCK_DEFS, HOTBAR_BLOCKS, type BlockId } from '../../types/blocks';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
+import { formatMasteryTechniqueBonus, getMasteryTechniqueBonus } from '../../types/masteryTechniquePerks';
 import {
   formatStageCombatBonus,
   getStageCombatStyle,
@@ -67,6 +68,14 @@ function formatCooldown(seconds: number): string {
   return seconds < 1 ? `${seconds.toFixed(1)}s` : `${Math.ceil(seconds)}s`;
 }
 
+function formatTechniqueDetail(
+  baseDetail: string,
+  equippedItem: EquippedItem,
+  bonus: ReturnType<typeof getMasteryTechniqueBonus>,
+): string {
+  return `${baseDetail} / ${bonus.title}: ${bonus.tierLabel} ${formatMasteryTechniqueBonus(equippedItem, bonus)}`;
+}
+
 function getItemTechniqueRecord(
   equippedItem: EquippedItem,
   mastery: ReturnType<typeof useMasteryStore.getState>['items'][EquippedItem],
@@ -76,14 +85,16 @@ function getItemTechniqueRecord(
   const bestScore = mastery.bestTechniqueScore ?? 0;
   const techniqueCount = mastery.techniqueActivations ?? 0;
   const bestLabel = mastery.bestTechniqueLabel || 'まだ記録なし';
+  const techniqueBonus = getMasteryTechniqueBonus(equippedItem, mastery);
 
   if (equippedItem === 'builder') {
+    const detail = techniqueCount > 0
+      ? `${bestLabel} / 技 ${techniqueCount}回 / ${mastery.blocksChanged}ブロック`
+      : '置く・掘る・起爆を続けると制作連鎖が記録される';
     return {
       icon: '🏗️',
       label: bestStreak >= 8 ? '制作連鎖記録' : '制作連鎖を作ろう',
-      detail: techniqueCount > 0
-        ? `${bestLabel} / 技 ${techniqueCount}回 / ${mastery.blocksChanged}ブロック`
-        : '置く・掘る・起爆を続けると制作連鎖が記録される',
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
       meterLabel: 'CHAIN',
       meterText: bestStreak > 0 ? `x${bestStreak}` : 'START',
       ratio: clampRatio(bestStreak / 12),
@@ -92,12 +103,13 @@ function getItemTechniqueRecord(
   }
 
   if (equippedItem === 'rocket_launcher') {
+    const detail = techniqueCount > 0
+      ? `${bestLabel} / 技 ${techniqueCount}回`
+      : '3体以上を巻き込むと爆風技の記録が伸びる';
     return {
       icon: '💥',
       label: bestScore > 0 ? '爆風ベスト' : '爆風ベストを作ろう',
-      detail: techniqueCount > 0
-        ? `${bestLabel} / 技 ${techniqueCount}回`
-        : '3体以上を巻き込むと爆風技の記録が伸びる',
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
       meterLabel: 'BLAST',
       meterText: bestScore > 0 ? `${bestScore}` : 'AREA',
       ratio: clampRatio(bestScore / 90),
@@ -106,12 +118,13 @@ function getItemTechniqueRecord(
   }
 
   if (equippedItem === 'machine_gun') {
+    const detail = techniqueCount > 0
+      ? `${bestLabel} / 技 ${techniqueCount}回 / HIT ${mastery.hits}`
+      : '当て続けるほど制圧チェーンが記録される';
     return {
       icon: '🎯',
       label: bestStreak >= 5 ? '弾幕チェーン記録' : '弾幕チェーンを作ろう',
-      detail: techniqueCount > 0
-        ? `${bestLabel} / 技 ${techniqueCount}回 / HIT ${mastery.hits}`
-        : '当て続けるほど制圧チェーンが記録される',
+      detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
       meterLabel: 'BURST',
       meterText: bestStreak > 0 ? `x${bestStreak}` : 'HOLD',
       ratio: clampRatio(bestStreak / 12),
@@ -119,12 +132,13 @@ function getItemTechniqueRecord(
     };
   }
 
+  const detail = techniqueCount > 0
+    ? `${bestLabel} / 技 ${techniqueCount}回 / DOWN ${mastery.defeats}`
+    : '5段目のフィニッシュを当てると記録が伸びる';
   return {
     icon: '✨',
     label: bestStreak >= 5 ? 'コンボ記録' : 'コンボ記録を作ろう',
-    detail: techniqueCount > 0
-      ? `${bestLabel} / 技 ${techniqueCount}回 / DOWN ${mastery.defeats}`
-      : '5段目のフィニッシュを当てると記録が伸びる',
+    detail: formatTechniqueDetail(detail, equippedItem, techniqueBonus),
     meterLabel: 'COMBO',
     meterText: bestStreak > 0 ? `x${bestStreak}` : '5段',
     ratio: clampRatio(bestStreak / 8),

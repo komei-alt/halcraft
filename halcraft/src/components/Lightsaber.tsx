@@ -15,6 +15,7 @@ import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { getStageCombatModifier } from '../types/stageCombatStyles';
 
 import { mobileActions } from '../utils/touchInput';
@@ -28,6 +29,10 @@ import {
   startLightsaberHumLoop,
   stopLightsaberHumLoop,
 } from '../utils/lightsaberSounds';
+
+function getLightsaberTechniqueBonus() {
+  return getMasteryTechniqueBonus('lightsaber', useMasteryStore.getState().items.lightsaber);
+}
 
 // ============================================
 // 定数
@@ -249,12 +254,14 @@ export function Lightsaber() {
     const step = COMBO_STEPS[comboStep];
     const masteryLevel = useMasteryStore.getState().items.lightsaber?.level ?? 1;
     const masteryBonus = getMasteryBonus('lightsaber', masteryLevel);
+    const techniqueBonus = getLightsaberTechniqueBonus();
     const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
     const attackReach = ATTACK_REACH + masteryBonus.lightsaberReachBonus + styleBonus.lightsaberReachBonus;
     const damage = Math.max(1, Math.round(
       LIGHTSABER_BASE_DAMAGE
       * step.damageMultiplier
       * masteryBonus.lightsaberDamageMultiplier
+      * techniqueBonus.lightsaberDamageMultiplier
       * styleBonus.lightsaberDamageMultiplier,
     ));
 
@@ -379,7 +386,10 @@ export function Lightsaber() {
     if (isSwinging.current) return;
     const now = performance.now() / 1000;
     const styleBonus = getStageCombatModifier(useGameStore.getState().currentStageId, 'lightsaber');
-    const comboResetTime = COMBO_RESET_TIME * styleBonus.lightsaberComboWindowMultiplier;
+    const techniqueBonus = getLightsaberTechniqueBonus();
+    const comboResetTime = COMBO_RESET_TIME
+      * techniqueBonus.lightsaberComboWindowMultiplier
+      * styleBonus.lightsaberComboWindowMultiplier;
 
     // コンボリセット判定
     if (now - lastComboTime.current > comboResetTime) {

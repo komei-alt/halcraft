@@ -9,6 +9,7 @@ import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
 import { type ToolId, TOOL_DEFS, HAND_TIER_LEVEL, HAND_MINING_SPEED, HAND_ATTACK_DAMAGE, isEffectiveTool } from '../types/tools';
 import { type ArmorSlot, type ArmorId, ARMOR_DEFS, calculateTotalDefense, calculateDamageReduction } from '../types/armor';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { playItemSwitchSound, playRocketReadySound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
@@ -360,8 +361,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     if (state.rocketCooldown > 0 || state.isDead) return false;
     const bonus = getMasteryBonus('rocket_launcher', getMasteryLevel('rocket_launcher'));
+    const techniqueBonus = getMasteryTechniqueBonus('rocket_launcher', useMasteryStore.getState().items.rocket_launcher);
     const style = getStageCombatModifier(useGameStore.getState().currentStageId, 'rocket_launcher');
-    const cooldownDuration = ROCKET_COOLDOWN * bonus.rocketCooldownMultiplier * style.rocketCooldownMultiplier;
+    const cooldownDuration = ROCKET_COOLDOWN
+      * bonus.rocketCooldownMultiplier
+      * techniqueBonus.rocketCooldownMultiplier
+      * style.rocketCooldownMultiplier;
 
     set({
       rocketCooldown: cooldownDuration,

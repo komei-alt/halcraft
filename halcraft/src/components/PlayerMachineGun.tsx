@@ -16,6 +16,7 @@ import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { useGameStore } from '../stores/useGameStore';
 import { getMasteryBonus } from '../types/masteryPerks';
+import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { getStageCombatModifier } from '../types/stageCombatStyles';
 import { mobileActions } from '../utils/touchInput';
 import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -59,6 +60,10 @@ let nextBulletId = 0;
 function getMachineGunMasteryBonus() {
   const level = useMasteryStore.getState().items.machine_gun?.level ?? 1;
   return getMasteryBonus('machine_gun', level);
+}
+
+function getMachineGunTechniqueBonus() {
+  return getMasteryTechniqueBonus('machine_gun', useMasteryStore.getState().items.machine_gun);
 }
 
 export function PlayerMachineGun() {
@@ -128,7 +133,10 @@ export function PlayerMachineGun() {
   const fire = useCallback(() => {
     const now = performance.now() / 1000;
     const stageStyle = getStageCombatModifier(useGameStore.getState().currentStageId, 'machine_gun');
-    const fireCooldown = FIRE_COOLDOWN * stageStyle.machineGunCooldownMultiplier;
+    const techniqueBonus = getMachineGunTechniqueBonus();
+    const fireCooldown = FIRE_COOLDOWN
+      * stageStyle.machineGunCooldownMultiplier
+      * techniqueBonus.machineGunCooldownMultiplier;
     if (now - lastFireTime.current < fireCooldown) return;
     if (useVehicleStore.getState().isInVehicle()) return;
     lastFireTime.current = now;
@@ -175,6 +183,7 @@ export function PlayerMachineGun() {
     const masteryBonus = getMachineGunMasteryBonus();
     const spread = (isRightMouseDown.current ? SCOPED_SPREAD : HIP_SPREAD)
       * masteryBonus.machineGunSpreadMultiplier
+      * techniqueBonus.machineGunSpreadMultiplier
       * stageStyle.machineGunSpreadMultiplier;
     shootDir.current.x += (Math.random() - 0.5) * spread;
     shootDir.current.y += (Math.random() - 0.5) * spread;
@@ -262,7 +271,11 @@ export function PlayerMachineGun() {
     const getBlock = useWorldStore.getState().getBlock;
     const mobs = useMobStore.getState().mobs;
     const remotePlayers = useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>;
-    const bulletDamage = BULLET_DAMAGE + getMachineGunMasteryBonus().machineGunDamageBonus;
+    const masteryBonus = getMachineGunMasteryBonus();
+    const techniqueBonus = getMachineGunTechniqueBonus();
+    const bulletDamage = BULLET_DAMAGE
+      + masteryBonus.machineGunDamageBonus
+      + techniqueBonus.machineGunDamageBonus;
 
     setBullets((prev) => {
       const alive: BulletProjectile[] = [];
