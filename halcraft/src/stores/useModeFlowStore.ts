@@ -11,11 +11,12 @@ import {
   type StageModeReward,
   type StageModeRule,
 } from '../types/stageModeRules';
+import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import type { StageCategory } from '../types/stages';
 import { playModeFlowSurgeSound, playStageRewardSound } from '../utils/sounds';
 import { useInventoryStore } from './useInventoryStore';
 import type { MobType } from './useMobStore';
-import { usePlayerStore } from './usePlayerStore';
+import { usePlayerStore, type EquippedItem } from './usePlayerStore';
 
 const MODE_FLOW_MAX_RANK = 3;
 
@@ -47,6 +48,7 @@ interface ModeFlowState {
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
   recordBuildBlockPlace: (blockId: BlockId) => void;
+  recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
   recordEnemyDefeat: (mobType: MobType) => void;
   clearRecentActivation: () => void;
 }
@@ -83,6 +85,14 @@ function getRewardMultiplier(rank: number): number {
   if (rank >= 3) return 2;
   if (rank === 2) return 1.5;
   return 1;
+}
+
+function getCombatStyleHitGain(item: EquippedItem, amount: number, critical: boolean): number {
+  const safeAmount = Math.max(1, Math.round(amount));
+  if (item === 'machine_gun') return Math.min(18, safeAmount * 5 + (critical ? 4 : 0));
+  if (item === 'rocket_launcher') return Math.min(44, 16 + (safeAmount - 1) * 8 + (critical ? 8 : 0));
+  if (item === 'lightsaber') return Math.min(28, 11 + (critical ? 12 : 0));
+  return 0;
 }
 
 export function getScaledStageModeReward(rule: StageModeRule, rank: number): StageModeReward {
@@ -216,6 +226,33 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
       lastGain: gain,
       lastGainLabel: `+${gain} ${rule.meterLabel}`,
+      recentActivation: activation,
+      flowRank,
+      activationCount: nextActivationCount,
+    });
+  },
+
+  recordCombatStyleHit: (item, amount = 1, critical = false) => {
+    const state = get();
+    const stageId = state.currentStageId;
+    const rule = getStageModeRule(stageId);
+    const style = getStageCombatStyleForItem(stageId, item);
+    if (!stageId || !rule || rule.category !== 'war' || !style) return;
+
+    const gain = getCombatStyleHitGain(item, amount, critical);
+    if (gain <= 0) return;
+
+    const nextRawMeter = state.meter + gain;
+    const reached = nextRawMeter >= rule.threshold;
+    const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
+    const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
+    const createdAt = nowMs();
+    const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+
+    set({
+      meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
+      lastGain: gain,
+      lastGainLabel: `${style.shortLabel} +${gain}`,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,

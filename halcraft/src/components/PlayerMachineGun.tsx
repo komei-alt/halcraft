@@ -13,6 +13,7 @@ import { useMultiplayerStore } from '../stores/useMultiplayerStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { useGameStore } from '../stores/useGameStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getStageCombatModifier } from '../types/stageCombatStyles';
@@ -300,6 +301,7 @@ export function PlayerMachineGun() {
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '連射ヒット', amount: 6 });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
           continue;
         }
 
@@ -309,6 +311,7 @@ export function PlayerMachineGun() {
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '対戦ヒット', amount: 7 });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
           continue;
         }
 
@@ -322,6 +325,7 @@ export function PlayerMachineGun() {
           useMasteryStore.getState().recordItemHit('machine_gun', { label: '乗り物ヒット', amount: 7 });
           useStageChallengeStore.getState().recordWeaponHit('machine_gun');
           useStageConditionStore.getState().recordWeaponHit('machine_gun');
+          useModeFlowStore.getState().recordCombatStyleHit('machine_gun');
           continue;
         }
 

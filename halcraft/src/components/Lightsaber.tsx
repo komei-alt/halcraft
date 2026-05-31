@@ -13,6 +13,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { getMasteryBonus } from '../types/masteryPerks';
 import { getStageCombatModifier } from '../types/stageCombatStyles';
 
@@ -308,6 +309,7 @@ export function Lightsaber() {
         });
         useStageChallengeStore.getState().recordWeaponHit('lightsaber');
         useStageConditionStore.getState().recordWeaponHit('lightsaber');
+        useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, step.damageMultiplier >= 1.5);
         lightBoost.current = 1;
         hasHitThisSwing.current = true;
         return true;
@@ -363,6 +365,7 @@ export function Lightsaber() {
       });
       useStageChallengeStore.getState().recordWeaponHit('lightsaber');
       useStageConditionStore.getState().recordWeaponHit('lightsaber');
+      useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, isCritical);
       lightBoost.current = 1;
       hasHitThisSwing.current = true;
       return true;

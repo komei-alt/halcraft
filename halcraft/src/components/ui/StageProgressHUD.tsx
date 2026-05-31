@@ -739,33 +739,51 @@ export function StageProgressHUD() {
 
       {isCompact && modeRule && (
         <div
+          id="stage-mode-flow-mini"
           style={{
             marginTop: 7,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
             color: 'rgba(255,255,255,0.7)',
             fontSize: 9,
             lineHeight: '12px',
             fontWeight: 900,
           }}
         >
-          <span
+          <div
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
               minWidth: 0,
-              color: modeRule.accent,
+            }}
+          >
+            <span
+              style={{
+                minWidth: 0,
+                color: modeRule.accent,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {modeRule.icon} {compactModeRankLabel}: {modeRule.shortLabel}
+            </span>
+            <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+              {Math.floor(modeMeter)}/{modeRule.threshold}
+              {modeLastGainLabel ? ` ${modeLastGainLabel}` : ''}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              color: 'rgba(255,255,255,0.58)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
           >
-            {modeRule.icon} {compactModeRankLabel}: {modeRule.shortLabel}
-          </span>
-          <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
-            {Math.floor(modeMeter)}/{modeRule.threshold}
-            {modeLastGainLabel ? ` ${modeLastGainLabel}` : ''}
-          </span>
+            {modeRule.actionLabel}
+          </div>
         </div>
       )}
 

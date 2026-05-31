@@ -13,6 +13,7 @@ import { useGameStore } from '../stores/useGameStore';
 import { useMasteryStore } from '../stores/useMasteryStore';
 import { useStageChallengeStore } from '../stores/useStageChallengeStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
+import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
@@ -481,6 +482,7 @@ export function RocketLauncher() {
       });
       useStageChallengeStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
       useStageConditionStore.getState().recordWeaponHit('rocket_launcher', masteryHits);
+      useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', masteryHits, masteryHits >= 3);
     }
   }, [camera, takeDamage]);
 
@@ -758,6 +760,7 @@ export function RocketLauncher() {
           });
           useStageChallengeStore.getState().recordWeaponHit('rocket_launcher');
           useStageConditionStore.getState().recordWeaponHit('rocket_launcher');
+          useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', 1, true);
           explosionsToSpawn.push({
             pos: projectile.pos.clone(),
             syncId: projectile.syncId,
