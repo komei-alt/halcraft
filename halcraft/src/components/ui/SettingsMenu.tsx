@@ -11,6 +11,7 @@ import {
 } from '../../stores/useSettingsStore';
 import { isTouchDevice } from '../../utils/device';
 import { getPerformanceProfile, type PerformanceTier } from '../../utils/performance';
+import { SG } from './startScreenTheme';
 
 interface SettingsButtonProps {
   variant: 'menu' | 'hud';
@@ -32,14 +33,14 @@ const panelStyle: CSSProperties = {
   width: 'min(720px, calc(100vw - 28px))',
   maxHeight: 'min(720px, calc(100vh - 28px))',
   overflowY: 'auto',
-  borderRadius: 8,
-  border: '1px solid rgba(255, 255, 255, 0.16)',
-  background: 'rgba(12, 14, 18, 0.94)',
+  borderRadius: 22,
+  border: '1px solid rgba(255, 255, 255, 0.14)',
+  background: 'rgba(11, 15, 23, 0.92)',
   color: '#fff',
-  boxShadow: '0 24px 80px rgba(0, 0, 0, 0.42)',
-  backdropFilter: 'blur(14px)',
-  WebkitBackdropFilter: 'blur(14px)',
-  fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+  boxShadow: 'var(--sg-shadow)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+  fontFamily: SG.font,
 };
 
 const sectionStyle: CSSProperties = {
@@ -61,7 +62,7 @@ const labelStyle: CSSProperties = {
 };
 
 const valueStyle: CSSProperties = {
-  color: '#ffe08a',
+  color: SG.gold,
   fontSize: 12,
   fontWeight: 800,
   fontFamily: 'monospace',
@@ -100,15 +101,16 @@ const tierLabels: Record<PerformanceTier, string> = {
 };
 
 const quickButtonStyle: CSSProperties = {
-  minHeight: 36,
-  padding: '8px 12px',
-  borderRadius: 6,
-  border: '1px solid rgba(120, 210, 255, 0.72)',
-  background: 'rgba(70, 155, 210, 0.28)',
+  minHeight: 38,
+  padding: '8px 14px',
+  borderRadius: 11,
+  border: `1px solid ${SG.build}99`,
+  background: `linear-gradient(160deg, ${SG.build}3a, ${SG.build}1a)`,
   color: '#fff',
   fontWeight: 900,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+  fontFamily: SG.font,
 };
 
 function Segment<T extends string>({
@@ -140,16 +142,18 @@ function Segment<T extends string>({
               justifyContent: 'center',
               gap: 5,
               minWidth: 0,
-              padding: '7px 6px',
-              borderRadius: 6,
-              border: active ? '1px solid rgba(120, 210, 255, 0.86)' : '1px solid rgba(255, 255, 255, 0.12)',
-              background: active ? 'rgba(70, 155, 210, 0.36)' : 'rgba(255, 255, 255, 0.06)',
+              padding: '8px 6px',
+              borderRadius: 10,
+              border: active ? `1px solid ${SG.build}` : '1px solid rgba(255, 255, 255, 0.12)',
+              background: active ? `linear-gradient(160deg, ${SG.build}44, ${SG.build}1c)` : 'rgba(255, 255, 255, 0.06)',
               color: active ? '#ffffff' : 'rgba(255, 255, 255, 0.72)',
               cursor: 'pointer',
               fontWeight: 800,
               fontSize: 11,
               letterSpacing: 0,
-              boxShadow: active ? '0 0 18px rgba(90, 180, 255, 0.18)' : 'none',
+              fontFamily: SG.font,
+              transition: 'all 0.18s ease',
+              boxShadow: active ? `0 0 18px ${SG.build}33` : 'none',
             }}
           >
             <span style={{
@@ -538,14 +542,15 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             type="button"
             onClick={resetSettings}
             style={{
-              minHeight: 38,
-              padding: '8px 14px',
-              borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.12)',
+              minHeight: 40,
+              padding: '9px 16px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.14)',
               background: 'rgba(255,255,255,0.06)',
               color: 'rgba(255,255,255,0.78)',
               fontWeight: 800,
               cursor: 'pointer',
+              fontFamily: SG.font,
             }}
           >
             リセット
@@ -554,14 +559,17 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             type="button"
             onClick={onClose}
             style={{
-              minHeight: 38,
-              padding: '8px 18px',
-              borderRadius: 6,
-              border: '1px solid rgba(120, 210, 255, 0.72)',
-              background: 'rgba(70, 155, 210, 0.34)',
+              minHeight: 40,
+              padding: '9px 24px',
+              borderRadius: 12,
+              border: `2px solid ${SG.build}99`,
+              background: `linear-gradient(160deg, ${SG.build}48, ${SG.build}1f)`,
               color: '#fff',
               fontWeight: 900,
+              letterSpacing: 1,
               cursor: 'pointer',
+              fontFamily: SG.font,
+              boxShadow: `0 5px 18px ${SG.build}33`,
             }}
           >
             完了
