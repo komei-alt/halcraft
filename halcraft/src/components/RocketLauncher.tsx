@@ -320,6 +320,7 @@ export function RocketLauncher() {
   const isDead = usePlayerStore((s) => s.isDead);
   const fireRocket = usePlayerStore((s) => s.fireRocket);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const getBlock = useWorldStore((s) => s.getBlock);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
@@ -334,10 +335,16 @@ export function RocketLauncher() {
   const isTouch = useRef(isTouchDevice());
   const fireRequested = useRef(false);
   const recoil = useRef(0);
+  const idleTimer = useRef(0);
+  const readyPulse = useRef(0);
+  const previousRocketCharge = useRef(1);
   const muzzleFlashTimer = useRef(0);
   const backblastTimer = useRef(0);
 
   const weaponGroupRef = useRef<THREE.Group>(null);
+  const chargeRingRef = useRef<THREE.Mesh>(null);
+  const chargeCellRef = useRef<THREE.Mesh>(null);
+  const chargeLightRef = useRef<THREE.PointLight>(null);
 
   const launcherPos = useRef(new THREE.Vector3());
   const launcherQuat = useRef(new THREE.Quaternion());
@@ -702,12 +709,21 @@ export function RocketLauncher() {
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
 
+    idleTimer.current += dt;
     recoil.current = Math.max(0, recoil.current - dt * 5.6);
+    readyPulse.current = Math.max(0, readyPulse.current - dt * 2.4);
     muzzleFlashTimer.current = Math.max(0, muzzleFlashTimer.current - dt);
     backblastTimer.current = Math.max(0, backblastTimer.current - dt);
+    if (rocketCharge >= 0.99 && previousRocketCharge.current < 0.99) {
+      readyPulse.current = 1;
+    }
+    previousRocketCharge.current = rocketCharge;
 
     if (weaponGroupRef.current) {
+      const readyBob = rocketCharge >= 0.99 ? Math.sin(idleTimer.current * 4.8) * 0.005 : 0;
       offsetWorld.current.copy(SHOULDER_OFFSET);
+      offsetWorld.current.x += Math.sin(idleTimer.current * 0.92) * 0.007;
+      offsetWorld.current.y += Math.sin(idleTimer.current * 1.38) * 0.01 + readyBob;
       offsetWorld.current.z += recoil.current * 0.12;
       offsetWorld.current.y -= recoil.current * 0.025;
       offsetWorld.current.applyQuaternion(camera.quaternion);
@@ -717,6 +733,26 @@ export function RocketLauncher() {
 
       weaponGroupRef.current.position.copy(launcherPos.current);
       weaponGroupRef.current.quaternion.copy(launcherQuat.current);
+    }
+
+    if (chargeRingRef.current) {
+      const material = chargeRingRef.current.material as THREE.MeshBasicMaterial;
+      const readyGlow = rocketCharge >= 0.99 ? 0.45 + Math.sin(idleTimer.current * 8) * 0.12 : 0;
+      const pulse = readyPulse.current;
+      chargeRingRef.current.rotation.z += dt * (1.8 + rocketCharge * 5.5 + pulse * 5);
+      chargeRingRef.current.scale.setScalar(1 + pulse * 0.28);
+      material.color.set(rocketAccent);
+      material.opacity = 0.22 + rocketCharge * 0.34 + readyGlow + pulse * 0.18;
+    }
+    if (chargeCellRef.current) {
+      const material = chargeCellRef.current.material as THREE.MeshBasicMaterial;
+      chargeCellRef.current.scale.x = Math.max(0.08, rocketCharge);
+      material.color.set(rocketAccentSoft);
+      material.opacity = 0.32 + rocketCharge * 0.58 + readyPulse.current * 0.1;
+    }
+    if (chargeLightRef.current) {
+      chargeLightRef.current.color.set(rocketAccent);
+      chargeLightRef.current.intensity = 0.8 + rocketCharge * 2.6 + readyPulse.current * 3.4;
     }
 
     const canUseLauncher = phase === 'playing'
@@ -1038,6 +1074,37 @@ export function RocketLauncher() {
             <cylinderGeometry args={[0.055, 0.055, 0.035, 12]} />
             <meshStandardMaterial color="#202426" roughness={0.45} metalness={0.55} />
           </mesh>
+
+          {/* 装填状態が見えるエネルギーリング */}
+          <mesh ref={chargeRingRef} position={[0.18, 0.28, -0.96]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.074, 0.006, 8, 28]} />
+            <meshBasicMaterial
+              color={rocketAccent}
+              transparent
+              opacity={0.52}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh ref={chargeCellRef} position={[0.18, 0.145, -0.33]}>
+            <boxGeometry args={[0.22, 0.024, 0.04]} />
+            <meshBasicMaterial
+              color={rocketAccentSoft}
+              transparent
+              opacity={0.75}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+          <pointLight
+            ref={chargeLightRef}
+            position={[0.18, 0.18, -0.58]}
+            color={rocketAccent}
+            intensity={1.6}
+            distance={2.7}
+            decay={2.2}
+          />
 
           {/* 砲口フラッシュ */}
           <sprite

@@ -75,17 +75,26 @@ export function PlayerMachineGun() {
   const gltf = useGLTF(MACHINE_GUN_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const weaponRef = useRef<THREE.Group>(null);
+  const barrelGroupRef = useRef<THREE.Group>(null);
   const flashCoreRef = useRef<THREE.Mesh>(null);
   const flashGlowRef = useRef<THREE.Mesh>(null);
+  const heatBandRef = useRef<THREE.Mesh>(null);
+  const heatLightRef = useRef<THREE.PointLight>(null);
   const flashLightRef = useRef<THREE.PointLight>(null);
   const isMouseDown = useRef(false);
   const isRightMouseDown = useRef(false);
   const lastFireTime = useRef(0);
+  const idleTimer = useRef(0);
+  const recoilKick = useRef(0);
+  const barrelSpin = useRef(0);
+  const heatGlow = useRef(0);
   const muzzleWorld = useRef(new THREE.Vector3());
   const aimPoint = useRef(new THREE.Vector3());
   const aimDir = useRef(new THREE.Vector3());
   const shootDir = useRef(new THREE.Vector3());
   const offsetWorld = useRef(new THREE.Vector3());
+  const rightWorld = useRef(new THREE.Vector3());
+  const forwardWorld = useRef(new THREE.Vector3());
   const flashTimer = useRef(0);
   const baseFov = useRef<number | null>(null);
   const scopeVisibleRef = useRef(false);
@@ -221,6 +230,8 @@ export function PlayerMachineGun() {
       scoped: scopedShot,
     }]);
 
+    recoilKick.current = scopedShot ? 0.45 : 1;
+    heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.08 : 0.12));
     flashTimer.current = combatFocus.active ? 0.09 : scopedShot ? 0.08 : 0.065;
     playMachineGunSound(startPos.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('machine_gun');
@@ -232,8 +243,15 @@ export function PlayerMachineGun() {
   }, [camera]);
 
   useFrame((_, delta) => {
+    idleTimer.current += delta;
+    recoilKick.current = Math.max(0, recoilKick.current - delta * 12);
+    heatGlow.current = Math.max(0, heatGlow.current - delta * 0.9);
     const visible = equippedItem === 'machine_gun' && !isDead && !useVehicleStore.getState().isInVehicle();
     const scoped = visible && isRightMouseDown.current && isDesktopGameplayInputActive();
+    const firingInput = visible && (
+      (isMouseDown.current && isDesktopGameplayInputActive()) ||
+      mobileActions.fireMachineGun
+    );
 
     if (!visible) {
       isMouseDown.current = false;
@@ -259,9 +277,36 @@ export function PlayerMachineGun() {
       weaponRef.current.visible = visible;
       if (visible) {
         offsetWorld.current.copy(scoped ? SCOPED_MODEL_OFFSET : HIP_MODEL_OFFSET).applyQuaternion(camera.quaternion);
+        const bobStrength = scoped ? 0.004 : 0.014;
+        const swayStrength = scoped ? 0.003 : 0.012;
+        rightWorld.current.set(1, 0, 0).applyQuaternion(camera.quaternion);
+        forwardWorld.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+        offsetWorld.current
+          .addScaledVector(camera.up, Math.sin(idleTimer.current * 1.7) * bobStrength - recoilKick.current * 0.018)
+          .addScaledVector(
+            rightWorld.current,
+            Math.sin(idleTimer.current * 1.05) * swayStrength + recoilKick.current * 0.011,
+          )
+          .addScaledVector(forwardWorld.current, -recoilKick.current * 0.07);
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(new THREE.Quaternion().setFromEuler(MODEL_ROTATION));
       }
+    }
+
+    barrelSpin.current += delta * (firingInput ? 42 : 4 + heatGlow.current * 22);
+    if (barrelGroupRef.current) {
+      barrelGroupRef.current.rotation.z = barrelSpin.current;
+    }
+    if (heatBandRef.current) {
+      const material = heatBandRef.current.material as THREE.MeshBasicMaterial;
+      const focusBoost = getCombatFocusModifier('machine_gun').active ? 0.16 : 0;
+      heatBandRef.current.scale.setScalar(1 + heatGlow.current * 0.18);
+      material.color.copy(muzzleGlowColor);
+      material.opacity = heatGlow.current * 0.62 + focusBoost;
+    }
+    if (heatLightRef.current) {
+      heatLightRef.current.color.copy(muzzleGlowColor);
+      heatLightRef.current.intensity = heatGlow.current * 1.8;
     }
 
     flashTimer.current = Math.max(0, flashTimer.current - delta);
@@ -288,11 +333,7 @@ export function PlayerMachineGun() {
         : 0;
     }
 
-    const canFire = visible && (
-      (isMouseDown.current && isDesktopGameplayInputActive()) ||
-      mobileActions.fireMachineGun
-    );
-    if (canFire) fire();
+    if (firingInput) fire();
 
     const now = performance.now() / 1000;
     const getBlock = useWorldStore.getState().getBlock;
@@ -402,6 +443,38 @@ export function PlayerMachineGun() {
           scale={0.13}
           position={[0, -0.02, 0]}
           rotation={[0, 0, 0]}
+        />
+        {/* 射撃中に回る銃身で連射感を出す */}
+        <group ref={barrelGroupRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.15]}>
+          {[
+            [0.035, 0, 0],
+            [-0.017, 0.03, 0],
+            [-0.017, -0.03, 0],
+          ].map(([x, y, z], index) => (
+            <mesh key={`barrel-${index}`} position={[x, y, z]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.011, 0.012, 0.42, 6]} />
+              <meshStandardMaterial color="#202327" roughness={0.42} metalness={0.72} />
+            </mesh>
+          ))}
+        </group>
+        <mesh ref={heatBandRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.1]}>
+          <torusGeometry args={[0.085, 0.006, 8, 24]} />
+          <meshBasicMaterial
+            color={muzzleGlowColor}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        <pointLight
+          ref={heatLightRef}
+          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.05]}
+          color={muzzleGlowColor}
+          intensity={0}
+          distance={2.5}
+          decay={2}
         />
         {/* 右腕とグリップ: トリガー側を手で握っているように見せる */}
         <mesh position={[0.24, -0.34, -0.12]} rotation={[-0.78, 0.12, -0.24]}>

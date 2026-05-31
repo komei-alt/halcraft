@@ -66,7 +66,7 @@ const JUST_COMBO_WINDOW_RATIO = 0.62;
 const JUST_COMBO_DAMAGE_BONUS = 0.12;
 
 /** FPS表示オフセット */
-const IDLE_OFFSET = new THREE.Vector3(0.46, -0.48, -0.68);
+const IDLE_OFFSET = new THREE.Vector3(0.34, -0.32, -0.88);
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 const BLADE_LENGTH = 1.55;
@@ -235,11 +235,14 @@ export function Lightsaber() {
   const weaponRef = useRef<THREE.Group>(null);
   const bladeGroupRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
+  const energyRingRef = useRef<THREE.Mesh>(null);
+  const guardGlowRef = useRef<THREE.Mesh>(null);
   const trailGeometries = useRef<Array<THREE.BufferGeometry<THREE.NormalOrGLBufferAttributes> | null>>([]);
   const trailMaterials = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
   const trailSamples = useRef<BladeTrailSample[]>([]);
   const trailSampleTimer = useRef(0);
   const bladeActivation = useRef(0);
+  const idleTimer = useRef(0);
   const offsetWorld = useRef(new THREE.Vector3());
   const attackDir = useRef(new THREE.Vector3());
   const tempOrigin = useRef(new THREE.Vector3());
@@ -468,6 +471,7 @@ export function Lightsaber() {
   // メインフレームループ
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
+    idleTimer.current += dt;
     const visible = equippedItem === 'lightsaber'
       && !isDead
       && phase === 'playing'
@@ -493,6 +497,12 @@ export function Lightsaber() {
       trailSamples.current = [];
       for (const material of trailMaterials.current) {
         if (material) material.opacity = 0;
+      }
+      if (energyRingRef.current) {
+        (energyRingRef.current.material as THREE.MeshBasicMaterial).opacity = 0;
+      }
+      if (guardGlowRef.current) {
+        (guardGlowRef.current.material as THREE.MeshBasicMaterial).opacity = 0;
       }
     }
 
@@ -551,10 +561,18 @@ export function Lightsaber() {
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(localQuat.current);
       } else {
         // アイドルポジション — 右下に構える
-        offsetWorld.current.copy(IDLE_OFFSET).applyQuaternion(camera.quaternion);
+        offsetWorld.current.copy(IDLE_OFFSET);
+        offsetWorld.current.x += Math.sin(idleTimer.current * 0.95) * 0.018;
+        offsetWorld.current.y += Math.sin(idleTimer.current * 1.62) * 0.014;
+        offsetWorld.current.applyQuaternion(camera.quaternion);
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
 
-        localEuler.current.set(0.36, -0.26, -0.82, 'YXZ');
+        localEuler.current.set(
+          0.46 + Math.sin(idleTimer.current * 1.1) * 0.018,
+          -0.18 + Math.sin(idleTimer.current * 0.75) * 0.018,
+          -0.58 + Math.sin(idleTimer.current * 1.35) * 0.026,
+          'YXZ',
+        );
         localQuat.current.setFromEuler(localEuler.current);
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(localQuat.current);
       }
@@ -629,6 +647,23 @@ export function Lightsaber() {
       lightRef.current.intensity = 0;
     }
 
+    const energyOpacity = visible
+      ? bladeActivation.current * (0.2 + (isSwinging.current ? 0.34 : 0.16) + lightBoost.current * 0.18)
+      : 0;
+    if (energyRingRef.current) {
+      const material = energyRingRef.current.material as THREE.MeshBasicMaterial;
+      energyRingRef.current.rotation.z += dt * (3.2 + lightBoost.current * 9 + (isSwinging.current ? 5 : 0));
+      energyRingRef.current.scale.setScalar(1 + Math.sin(idleTimer.current * 8) * 0.04 + lightBoost.current * 0.24);
+      material.color.copy(bladeColorObj);
+      material.opacity = Math.min(0.82, energyOpacity);
+    }
+    if (guardGlowRef.current) {
+      const material = guardGlowRef.current.material as THREE.MeshBasicMaterial;
+      guardGlowRef.current.scale.setScalar(1 + Math.sin(idleTimer.current * 5.4) * 0.05 + lightBoost.current * 0.18);
+      material.color.copy(bladeColorObj);
+      material.opacity = Math.min(0.36, energyOpacity * 0.56);
+    }
+
     if (visible) {
       const combatFocus = getCombatFocusModifier('lightsaber');
       const stageHumBoost = stageVisualStyle ? 0.12 : 0;
@@ -690,6 +725,28 @@ export function Lightsaber() {
         <mesh position={[0, -0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.035, 0.01, 6, 12]} />
           <meshStandardMaterial color="#aaaabb" metalness={0.9} roughness={0.15} />
+        </mesh>
+        <mesh ref={energyRingRef} position={[0, 0.02, 0]}>
+          <torusGeometry args={[0.068, 0.006, 8, 30]} />
+          <meshBasicMaterial
+            color={bladeColorObj}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh ref={guardGlowRef} position={[0, -0.015, 0]}>
+          <sphereGeometry args={[0.09, 18, 10]} />
+          <meshBasicMaterial
+            color={bladeColorObj}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
         </mesh>
         {/* ポンメル（柄尻のキャップ） */}
         <mesh position={[0, -0.4, 0]}>
