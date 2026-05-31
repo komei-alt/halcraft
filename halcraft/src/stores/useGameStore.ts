@@ -19,7 +19,7 @@ import { STAGES, type StageDefinition, type StageCategory } from '../types/stage
 import { TOOL_DEFS } from '../types/tools';
 import { getStageOpeningItem, getStageRunBonus } from '../types/stageRunBonuses';
 import { getStageHotbarSlots } from '../types/stageHotbars';
-import { BIOME_CONFIGS, type BiomeConfig } from '../types/biomes';
+import { resolveBiomeConfig, type BiomeConfig } from '../types/biomes';
 import { setCurrentBiome } from '../utils/terrain/biomeConfig';
 import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
 import { resetNoiseForBiome } from '../utils/terrain/noise';
@@ -194,7 +194,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setStage: (stageId) => {
     const stage = STAGES.find(s => s.id === stageId) || null;
-    const biome = stage ? BIOME_CONFIGS[stage.biome] : null;
+    const biome = stage ? resolveBiomeConfig(stage.biome, stage.terrain) : null;
     const category = stage?.category ?? null;
 
     // バイオーム設定を地形生成モジュールに適用

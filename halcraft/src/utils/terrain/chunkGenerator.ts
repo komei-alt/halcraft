@@ -5,6 +5,7 @@
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, type BlockId } from '../../types/blocks';
 import { getTerrainHeight } from './heightmap';
 import { placeTreesInChunk } from './structures/trees';
+import { placeDecorInChunk } from './structures/decor';
 import { placePlayerHouse } from './structures/house';
 import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
@@ -62,9 +63,12 @@ export function generateChunk(cx: number, cz: number): ChunkData {
           blockId = subSurfaceBlock;
         } else if (ly === surfaceY) {
           // 地表面はバイオームの地表ブロック
-          // 水面以下の地表は砂に置き換え（水底）
           if (fillWater && surfaceY < SEA_LEVEL) {
+            // 水面以下の地表は砂に置き換え（水底・ビーチ）
             blockId = BLOCK_IDS.SAND;
+          } else if (biome.peakBlock !== null && surfaceY >= biome.peakHeight) {
+            // 高所（山頂など）は露出ブロックに置き換えて、岩肌・氷壁を見せる
+            blockId = biome.peakBlock;
           } else {
             blockId = surfaceBlock;
           }
@@ -90,6 +94,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // 地形生成後に木を配置
   placeTreesInChunk(chunk, cx, cz);
+
+  // 木の後に地表装飾（茂み・岩・枯れ木など）を撒く
+  placeDecorInChunk(chunk, cx, cz);
 
   // スポーン地点（0,0）付近のチャンクに家を配置
   if (cx === 0 && cz === 0) {

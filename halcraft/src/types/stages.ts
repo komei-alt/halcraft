@@ -2,6 +2,7 @@
 // マップ選択、ゲームモード、初期支給、敵の出方、進行表示を同じ定義から動かす
 
 import { BLOCK_IDS, type BlockId } from './blocks';
+import type { TerrainShape } from './biomes';
 import type { StageEnemyProfileId } from './stageEnemyProfiles';
 import type { ToolId } from './tools';
 
@@ -10,6 +11,30 @@ export type StageCategory = 'build' | 'war';
 
 /** バイオームID */
 export type BiomeId = 'forest' | 'tropical' | 'snow' | 'desert';
+
+/**
+ * ステージ固有の地形プロファイル
+ * ベースのバイオーム設定を上書きし、同じバイオームでもステージごとに地形を変える。
+ * 例: 森でも build と war でシード・形状・起伏を変えて別マップにする。
+ */
+export interface StageTerrainProfile {
+  /** ノイズシード（変えると地形配置が丸ごと変わる） */
+  noiseSeed?: number;
+  /** 地形の基本形状 */
+  terrainShape?: TerrainShape;
+  /** 基準高さ */
+  baseHeight?: number;
+  /** 高低差の振幅 */
+  heightVariation?: number;
+  /** 細かい凹凸の振幅 */
+  detailVariation?: number;
+  /** 大地形ノイズ周波数 */
+  noiseFrequency?: number;
+  /** 木の密度 */
+  treeDensity?: number;
+  /** 地表装飾の密度 */
+  decorDensity?: number;
+}
 
 /** リセットポリシー */
 export interface ResetPolicy {
@@ -91,6 +116,8 @@ export interface StageDefinition {
   color: string;
   resetPolicy: ResetPolicy;
   rules: StageGameplayRules;
+  /** ステージ固有の地形プロファイル（ベースバイオームを上書き） */
+  terrain?: StageTerrainProfile;
 }
 
 /** 1日 = 24時間（ミリ秒） */
@@ -220,6 +247,7 @@ export const STAGES: StageDefinition[] = [
     biome: 'forest',
     color: '#4caf50',
     resetPolicy: { autoReset: false },
+    terrain: { noiseSeed: 0.50, terrainShape: 'rolling', treeDensity: 0.42 },
     rules: buildRules({
       modeLabel: '建築 / 森の工房',
       shortPitch: '木材と明かりを使って、森の中に暮らせる場所を広げるステージ',
@@ -243,6 +271,7 @@ export const STAGES: StageDefinition[] = [
     biome: 'tropical',
     color: '#ff9800',
     resetPolicy: { autoReset: false },
+    terrain: { noiseSeed: 0.70, terrainShape: 'islands', heightVariation: 9 },
     rules: buildRules({
       modeLabel: '建築 / 南国リゾート',
       shortPitch: '水辺とガラスを活かして、明るいリゾートを作るステージ',
@@ -268,6 +297,7 @@ export const STAGES: StageDefinition[] = [
     biome: 'snow',
     color: '#90caf9',
     resetPolicy: { autoReset: false },
+    terrain: { noiseSeed: 0.30, terrainShape: 'hills', heightVariation: 12 },
     rules: buildRules({
       modeLabel: '建築 / 雪の王国',
       shortPitch: '白い地形とガラスで、遠くから見える城を作るステージ',
@@ -293,6 +323,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'desert',
     color: '#ffc107',
     resetPolicy: { autoReset: false },
+    // 平らな砂地で巨大建築しやすいよう、起伏を抑えた平原寄りに
+    terrain: { noiseSeed: 0.90, terrainShape: 'plains', heightVariation: 3 },
     rules: buildRules({
       modeLabel: '建築 / 砂の大工事',
       shortPitch: '平らな砂地を活かして、大きな建造物を一気に作るステージ',
@@ -318,6 +350,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'forest',
     color: '#388e3c',
     resetPolicy: { autoReset: true, autoResetIntervalMs: ONE_DAY_MS },
+    // 建築場と別マップに。起伏を強めて見通しを悪くし、木も濃いめ
+    terrain: { noiseSeed: 0.18, terrainShape: 'hills', heightVariation: 13, treeDensity: 0.5 },
     rules: warRules({
       modeLabel: '戦争 / 森の防衛',
       shortPitch: '見通しの悪い森で、拠点を守りながら敵を倒す標準戦場',
@@ -354,6 +388,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'tropical',
     color: '#e65100',
     resetPolicy: { autoReset: true, autoResetIntervalMs: ONE_DAY_MS },
+    // 島より陸地多めの起伏ジャングル。近距離戦向けに密集
+    terrain: { noiseSeed: 0.62, terrainShape: 'hills', heightVariation: 10, treeDensity: 0.45 },
     rules: warRules({
       modeLabel: '戦争 / ジャングル強襲',
       shortPitch: '敵の数が多く、動き回って切り抜けるラッシュ型ステージ',
@@ -395,6 +431,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'snow',
     color: '#1565c0',
     resetPolicy: { autoReset: true, autoResetIntervalMs: ONE_DAY_MS },
+    // 険しい雪山で視界が遮られる持久戦地形
+    terrain: { noiseSeed: 0.42, terrainShape: 'mountains', baseHeight: 24, heightVariation: 16 },
     rules: warRules({
       modeLabel: '戦争 / 極寒持久戦',
       shortPitch: '敵は少なめでも長く硬く、準備と拠点防衛が効くステージ',
@@ -436,6 +474,8 @@ export const STAGES: StageDefinition[] = [
     biome: 'desert',
     color: '#f57f17',
     resetPolicy: { autoReset: true, autoResetIntervalMs: ONE_DAY_MS },
+    // 砂丘の高台と窪地で、乗り物と待ち伏せが効く開けた決戦地形
+    terrain: { noiseSeed: 0.78, terrainShape: 'dunes', heightVariation: 7 },
     rules: warRules({
       modeLabel: '戦争 / 砂漠決戦',
       shortPitch: '見通しは良いが逃げ場が少ない、乗り物と爆発が強い決戦ステージ',

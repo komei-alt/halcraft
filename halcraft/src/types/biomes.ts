@@ -2,10 +2,24 @@
 // 各バイオームの地形パラメータ、ブロック種、環境色を管理
 
 import { BLOCK_IDS, type BlockId } from './blocks';
-import type { BiomeId } from './stages';
+import type { BiomeId, StageTerrainProfile } from './stages';
 
 /** 木の種類 */
 export type TreeType = 'oak' | 'palm' | 'pine' | 'cactus';
+
+/**
+ * 地形の基本形状
+ * - plains: ほぼ平坦（開けた地形、巨大建築・乗り物向き）
+ * - rolling: なだらかな丘
+ * - hills: 起伏の大きい丘陵（高低差あり）
+ * - mountains: ridgedノイズによる険しい山と谷
+ * - dunes: 方向性のある砂丘の波
+ * - islands: 海に浮かぶ島とラグーン
+ */
+export type TerrainShape = 'plains' | 'rolling' | 'hills' | 'mountains' | 'dunes' | 'islands';
+
+/** 地表に撒く装飾の種類 */
+export type DecorKind = 'bush' | 'rock' | 'flower' | 'snowRock' | 'deadBush';
 
 /** バイオーム設定 */
 export interface BiomeConfig {
@@ -25,6 +39,16 @@ export interface BiomeConfig {
   detailFrequency: number;
   /** ノイズシード値 */
   noiseSeed: number;
+  /** 地形の基本形状 */
+  terrainShape: TerrainShape;
+  /** 高所に露出させるブロック（山頂の石・雪など）。null なら露出なし */
+  peakBlock: BlockId | null;
+  /** peakBlock が露出し始める高さ */
+  peakHeight: number;
+  /** 地表に撒く装飾の種類（複数可） */
+  decorKinds: DecorKind[];
+  /** 装飾の密度（0.0 ~ 1.0） */
+  decorDensity: number;
 
   // ブロックマッピング
   /** 地表ブロック */
@@ -80,6 +104,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     noiseFrequency: 0.01,
     detailFrequency: 0.05,
     noiseSeed: 0.5,
+    terrainShape: 'rolling',
+    peakBlock: BLOCK_IDS.STONE,
+    peakHeight: 30,
+    decorKinds: ['bush', 'rock', 'flower'],
+    decorDensity: 0.18,
     surfaceBlock: BLOCK_IDS.GRASS,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -110,6 +139,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     noiseFrequency: 0.008,
     detailFrequency: 0.04,
     noiseSeed: 0.7,
+    terrainShape: 'islands',
+    peakBlock: null,
+    peakHeight: 99,
+    decorKinds: ['bush', 'flower'],
+    decorDensity: 0.2,
     surfaceBlock: BLOCK_IDS.GRASS,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -140,6 +174,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     noiseFrequency: 0.012,
     detailFrequency: 0.06,
     noiseSeed: 0.3,
+    terrainShape: 'hills',
+    peakBlock: BLOCK_IDS.STONE,
+    peakHeight: 34,
+    decorKinds: ['snowRock', 'rock'],
+    decorDensity: 0.14,
     surfaceBlock: BLOCK_IDS.SNOW,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -170,6 +209,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     noiseFrequency: 0.006,
     detailFrequency: 0.03,
     noiseSeed: 0.9,
+    terrainShape: 'dunes',
+    peakBlock: null,
+    peakHeight: 99,
+    decorKinds: ['rock', 'deadBush'],
+    decorDensity: 0.1,
     surfaceBlock: BLOCK_IDS.SAND,
     subSurfaceBlock: BLOCK_IDS.SAND,
     deepBlock: BLOCK_IDS.STONE,
@@ -195,4 +239,24 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
 /** バイオームIDからBiomeConfigを取得 */
 export function getBiomeConfig(biomeId: BiomeId): BiomeConfig {
   return BIOME_CONFIGS[biomeId];
+}
+
+/**
+ * ステージの地形プロファイルでベースバイオームを上書きした実効設定を返す。
+ * 同じバイオームでもステージごとにシード・形状・起伏を変えて別マップにする。
+ */
+export function resolveBiomeConfig(biomeId: BiomeId, terrain?: StageTerrainProfile): BiomeConfig {
+  const base = BIOME_CONFIGS[biomeId];
+  if (!terrain) return base;
+  return {
+    ...base,
+    noiseSeed: terrain.noiseSeed ?? base.noiseSeed,
+    terrainShape: terrain.terrainShape ?? base.terrainShape,
+    baseHeight: terrain.baseHeight ?? base.baseHeight,
+    heightVariation: terrain.heightVariation ?? base.heightVariation,
+    detailVariation: terrain.detailVariation ?? base.detailVariation,
+    noiseFrequency: terrain.noiseFrequency ?? base.noiseFrequency,
+    treeDensity: terrain.treeDensity ?? base.treeDensity,
+    decorDensity: terrain.decorDensity ?? base.decorDensity,
+  };
 }

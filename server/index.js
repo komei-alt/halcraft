@@ -225,9 +225,9 @@ const PROTOTYPE_HEIGHT = 3.6;
 const PROTOTYPE_JUMP_VEL = 10;
 const PROTOTYPE_HP = 50;
 
-function makeDefaultHeliState() {
+function makeDefaultHeliState(stageId) {
   const x = HELIPORT_CENTER.x;
-  const y = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2;
+  const y = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z, stageId) + 2;
   const z = HELIPORT_CENTER.z;
   return {
     spawned: true,
@@ -250,9 +250,9 @@ function makeDefaultHeliState() {
   };
 }
 
-function makeDefaultTankState() {
+function makeDefaultTankState(stageId) {
   const x = TANK_SPAWN.x;
-  const y = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z) + VEHICLE_GROUND_TOP_OFFSET;
+  const y = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z, stageId) + VEHICLE_GROUND_TOP_OFFSET;
   const z = TANK_SPAWN.z;
   return {
     spawned: true,
@@ -275,9 +275,9 @@ function makeDefaultTankState() {
   };
 }
 
-function makeDefaultAirplaneState() {
+function makeDefaultAirplaneState(stageId) {
   const x = AIRPLANE_SPAWN.x;
-  const y = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z) + VEHICLE_GROUND_TOP_OFFSET;
+  const y = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z, stageId) + VEHICLE_GROUND_TOP_OFFSET;
   const z = AIRPLANE_SPAWN.z;
   return {
     spawned: true,
@@ -301,9 +301,9 @@ function makeDefaultAirplaneState() {
   };
 }
 
-function makeDefaultCarState() {
+function makeDefaultCarState(stageId) {
   const x = CAR_SPAWN.x;
-  const y = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z) + 0.95;
+  const y = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z, stageId) + 0.95;
   const z = CAR_SPAWN.z;
   return {
     spawned: true,
@@ -325,12 +325,12 @@ function makeDefaultCarState() {
   };
 }
 
-function makeDefaultVehiclesState() {
+function makeDefaultVehiclesState(stageId) {
   return {
-    helicopter: makeDefaultHeliState(),
-    tank: makeDefaultTankState(),
-    airplane: makeDefaultAirplaneState(),
-    car: makeDefaultCarState(),
+    helicopter: makeDefaultHeliState(stageId),
+    tank: makeDefaultTankState(stageId),
+    airplane: makeDefaultAirplaneState(stageId),
+    car: makeDefaultCarState(stageId),
   };
 }
 
@@ -349,7 +349,7 @@ class Stage {
     this.lastMobUpdate = Date.now();
     this.wasNight = false;
     this.lastDarwinSpawnTime = 0;
-    this.vehicleStates = makeDefaultVehiclesState();
+    this.vehicleStates = makeDefaultVehiclesState(this.id);
     this.helicopterState = this.vehicleStates.helicopter;
     // ボイスチャット参加者（socket.id）。新規参加者へ既存メンバーを通知するために保持
     this.voicePeers = new Set();
@@ -370,7 +370,7 @@ class Stage {
   }
 
   resetHelicopterToHeliport() {
-    this.vehicleStates.helicopter = makeDefaultHeliState();
+    this.vehicleStates.helicopter = makeDefaultHeliState(this.id);
     this.helicopterState = this.vehicleStates.helicopter;
   }
 
@@ -400,14 +400,14 @@ class Stage {
 
   resetSingleSeatVehicle(type) {
     if (type === 'tank') {
-      this.vehicleStates.tank = makeDefaultTankState();
+      this.vehicleStates.tank = makeDefaultTankState(this.id);
     } else if (type === 'airplane') {
-      this.vehicleStates.airplane = makeDefaultAirplaneState();
+      this.vehicleStates.airplane = makeDefaultAirplaneState(this.id);
     }
   }
 
   resetCarToParking() {
-    this.vehicleStates.car = makeDefaultCarState();
+    this.vehicleStates.car = makeDefaultCarState(this.id);
   }
 
   removePlayerFromVehicle(socketId, type) {
@@ -552,7 +552,7 @@ class Stage {
         const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
         const sx = avgX + Math.cos(angle) * distance;
         const sz = avgZ + Math.sin(angle) * distance;
-        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 1;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 1;
         this.spawnMob('zombie', sx, sy, sz);
         this.lastSpawnTime = nowSec;
       }
@@ -563,7 +563,7 @@ class Stage {
         const distance = SPAWN_DISTANCE_MIN + 8 + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
         const sx = avgX + Math.cos(angle) * distance;
         const sz = avgZ + Math.sin(angle) * distance;
-        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 1;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 1;
         this.spawnMob('darwin', sx, sy, sz);
         this.lastDarwinSpawnTime = nowSec;
       }
@@ -574,7 +574,7 @@ class Stage {
       const angle = Math.random() * Math.PI * 2;
       const sx = avgX + Math.cos(angle) * 8;
       const sz = avgZ + Math.sin(angle) * 8;
-      const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 2;
+      const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
       this.spawnMob('prototype', sx, sy, sz);
     }
 
@@ -586,7 +586,7 @@ class Stage {
         const distance = 20;
         const sx = avgX + Math.cos(angle) * distance;
         const sz = avgZ + Math.sin(angle) * distance;
-        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz)) + 2;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
         this.spawnMob('boss_giant', sx, sy, sz);
         console.log(`[Boss] ステージ ${this.id} に巨大ボスをスポーン (${sx.toFixed(1)}, ${sy.toFixed(1)}, ${sz.toFixed(1)})`);
       }
@@ -625,7 +625,7 @@ class Stage {
           const tAngle = Math.atan2(dzP, dxP) + (Math.random() - 0.5);
           m.x = playerX - Math.cos(tAngle) * PROTOTYPE_FOLLOW_MIN;
           m.z = playerZ - Math.sin(tAngle) * PROTOTYPE_FOLLOW_MIN;
-          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
+          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z), this.id) + 2;
           m.vx = 0; m.vz = 0; m.vy = 0;
         }
 
@@ -680,7 +680,7 @@ class Stage {
         m.vy += MOB_GRAVITY * dt;
         if (m.vy < -30) m.vy = -30;
         m.y += m.vy * dt;
-        const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 1;
+        const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z), this.id) + 1;
         if (m.y <= groundY) {
           m.y = groundY;
           m.vy = 0;
@@ -691,7 +691,7 @@ class Stage {
         if (m.y < -20) {
           m.x = playerX + 3;
           m.z = playerZ + 3;
-          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
+          m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z), this.id) + 2;
           m.vy = 0;
         }
 
@@ -726,7 +726,7 @@ class Stage {
         m.vy += MOB_GRAVITY * dt;
         if (m.vy < -30) m.vy = -30;
         m.y += m.vy * dt;
-        const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 1;
+        const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z), this.id) + 1;
         if (m.y <= groundY) {
           m.y = groundY;
           m.vy = 0;
@@ -784,7 +784,7 @@ class Stage {
       m.vy += MOB_GRAVITY * dt;
       if (m.vy < -30) m.vy = -30;
       m.y += m.vy * dt;
-      const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 1;
+      const groundY = getTerrainHeight(Math.floor(m.x), Math.floor(m.z), this.id) + 1;
       if (m.y <= groundY) {
         m.y = groundY;
         m.vy = 0;
