@@ -8,6 +8,7 @@ import { useDroppedItemStore, type DroppedItem } from '../stores/useDroppedItemS
 import { useInventoryStore } from '../stores/useInventoryStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId, type BlockInfo } from '../types/blocks';
+import { playItemPickupSound } from '../utils/sounds';
 
 /** ピックアップ距離 */
 const PICKUP_RADIUS = 2.0;
@@ -32,6 +33,18 @@ const PICKUP_TRAIL_LENGTH = 1.45;
 /** 期限切れチェック間隔（フレーム数） */
 const CLEANUP_INTERVAL = 120;
 
+type DropRarity = 'common' | 'resource' | 'precious' | 'power' | 'hazard';
+
+interface DropPresentation {
+  rarity: DropRarity;
+  scale: number;
+  haloScale: number;
+  glowScale: number;
+  edgeOpacity: number;
+  spinBoost: number;
+  secondaryColor: THREE.Color;
+}
+
 /** テクスチャキャッシュ */
 const textureCache = new Map<string, THREE.Texture>();
 const textureLoader = new THREE.TextureLoader();
@@ -52,6 +65,14 @@ const sharedItemEdgesGeometry = new THREE.EdgesGeometry(sharedItemGeometry);
 const sharedHaloGeometry = new THREE.RingGeometry(0.78, 1.08, 36);
 const sharedShadowGeometry = new THREE.CircleGeometry(0.72, 32);
 const sharedBillboardGlowGeometry = new THREE.CircleGeometry(1.05, 36);
+const sharedCrownGeometry = new THREE.TorusGeometry(1.26, 0.035, 6, 44);
+const sharedSparkGeometry = new THREE.OctahedronGeometry(0.16, 0);
+const SPARK_POSITIONS: Array<[number, number, number]> = [
+  [0.72, 0.42, 0],
+  [-0.72, 0.32, 0],
+  [0, 0.38, 0.72],
+  [0, 0.28, -0.72],
+];
 
 function getDropAccentColor(blockId: BlockId, def: BlockInfo | undefined): THREE.Color {
   if (def?.emissiveColor) return def.emissiveColor.clone();
@@ -88,13 +109,91 @@ function getDropAccentColor(blockId: BlockId, def: BlockInfo | undefined): THREE
   return new THREE.Color(0xffffff);
 }
 
+function getDropRarity(blockId: BlockId, def: BlockInfo | undefined): DropRarity {
+  if (blockId === BLOCK_IDS.LAVA || blockId === BLOCK_IDS.TNT || blockId === BLOCK_IDS.NETHER_PORTAL) return 'hazard';
+  if (def?.emissive || blockId === BLOCK_IDS.GLOWSTONE || blockId === BLOCK_IDS.ENCHANT || blockId === BLOCK_IDS.ELECTRIC) return 'power';
+  if (blockId === BLOCK_IDS.DIAMOND_ORE || blockId === BLOCK_IDS.DIAMOND_GEM || blockId === BLOCK_IDS.GOLD_ORE || blockId === BLOCK_IDS.GOLD_INGOT) {
+    return 'precious';
+  }
+  if (
+    blockId === BLOCK_IDS.IRON ||
+    blockId === BLOCK_IDS.IRON_ORE ||
+    blockId === BLOCK_IDS.IRON_INGOT ||
+    blockId === BLOCK_IDS.COAL_ORE ||
+    blockId === BLOCK_IDS.CHEST ||
+    blockId === BLOCK_IDS.FURNACE
+  ) {
+    return 'resource';
+  }
+  return 'common';
+}
+
+function getDropPresentation(blockId: BlockId, def: BlockInfo | undefined, accent: THREE.Color): DropPresentation {
+  const rarity = getDropRarity(blockId, def);
+  if (rarity === 'hazard') {
+    return {
+      rarity,
+      scale: 1.12,
+      haloScale: 1.28,
+      glowScale: 1.34,
+      edgeOpacity: 0.7,
+      spinBoost: 1.55,
+      secondaryColor: new THREE.Color(0xffd079),
+    };
+  }
+  if (rarity === 'power') {
+    return {
+      rarity,
+      scale: 1.16,
+      haloScale: 1.36,
+      glowScale: 1.46,
+      edgeOpacity: 0.82,
+      spinBoost: 1.42,
+      secondaryColor: new THREE.Color(0xffffff),
+    };
+  }
+  if (rarity === 'precious') {
+    return {
+      rarity,
+      scale: 1.1,
+      haloScale: 1.26,
+      glowScale: 1.32,
+      edgeOpacity: 0.76,
+      spinBoost: 1.32,
+      secondaryColor: new THREE.Color(0xfff2a8),
+    };
+  }
+  if (rarity === 'resource') {
+    return {
+      rarity,
+      scale: 1.04,
+      haloScale: 1.12,
+      glowScale: 1.12,
+      edgeOpacity: 0.6,
+      spinBoost: 1.16,
+      secondaryColor: accent.clone().lerp(new THREE.Color(0xffffff), 0.35),
+    };
+  }
+  return {
+    rarity,
+    scale: 1,
+    haloScale: 1,
+    glowScale: 1,
+    edgeOpacity: 0.5,
+    spinBoost: 1,
+    secondaryColor: accent.clone().lerp(new THREE.Color(0xffffff), 0.18),
+  };
+}
+
 /** 個別のドロップアイテム描画 */
 function DroppedItemRenderer({ item }: { item: DroppedItem }) {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>>(null);
+  const crownRef = useRef<THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>>(null);
   const shadowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
   const glowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
+  const sparkRef = useRef<THREE.Group>(null);
   const trailRef = useRef<THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>(null);
   const { camera } = useThree();
   const getBlock = useWorldStore((s) => s.getBlock);
@@ -117,6 +216,10 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
   }, [def]);
 
   const accentColor = useMemo(() => getDropAccentColor(item.blockId, def), [def, item.blockId]);
+  const presentation = useMemo(
+    () => getDropPresentation(item.blockId, def, accentColor),
+    [accentColor, def, item.blockId],
+  );
   const trailGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
@@ -146,6 +249,7 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
       if (dist < 0.5) {
         // ピックアップ完了
         addItem(item.blockId);
+        playItemPickupSound(presentation.rarity);
         removeItem(item.id);
         return;
       }
@@ -158,19 +262,28 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
       groupRef.current.position.set(x, y, z);
 
       // ピックアップ中はスケールが縮む
-      const scale = Math.max(0.1, dist / PICKUP_RADIUS) * ITEM_SCALE;
+      const scale = Math.max(0.1, dist / PICKUP_RADIUS) * ITEM_SCALE * presentation.scale;
       groupRef.current.scale.setScalar(scale);
-      meshRef.current.rotation.y += ROTATE_SPEED * 3.6 * clampedDelta;
-      meshRef.current.rotation.x += ROTATE_SPEED * 1.8 * clampedDelta;
+      meshRef.current.rotation.y += ROTATE_SPEED * 3.6 * presentation.spinBoost * clampedDelta;
+      meshRef.current.rotation.x += ROTATE_SPEED * 1.8 * presentation.spinBoost * clampedDelta;
 
       if (haloRef.current) {
-        haloRef.current.scale.setScalar(HALO_SCALE * (1.22 + Math.sin(ageSeconds * 18) * 0.08));
-        haloRef.current.material.opacity = 0.5;
+        haloRef.current.scale.setScalar(HALO_SCALE * presentation.haloScale * (1.22 + Math.sin(ageSeconds * 18) * 0.08));
+        haloRef.current.material.opacity = presentation.rarity === 'common' ? 0.44 : 0.58;
+      }
+      if (crownRef.current) {
+        crownRef.current.rotation.z = ageSeconds * 2.6;
+        crownRef.current.scale.setScalar(presentation.haloScale * (1.2 + Math.sin(ageSeconds * 20) * 0.1));
+        crownRef.current.material.opacity = presentation.rarity === 'common' ? 0 : 0.52;
       }
       if (glowRef.current) {
         glowRef.current.quaternion.copy(camera.quaternion);
-        glowRef.current.scale.setScalar(1.18 + Math.sin(ageSeconds * 16) * 0.08);
-        glowRef.current.material.opacity = 0.36;
+        glowRef.current.scale.setScalar(presentation.glowScale * (1.18 + Math.sin(ageSeconds * 16) * 0.08));
+        glowRef.current.material.opacity = presentation.rarity === 'common' ? 0.28 : 0.42;
+      }
+      if (sparkRef.current) {
+        sparkRef.current.rotation.y = -ageSeconds * 4.2;
+        sparkRef.current.visible = presentation.rarity !== 'common';
       }
       if (shadowRef.current) {
         shadowRef.current.material.opacity = 0.04;
@@ -219,21 +332,31 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
     // ボブ＆回転アニメーション（着地後）
     const bobOffset = Math.sin(ageSeconds * BOB_SPEED + item.spawnedAt * 0.001) * BOB_HEIGHT;
     groupRef.current.position.set(x, y + bobOffset, z);
-    groupRef.current.scale.setScalar(ITEM_SCALE);
-    meshRef.current.rotation.y += ROTATE_SPEED * clampedDelta;
+    groupRef.current.scale.setScalar(ITEM_SCALE * presentation.scale);
+    meshRef.current.rotation.y += ROTATE_SPEED * presentation.spinBoost * clampedDelta;
     meshRef.current.rotation.x = Math.sin(ageSeconds * 1.45) * 0.16;
     meshRef.current.rotation.z = Math.cos(ageSeconds * 1.18) * 0.1;
 
     const pulse = 1 + Math.sin(ageSeconds * 4.8) * 0.065;
     if (haloRef.current) {
-      haloRef.current.scale.setScalar(HALO_SCALE * pulse);
+      haloRef.current.scale.setScalar(HALO_SCALE * presentation.haloScale * pulse);
       haloRef.current.rotation.z = -ageSeconds * 0.8;
-      haloRef.current.material.opacity = 0.2 + Math.max(0, Math.sin(ageSeconds * 3.2)) * 0.12;
+      haloRef.current.material.opacity = 0.18 + Math.max(0, Math.sin(ageSeconds * 3.2)) * (presentation.rarity === 'common' ? 0.1 : 0.18);
+    }
+    if (crownRef.current) {
+      crownRef.current.rotation.z = ageSeconds * (presentation.rarity === 'hazard' ? 1.25 : 0.9);
+      crownRef.current.scale.setScalar(presentation.haloScale * (0.92 + Math.sin(ageSeconds * 3.8) * 0.04));
+      crownRef.current.material.opacity = presentation.rarity === 'common' ? 0 : 0.22 + Math.max(0, Math.sin(ageSeconds * 2.7)) * 0.16;
     }
     if (glowRef.current) {
       glowRef.current.quaternion.copy(camera.quaternion);
-      glowRef.current.scale.setScalar(0.95 + Math.sin(ageSeconds * 3.7) * 0.08);
-      glowRef.current.material.opacity = 0.16 + Math.max(0, Math.sin(ageSeconds * 4.1)) * 0.08;
+      glowRef.current.scale.setScalar(presentation.glowScale * (0.95 + Math.sin(ageSeconds * 3.7) * 0.08));
+      glowRef.current.material.opacity = (presentation.rarity === 'common' ? 0.14 : 0.2) + Math.max(0, Math.sin(ageSeconds * 4.1)) * 0.1;
+    }
+    if (sparkRef.current) {
+      sparkRef.current.visible = presentation.rarity !== 'common';
+      sparkRef.current.rotation.y = -ageSeconds * (presentation.rarity === 'hazard' ? 1.65 : 1.05);
+      sparkRef.current.rotation.x = Math.sin(ageSeconds * 1.6) * 0.16;
     }
     if (shadowRef.current) {
       shadowRef.current.position.y = -0.43 - bobOffset;
@@ -290,6 +413,21 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
           blending={THREE.AdditiveBlending}
         />
       </mesh>
+      <mesh
+        ref={crownRef}
+        geometry={sharedCrownGeometry}
+        rotation={[-Math.PI / 2, 0, 0]}
+        renderOrder={2}
+      >
+        <meshBasicMaterial
+          color={presentation.secondaryColor}
+          depthWrite={false}
+          opacity={presentation.rarity === 'common' ? 0 : 0.28}
+          transparent
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
       <lineSegments ref={trailRef} geometry={trailGeometry} renderOrder={4}>
         <lineBasicMaterial
           color={accentColor}
@@ -315,21 +453,41 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
         <meshStandardMaterial
           map={texture}
           emissive={emissiveColor ?? accentColor}
-          emissiveIntensity={emissiveColor ? 0.42 : 0.1}
+          emissiveIntensity={emissiveColor ? 0.52 : presentation.rarity === 'common' ? 0.1 : 0.22}
           metalness={item.blockId === BLOCK_IDS.IRON || item.blockId === BLOCK_IDS.IRON_INGOT ? 0.18 : 0}
           opacity={def.transparent ? 0.78 : 1}
           transparent={def.transparent}
-          roughness={0.54}
+          roughness={presentation.rarity === 'precious' || presentation.rarity === 'power' ? 0.38 : 0.54}
         />
       </mesh>
       <lineSegments geometry={sharedItemEdgesGeometry} renderOrder={3}>
         <lineBasicMaterial
           color={accentColor}
-          opacity={0.52}
+          opacity={presentation.edgeOpacity}
           transparent
           toneMapped={false}
         />
       </lineSegments>
+      <group ref={sparkRef} visible={presentation.rarity !== 'common'}>
+        {SPARK_POSITIONS.map(([x, y, z], index) => (
+          <mesh
+            key={`${x}:${z}`}
+            geometry={sharedSparkGeometry}
+            position={[x, y, z]}
+            rotation={[0.35, index * Math.PI * 0.5, 0.2]}
+            renderOrder={4}
+          >
+            <meshBasicMaterial
+              color={index % 2 === 0 ? presentation.secondaryColor : accentColor}
+              depthWrite={false}
+              opacity={0.46}
+              transparent
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }

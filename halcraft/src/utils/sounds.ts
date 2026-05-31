@@ -1591,7 +1591,107 @@ type StageEventSoundKind = 'forest' | 'tropical' | 'snow' | 'desert' | 'war' | '
 type StagePressureSoundKind = 'ambush' | 'humidity' | 'cold' | 'heat';
 type StagePressureSoundSeverity = 'danger' | 'critical';
 type StageStartSoundKind = 'build' | 'war';
+export type ItemPickupSoundKind = 'common' | 'resource' | 'precious' | 'power' | 'hazard';
 export type StageOpportunitySoundKind = 'build' | 'war' | 'boss';
+
+/** アイテム拾得SE — 素材の価値が耳でも分かる短い反応 */
+export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`itemPickup:${kind}`, kind === 'common' ? 70 : 115)) return;
+  const now = ctx.currentTime;
+  const profile: Record<ItemPickupSoundKind, {
+    notes: number[];
+    wave: OscillatorType;
+    volume: number;
+    filter: BiquadFilterType;
+    filterFrequency: number;
+    q: number;
+  }> = {
+    common: {
+      notes: [784],
+      wave: 'triangle',
+      volume: 0.036,
+      filter: 'lowpass',
+      filterFrequency: 2800,
+      q: 0.7,
+    },
+    resource: {
+      notes: [659.25, 880],
+      wave: 'triangle',
+      volume: 0.044,
+      filter: 'lowpass',
+      filterFrequency: 3200,
+      q: 0.8,
+    },
+    precious: {
+      notes: [880, 1174.66, 1567.98],
+      wave: 'sine',
+      volume: 0.05,
+      filter: 'highpass',
+      filterFrequency: 520,
+      q: 0.9,
+    },
+    power: {
+      notes: [523.25, 1046.5, 1760],
+      wave: 'triangle',
+      volume: 0.056,
+      filter: 'bandpass',
+      filterFrequency: 1800,
+      q: 1.6,
+    },
+    hazard: {
+      notes: [196, 392, 784],
+      wave: 'sawtooth',
+      volume: 0.048,
+      filter: 'bandpass',
+      filterFrequency: 760,
+      q: 2,
+    },
+  };
+  const selected = profile[kind];
+
+  selected.notes.forEach((note, index) => {
+    const t = now + index * 0.038;
+    const osc = ctx.createOscillator();
+    osc.type = selected.wave;
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (kind === 'hazard' ? 0.84 : 1.08), t + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = selected.filter;
+    filter.frequency.setValueAtTime(selected.filterFrequency, t);
+    filter.Q.setValueAtTime(selected.q, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(selected.volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
+
+  if (kind === 'common' || kind === 'resource') return;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = kind === 'hazard' ? 'lowpass' : 'highpass';
+  noiseFilter.frequency.setValueAtTime(kind === 'hazard' ? 560 : 2400, now);
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(kind === 'hazard' ? 0.035 : 0.022, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.16);
+}
 
 /** ステージ開始SE — 建築と戦争でスタートの気分を変える */
 export function playStageStartSound(kind: StageStartSoundKind): void {
