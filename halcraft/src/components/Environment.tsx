@@ -19,6 +19,10 @@ const _skyTopColor = new THREE.Color();
 const _skyHorizonColor = new THREE.Color();
 const _skySunGlowColor = new THREE.Color();
 const _skySunDirection = new THREE.Vector3();
+const _moonPosition = new THREE.Vector3();
+const _starfieldRotation = new THREE.Euler();
+const _sunDiscColor = new THREE.Color();
+const _sunDiscLiftColor = new THREE.Color(0xffffff);
 
 /** バイオーム色キャッシュ用 */
 const _daySky = new THREE.Color();
@@ -37,6 +41,38 @@ let cachedFogNear = 100;
 let cachedFogFar = 250;
 
 const SKY_DOME_RADIUS = 395;
+const CELESTIAL_RADIUS = 365;
+const SUN_DISC_RADIUS = 13.5;
+const SUN_HALO_RADIUS = 31;
+const MOON_DISC_RADIUS = 10.5;
+const MOON_HALO_RADIUS = 22;
+const STAR_COUNT = 190;
+
+function smoothRange(min: number, max: number, value: number): number {
+  const t = THREE.MathUtils.clamp((value - min) / (max - min), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function createStarGeometry(): THREE.BufferGeometry {
+  const positions = new Float32Array(STAR_COUNT * 3);
+  for (let i = 0; i < STAR_COUNT; i++) {
+    const seedA = ((i * 16807) % 9973) / 9973;
+    const seedB = ((i * 48271) % 7919) / 7919;
+    const seedC = ((i * 69621) % 6151) / 6151;
+    const theta = seedA * Math.PI * 2;
+    const y = 0.18 + seedB * 0.8;
+    const radius = Math.sqrt(Math.max(0, 1 - y * y)) * (0.78 + seedC * 0.2);
+    const off = i * 3;
+    positions[off] = Math.cos(theta) * radius * CELESTIAL_RADIUS;
+    positions[off + 1] = y * CELESTIAL_RADIUS;
+    positions[off + 2] = Math.sin(theta) * radius * CELESTIAL_RADIUS;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return geometry;
+}
+
 const SKY_VERTEX_SHADER = /* glsl */ `
   varying vec3 vDirection;
 
@@ -143,7 +179,19 @@ export function Environment() {
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const celestialGroupRef = useRef<THREE.Group>(null);
+  const sunDiscRef = useRef<THREE.Mesh>(null);
+  const sunHaloRef = useRef<THREE.Mesh>(null);
+  const moonDiscRef = useRef<THREE.Mesh>(null);
+  const moonHaloRef = useRef<THREE.Mesh>(null);
+  const starfieldRef = useRef<THREE.Points>(null);
+  const sunDiscMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const sunHaloMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const moonDiscMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const moonHaloMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const starMaterialRef = useRef<THREE.PointsMaterial>(null);
   const skyUniforms = useMemo(() => createSkyUniforms(), []);
+  const starGeometry = useMemo(() => createStarGeometry(), []);
   useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
 
@@ -248,11 +296,63 @@ export function Environment() {
     _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.14);
     _skySunGlowColor.copy(_sunColor).multiplyScalar(gameState.dimension === 'nether' ? 0.65 : 0.95);
     _skySunDirection.copy(_sunPosition).normalize();
+    const nightMix = getNightMix(gameTime, gameState.dimension);
     skyUniforms.uTopColor.value.copy(_skyTopColor);
     skyUniforms.uHorizonColor.value.copy(_skyHorizonColor);
     skyUniforms.uSunColor.value.copy(_skySunGlowColor);
     skyUniforms.uSunDirection.value.copy(_skySunDirection);
-    skyUniforms.uNightMix.value = getNightMix(gameTime, gameState.dimension);
+    skyUniforms.uNightMix.value = nightMix;
+
+    // 視界の奥に、昼は太陽・夜は月と星が見える天体レイヤーを重ねる
+    if (celestialGroupRef.current) {
+      celestialGroupRef.current.position.copy(camera.position);
+      celestialGroupRef.current.visible = gameState.dimension !== 'nether';
+    }
+    const sunAltitude = smoothRange(-0.08, 0.22, _skySunDirection.y);
+    const sunOpacity = gameState.dimension === 'nether' ? 0 : THREE.MathUtils.clamp(sunAltitude * (1 - nightMix * 0.75), 0, 1);
+    _moonPosition.copy(_skySunDirection).multiplyScalar(-CELESTIAL_RADIUS);
+    const moonAltitude = smoothRange(0.04, 0.28, _moonPosition.y / CELESTIAL_RADIUS);
+    const moonOpacity = gameState.dimension === 'nether' ? 0 : THREE.MathUtils.clamp(nightMix * moonAltitude, 0, 0.92);
+    const starOpacity = gameState.dimension === 'nether' ? 0 : THREE.MathUtils.clamp(nightMix * 0.72, 0, 0.72);
+
+    if (sunDiscRef.current) {
+      sunDiscRef.current.position.copy(_skySunDirection).multiplyScalar(CELESTIAL_RADIUS);
+      sunDiscRef.current.lookAt(camera.position);
+    }
+    if (sunHaloRef.current) {
+      sunHaloRef.current.position.copy(_skySunDirection).multiplyScalar(CELESTIAL_RADIUS - 1);
+      sunHaloRef.current.lookAt(camera.position);
+    }
+    if (moonDiscRef.current) {
+      moonDiscRef.current.position.copy(_moonPosition);
+      moonDiscRef.current.lookAt(camera.position);
+    }
+    if (moonHaloRef.current) {
+      moonHaloRef.current.position.copy(_moonPosition).multiplyScalar(0.998);
+      moonHaloRef.current.lookAt(camera.position);
+    }
+    if (starfieldRef.current) {
+      _starfieldRotation.set(0, gameTime * Math.PI * 2 * 0.08, 0);
+      starfieldRef.current.rotation.copy(_starfieldRotation);
+    }
+    if (sunDiscMaterialRef.current) {
+      sunDiscMaterialRef.current.opacity = sunOpacity;
+      _sunDiscColor.copy(_sunColor).lerp(_sunDiscLiftColor, 0.18);
+      sunDiscMaterialRef.current.color.copy(_sunDiscColor);
+    }
+    if (sunHaloMaterialRef.current) {
+      sunHaloMaterialRef.current.opacity = sunOpacity * 0.35;
+      sunHaloMaterialRef.current.color.copy(_sunColor);
+    }
+    if (moonDiscMaterialRef.current) {
+      moonDiscMaterialRef.current.opacity = moonOpacity;
+    }
+    if (moonHaloMaterialRef.current) {
+      moonHaloMaterialRef.current.opacity = moonOpacity * 0.32;
+    }
+    if (starMaterialRef.current) {
+      starMaterialRef.current.opacity = starOpacity;
+    }
 
     // ライト更新
     if (sunRef.current) {
@@ -284,6 +384,77 @@ export function Environment() {
           fog={false}
         />
       </mesh>
+
+      <group ref={celestialGroupRef} frustumCulled={false}>
+        <points ref={starfieldRef} geometry={starGeometry} renderOrder={-960} frustumCulled={false}>
+          <pointsMaterial
+            ref={starMaterialRef}
+            color={0xfff2c7}
+            size={2.1}
+            sizeAttenuation={false}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            fog={false}
+            toneMapped={false}
+          />
+        </points>
+        <mesh ref={sunHaloRef} renderOrder={-950} frustumCulled={false}>
+          <circleGeometry args={[SUN_HALO_RADIUS, 48]} />
+          <meshBasicMaterial
+            ref={sunHaloMaterialRef}
+            color={0xffe0a0}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            fog={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+        <mesh ref={sunDiscRef} renderOrder={-949} frustumCulled={false}>
+          <circleGeometry args={[SUN_DISC_RADIUS, 48]} />
+          <meshBasicMaterial
+            ref={sunDiscMaterialRef}
+            color={0xfff0c0}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            fog={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh ref={moonHaloRef} renderOrder={-948} frustumCulled={false}>
+          <circleGeometry args={[MOON_HALO_RADIUS, 40]} />
+          <meshBasicMaterial
+            ref={moonHaloMaterialRef}
+            color={0x90b4ff}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            fog={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+        <mesh ref={moonDiscRef} renderOrder={-947} frustumCulled={false}>
+          <circleGeometry args={[MOON_DISC_RADIUS, 40]} />
+          <meshBasicMaterial
+            ref={moonDiscMaterialRef}
+            color={0xdce6ff}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            fog={false}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
 
       {/* 環境光（全体を柔らかく照らす） */}
       <ambientLight ref={ambientRef} intensity={0.6} color={0xffffff} />
