@@ -38,7 +38,7 @@ import {
 } from '../../types/stageCombatStyles';
 import { getStageEvent } from '../../types/stageEvents';
 import type { StageDefinition } from '../../types/stages';
-import { getStageModeRule } from '../../types/stageModeRules';
+import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { isTouchDevice } from '../../utils/device';
 import { getStageEventHudDisplay } from './stageEventDisplay';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
@@ -79,6 +79,15 @@ interface StageOpportunityCue {
 interface StageOpportunityCandidate {
   cue: StageOpportunityCue;
   priority: number;
+}
+
+interface StageRouteStep {
+  icon: string;
+  label: string;
+  detail: string;
+  valueText: string;
+  accent: string;
+  ratio: number;
 }
 
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
@@ -481,6 +490,100 @@ function getStageOpportunityCue(args: {
   return candidates.sort((a, b) => b.priority - a.priority || b.cue.ratio - a.cue.ratio)[0]?.cue ?? null;
 }
 
+function getStageRouteSteps(args: {
+  stage: StageDefinition;
+  modeRule: ReturnType<typeof getStageModeRule>;
+  modeMeter: number;
+  buildScore: number;
+  buildComboChain: number;
+  enemiesDefeated: number;
+  targetCount: number | null;
+  bossSpawned: boolean;
+  bossHpPercent: number | null;
+  recordTarget: StageRecordTarget;
+  opportunityCue: StageOpportunityCue | null;
+}): StageRouteStep[] {
+  const {
+    stage,
+    modeRule,
+    modeMeter,
+    buildScore,
+    buildComboChain,
+    enemiesDefeated,
+    targetCount,
+    bossSpawned,
+    bossHpPercent,
+    recordTarget,
+    opportunityCue,
+  } = args;
+  const buildStyle = getStageBuildStyle(stage.id);
+  const combatStyle = getStageCombatStyle(stage.id);
+  const steps: StageRouteStep[] = [];
+
+  if (stage.category === 'build') {
+    steps.push({
+      icon: buildStyle?.icon ?? stage.icon,
+      label: '今つくる',
+      detail: buildStyle
+        ? `${formatStageBuildFocus(buildStyle, 2)}を置いて作品点を伸ばす`
+        : stage.rules.objective.prompts[0] ?? stage.rules.objective.title,
+      valueText: buildComboChain > 0 ? `連置x${buildComboChain}` : `${buildScore}pt`,
+      accent: buildStyle?.accent ?? stage.color,
+      ratio: Math.min(1, buildScore / FINAL_BUILD_SCORE),
+    });
+  } else {
+    const targetRatio = targetCount ? Math.min(1, enemiesDefeated / targetCount) : 0;
+    steps.push({
+      icon: combatStyle?.icon ?? stage.icon,
+      label: bossSpawned ? 'ボス集中' : '今攻める',
+      detail: combatStyle
+        ? `${getStageCombatWeaponLabel(combatStyle.weapon)}で${combatStyle.shortLabel}`
+        : stage.rules.objective.description,
+      valueText: bossHpPercent !== null
+        ? `${bossHpPercent}%`
+        : targetCount
+          ? `${enemiesDefeated}/${targetCount}`
+          : 'FIGHT',
+      accent: combatStyle?.accent ?? '#ffb36d',
+      ratio: bossHpPercent !== null ? 1 - bossHpPercent / 100 : targetRatio,
+    });
+  }
+
+  if (modeRule) {
+    const modeRemaining = Math.max(0, Math.ceil(modeRule.threshold - modeMeter));
+    steps.push({
+      icon: modeRule.icon,
+      label: modeRule.category === 'build' ? 'ひらめき' : '戦意',
+      detail: `${modeRule.actionLabel} / 発動: ${formatStageModeReward(modeRule)}`,
+      valueText: modeRemaining > 0 ? `あと${modeRemaining}` : '発動',
+      accent: modeRule.accent,
+      ratio: Math.max(0, Math.min(1, modeMeter / modeRule.threshold)),
+    });
+  }
+
+  if (opportunityCue) {
+    steps.push({
+      icon: opportunityCue.icon,
+      label: '寄り道',
+      detail: opportunityCue.detail,
+      valueText: opportunityCue.valueText,
+      accent: opportunityCue.accent,
+      ratio: opportunityCue.ratio,
+    });
+  } else {
+    steps.push({
+      icon: recordTarget.icon,
+      label: '記録',
+      detail: recordTarget.detail,
+      valueText: recordTarget.valueText,
+      accent: recordTarget.accent,
+      ratio: recordTarget.ratio,
+    });
+  }
+
+  return steps.slice(0, 3);
+}
+
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -615,6 +718,19 @@ export function StageProgressHUD() {
     bossHpRatio,
     bossWeakness: bossEncounter?.weakness ?? null,
     bossAccent: bossEncounter?.accent ?? null,
+  });
+  const routeSteps = getStageRouteSteps({
+    stage,
+    modeRule,
+    modeMeter,
+    buildScore,
+    buildComboChain,
+    enemiesDefeated,
+    targetCount: target,
+    bossSpawned,
+    bossHpPercent,
+    recordTarget,
+    opportunityCue,
   });
 
   return (
@@ -767,6 +883,146 @@ export function StageProgressHUD() {
           {guidance.detail}
         </div>
       </div>
+
+      {routeSteps.length > 0 && (
+        <div
+          id="stage-action-route"
+          style={{
+            marginTop: 7,
+            padding: isCompact ? '5px 7px' : '7px 8px',
+            borderRadius: 7,
+            border: `1px solid ${stage.color}44`,
+            background: 'linear-gradient(90deg, rgba(255,255,255,0.055), rgba(0,0,0,0.18))',
+            boxShadow: `0 0 16px ${stage.color}18`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              color: stage.color,
+              fontSize: isCompact ? 8 : 9,
+              lineHeight: '11px',
+              fontWeight: 950,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span>🧭</span>
+            <span>作戦ルート</span>
+            <span
+              style={{
+                flex: 1,
+                height: 1,
+                background: `linear-gradient(90deg, ${stage.color}66, transparent)`,
+              }}
+            />
+          </div>
+
+          {isCompact ? (
+            <div
+              style={{
+                marginTop: 4,
+                color: 'rgba(255,255,255,0.82)',
+                fontSize: 9,
+                lineHeight: '12px',
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {routeSteps.map((step) => `${step.label}:${step.valueText}`).join(' → ')}
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: 6,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 6,
+              }}
+            >
+              {routeSteps.map((step) => (
+                <div
+                  key={`${step.label}-${step.valueText}`}
+                  style={{
+                    minWidth: 0,
+                    padding: '6px 7px',
+                    borderRadius: 6,
+                    background: `${step.accent}14`,
+                    border: `1px solid ${step.accent}3d`,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                    <span style={{ flex: '0 0 auto', fontSize: 11 }}>{step.icon}</span>
+                    <span
+                      style={{
+                        minWidth: 0,
+                        flex: 1,
+                        color: step.accent,
+                        fontSize: 9,
+                        lineHeight: '11px',
+                        fontWeight: 950,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {step.label}
+                    </span>
+                    <span
+                      style={{
+                        flex: '0 0 auto',
+                        color: 'rgba(255,255,255,0.72)',
+                        fontSize: 9,
+                        lineHeight: '11px',
+                        fontWeight: 950,
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {step.valueText}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 3,
+                      color: 'rgba(255,255,255,0.58)',
+                      fontSize: 9,
+                      lineHeight: '11px',
+                      fontWeight: 780,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {step.detail}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      height: 3,
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      background: 'rgba(255,255,255,0.13)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.round(Math.max(0, Math.min(1, step.ratio)) * 100)}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background: `linear-gradient(90deg, ${step.accent}, #ffffff)`,
+                        transition: 'width 0.22s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {opportunityCue && (
         <div

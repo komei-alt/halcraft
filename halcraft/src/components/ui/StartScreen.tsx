@@ -2026,10 +2026,13 @@ export function StartScreen() {
               </span>
             </div>
 
-            <div
+            <button
               id="start-game-button"
+              type="button"
               onClick={handleStart}
+              disabled={!isValidName || isStartPending}
               style={{
+                appearance: 'none',
                 position: 'relative',
                 overflow: 'hidden',
                 minWidth: isTouch ? 200 : 240,
@@ -2076,7 +2079,7 @@ export function StartScreen() {
                   }}
                 />
               )}
-            </div>
+            </button>
           </div>
         </div>
 
