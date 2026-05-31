@@ -311,7 +311,11 @@ interface HorizonPanel {
   yOffset: number;
   widthScale: number;
   heightScale: number;
+  depthShift: number;
+  mistLift: number;
 }
+
+type HorizonGeometryLayer = 'back' | 'main' | 'accent' | 'front';
 
 function getEffectiveCount(config: AtmosphereConfig): number {
   const profile = getPerformanceProfile();
@@ -407,15 +411,41 @@ function skylineNoise(index: number, seed: number): number {
   return x - Math.floor(x);
 }
 
-function createSkylineGeometry(kind: HorizonKind, width: number, height: number, seed: number): THREE.BufferGeometry {
-  const segments = 12;
+function getEffectiveHorizonCount(): number {
+  const profile = getPerformanceProfile();
+  const tierScale = profile.tier === 'low'
+    ? 0.72
+    : profile.tier === 'balanced'
+      ? 0.86
+      : 1;
+  const touchScale = isTouchDevice() ? 0.78 : 1;
+  return Math.max(10, Math.round(16 * tierScale * touchScale));
+}
+
+function createSkylineGeometry(
+  kind: HorizonKind,
+  width: number,
+  height: number,
+  seed: number,
+  layer: HorizonGeometryLayer = 'main',
+): THREE.BufferGeometry {
+  const segments = layer === 'front' ? 14 : 18;
   const vertices: number[] = [];
   const indices: number[] = [];
+  const layerHeight =
+    layer === 'back' ? 0.64 :
+      layer === 'accent' ? 0.54 :
+        layer === 'front' ? 0.38 :
+          1;
+  const layerBase =
+    layer === 'front' ? 0.08 :
+      layer === 'accent' ? 0.1 :
+        0.12;
 
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
     const x = (t - 0.5) * width;
-    const noise = skylineNoise(i, seed);
+    const noise = skylineNoise(i, seed + (layer === 'back' ? 1.7 : layer === 'front' ? 4.8 : 0));
     let top: number;
 
     if (kind === 'mountains') {
@@ -423,19 +453,23 @@ function createSkylineGeometry(kind: HorizonKind, width: number, height: number,
         0,
         1 - Math.abs(((t * 3.2 + seed * 0.37) % 1) * 2 - 1),
       );
-      top = height * (0.34 + ridge * 0.78 + noise * 0.22);
+      const farLift = layer === 'back' ? 0.18 : 0;
+      top = height * (0.34 + farLift + ridge * 0.78 + noise * 0.22);
     } else if (kind === 'forestLine') {
-      const canopy = Math.sin(t * Math.PI * 8 + seed) * 0.18 + noise * 0.28;
-      top = height * (0.58 + canopy);
+      const canopy = Math.sin(t * Math.PI * (layer === 'front' ? 11 : 8) + seed) * 0.18 + noise * 0.28;
+      const crown = Math.max(0, Math.sin(t * Math.PI * 15 + seed * 0.6)) * (layer === 'front' ? 0.34 : 0.16);
+      top = height * (0.48 + canopy + crown);
     } else if (kind === 'islands') {
       const island = Math.max(0, Math.sin(t * Math.PI * 2.7 + seed * 2.1));
-      top = height * (0.16 + island * 0.54 + noise * 0.16);
+      const palm = layer === 'front' ? Math.max(0, Math.sin(t * Math.PI * 12 + seed)) * 0.24 : 0;
+      top = height * (0.14 + island * 0.54 + palm + noise * 0.16);
     } else {
       const dune = Math.sin(t * Math.PI * 2.2 + seed) * 0.28 + Math.sin(t * Math.PI * 4.4 + seed * 0.7) * 0.14;
-      top = height * (0.42 + dune + noise * 0.1);
+      const crest = layer === 'front' ? Math.max(0, Math.sin(t * Math.PI * 5.5 + seed * 1.2)) * 0.12 : 0;
+      top = height * (0.4 + dune + crest + noise * 0.1);
     }
 
-    vertices.push(x, 0, 0, x, Math.max(height * 0.12, top), 0);
+    vertices.push(x, 0, 0, x, Math.max(height * layerBase, top * layerHeight), 0);
   }
 
   for (let i = 0; i < segments; i++) {
@@ -450,8 +484,7 @@ function createSkylineGeometry(kind: HorizonKind, width: number, height: number,
   return geometry;
 }
 
-function createHorizonPanels(): HorizonPanel[] {
-  const count = 14;
+function createHorizonPanels(count: number): HorizonPanel[] {
   return Array.from({ length: count }, (_, i) => {
     const seed = skylineNoise(i, 2.5);
     return {
@@ -460,6 +493,8 @@ function createHorizonPanels(): HorizonPanel[] {
       yOffset: (skylineNoise(i, 5.1) - 0.5) * 3,
       widthScale: 0.88 + skylineNoise(i, 8.7) * 0.28,
       heightScale: 0.82 + skylineNoise(i, 11.3) * 0.36,
+      depthShift: (skylineNoise(i, 14.8) - 0.5) * 1.7,
+      mistLift: skylineNoise(i, 17.2) * 0.28,
     };
   });
 }
@@ -516,14 +551,26 @@ const sharedSignatureGeometry = new THREE.PlaneGeometry(1, 1);
 function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: string }) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
-  const panels = useMemo(() => createHorizonPanels(), []);
+  const panels = useMemo(() => createHorizonPanels(getEffectiveHorizonCount()), []);
+  const backGeometry = useMemo(
+    () => createSkylineGeometry(config.horizon.kind, 58, config.horizon.height * 1.08, config.horizon.accentColor, 'back'),
+    [config.horizon.accentColor, config.horizon.height, config.horizon.kind],
+  );
   const skylineGeometry = useMemo(
-    () => createSkylineGeometry(config.horizon.kind, 48, config.horizon.height, config.horizon.color),
+    () => createSkylineGeometry(config.horizon.kind, 48, config.horizon.height, config.horizon.color, 'main'),
     [config.horizon.color, config.horizon.height, config.horizon.kind],
   );
   const accentGeometry = useMemo(
-    () => createSkylineGeometry(config.horizon.kind, 42, config.horizon.height * 0.55, config.horizon.accentColor),
+    () => createSkylineGeometry(config.horizon.kind, 42, config.horizon.height * 0.55, config.horizon.accentColor, 'accent'),
     [config.horizon.accentColor, config.horizon.height, config.horizon.kind],
+  );
+  const frontGeometry = useMemo(
+    () => createSkylineGeometry(config.horizon.kind, 36, config.horizon.height * 0.62, config.horizon.color, 'front'),
+    [config.horizon.color, config.horizon.height, config.horizon.kind],
+  );
+  const mistGeometry = useMemo(
+    () => new THREE.PlaneGeometry(56, Math.max(4, config.horizon.height * 0.36)),
+    [config.horizon.height],
   );
 
   useFrame(({ clock }) => {
@@ -550,6 +597,35 @@ function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: stri
             rotation={[_horizonRotation.x, _horizonRotation.y, _horizonRotation.z]}
           >
             <mesh
+              geometry={mistGeometry}
+              position={[0, config.horizon.height * (0.18 + panel.mistLift), -1.15 + panel.depthShift]}
+              scale={[panel.widthScale * 1.08, panel.heightScale, 1]}
+              renderOrder={-23}
+            >
+              <meshBasicMaterial
+                color={config.horizon.accentColor}
+                transparent
+                opacity={config.horizon.opacity * 0.13}
+                depthWrite={false}
+                fog
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            <mesh
+              geometry={backGeometry}
+              position={[0, config.horizon.height * 0.05, -1.1 + panel.depthShift]}
+              scale={[panel.widthScale * 1.18, panel.heightScale * 0.9, 1]}
+              renderOrder={-22}
+            >
+              <meshBasicMaterial
+                color={config.horizon.accentColor}
+                transparent
+                opacity={config.horizon.opacity * 0.18}
+                depthWrite={false}
+                fog
+              />
+            </mesh>
+            <mesh
               geometry={skylineGeometry}
               scale={[panel.widthScale, panel.heightScale, 1]}
               renderOrder={-20}
@@ -572,6 +648,20 @@ function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: stri
                 color={config.horizon.accentColor}
                 transparent
                 opacity={config.horizon.opacity * 0.34}
+                depthWrite={false}
+                fog
+              />
+            </mesh>
+            <mesh
+              geometry={frontGeometry}
+              position={[0, -config.horizon.height * 0.02, 0.42]}
+              scale={[panel.widthScale * 0.74, panel.heightScale * 0.82, 1]}
+              renderOrder={-18}
+            >
+              <meshBasicMaterial
+                color={config.horizon.color}
+                transparent
+                opacity={config.horizon.opacity * 0.24}
                 depthWrite={false}
                 fog
               />
