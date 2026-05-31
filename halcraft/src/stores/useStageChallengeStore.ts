@@ -16,6 +16,7 @@ import {
   type StageChallengeStats,
 } from '../types/stageChallenges';
 import { getStageChallengeReward } from '../types/stageChallengeRewards';
+import { getStageById } from '../types/stages';
 import { playLevelUpSound, playXPGainSound } from '../utils/sounds';
 
 export interface StageChallengeBest {
@@ -42,6 +43,23 @@ export interface StageChallengeCompletion {
   createdAt: number;
 }
 
+export interface StageRunRecordHighlight {
+  label: string;
+  value: string;
+  accent: string;
+}
+
+export interface StageRunRecordEvent {
+  id: string;
+  stageId: string;
+  icon: string;
+  title: string;
+  detail: string;
+  accent: string;
+  highlights: StageRunRecordHighlight[];
+  createdAt: number;
+}
+
 interface BlockBreakOptions {
   isOre?: boolean;
   isExplosive?: boolean;
@@ -60,6 +78,7 @@ interface StageChallengeState {
   completedIds: string[];
   bestByStage: Record<string, StageChallengeBest>;
   recentCompletion: StageChallengeCompletion | null;
+  recentRecord: StageRunRecordEvent | null;
   resultDismissed: boolean;
   startRun: (stageId: string | null) => void;
   recordBlockPlace: (blockId: BlockId) => void;
@@ -83,6 +102,20 @@ function createEmptyStats(): StageChallengeStats {
 function nowMs(): number {
   if (typeof performance !== 'undefined') return performance.now();
   return Date.now();
+}
+
+function getMedalRank(medal: StageChallengeMedal): number {
+  if (medal === 'gold') return 3;
+  if (medal === 'silver') return 2;
+  if (medal === 'bronze') return 1;
+  return 0;
+}
+
+function formatRecordTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${rest.toString().padStart(2, '0')}`;
 }
 
 function createBest(completedIds: string[], totalCount: number): StageChallengeBest {
@@ -132,6 +165,90 @@ function getNewCompletion(
   };
 }
 
+function createRunRecordEvent(
+  stageId: string,
+  currentBest: StageChallengeBest | undefined,
+  nextBest: StageChallengeBest,
+  medal: StageChallengeMedal,
+  record: StageClearRecordInput,
+  elapsedSeconds: number,
+  createdAt: number,
+): StageRunRecordEvent | null {
+  const stage = getStageById(stageId);
+  const highlights: StageRunRecordHighlight[] = [];
+  const previousMedal = currentBest?.medal ?? 'none';
+  const firstClear = !currentBest?.clearCount;
+  const bestTimeUpdated = typeof currentBest?.bestClearSeconds !== 'number'
+    || elapsedSeconds < currentBest.bestClearSeconds;
+  const medalUpgraded = getMedalRank(medal) > getMedalRank(previousMedal);
+  const modeRankUpdated = Math.floor(record.modeFlowRank) > (currentBest?.bestModeFlowRank ?? 0);
+  const modeActivationsUpdated = Math.floor(record.modeActivations) > (currentBest?.bestModeActivations ?? 0);
+  const streakUpdated = Math.floor(record.bestStreak) > (currentBest?.bestStreak ?? 0);
+
+  if (firstClear) {
+    highlights.push({
+      label: '初回クリア',
+      value: formatRecordTime(elapsedSeconds),
+      accent: '#a6ffcf',
+    });
+  } else if (bestTimeUpdated) {
+    highlights.push({
+      label: 'BESTタイム',
+      value: formatRecordTime(elapsedSeconds),
+      accent: '#a6ffcf',
+    });
+  }
+
+  if (medalUpgraded && medal !== 'none') {
+    highlights.push({
+      label: 'メダル更新',
+      value: getStageChallengeMedalLabel(medal),
+      accent: medal === 'gold' ? '#ffe680' : medal === 'silver' ? '#dce8ff' : '#ffc58a',
+    });
+  }
+
+  if (modeRankUpdated && record.modeFlowRank > 0) {
+    highlights.push({
+      label: stage?.category === 'build' ? 'ひらめき記録' : '戦意記録',
+      value: `Lv.${Math.floor(record.modeFlowRank)}`,
+      accent: stage?.color ?? '#fff1a8',
+    });
+  }
+
+  if (modeActivationsUpdated && record.modeActivations > 0) {
+    highlights.push({
+      label: '発動回数',
+      value: `${Math.floor(record.modeActivations)}回`,
+      accent: '#fff1a8',
+    });
+  }
+
+  if (streakUpdated && record.bestStreak > 0) {
+    highlights.push({
+      label: '連続記録',
+      value: `x${Math.floor(record.bestStreak)}`,
+      accent: '#ffb36d',
+    });
+  }
+
+  if (highlights.length === 0) return null;
+
+  return {
+    id: `${stageId}-record-${Math.round(createdAt)}`,
+    stageId,
+    icon: firstClear ? '🏁' : bestTimeUpdated || medalUpgraded ? '🏆' : '⚡',
+    title: firstClear
+      ? 'このマップの記録ができた'
+      : stage?.category === 'build'
+        ? '制作ラン記録更新'
+        : '戦闘ラン記録更新',
+    detail: `${stage?.name ?? 'このマップ'}: ${nextBest.clearCount ?? 1}回目の記録を保存`,
+    accent: highlights[0]?.accent ?? '#a6ffcf',
+    highlights: highlights.slice(0, 4),
+    createdAt,
+  };
+}
+
 export const useStageChallengeStore = create<StageChallengeState>()(
   persist(
     (set, get) => {
@@ -176,6 +293,7 @@ export const useStageChallengeStore = create<StageChallengeState>()(
         completedIds: [],
         bestByStage: {},
         recentCompletion: null,
+        recentRecord: null,
         resultDismissed: false,
 
         startRun: (stageId) => {
@@ -184,6 +302,7 @@ export const useStageChallengeStore = create<StageChallengeState>()(
             stats: createEmptyStats(),
             completedIds: [],
             recentCompletion: null,
+            recentRecord: null,
             resultDismissed: false,
           });
         },
@@ -265,12 +384,24 @@ export const useStageChallengeStore = create<StageChallengeState>()(
             bestStreak: Math.max(currentBest?.bestStreak ?? 0, Math.floor(record.bestStreak)),
             updatedAt: Date.now(),
           };
+          const createdAt = nowMs();
+          const nextMedal = getStageChallengeMedal(state.completedIds.length, challenges.length);
+          const recentRecord = createRunRecordEvent(
+            stageId,
+            currentBest,
+            nextBest,
+            nextMedal,
+            record,
+            elapsedSeconds,
+            createdAt,
+          );
 
           set({
             bestByStage: {
               ...state.bestByStage,
               [stageId]: nextBest,
             },
+            recentRecord,
           });
         },
 

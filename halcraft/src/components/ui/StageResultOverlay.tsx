@@ -60,6 +60,7 @@ export function StageResultOverlay() {
   const completedIds = useStageChallengeStore((s) => s.completedIds);
   const bestByStage = useStageChallengeStore((s) => s.bestByStage);
   const resultDismissed = useStageChallengeStore((s) => s.resultDismissed);
+  const recentRecord = useStageChallengeStore((s) => s.recentRecord);
   const recordStageClear = useStageChallengeStore((s) => s.recordStageClear);
   const dismissStageResult = useStageChallengeStore((s) => s.dismissStageResult);
   const buildScore = useStageBuildScoreStore((s) => s.score);
@@ -150,6 +151,7 @@ export function StageResultOverlay() {
   const targetCount = stage.rules.objective.targetCount;
   const runBest = bestByStage[stage.id];
   const buildBest = buildBestByStage[stage.id];
+  const activeRecordEvent = recentRecord?.stageId === stage.id ? recentRecord : null;
   const nextRecordGoal = getStageRecordGoal({
     stage,
     runBest,
@@ -317,6 +319,132 @@ export function StageResultOverlay() {
             </div>
           ))}
         </div>
+
+        {activeRecordEvent && (
+          <div
+            id="stage-record-moment"
+            style={{
+              marginBottom: 14,
+              padding: isCompact ? '10px 11px' : '11px 12px',
+              borderRadius: 11,
+              background: `linear-gradient(135deg, ${activeRecordEvent.accent}28, rgba(255,255,255,0.06))`,
+              border: `1px solid ${activeRecordEvent.accent}66`,
+              boxShadow: `0 0 24px ${activeRecordEvent.accent}26, inset 0 1px 0 rgba(255,255,255,0.14)`,
+              animation: 'masteryPulse 0.42s ease-out',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  width: isCompact ? 36 : 40,
+                  height: isCompact ? 36 : 40,
+                  borderRadius: 9,
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: `${activeRecordEvent.accent}24`,
+                  border: `1px solid ${activeRecordEvent.accent}66`,
+                  boxShadow: `0 0 14px ${activeRecordEvent.accent}44`,
+                  fontSize: isCompact ? 19 : 22,
+                }}
+              >
+                {activeRecordEvent.icon}
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: activeRecordEvent.accent,
+                    fontSize: isCompact ? 10 : 11,
+                    lineHeight: '13px',
+                    fontWeight: 950,
+                    letterSpacing: 1,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  NEW RECORD
+                </div>
+                <div
+                  style={{
+                    marginTop: 2,
+                    color: '#fff',
+                    fontSize: isCompact ? 15 : 18,
+                    lineHeight: isCompact ? '19px' : '22px',
+                    fontWeight: 950,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {activeRecordEvent.title}
+                </div>
+                <div
+                  style={{
+                    marginTop: 2,
+                    color: 'rgba(255,255,255,0.66)',
+                    fontSize: isCompact ? 10 : 11,
+                    lineHeight: '14px',
+                    fontWeight: 800,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeRecordEvent.detail}
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 9,
+                display: 'grid',
+                gridTemplateColumns: `repeat(${Math.min(4, Math.max(1, activeRecordEvent.highlights.length))}, minmax(0, 1fr))`,
+                gap: 7,
+              }}
+            >
+              {activeRecordEvent.highlights.map((highlight) => (
+                <div
+                  key={`${highlight.label}-${highlight.value}`}
+                  style={{
+                    minWidth: 0,
+                    padding: '7px 8px',
+                    borderRadius: 9,
+                    background: `${highlight.accent}18`,
+                    border: `1px solid ${highlight.accent}4a`,
+                  }}
+                >
+                  <div
+                    style={{
+                      color: 'rgba(255,255,255,0.6)',
+                      fontSize: isCompact ? 9 : 10,
+                      lineHeight: '12px',
+                      fontWeight: 850,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {highlight.label}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 2,
+                      color: highlight.accent,
+                      fontSize: isCompact ? 13 : 15,
+                      lineHeight: isCompact ? '16px' : '18px',
+                      fontWeight: 950,
+                      fontFamily: 'monospace',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {highlight.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div
           style={{
