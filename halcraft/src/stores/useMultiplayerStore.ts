@@ -21,6 +21,8 @@ import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import type { SkinId } from '../types/skins';
 import { spawnBlockBreakEffect } from '../utils/effectTriggers';
 
+export type MultiplayerConnectionState = 'idle' | 'connecting' | 'connected' | 'offline' | 'full';
+
 /** リモートプレイヤーの状態 */
 export interface RemotePlayer {
   id: string;
@@ -64,7 +66,11 @@ interface MultiplayerState {
   /** サーバー満員フラグ */
   serverFull: boolean;
 
+  /** 接続の見た目用状態 */
+  connectionState: MultiplayerConnectionState;
 
+  /** プレイヤーに見せる接続メッセージ */
+  connectionMessage: string | null;
 
   /** 名前を設定 */
   setPlayerName: (name: string) => void;
@@ -153,6 +159,13 @@ interface MultiplayerState {
 let lastSentPos: [number, number, number] | null = null;
 let lastSentRot: [number, number] | null = null;
 let lastSentEquipped: EquippedItem | null = null;
+const configuredSockets = new WeakSet<Socket>();
+
+function getOfflineConnectionMessage(): string {
+  return import.meta.env.DEV
+    ? 'ローカルのマルチサーバー未起動。ひとりプレイで続行中。'
+    : 'マルチ接続を再試行中。ひとりプレイで続行中。';
+}
 
 function angleDistance(a: number, b: number): number {
   return Math.abs(((a - b + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
@@ -165,11 +178,18 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
   remotePlayers: new Map(),
   playerCount: 0,
   serverFull: false,
-
+  connectionState: 'idle',
+  connectionMessage: null,
 
   setPlayerName: (name) => set({ playerName: name }),
 
   join: (name, stageId) => {
+    set({
+      playerName: name,
+      serverFull: false,
+      connectionState: 'connecting',
+      connectionMessage: 'マルチ接続中。つながらない時はひとりプレイで続けます。',
+    });
     const socket = connectToServer();
     setupSocketListeners(socket, set, get);
     const skinId = usePlayerStore.getState().skinId;
@@ -188,6 +208,8 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       remotePlayers: new Map(),
       playerCount: 0,
       serverFull: false,
+      connectionState: 'idle',
+      connectionMessage: null,
     });
   },
 
@@ -376,15 +398,38 @@ function setupSocketListeners(
   set: (partial: Partial<MultiplayerState>) => void,
   get: () => MultiplayerState,
 ) {
+  if (configuredSockets.has(socket)) return;
+  configuredSockets.add(socket);
+
   // 接続完了
   socket.on('connect', () => {
-    set({ connected: true });
+    set({
+      connected: true,
+      serverFull: false,
+      connectionState: 'connected',
+      connectionMessage: null,
+    });
     useGameStore.getState().setMultiplayer(true);
   });
 
   // 切断
-  socket.on('disconnect', () => {
-    set({ connected: false });
+  socket.on('disconnect', (reason) => {
+    const isManualDisconnect = reason === 'io client disconnect';
+    set({
+      connected: false,
+      connectionState: isManualDisconnect ? 'idle' : 'offline',
+      connectionMessage: isManualDisconnect ? null : 'マルチ接続が切れました。ひとりプレイで続行中。',
+    });
+    useGameStore.getState().setMultiplayer(false);
+  });
+
+  // 接続できない時もゲーム開始は止めず、ひとりプレイの状態として扱う
+  socket.on('connect_error', () => {
+    set({
+      connected: false,
+      connectionState: 'offline',
+      connectionMessage: getOfflineConnectionMessage(),
+    });
     useGameStore.getState().setMultiplayer(false);
   });
 
@@ -497,7 +542,13 @@ function setupSocketListeners(
 
   // サーバー満員
   socket.on('server:full', () => {
-    set({ serverFull: true });
+    set({
+      serverFull: true,
+      connected: false,
+      connectionState: 'full',
+      connectionMessage: 'サーバーが満員です（最大10人）。ひとりプレイで続行できます。',
+    });
+    useGameStore.getState().setMultiplayer(false);
   });
 
   // ── 時間同期 ──

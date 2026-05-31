@@ -21,13 +21,17 @@ let socket: Socket | null = null;
  * サーバーに接続
  */
 export function connectToServer(): Socket {
-  if (socket?.connected) return socket;
+  if (socket) {
+    if (!socket.connected) socket.connect();
+    return socket;
+  }
 
   socket = io(SERVER_URL, {
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 10,
+    reconnectionDelay: import.meta.env.DEV ? 1800 : 1000,
+    reconnectionAttempts: import.meta.env.DEV ? 3 : 10,
+    timeout: import.meta.env.DEV ? 2500 : 6000,
   });
 
   socket.on('connect', () => {
@@ -38,9 +42,7 @@ export function connectToServer(): Socket {
     console.log('[Multiplayer] 切断:', reason);
   });
 
-  socket.on('connect_error', (err) => {
-    console.warn('[Multiplayer] 接続エラー:', err.message);
-  });
+  // 接続エラーは useMultiplayerStore で状態表示する。ここではコンソールを汚さない。
 
   return socket;
 }

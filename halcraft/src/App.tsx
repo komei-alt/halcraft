@@ -52,6 +52,7 @@ import { CockpitHUD } from './components/ui/CockpitHUD';
 import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
 import { MinimapHUD } from './components/ui/MinimapHUD';
 import { CoasterHUD } from './components/ui/CoasterHUD';
+import { MultiplayerConnectionHUD } from './components/ui/MultiplayerConnectionHUD';
 import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from './stores/useVehicleStore';
 import { useGameStore } from './stores/useGameStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
@@ -319,6 +320,7 @@ export default function App() {
           <CockpitHUD />
           <MinimapHUD />
           <CoasterHUD />
+          <MultiplayerConnectionHUD />
           <AirSupplyBar />
           <HungerBar />
           <UnderwaterOverlay />

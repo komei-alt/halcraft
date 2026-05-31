@@ -466,6 +466,8 @@ export function StartScreen() {
   const setStage = useGameStore((s) => s.setStage);
   const join = useMultiplayerStore((s) => s.join);
   const serverFull = useMultiplayerStore((s) => s.serverFull);
+  const connectionState = useMultiplayerStore((s) => s.connectionState);
+  const connectionMessage = useMultiplayerStore((s) => s.connectionMessage);
   const bestByStage = useStageChallengeStore((s) => s.bestByStage);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
 
@@ -625,6 +627,7 @@ export function StartScreen() {
     ? Math.round((activeCompletedCount / activeChallengeCount) * 100)
     : 0;
   const progressColumns = viewportSize.w < 360 ? '1fr' : 'repeat(3, minmax(0, 1fr))';
+  const showSoloFallbackNotice = connectionState === 'offline' && !!connectionMessage;
 
   // 定期的にステージのプレイヤー数を取得
   useEffect(() => {
@@ -1846,6 +1849,29 @@ export function StartScreen() {
         <div style={{ marginTop: isTouch ? 8 : 12 }}>
           <SkinSelector compact />
         </div>
+
+        {/* マルチ不通時も、ひとりプレイで続けられることを表示 */}
+        {showSoloFallbackNotice && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: isTouch ? '6px 12px' : '7px 16px',
+              background: 'rgba(255, 213, 106, 0.18)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 213, 106, 0.42)',
+              borderRadius: 8,
+              color: '#ffe08a',
+              fontSize: isTouch ? 11 : 13,
+              fontWeight: 850,
+              lineHeight: 1.35,
+              textShadow: '0 1px 3px rgba(0,0,0,0.72)',
+              textAlign: 'center',
+              maxWidth: isTouch ? 'calc(100vw - 32px)' : 440,
+            }}
+          >
+            ⚡ {connectionMessage}
+          </div>
+        )}
 
         {/* サーバー満員表示 */}
         {serverFull && (
