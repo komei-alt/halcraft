@@ -1,7 +1,7 @@
 // ステージ環境プレッシャーHUD
 // 暑さ・寒さ・暗がりなど、マップ固有の危険と対策を短く表示する
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useStagePressureStore } from '../../stores/useStagePressureStore';
 import { getStagePressure } from '../../types/stagePressures';
@@ -24,19 +24,33 @@ export function StagePressureHUD() {
   const isSheltered = useStagePressureStore((s) => s.isSheltered);
   const timeMultiplier = useStagePressureStore((s) => s.timeMultiplier);
   const statusLabel = useStagePressureStore((s) => s.statusLabel);
+  const recentRelief = useStagePressureStore((s) => s.recentRelief);
+  const clearRecentRelief = useStagePressureStore((s) => s.clearRecentRelief);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 
   const definition = useMemo(() => getStagePressure(stage?.id), [stage?.id]);
 
+  useEffect(() => {
+    if (!recentRelief) return undefined;
+    const timer = window.setTimeout(() => clearRecentRelief(), 2800);
+    return () => window.clearTimeout(timer);
+  }, [clearRecentRelief, recentRelief]);
+
   if (phase !== 'playing' || !stage || !definition) return null;
 
+  const activeRelief = recentRelief?.stageId === stage.id ? recentRelief : null;
   const severityColor = SEVERITY_COLORS[severity];
   const pressurePercent = Math.round(pressure * 100);
-  const title = timeMultiplier <= 0
+  const title = activeRelief
+    ? activeRelief.title
+    : timeMultiplier <= 0
     ? '環境はおだやか'
     : isSheltered
       ? definition.safeLabel
       : statusLabel;
+  const detail = activeRelief
+    ? activeRelief.detail
+    : `${definition.protectLabel} / ${definition.reliefLabel}`;
 
   return (
     <div
@@ -62,10 +76,12 @@ export function StagePressureHUD() {
           style={{
             fontSize: isCompact ? 18 : 21,
             flex: '0 0 auto',
-            filter: `drop-shadow(0 1px 3px rgba(0,0,0,0.9))`,
+            filter: activeRelief
+              ? `drop-shadow(0 0 8px ${definition.accent})`
+              : `drop-shadow(0 1px 3px rgba(0,0,0,0.9))`,
           }}
         >
-          {definition.icon}
+          {activeRelief?.icon ?? definition.icon}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
@@ -79,7 +95,7 @@ export function StagePressureHUD() {
               textOverflow: 'ellipsis',
             }}
           >
-            マップ環境
+            {activeRelief ? '環境対策' : 'マップ環境'}
           </div>
           <div
             style={{
@@ -113,7 +129,7 @@ export function StagePressureHUD() {
       <div
         style={{
           marginTop: 7,
-          color: isSheltered || timeMultiplier <= 0 ? '#a8ffe9' : severityColor,
+          color: activeRelief || isSheltered || timeMultiplier <= 0 ? '#a8ffe9' : severityColor,
           fontSize: isCompact ? 10 : 11,
           lineHeight: '14px',
           fontWeight: 900,
@@ -136,7 +152,7 @@ export function StagePressureHUD() {
             textOverflow: 'ellipsis',
           }}
         >
-          {definition.protectLabel}
+          {detail}
         </div>
       )}
 
@@ -154,7 +170,9 @@ export function StagePressureHUD() {
             width: `${pressurePercent}%`,
             height: '100%',
             borderRadius: 999,
-            background: `linear-gradient(90deg, ${definition.accent}, ${severityColor})`,
+            background: activeRelief
+              ? `linear-gradient(90deg, #fff2a6, ${definition.accent})`
+              : `linear-gradient(90deg, ${definition.accent}, ${severityColor})`,
             transition: 'width 0.24s ease',
           }}
         />

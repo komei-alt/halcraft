@@ -22,6 +22,8 @@ export interface StagePressureDefinition {
   dangerLabel: string;
   safeLabel: string;
   protectLabel: string;
+  reliefLabel: string;
+  reliefModeGain: number;
   accent: string;
   safeBlocks: BlockId[];
   safeRadius: number;
@@ -52,6 +54,8 @@ export const STAGE_PRESSURES: Record<string, StagePressureDefinition> = {
     dangerLabel: '暗がりで消耗中',
     safeLabel: '灯りの防衛圏',
     protectLabel: '松明・焚き火・タレットの近くへ',
+    reliefLabel: '防衛圏で立て直すと戦意が戻る',
+    reliefModeGain: 16,
     accent: '#dce775',
     safeBlocks: LIGHT_AND_DEFENSE_BLOCKS,
     safeRadius: 5,
@@ -76,6 +80,8 @@ export const STAGE_PRESSURES: Record<string, StagePressureDefinition> = {
     dangerLabel: '蒸し暑さで消耗中',
     safeLabel: '水辺でクールダウン',
     protectLabel: '水ブロックや水辺に寄る',
+    reliefLabel: '水辺で受け流すと戦意が戻る',
+    reliefModeGain: 18,
     accent: '#80deea',
     safeBlocks: [BLOCK_IDS.WATER],
     safeRadius: 4,
@@ -96,6 +102,8 @@ export const STAGE_PRESSURES: Record<string, StagePressureDefinition> = {
     dangerLabel: '寒さで消耗中',
     safeLabel: '暖かい補給圏',
     protectLabel: '焚き火・松明・光る石の近くへ',
+    reliefLabel: '火のそばで温まると戦意が戻る',
+    reliefModeGain: 22,
     accent: '#bbdefb',
     safeBlocks: [BLOCK_IDS.CAMPFIRE, BLOCK_IDS.TORCH, BLOCK_IDS.GLOWSTONE, BLOCK_IDS.ELECTRIC],
     safeRadius: 5,
@@ -116,6 +124,8 @@ export const STAGE_PRESSURES: Record<string, StagePressureDefinition> = {
     dangerLabel: '熱で消耗中',
     safeLabel: '日陰・水場で冷却',
     protectLabel: '水・石・階段の近くへ',
+    reliefLabel: '日陰や水場で冷やすと戦意が戻る',
+    reliefModeGain: 22,
     accent: '#ffc06d',
     safeBlocks: [BLOCK_IDS.WATER, BLOCK_IDS.STONE, BLOCK_IDS.STAIRS],
     safeRadius: 5,
@@ -159,6 +169,20 @@ export function getStagePressureSeverity(pressure: number): StagePressureSeverit
   if (pressure >= 0.62) return 'danger';
   if (pressure >= 0.28) return 'watch';
   return 'safe';
+}
+
+export function getStagePressureReliefGain(
+  definition: StagePressureDefinition,
+  peakPressure: number,
+): number {
+  const urgencyBonus = peakPressure >= 0.86
+    ? 10
+    : peakPressure >= 0.62
+      ? 6
+      : peakPressure >= 0.42
+        ? 3
+        : 0;
+  return definition.reliefModeGain + urgencyBonus;
 }
 
 export function isStagePressureShelterBlock(

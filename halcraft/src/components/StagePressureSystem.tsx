@@ -5,24 +5,29 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
+import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useStagePressureStore } from '../stores/useStagePressureStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import {
   getStagePressure,
+  getStagePressureReliefGain,
   getStagePressureSeverity,
   getStagePressureTimeMultiplier,
   isStagePressureShelterBlock,
   type StagePressureDefinition,
   type StagePressureSeverity,
 } from '../types/stagePressures';
-import { playStagePressureSound } from '../utils/sounds';
+import { playStagePressureSound, playStageRewardSound } from '../utils/sounds';
 
 const UPDATE_INTERVAL_MS = 240;
 const DAMAGE_INTERVAL_MS = 950;
 const MOVEMENT_RISE_BONUS = 0.35;
 const PRESSURE_EPSILON = 0.003;
 const PLAYER_FOOT_OFFSET = 1.5;
+const RELIEF_MIN_PEAK = 0.42;
+const RELIEF_DROP_REQUIRED = 0.14;
+const RELIEF_COOLDOWN_MS = 6200;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -71,6 +76,15 @@ function shouldPlayWarning(previous: StagePressureSeverity, next: StagePressureS
   return previous !== next;
 }
 
+function createReliefDetail(gain: number, peakPressure: number): string {
+  const peakLabel = peakPressure >= 0.86
+    ? '危険域から復帰'
+    : peakPressure >= 0.62
+      ? '高圧から復帰'
+      : '早めに対策';
+  return `${peakLabel} / 戦意 +${gain}`;
+}
+
 /** 戦争マップごとの暑さ・寒さ・暗がりを、消耗と避難行動として反映する */
 export function StagePressureSystem() {
   const { camera } = useThree();
@@ -81,7 +95,9 @@ export function StagePressureSystem() {
   const getBlock = useWorldStore((s) => s.getBlock);
   const lastUpdateAt = useRef(0);
   const lastDamageAt = useRef(0);
+  const lastReliefAt = useRef(0);
   const pressureRef = useRef(0);
+  const peakPressureRef = useRef(0);
   const severityRef = useRef<StagePressureSeverity>('safe');
   const lastPositionRef = useRef(new THREE.Vector3());
 
@@ -95,6 +111,7 @@ export function StagePressureSystem() {
     if (phase !== 'playing' || isBuildMode || !definition) {
       if (pressureRef.current > 0 || useStagePressureStore.getState().stageId !== null) {
         pressureRef.current = 0;
+        peakPressureRef.current = 0;
         severityRef.current = 'safe';
         useStagePressureStore.getState().reset();
       }
@@ -119,7 +136,39 @@ export function StagePressureSystem() {
           pressureRef.current
             + definition.risePerSecond * timeMultiplier * movementMultiplier * dt,
         );
+    const previousPeakPressure = peakPressureRef.current;
     pressureRef.current = nextPressure;
+
+    if (isSheltered) {
+      const recoveredEnough = previousPeakPressure - nextPressure >= RELIEF_DROP_REQUIRED;
+      if (
+        timeMultiplier > 0 &&
+        previousPeakPressure >= RELIEF_MIN_PEAK &&
+        recoveredEnough &&
+        now - lastReliefAt.current >= RELIEF_COOLDOWN_MS
+      ) {
+        const gain = getStagePressureReliefGain(definition, previousPeakPressure);
+        lastReliefAt.current = now;
+        useModeFlowStore.getState().recordPressureRelief(gain, '環境対策');
+        useStagePressureStore.getState().setRecentRelief({
+          id: `${definition.stageId}-relief-${Math.round(now)}`,
+          stageId: definition.stageId,
+          kind: definition.kind,
+          icon: definition.icon,
+          title: `${definition.safeLabel} 成功`,
+          detail: createReliefDetail(gain, previousPeakPressure),
+          gain,
+          accent: definition.accent,
+          createdAt: now,
+        });
+        playStageRewardSound('war_supply');
+        peakPressureRef.current = nextPressure;
+      } else if (nextPressure <= PRESSURE_EPSILON || timeMultiplier <= 0) {
+        peakPressureRef.current = nextPressure;
+      }
+    } else {
+      peakPressureRef.current = Math.max(previousPeakPressure, nextPressure);
+    }
 
     if (!isSheltered && nextPressure > PRESSURE_EPSILON) {
       const exhaustion = definition.hungerExhaustionPerSecond * nextPressure * timeMultiplier * dt;

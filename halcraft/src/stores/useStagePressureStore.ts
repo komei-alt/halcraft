@@ -16,8 +16,23 @@ interface StagePressureSnapshot {
   updatedAt: number;
 }
 
+export interface StagePressureReliefEvent {
+  id: string;
+  stageId: string;
+  kind: StagePressureKind;
+  icon: string;
+  title: string;
+  detail: string;
+  gain: number;
+  accent: string;
+  createdAt: number;
+}
+
 interface StagePressureState extends StagePressureSnapshot {
+  recentRelief: StagePressureReliefEvent | null;
   setSnapshot: (snapshot: StagePressureSnapshot) => void;
+  setRecentRelief: (event: StagePressureReliefEvent) => void;
+  clearRecentRelief: () => void;
   reset: () => void;
 }
 
@@ -35,6 +50,9 @@ const EMPTY_SNAPSHOT: StagePressureSnapshot = {
 
 export const useStagePressureStore = create<StagePressureState>()((set) => ({
   ...EMPTY_SNAPSHOT,
+  recentRelief: null,
   setSnapshot: (snapshot) => set(snapshot),
-  reset: () => set(EMPTY_SNAPSHOT),
+  setRecentRelief: (event) => set({ recentRelief: event }),
+  clearRecentRelief: () => set({ recentRelief: null }),
+  reset: () => set({ ...EMPTY_SNAPSHOT, recentRelief: null }),
 }));

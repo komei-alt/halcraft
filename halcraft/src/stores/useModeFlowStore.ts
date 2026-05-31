@@ -50,6 +50,7 @@ interface ModeFlowState {
   recordBuildBlockPlace: (blockId: BlockId) => void;
   recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
   recordEnemyDefeat: (mobType: MobType) => void;
+  recordPressureRelief: (gain: number, label: string) => void;
   clearRecentActivation: () => void;
 }
 
@@ -284,6 +285,30 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       streak: nextStreak,
       bestStreak: Math.max(state.bestStreak, nextStreak),
       streakExpiresAt: createdAt + streakWindow,
+      recentActivation: activation,
+      flowRank,
+      activationCount: nextActivationCount,
+    });
+  },
+
+  recordPressureRelief: (gain, label) => {
+    const state = get();
+    const stageId = state.currentStageId;
+    const rule = getStageModeRule(stageId);
+    if (!stageId || !rule || rule.category !== 'war') return;
+
+    const safeGain = Math.max(1, Math.round(gain));
+    const nextRawMeter = state.meter + safeGain;
+    const reached = nextRawMeter >= rule.threshold;
+    const nextActivationCount = reached ? state.activationCount + 1 : state.activationCount;
+    const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
+    const createdAt = nowMs();
+    const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+
+    set({
+      meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
+      lastGain: safeGain,
+      lastGainLabel: `${label} +${safeGain}`,
       recentActivation: activation,
       flowRank,
       activationCount: nextActivationCount,
