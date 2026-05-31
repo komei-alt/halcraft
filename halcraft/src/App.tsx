@@ -29,6 +29,7 @@ import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
+import { GraphicsPostFX, RendererColorPipeline } from './components/GraphicsQuality';
 import { StageConditionSystem } from './components/StageConditionSystem';
 import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
 import { StageEventSystem } from './components/StageEventSystem';
@@ -112,73 +113,77 @@ function GameCanvas() {
   const performanceProfile = getPerformanceProfile();
 
   return (
-    <Canvas
-      shadows={performanceProfile.shadowsEnabled ? { type: THREE.PCFShadowMap } : false}
-      camera={{
-        fov: isTouch ? 65 : 70,
-        near: 0.1,
-        far: performanceProfile.cameraFar,
-      }}
-      dpr={[1, performanceProfile.maxDpr]}
-      gl={{
-        antialias: false,
-        powerPreference: isTouch ? 'default' : 'high-performance',
-        stencil: false,
-        depth: true,
-      }}
-      tabIndex={0}
-      style={{ position: 'fixed', inset: 0, outline: 'none' }}
-    >
-      <Suspense fallback={null}>
-        <Environment />
-        <StageAtmosphereFX />
-        <StageConditionFX />
-        <StageEventFX />
-        <StageLandmarkBeaconFX />
-        <StageModeFlowFX />
-        <World />
-        <TorchRenderer />
-        <BedRenderer />
-        <DoorRenderer />
-        <LadderRenderer />
-        <CampfireRenderer />
-        <CandleRenderer />
-        <TurretRenderer />
-        <BlockLights />
-        <Player />
-        <BlockInteraction />
-        <BlockBreakEffect />
-        <BlockUseEffect />
-        <DamagePopup />
-        <HitImpactEffect />
-        <MobDeathEffect />
-        <RocketLauncher />
-        <PlayerMachineGun />
-        <Lightsaber />
-        <DroppedItems />
-        <MobManager />
-        <Helicopter />
-        <Tank />
-        <Airplane />
-        <Car />
-        <MachineGun />
-        <VehicleWeapons />
-        <VehicleCombat />
-        <VehicleExplosionEffect />
-        <VehicleHealthBars />
-        {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
-        {/* <CockpitView /> */}
-        <RemotePlayers />
-        <PlayerNameOverlay />
-        <SoundManager />
-        <RailRenderer />
-        <CoasterCart />
-        <WaterRenderer />
-        <StageConditionSystem />
-        <StageEventSystem />
-        <StagePressureSystem />
-      </Suspense>
-    </Canvas>
+    <div className="game-canvas-shell">
+      <Canvas
+        shadows={performanceProfile.shadowsEnabled ? { type: THREE.PCFShadowMap } : false}
+        camera={{
+          fov: isTouch ? 65 : 70,
+          near: 0.1,
+          far: performanceProfile.cameraFar,
+        }}
+        dpr={[1, performanceProfile.maxDpr]}
+        gl={{
+          antialias: false,
+          powerPreference: isTouch ? 'default' : 'high-performance',
+          stencil: false,
+          depth: true,
+        }}
+        tabIndex={0}
+        style={{ width: '100%', height: '100%', outline: 'none' }}
+      >
+        <RendererColorPipeline />
+        <Suspense fallback={null}>
+          <Environment />
+          <StageAtmosphereFX />
+          <StageConditionFX />
+          <StageEventFX />
+          <StageLandmarkBeaconFX />
+          <StageModeFlowFX />
+          <World />
+          <TorchRenderer />
+          <BedRenderer />
+          <DoorRenderer />
+          <LadderRenderer />
+          <CampfireRenderer />
+          <CandleRenderer />
+          <TurretRenderer />
+          <BlockLights />
+          <Player />
+          <BlockInteraction />
+          <BlockBreakEffect />
+          <BlockUseEffect />
+          <DamagePopup />
+          <HitImpactEffect />
+          <MobDeathEffect />
+          <RocketLauncher />
+          <PlayerMachineGun />
+          <Lightsaber />
+          <DroppedItems />
+          <MobManager />
+          <Helicopter />
+          <Tank />
+          <Airplane />
+          <Car />
+          <MachineGun />
+          <VehicleWeapons />
+          <VehicleCombat />
+          <VehicleExplosionEffect />
+          <VehicleHealthBars />
+          {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
+          {/* <CockpitView /> */}
+          <RemotePlayers />
+          <PlayerNameOverlay />
+          <SoundManager />
+          <RailRenderer />
+          <CoasterCart />
+          <WaterRenderer />
+          <StageConditionSystem />
+          <StageEventSystem />
+          <StagePressureSystem />
+          <GraphicsPostFX />
+        </Suspense>
+      </Canvas>
+    </div>
   );
 }
 

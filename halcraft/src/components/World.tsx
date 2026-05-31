@@ -21,7 +21,9 @@ function getBlockTexture(textureName: string): THREE.Texture {
 
   const texture = textureLoader.load(`/textures/blocks/${textureName}`);
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 2;
   texture.colorSpace = THREE.SRGBColorSpace;
 
   textureCache.set(textureName, texture);
@@ -88,10 +90,11 @@ function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial
 interface ChunkRendererProps {
   cx: number;
   cz: number;
+  castBlockShadows: boolean;
 }
 
 /** 1チャンク分のブロックを描画するコンポーネント */
-function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
+function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
   const getChunk = useWorldStore((s) => s.getChunk);
   const version = useWorldStore((s) => s.chunkVersions.get(`${cx},${cz}`) ?? 0);
 
@@ -162,6 +165,7 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
             key={`${cx}-${cz}-${blockId}-${version}`}
             blockDef={def}
             positionData={positionData}
+            castShadow={castBlockShadows}
           />
         );
       })}
@@ -173,9 +177,11 @@ function ChunkRenderer({ cx, cz }: ChunkRendererProps) {
 function BlockTypeInstances({
   blockDef,
   positionData,
+  castShadow,
 }: {
   blockDef: BlockInfo;
   positionData: Float32Array;
+  castShadow: boolean;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummyRef = useRef(new THREE.Object3D());
@@ -200,6 +206,7 @@ function BlockTypeInstances({
       ref={meshRef}
       args={[sharedBoxGeometry, undefined, count]}
       material={material}
+      castShadow={castShadow}
       receiveShadow
     />
   );
@@ -212,10 +219,13 @@ export function World() {
   const processFluidSimulation = useWorldStore((s) => s.processFluidSimulation);
   const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
   const { camera } = useThree();
+  useSettingsStore((s) => s.graphicsPreset);
   useSettingsStore((s) => s.renderDistance);
+  useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
   const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
+  const castBlockShadows = performanceProfile.shadowsEnabled && performanceProfile.tier === 'high';
 
   // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
   const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
@@ -273,7 +283,7 @@ export function World() {
   return (
     <group>
       {visibleChunks.map(([cx, cz]) => (
-        <ChunkRenderer key={`${cx},${cz}`} cx={cx} cz={cz} />
+        <ChunkRenderer key={`${cx},${cz}`} cx={cx} cz={cz} castBlockShadows={castBlockShadows} />
       ))}
     </group>
   );

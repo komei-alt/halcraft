@@ -3,7 +3,7 @@
 // バイオーム設定から環境色を取得
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import { BIOME_CONFIGS } from '../types/biomes';
@@ -15,6 +15,10 @@ const _skyColor = new THREE.Color();
 const _fogColor = new THREE.Color();
 const _sunColor = new THREE.Color();
 const _sunPosition = new THREE.Vector3();
+const _skyTopColor = new THREE.Color();
+const _skyHorizonColor = new THREE.Color();
+const _skySunGlowColor = new THREE.Color();
+const _skySunDirection = new THREE.Vector3();
 
 /** バイオーム色キャッシュ用 */
 const _daySky = new THREE.Color();
@@ -31,6 +35,55 @@ const _sunsetSun = new THREE.Color();
 let cachedBiomeId: string | null = null;
 let cachedFogNear = 100;
 let cachedFogFar = 250;
+
+const SKY_DOME_RADIUS = 395;
+const SKY_VERTEX_SHADER = /* glsl */ `
+  varying vec3 vDirection;
+
+  void main() {
+    vDirection = position;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    gl_Position.z = gl_Position.w;
+  }
+`;
+
+const SKY_FRAGMENT_SHADER = /* glsl */ `
+  uniform vec3 uTopColor;
+  uniform vec3 uHorizonColor;
+  uniform vec3 uSunColor;
+  uniform vec3 uSunDirection;
+  uniform float uNightMix;
+
+  varying vec3 vDirection;
+
+  void main() {
+    vec3 direction = normalize(vDirection);
+    float height = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
+    float skyBlend = smoothstep(0.08, 0.96, height);
+    vec3 sky = mix(uHorizonColor, uTopColor, skyBlend);
+
+    float horizonGlow = exp(-abs(direction.y) * 4.0) * 0.08;
+    float sunDot = max(dot(direction, normalize(uSunDirection)), 0.0);
+    float sunHalo = pow(sunDot, 22.0);
+    float sunCore = pow(sunDot, 420.0);
+    float zenithLift = smoothstep(0.62, 1.0, height) * 0.08;
+
+    sky += uSunColor * (horizonGlow + sunHalo * 0.28 + sunCore * 1.85);
+    sky += uTopColor * zenithLift;
+    sky = mix(sky, sky * 0.58 + vec3(0.014, 0.024, 0.055), uNightMix * 0.38);
+
+    gl_FragColor = vec4(sky, 1.0);
+  }
+`;
+
+interface SkyUniforms extends Record<string, THREE.IUniform<THREE.Color | THREE.Vector3 | number>> {
+  uTopColor: THREE.IUniform<THREE.Color>;
+  uHorizonColor: THREE.IUniform<THREE.Color>;
+  uSunColor: THREE.IUniform<THREE.Color>;
+  uSunDirection: THREE.IUniform<THREE.Vector3>;
+  uNightMix: THREE.IUniform<number>;
+}
 
 function ensureSceneEnvironment(scene: THREE.Scene): { background: THREE.Color; fog: THREE.Fog } {
   if (!(scene.background instanceof THREE.Color)) {
@@ -65,11 +118,32 @@ function updateBiomeColors(biomeId: string): void {
   cachedFogFar = biome.fogFar;
 }
 
+function getNightMix(gameTime: number, dimension: string): number {
+  if (dimension === 'nether') return 0.9;
+  if (gameTime < 0.05) return 1;
+  if (gameTime < 0.1) return 1 - ((gameTime - 0.05) / 0.05);
+  if (gameTime < 0.4) return 0;
+  if (gameTime < 0.55) return (gameTime - 0.4) / 0.15;
+  return 1;
+}
+
+function createSkyUniforms(): SkyUniforms {
+  return {
+    uTopColor: { value: new THREE.Color(0x87ceeb) },
+    uHorizonColor: { value: new THREE.Color(0xd8f1ff) },
+    uSunColor: { value: new THREE.Color(0xfff5e0) },
+    uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.2).normalize() },
+    uNightMix: { value: 0 },
+  };
+}
+
 export function Environment() {
-  const { scene } = useThree();
+  const { camera, scene } = useThree();
+  const skyRef = useRef<THREE.Mesh>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const skyUniforms = useMemo(() => createSkyUniforms(), []);
   useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
 
@@ -82,6 +156,7 @@ export function Environment() {
   }, [scene]);
 
   // 毎フレーム昼夜サイクルを更新
+  /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
     // ゲーム時間を進める
     advanceTime(delta);
@@ -165,6 +240,20 @@ export function Environment() {
     sceneEnvironment.background.copy(_skyColor);
     sceneEnvironment.fog.color.copy(_fogColor);
 
+    // 空ドームはカメラに追従させ、背景に立体的なグラデーションと太陽光を重ねる
+    if (skyRef.current) {
+      skyRef.current.position.copy(camera.position);
+    }
+    _skyTopColor.copy(_skyColor).multiplyScalar(gameState.dimension === 'nether' ? 0.8 : 1.08);
+    _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.14);
+    _skySunGlowColor.copy(_sunColor).multiplyScalar(gameState.dimension === 'nether' ? 0.65 : 0.95);
+    _skySunDirection.copy(_sunPosition).normalize();
+    skyUniforms.uTopColor.value.copy(_skyTopColor);
+    skyUniforms.uHorizonColor.value.copy(_skyHorizonColor);
+    skyUniforms.uSunColor.value.copy(_skySunGlowColor);
+    skyUniforms.uSunDirection.value.copy(_skySunDirection);
+    skyUniforms.uNightMix.value = getNightMix(gameTime, gameState.dimension);
+
     // ライト更新
     if (sunRef.current) {
       sunRef.current.position.copy(_sunPosition);
@@ -178,9 +267,24 @@ export function Environment() {
       hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.7);
     }
   });
+  /* eslint-enable react-hooks/immutability */
 
   return (
     <>
+      {/* 空ドーム（単色背景から、奥行きのある空と太陽のにじみにする） */}
+      <mesh ref={skyRef} frustumCulled={false} renderOrder={-1000}>
+        <sphereGeometry args={[SKY_DOME_RADIUS, 48, 24]} />
+        <shaderMaterial
+          uniforms={skyUniforms}
+          vertexShader={SKY_VERTEX_SHADER}
+          fragmentShader={SKY_FRAGMENT_SHADER}
+          side={THREE.BackSide}
+          depthWrite={false}
+          depthTest={false}
+          fog={false}
+        />
+      </mesh>
+
       {/* 環境光（全体を柔らかく照らす） */}
       <ambientLight ref={ambientRef} intensity={0.6} color={0xffffff} />
 

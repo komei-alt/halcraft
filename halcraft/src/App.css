@@ -1,6 +1,22 @@
 /* ハルクラ — アプリスタイル */
 /* App.css は必要に応じて追加 */
 
+.game-canvas-shell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: #000;
+  z-index: 0;
+}
+
+.game-canvas-shell canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 @keyframes masteryPulse {
   0% {
     opacity: 0;
