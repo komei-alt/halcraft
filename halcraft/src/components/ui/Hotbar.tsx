@@ -2,7 +2,7 @@
 // 画面下部にマイクラ風のブロック選択バーを表示
 // モバイルではタップで選択可能
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useGameStore } from '../../stores/useGameStore';
@@ -31,6 +31,7 @@ import {
 import type { StageDefinition } from '../../types/stages';
 import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
+import { playBlockUseFeedbackSound } from '../../utils/sounds';
 
 interface HotbarStageHint {
   icon: string;
@@ -246,6 +247,8 @@ export function Hotbar() {
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
   const [now, setNow] = useState(() => performance.now());
+  const [selectionPulseKey, setSelectionPulseKey] = useState(0);
+  const previousSelectionKeyRef = useRef<string | null>(null);
 
   const isTouch = isTouchDevice();
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
@@ -275,6 +278,23 @@ export function Hotbar() {
     const timer = window.setInterval(() => setNow(performance.now()), 250);
     return () => window.clearInterval(timer);
   }, [currentStage?.category]);
+
+  useEffect(() => {
+    const selectionKey = `${selectedSlot}:${selectedBlock}`;
+    if (previousSelectionKeyRef.current === null) {
+      previousSelectionKeyRef.current = selectionKey;
+      return;
+    }
+    if (previousSelectionKeyRef.current === selectionKey) return;
+    previousSelectionKeyRef.current = selectionKey;
+    if (equippedItem === 'builder') {
+      playBlockUseFeedbackSound(selectedProfile.soundKind);
+    }
+    const timer = window.setTimeout(() => {
+      setSelectionPulseKey((value) => value + 1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [equippedItem, selectedBlock, selectedProfile.soundKind, selectedSlot]);
 
   // テクスチャをdata URLに変換して表示用に準備（hotbarSlotsが変わるたび再計算）
   const textures = useMemo(() => {
@@ -332,10 +352,26 @@ export function Hotbar() {
             backdropFilter: 'blur(8px)',
             fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
             animation: buildFocusActive ? 'builderFocusPanel 0.9s ease-in-out infinite alternate' : undefined,
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
+          {selectionPulseKey > 0 && (
+            <span
+              key={`selected-block-panel-${selectionPulseKey}`}
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 999,
+                background: `linear-gradient(100deg, transparent, ${selectedProfile.accent}4d, transparent)`,
+                animation: 'hotbarSelectSweep 0.42s ease-out both',
+              }}
+            />
+          )}
           <span
             style={{
+              position: 'relative',
               minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
@@ -501,6 +537,7 @@ export function Hotbar() {
           </span>
           <span
             style={{
+              position: 'relative',
               flexShrink: 0,
               minWidth: isTouch ? 52 : 60,
               textAlign: 'center',
@@ -710,12 +747,27 @@ export function Hotbar() {
                 boxShadow: isSelected
                   ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 14px ${profile.glow}`
                   : 'none',
+                animation: isSelected && selectionPulseKey > 0 ? 'hotbarSlotSelectPop 0.42s ease-out both' : undefined,
                 imageRendering: 'pixelated',
                 touchAction: 'none',
                 WebkitTapHighlightColor: 'transparent',
                 cursor: 'pointer',
               }}
             >
+              {isSelected && selectionPulseKey > 0 && (
+                <span
+                  key={`selected-slot-flash-${selectionPulseKey}`}
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    inset: -7,
+                    borderRadius: 8,
+                    border: `2px solid ${profile.accent}`,
+                    boxShadow: `0 0 18px ${profile.glow}`,
+                    animation: 'hotbarSlotSelectRing 0.48s ease-out both',
+                  }}
+                />
+              )}
               {texUrl && (
                 <img
                   src={texUrl}
