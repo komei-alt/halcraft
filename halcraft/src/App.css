@@ -33,6 +33,66 @@
   pointer-events: none;
 }
 
+.stage-mood-overlay__lens {
+  position: absolute;
+  inset: -8vw;
+  pointer-events: none;
+  opacity: var(--stage-mood-lens-opacity);
+  mix-blend-mode: screen;
+  background:
+    linear-gradient(180deg, transparent 0%, var(--stage-mood-highlight) 18%, transparent 42%),
+    linear-gradient(90deg, transparent 2%, var(--stage-mood-atmosphere) 37%, var(--stage-mood-horizon) 54%, transparent 96%),
+    linear-gradient(0deg, var(--stage-mood-shadow), transparent 27%, transparent 74%, var(--stage-mood-shadow));
+  filter: saturate(1.12) contrast(1.04);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  animation: stageMoodLens 8.4s ease-in-out infinite alternate;
+}
+
+.stage-mood-overlay__depth {
+  position: absolute;
+  left: -14vw;
+  right: -14vw;
+  pointer-events: none;
+  opacity: var(--stage-mood-strata-opacity);
+  transform: rotate(var(--stage-mood-tilt));
+  mix-blend-mode: screen;
+  filter: blur(7px) saturate(1.1);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
+}
+
+.stage-mood-overlay__depth--far {
+  top: 38vh;
+  height: 22vh;
+  background:
+    linear-gradient(90deg, transparent 0%, var(--stage-mood-horizon) 28%, var(--stage-mood-highlight) 52%, transparent 100%),
+    repeating-linear-gradient(
+      96deg,
+      transparent 0,
+      transparent 12vw,
+      var(--stage-mood-atmosphere) 12.5vw,
+      transparent 15vw
+    );
+  animation: stageMoodDepthA var(--stage-mood-flow-ms) ease-in-out infinite alternate;
+}
+
+.stage-mood-overlay__depth--near {
+  bottom: 18vh;
+  height: 18vh;
+  opacity: var(--stage-mood-strata-near-opacity);
+  background:
+    linear-gradient(90deg, transparent 0%, var(--stage-mood-mode) 35%, var(--stage-mood-stripe) 57%, transparent 100%),
+    repeating-linear-gradient(
+      104deg,
+      transparent 0,
+      transparent 8vw,
+      var(--stage-mood-horizon) 8.4vw,
+      transparent 11vw
+    );
+  animation: stageMoodDepthB var(--stage-mood-flow-fast-ms) ease-in-out infinite alternate;
+}
+
 .stage-mood-overlay__edge--top {
   inset: 0 0 auto 0;
   height: 18vh;
@@ -89,6 +149,46 @@
   filter: blur(7px);
 }
 
+.stage-mood-overlay__shaft {
+  position: absolute;
+  top: -14vh;
+  bottom: -14vh;
+  width: 17vw;
+  pointer-events: none;
+  opacity: var(--stage-mood-shaft-opacity);
+  background: linear-gradient(180deg, transparent 6%, var(--stage-mood-highlight) 38%, var(--stage-mood-atmosphere) 54%, transparent 90%);
+  filter: blur(9px);
+  mix-blend-mode: screen;
+  transform: skewX(-12deg) rotate(var(--stage-mood-tilt));
+  animation: stageMoodShaft 9.2s ease-in-out infinite alternate;
+}
+
+.stage-mood-overlay__shaft--a {
+  left: 12vw;
+}
+
+.stage-mood-overlay__shaft--b {
+  left: 44vw;
+  width: 12vw;
+  opacity: var(--stage-mood-shaft-soft-opacity);
+  animation-delay: -3.2s;
+}
+
+.stage-mood-overlay__shaft--c {
+  right: 10vw;
+  width: 14vw;
+  opacity: var(--stage-mood-shaft-soft-opacity);
+  animation-delay: -5.4s;
+}
+
+.stage-mood-overlay--war .stage-mood-overlay__shaft {
+  width: 10vw;
+  opacity: var(--stage-mood-shaft-soft-opacity);
+  background: linear-gradient(180deg, transparent 8%, var(--stage-mood-mode) 30%, var(--stage-mood-highlight) 50%, transparent 86%);
+  filter: blur(5px);
+  transform: skewX(-22deg) rotate(var(--stage-mood-tilt));
+}
+
 .stage-mood-overlay__grain {
   position: absolute;
   inset: 0;
@@ -139,6 +239,46 @@
   }
 }
 
+@keyframes stageMoodLens {
+  0% {
+    transform: translateX(-1.2vw) translateY(-0.6vh) scale(1);
+  }
+
+  100% {
+    transform: translateX(1.2vw) translateY(0.8vh) scale(1.02);
+  }
+}
+
+@keyframes stageMoodDepthA {
+  0% {
+    transform: translateX(-1.4vw) rotate(var(--stage-mood-tilt));
+  }
+
+  100% {
+    transform: translateX(1.8vw) rotate(var(--stage-mood-tilt));
+  }
+}
+
+@keyframes stageMoodDepthB {
+  0% {
+    transform: translateX(1.8vw) rotate(var(--stage-mood-tilt));
+  }
+
+  100% {
+    transform: translateX(-1.2vw) rotate(var(--stage-mood-tilt));
+  }
+}
+
+@keyframes stageMoodShaft {
+  0% {
+    transform: translateX(-1vw) skewX(-12deg) rotate(var(--stage-mood-tilt));
+  }
+
+  100% {
+    transform: translateX(1vw) skewX(-9deg) rotate(var(--stage-mood-tilt));
+  }
+}
+
 @keyframes stageMoodTexture {
   0% {
     transform: translateX(0);
@@ -146,6 +286,16 @@
 
   100% {
     transform: translateX(84px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-mood-overlay__lens,
+  .stage-mood-overlay__depth,
+  .stage-mood-overlay__shaft,
+  .stage-mood-overlay__ribbon,
+  .stage-mood-overlay__grain {
+    animation: none;
   }
 }
 
