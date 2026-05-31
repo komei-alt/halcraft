@@ -45,8 +45,10 @@ const ATTACK_REACH = 3.5;
 const ATTACK_DAMAGE = 3;
 /** プレイヤーへの攻撃ダメージ */
 const PVP_DAMAGE = 3;
-/** 連続設置の間隔（秒） — Minecraft は約 4tick = 200ms */
-const PLACE_INTERVAL = 0.2;
+/** 連続設置の間隔（秒） — Minecraft は約 4tick = 200ms。誤連射を避けるため少し長めに余裕を持たせる */
+const PLACE_INTERVAL = 0.25;
+/** 右クリック押下から連続設置が始まるまでの初動待機（秒）。単発クリックで複数置かないためのガード */
+const PLACE_INITIAL_DELAY = 0.32;
 /** プレイヤーの当たり判定サイズ */
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -303,6 +305,8 @@ export function BlockInteraction() {
   const isPlacingRef = useRef(false);
   // 連続設置のクールダウンタイマー
   const placeTimerRef = useRef(0);
+  // 連続設置がリピート段階に入ったか（初動待機の判定用）
+  const placeRepeatStartedRef = useRef(false);
   // 直前に設置した座標（同じ座標に二重設置しない）
   const lastPlacedRef = useRef<string>('');
 
@@ -953,19 +957,23 @@ export function BlockInteraction() {
             // 既にブロックがある→座標を記録してスキップ
             lastPlacedRef.current = coordKey;
           } else {
-          // 照準先が変わったら即座に設置（クールダウンリセット）
-          const targetChanged = coordKey !== lastPlacedRef.current;
-          const placeInterval = PLACE_INTERVAL * getBuilderMasteryBonus().placementIntervalMultiplier;
-          if (targetChanged || placeTimerRef.current >= placeInterval) {
-            // TNT右クリック起爆チェック
-            const targetBlockId = getBlock(t.x, t.y, t.z);
-            if (BLOCK_DEFS[targetBlockId]?.explosive) {
-              detonateExplosiveBlock(t.x, t.y, t.z);
-            } else if (tryPlaceSelectedBlock(t)) {
-              lastPlacedRef.current = coordKey;
+            // 初動待機: 押し始めの単発クリックでは連続設置を始めない。
+            // 一度リピートに入った後は通常間隔で連続設置する。
+            // 設置直後はレイマーチングで照準先が自分側へずれるため、
+            // 照準変化による即時連射はせず常に間隔ベースで判定する（自分方向への暴発防止）。
+            const placeInterval = PLACE_INTERVAL * getBuilderMasteryBonus().placementIntervalMultiplier;
+            const requiredDelay = placeRepeatStartedRef.current ? placeInterval : PLACE_INITIAL_DELAY;
+            if (placeTimerRef.current >= requiredDelay) {
+              // TNT右クリック起爆チェック
+              const targetBlockId = getBlock(t.x, t.y, t.z);
+              if (BLOCK_DEFS[targetBlockId]?.explosive) {
+                detonateExplosiveBlock(t.x, t.y, t.z);
+              } else if (tryPlaceSelectedBlock(t)) {
+                lastPlacedRef.current = coordKey;
+              }
+              placeTimerRef.current = 0;
+              placeRepeatStartedRef.current = true;
             }
-            placeTimerRef.current = 0;
-          }
           } // 空気ブロックチェックのelse終了
         }
       }
@@ -1054,6 +1062,7 @@ export function BlockInteraction() {
       // 右クリック押下: 連続設置モード開始 + 初回即設置
       isPlacingRef.current = true;
       placeTimerRef.current = 0;
+      placeRepeatStartedRef.current = false;
       lastPlacedRef.current = '';
 
       const t = targetRef.current;
@@ -1078,6 +1087,7 @@ export function BlockInteraction() {
     }
     if (e.button === 2) {
       isPlacingRef.current = false;
+      placeRepeatStartedRef.current = false;
       lastPlacedRef.current = '';
     }
   }, []);
@@ -1097,6 +1107,7 @@ export function BlockInteraction() {
       if (!document.pointerLockElement) {
         isBreakingRef.current = false;
         isPlacingRef.current = false;
+        placeRepeatStartedRef.current = false;
         lastPlacedRef.current = '';
         breakProgressRef.current = null;
         setBreakProgressState(null);
@@ -1108,6 +1119,7 @@ export function BlockInteraction() {
     const handleBlur = () => {
       isBreakingRef.current = false;
       isPlacingRef.current = false;
+      placeRepeatStartedRef.current = false;
       lastPlacedRef.current = '';
     };
     window.addEventListener('blur', handleBlur);

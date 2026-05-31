@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-05-31',
+    items: [
+      { type: 'fix', text: '右クリックでブロックを1個だけ置いたつもりが3個まとめて置かれてしまうことがあったのを直して、ポンと押すと1個だけ置けるようにしたよ' },
+    ],
+  },
+  {
     date: '2026-05-30',
     items: [
       { type: 'improve', text: 'ロケット・機関銃・ライトセイバーの技が決まった時に、専用カードと音で手ごたえが分かるようになったよ' },
