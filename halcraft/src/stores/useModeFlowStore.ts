@@ -14,7 +14,11 @@ import {
 } from '../types/stageModeRules';
 import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import type { StageCategory } from '../types/stages';
-import { playModeFlowSurgeSound, playStageRewardSound } from '../utils/sounds';
+import {
+  playBuildFocusPlaceSound,
+  playModeFlowSurgeSound,
+  playStageRewardSound,
+} from '../utils/sounds';
 import { useInventoryStore } from './useInventoryStore';
 import type { MobType } from './useMobStore';
 import { usePlayerStore, type EquippedItem } from './usePlayerStore';
@@ -39,6 +43,16 @@ export interface ModeFlowActivation {
   createdAt: number;
 }
 
+export interface ModeFlowBuildPlacementResult {
+  focused: boolean;
+  activated: boolean;
+  chain: number;
+  bestChain: number;
+  accent: string;
+  glow: string;
+  label: string;
+}
+
 interface ModeFlowState {
   currentStageId: string | null;
   meter: number;
@@ -52,9 +66,12 @@ interface ModeFlowState {
   flowRank: number;
   activationCount: number;
   buildFocusUntil: number;
+  buildFocusChain: number;
+  bestBuildFocusChain: number;
+  buildFocusChainExpiresAt: number;
   recentActivation: ModeFlowActivation | null;
   startRun: (stageId: string | null) => void;
-  recordBuildBlockPlace: (blockId: BlockId) => void;
+  recordBuildBlockPlace: (blockId: BlockId) => ModeFlowBuildPlacementResult | null;
   recordCombatStyleHit: (item: EquippedItem, amount?: number, critical?: boolean) => void;
   recordVehicleHit: (vehicleType: VehicleType, amount?: number, critical?: boolean) => void;
   recordEnemyDefeat: (mobType: MobType) => void;
@@ -213,6 +230,9 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
   flowRank: 0,
   activationCount: 0,
   buildFocusUntil: 0,
+  buildFocusChain: 0,
+  bestBuildFocusChain: 0,
+  buildFocusChainExpiresAt: 0,
   recentActivation: null,
 
   startRun: (stageId) => {
@@ -230,6 +250,9 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       flowRank: 0,
       activationCount: 0,
       buildFocusUntil: 0,
+      buildFocusChain: 0,
+      bestBuildFocusChain: 0,
+      buildFocusChainExpiresAt: 0,
       recentActivation: null,
     });
   },
@@ -238,10 +261,10 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const state = get();
     const stageId = state.currentStageId;
     const rule = getStageModeRule(stageId);
-    if (!stageId || !rule || rule.category !== 'build') return;
+    if (!stageId || !rule || rule.category !== 'build') return null;
 
     const gain = getStageModeBuildGain(stageId, blockId);
-    if (gain <= 0) return;
+    if (gain <= 0) return null;
 
     const nextRawMeter = state.meter + gain;
     const reached = nextRawMeter >= rule.threshold;
@@ -249,12 +272,21 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
     const flowRank = reached ? getModeFlowRank(nextActivationCount) : state.flowRank;
     const createdAt = nowMs();
     const activation = reached ? triggerRule(rule, flowRank, createdAt) : state.recentActivation;
+    const focusActiveBeforePlace = state.buildFocusUntil > createdAt;
     const buildFocusUntil = reached
       ? Math.max(
           state.buildFocusUntil,
           createdAt + getScaledStageModeReward(rule, Math.max(1, flowRank)).buildFocusMs,
         )
       : state.buildFocusUntil;
+    const focusActiveAfterPlace = buildFocusUntil > createdAt;
+    const nextBuildFocusChain = focusActiveAfterPlace
+      ? focusActiveBeforePlace && createdAt <= state.buildFocusChainExpiresAt
+        ? state.buildFocusChain + 1
+        : 1
+      : 0;
+    const nextBestBuildFocusChain = Math.max(state.bestBuildFocusChain, nextBuildFocusChain);
+    const nextBuildFocusChainExpiresAt = focusActiveAfterPlace ? createdAt + 1450 : 0;
 
     set({
       meter: reached ? nextRawMeter - rule.threshold : nextRawMeter,
@@ -266,7 +298,26 @@ export const useModeFlowStore = create<ModeFlowState>((set, get) => ({
       flowRank,
       activationCount: nextActivationCount,
       buildFocusUntil,
+      buildFocusChain: nextBuildFocusChain,
+      bestBuildFocusChain: nextBestBuildFocusChain,
+      buildFocusChainExpiresAt: nextBuildFocusChainExpiresAt,
     });
+
+    if (focusActiveBeforePlace) {
+      playBuildFocusPlaceSound(nextBuildFocusChain);
+    }
+
+    return focusActiveAfterPlace
+      ? {
+          focused: true,
+          activated: reached,
+          chain: nextBuildFocusChain,
+          bestChain: nextBestBuildFocusChain,
+          accent: rule.accent,
+          glow: rule.glow,
+          label: rule.meterLabel,
+        }
+      : null;
   },
 
   recordCombatStyleHit: (item, amount = 1, critical = false) => {

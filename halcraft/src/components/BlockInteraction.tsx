@@ -22,6 +22,7 @@ import { useStageBuildScoreStore } from '../stores/useStageBuildScoreStore';
 import {
   getBuildFocusMiningSpeedMultiplier,
   getBuildFocusPlacementIntervalMultiplier,
+  type ModeFlowBuildPlacementResult,
   useModeFlowStore,
 } from '../stores/useModeFlowStore';
 import { useItemFeedbackStore } from '../stores/useItemFeedbackStore';
@@ -544,12 +545,12 @@ export function BlockInteraction() {
     });
   }, [recordBuilderAction, recordConditionDetonation, recordStageBlockBreak]);
 
-  const recordBlockPlaceMastery = useCallback((blockId: BlockId) => {
+  const recordBlockPlaceMastery = useCallback((blockId: BlockId): ModeFlowBuildPlacementResult | null => {
     recordBuilderAction(blockId === BLOCK_IDS.SPAWNER ? 'summon' : 'block_place');
     recordStageBlockPlace(blockId);
     recordConditionBlockPlace(blockId);
     useStageBuildScoreStore.getState().recordBlockPlace(blockId);
-    useModeFlowStore.getState().recordBuildBlockPlace(blockId);
+    return useModeFlowStore.getState().recordBuildBlockPlace(blockId);
   }, [recordBuilderAction, recordConditionBlockPlace, recordStageBlockPlace]);
 
   const detonateExplosiveBlock = useCallback((x: number, y: number, z: number): boolean => {
@@ -783,9 +784,12 @@ export function BlockInteraction() {
     setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
     sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     playBlockPlaceSound();
-    recordBlockPlaceMastery(selectedBlock);
+    const modeFlowPlacement = recordBlockPlaceMastery(selectedBlock);
     const specialPlacement = applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
     emitBlockUseFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ, specialPlacement);
+    if (modeFlowPlacement?.focused && !modeFlowPlacement.activated) {
+      spawnBlockUseEffect('light', t.placeX, t.placeY, t.placeZ, modeFlowPlacement.accent);
+    }
     return true;
   }, [
     applySpecialPlacement,

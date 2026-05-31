@@ -4,10 +4,12 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
 import * as THREE from 'three';
+import { useCoasterStore } from '../stores/useCoasterStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useStagePressureStore } from '../stores/useStagePressureStore';
+import { useVehicleStore } from '../stores/useVehicleStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import {
   getStagePressure,
@@ -182,7 +184,13 @@ export function StagePressureSystem() {
     if (
       !isSheltered &&
       nextPressure >= definition.damageThreshold &&
-      now - lastDamageAt.current >= DAMAGE_INTERVAL_MS
+      now - lastDamageAt.current >= DAMAGE_INTERVAL_MS &&
+      // 乗り物・コースター搭乗中はコックピットに守られ、気圧ダメージを受けない。
+      // 特にヘリ等で飛ぶと避難ブロックに近づけず気圧が下がらず、移動量で上昇も加速する。
+      // 気圧ダメージは被弾するたび自然回復の30秒待機がリセットされ回復も効かないため、
+      // 搭乗中はダメージだけが一方的に蓄積してしまう（ヘリで戦争マップを飛ぶと顕著）。
+      useVehicleStore.getState().getActiveVehicle() === null &&
+      !useCoasterStore.getState().isBoarded
     ) {
       lastDamageAt.current = now;
       playerState.takeDamage(definition.damagePerSecond);

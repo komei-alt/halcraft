@@ -30,6 +30,8 @@ export function ModeFlowHUD() {
   const flowRank = useModeFlowStore((s) => s.flowRank);
   const activationCount = useModeFlowStore((s) => s.activationCount);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
+  const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
+  const bestBuildFocusChain = useModeFlowStore((s) => s.bestBuildFocusChain);
   const recentActivation = useModeFlowStore((s) => s.recentActivation);
   const clearRecentActivation = useModeFlowStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
@@ -66,7 +68,7 @@ export function ModeFlowHUD() {
     ? recentActivation.detail
     : rule.category === 'build'
       ? buildFocusActive
-        ? `高速建築中 / 残り${formatSeconds(buildFocusRemainingMs)}`
+        ? `高速建築中 / 連置x${Math.max(1, buildFocusChain)} / 残り${formatSeconds(buildFocusRemainingMs)}`
         : rule.actionLabel
       : streak > 0
         ? `連続${streak}体 / 残り${formatSeconds(streakRemainingMs)}`
@@ -169,7 +171,9 @@ export function ModeFlowHUD() {
         </span>
         <span style={{ flex: '0 0 auto', color: rule.accent, fontFamily: 'monospace', fontWeight: 950 }}>
           {buildFocusActive
-            ? 'BUILD x1.32'
+            ? buildFocusChain >= 2
+              ? `PLACE x${buildFocusChain}`
+              : 'BUILD x1.32'
             : lastGainLabel ?? (rule.category === 'war' && bestStreak > 0 ? `BEST x${bestStreak}` : `${activationCount}回`)}
         </span>
       </div>
@@ -209,6 +213,7 @@ export function ModeFlowHUD() {
           }}
         >
           次発動: {getModeFlowRankLabel(rule.category, nextRank)} / {formatStageModeRewardDetail(previewReward)}
+          {rule.category === 'build' && bestBuildFocusChain > 1 ? ` / 連置BEST x${bestBuildFocusChain}` : ''}
         </div>
       )}
     </div>

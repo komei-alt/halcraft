@@ -1759,6 +1759,50 @@ export function playModeFlowSurgeSound(kind: StageStartSoundKind, rank: number):
   noise.stop(now + 0.17);
 }
 
+/** 高速建築中の連続設置SE — 置くテンポが乗っていることを耳で返す */
+export function playBuildFocusPlaceSound(chain: number): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('buildFocusPlace', 86)) return;
+  const now = ctx.currentTime;
+  const safeChain = Math.max(1, Math.min(12, Math.round(chain)));
+  const base = 560 + safeChain * 22;
+
+  const tap = ctx.createOscillator();
+  tap.type = 'triangle';
+  tap.frequency.setValueAtTime(base, now);
+  tap.frequency.exponentialRampToValueAtTime(base * 1.18, now + 0.11);
+
+  const tapFilter = ctx.createBiquadFilter();
+  tapFilter.type = 'bandpass';
+  tapFilter.frequency.setValueAtTime(2100 + safeChain * 42, now);
+  tapFilter.Q.setValueAtTime(1.4, now);
+
+  const tapGain = ctx.createGain();
+  tapGain.gain.setValueAtTime(0.022 + Math.min(0.018, safeChain * 0.002), now);
+  tapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+  tap.connect(tapFilter);
+  tapFilter.connect(tapGain);
+  tapGain.connect(ctx.destination);
+  tap.start(now);
+  tap.stop(now + 0.12);
+
+  if (safeChain < 5) return;
+
+  const sparkle = ctx.createOscillator();
+  sparkle.type = 'sine';
+  sparkle.frequency.setValueAtTime(base * 1.5, now + 0.035);
+
+  const sparkleGain = ctx.createGain();
+  sparkleGain.gain.setValueAtTime(0.018, now + 0.035);
+  sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  sparkle.connect(sparkleGain);
+  sparkleGain.connect(ctx.destination);
+  sparkle.start(now + 0.035);
+  sparkle.stop(now + 0.16);
+}
+
 /** ボス出現SE — 決戦開始を画面外からでも気づける重い合図 */
 export function playBossSpawnSound(): void {
   const ctx = getAudioContext();

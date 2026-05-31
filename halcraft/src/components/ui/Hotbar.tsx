@@ -191,12 +191,17 @@ export function Hotbar() {
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const modeMeter = useModeFlowStore((s) => s.meter);
+  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
+  const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
 
   const isTouch = isTouchDevice();
   const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
   const selectedDef = BLOCK_DEFS[selectedBlock];
   const selectedCount = items[selectedBlock] ?? 0;
   const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
+  const modeRule = getStageModeRule(currentStageId);
+  const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > performance.now();
+  const buildFocusAccent = modeRule?.accent ?? selectedProfile.accent;
   const selectedStageHint = getSelectedBlockStageHint({
     stage: currentStage,
     blockId: selectedBlock,
@@ -251,17 +256,22 @@ export function Hotbar() {
             padding: isTouch ? '8px 12px' : '7px 12px',
             borderRadius: 999,
             border: selectedCount > 0
-              ? `1px solid ${selectedProfile.accent}7a`
+              ? `1px solid ${buildFocusActive ? buildFocusAccent : selectedProfile.accent}7a`
               : '1px solid rgba(255, 105, 105, 0.55)',
             background: selectedCount > 0
-              ? `linear-gradient(135deg, ${selectedProfile.glow}, rgba(24, 20, 16, 0.72))`
+              ? buildFocusActive
+                ? `linear-gradient(135deg, ${buildFocusAccent}38, ${selectedProfile.glow}, rgba(20, 24, 16, 0.76))`
+                : `linear-gradient(135deg, ${selectedProfile.glow}, rgba(24, 20, 16, 0.72))`
               : 'rgba(70, 18, 18, 0.72)',
             color: '#fff',
             boxShadow: selectedCount > 0
-              ? `0 8px 24px rgba(0,0,0,0.22), 0 0 18px ${selectedProfile.glow}`
+              ? buildFocusActive
+                ? `0 8px 24px rgba(0,0,0,0.22), 0 0 24px ${buildFocusAccent}55`
+                : `0 8px 24px rgba(0,0,0,0.22), 0 0 18px ${selectedProfile.glow}`
               : '0 8px 24px rgba(0,0,0,0.22)',
             backdropFilter: 'blur(8px)',
             fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            animation: buildFocusActive ? 'builderFocusPanel 0.9s ease-in-out infinite alternate' : undefined,
           }}
         >
           <span
@@ -370,6 +380,40 @@ export function Hotbar() {
                   }}
                 >
                   {selectedStageHint.value}
+                </span>
+              </span>
+            )}
+            {selectedCount > 0 && buildFocusActive && (
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minWidth: 0,
+                  color: buildFocusAccent,
+                  fontSize: isTouch ? 9 : 10,
+                  fontWeight: 950,
+                  lineHeight: '12px',
+                }}
+              >
+                <span style={{ flex: '0 0 auto' }}>⚡</span>
+                <span style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                  高速建築
+                </span>
+                <span
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: 'rgba(255,255,255,0.74)',
+                  }}
+                >
+                  置くテンポUP
+                </span>
+                <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
+                  x{Math.max(1, buildFocusChain)}
                 </span>
               </span>
             )}
