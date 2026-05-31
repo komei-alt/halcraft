@@ -14,9 +14,11 @@ import {
   playHelicopterRotor,
 } from '../utils/sounds';
 import { useVehicleStore } from '../stores/useVehicleStore';
+import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { startBGM } from '../utils/musicManager';
 import { initAmbientSounds, updateAmbientSounds } from '../utils/ambientSounds';
 import { SEA_LEVEL } from '../types/blocks';
+import { getStageModeRule } from '../types/stageModeRules';
 
 /** 足音の最小速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -153,6 +155,9 @@ export function SoundManager() {
     const isUnderwater = playerState.isSubmerged;
     const isUnderground = cy < SEA_LEVEL;
     const isOutside = !isUnderground;
+    const modeState = useModeFlowStore.getState();
+    const modeRule = getStageModeRule(gameState.currentStage?.id);
+    const modeFlowRatio = modeRule ? modeState.meter / modeRule.threshold : 0;
     updateAmbientSounds(
       isOutside,
       isUnderwater,
@@ -161,6 +166,9 @@ export function SoundManager() {
       gameState.currentBiome?.id,
       gameState.isNight,
       gameState.currentStage?.rules.ambientIntensity ?? 1,
+      gameState.currentStage?.category ?? null,
+      modeFlowRatio,
+      modeState.flowRank,
     );
   });
 

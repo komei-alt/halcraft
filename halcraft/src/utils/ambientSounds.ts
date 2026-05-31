@@ -3,7 +3,7 @@
 // Web Audio API で手続き的に生成（外部ファイル不要）
 
 import { SEA_LEVEL } from '../types/blocks';
-import type { BiomeId } from '../types/stages';
+import type { BiomeId, StageCategory } from '../types/stages';
 
 interface AmbientProfile {
   windLevel: number;
@@ -58,6 +58,34 @@ const AMBIENT_PROFILES: Record<BiomeId, AmbientProfile> = {
   },
 };
 
+const BUILD_TONE_PITCH: Record<BiomeId, number> = {
+  forest: 196,
+  tropical: 246,
+  snow: 220,
+  desert: 174,
+};
+
+const WAR_TONE_PITCH: Record<BiomeId, number> = {
+  forest: 74,
+  tropical: 86,
+  snow: 62,
+  desert: 56,
+};
+
+const BUILD_TEXTURE_PITCH: Record<BiomeId, number> = {
+  forest: 2750,
+  tropical: 3400,
+  snow: 4200,
+  desert: 2250,
+};
+
+const WAR_TEXTURE_PITCH: Record<BiomeId, number> = {
+  forest: 360,
+  tropical: 430,
+  snow: 280,
+  desert: 520,
+};
+
 let audioCtx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let windBodyGain: GainNode | null = null;
@@ -70,6 +98,11 @@ let windAirFilterNode: BiquadFilterNode | null = null;
 let waterFilterNode: BiquadFilterNode | null = null;
 let caveFilterNode: BiquadFilterNode | null = null;
 let caveDroneNode: OscillatorNode | null = null;
+let modeToneGain: GainNode | null = null;
+let modeToneFilterNode: BiquadFilterNode | null = null;
+let modeToneNode: OscillatorNode | null = null;
+let modeTextureGain: GainNode | null = null;
+let modeTextureFilterNode: BiquadFilterNode | null = null;
 let activeSources: AudioScheduledSourceNode[] = [];
 let isRunning = false;
 
@@ -292,6 +325,44 @@ export function initAmbientSounds(): void {
   caveAirGain.connect(caveGain);
   caveAirSource.start();
 
+  // --- モード空気音: 建築は柔らかい制作感、戦争は低い緊張感を薄く重ねる ---
+  modeToneGain = audioCtx.createGain();
+  modeToneGain.gain.value = 0;
+  modeToneGain.connect(masterGain);
+
+  const modeToneFilter = audioCtx.createBiquadFilter();
+  modeToneFilter.type = 'lowpass';
+  modeToneFilter.frequency.value = 700;
+  modeToneFilter.Q.value = 0.35;
+  modeToneFilterNode = modeToneFilter;
+
+  const modeTone = trackSource(audioCtx.createOscillator());
+  modeTone.type = 'triangle';
+  modeTone.frequency.value = BUILD_TONE_PITCH.forest;
+  modeToneNode = modeTone;
+
+  modeTone.connect(modeToneFilter);
+  modeToneFilter.connect(modeToneGain);
+  modeTone.start();
+
+  modeTextureGain = audioCtx.createGain();
+  modeTextureGain.gain.value = 0;
+  modeTextureGain.connect(masterGain);
+
+  const modeTextureSource = trackSource(audioCtx.createBufferSource());
+  modeTextureSource.buffer = createTexturedNoiseBuffer(audioCtx, 11, 0.93, 1.35);
+  modeTextureSource.loop = true;
+
+  const modeTextureFilter = audioCtx.createBiquadFilter();
+  modeTextureFilter.type = 'bandpass';
+  modeTextureFilter.frequency.value = BUILD_TEXTURE_PITCH.forest;
+  modeTextureFilter.Q.value = 1.1;
+  modeTextureFilterNode = modeTextureFilter;
+
+  modeTextureSource.connect(modeTextureFilter);
+  modeTextureFilter.connect(modeTextureGain);
+  modeTextureSource.start();
+
   isRunning = true;
 }
 
@@ -301,6 +372,8 @@ export function initAmbientSounds(): void {
  * @param isUnderwater 水中にいるか
  * @param isUnderground 地下にいるか（y < 海面レベル）
  * @param playerY プレイヤーのY座標
+ * @param stageCategory 建築/戦争のモード差
+ * @param modeFlowRatio ひらめき/戦意ゲージの進み具合
  */
 export function updateAmbientSounds(
   isOutside: boolean,
@@ -310,6 +383,9 @@ export function updateAmbientSounds(
   biomeId: BiomeId = 'forest',
   isNight = false,
   stageAmbientIntensity = 1,
+  stageCategory: StageCategory | null = null,
+  modeFlowRatio = 0,
+  modeFlowRank = 0,
 ): void {
   if (
     !audioCtx ||
@@ -317,7 +393,9 @@ export function updateAmbientSounds(
     !windAirGain ||
     !windRustleGain ||
     !waterGain ||
-    !caveGain
+    !caveGain ||
+    !modeToneGain ||
+    !modeTextureGain
   ) {
     return;
   }
@@ -367,6 +445,52 @@ export function updateAmbientSounds(
   const caveDepth = Math.max(0, Math.min(1, (SEA_LEVEL - playerY) / SEA_LEVEL));
   const caveTarget = isUnderground && !isUnderwater ? (0.08 + caveDepth * 0.1) * stageIntensity : 0;
   smoothParam(caveGain.gain, caveTarget, now, 0.9);
+
+  const safeModeRatio = clamp(modeFlowRatio, 0, 1);
+  const safeModeRank = clamp(modeFlowRank, 0, 3);
+  const playfieldPresence = isUnderwater ? 0.12 : isUnderground ? 0.42 : isOutside ? 1 : 0.72;
+  const modePresence = stageCategory
+    ? (0.42 + safeModeRatio * 0.42 + safeModeRank * 0.08) * stageIntensity * playfieldPresence
+    : 0;
+  const modePulse = stageCategory === 'war'
+    ? 0.8 + Math.sin(now * (1.55 + safeModeRatio * 1.6)) * 0.2
+    : 0.74 + Math.sin(now * 0.58 + safeModeRatio) * 0.16;
+
+  if (modeToneNode) {
+    const basePitch = stageCategory === 'war'
+      ? WAR_TONE_PITCH[biomeId]
+      : BUILD_TONE_PITCH[biomeId];
+    const flowLift = stageCategory === 'war'
+      ? safeModeRatio * 8 + safeModeRank * 2
+      : safeModeRatio * 18 + safeModeRank * 4;
+    const drift = Math.sin(now * 0.17 + basePitch) * (stageCategory === 'war' ? 1.8 : 3.2);
+    modeToneNode.type = stageCategory === 'war' ? 'sawtooth' : 'triangle';
+    smoothParam(modeToneNode.frequency, basePitch + flowLift + drift, now, 1.1);
+  }
+
+  if (modeToneFilterNode) {
+    const targetCutoff = stageCategory === 'war'
+      ? 170 + safeModeRatio * 150
+      : 720 + safeModeRatio * 520;
+    smoothParam(modeToneFilterNode.frequency, targetCutoff, now, 1);
+  }
+
+  if (modeTextureFilterNode) {
+    const texturePitch = stageCategory === 'war'
+      ? WAR_TEXTURE_PITCH[biomeId] + safeModeRatio * 130
+      : BUILD_TEXTURE_PITCH[biomeId] + safeModeRatio * 760;
+    modeTextureFilterNode.type = stageCategory === 'war' ? 'lowpass' : 'bandpass';
+    smoothParam(modeTextureFilterNode.frequency, texturePitch, now, 0.85);
+  }
+
+  const toneTarget = stageCategory === 'war'
+    ? 0.12 * modePresence * modePulse
+    : 0.09 * modePresence * modePulse;
+  const textureTarget = stageCategory === 'war'
+    ? 0.075 * modePresence * (0.74 + safeModeRatio * 0.3)
+    : 0.082 * modePresence * (0.8 + safeModeRatio * 0.45);
+  smoothParam(modeToneGain.gain, toneTarget, now, 0.28);
+  smoothParam(modeTextureGain.gain, textureTarget, now, 0.36);
 }
 
 /** 環境音の停止 */
@@ -393,5 +517,10 @@ export function stopAmbientSounds(): void {
     waterFilterNode = null;
     caveFilterNode = null;
     caveDroneNode = null;
+    modeToneGain = null;
+    modeToneFilterNode = null;
+    modeToneNode = null;
+    modeTextureGain = null;
+    modeTextureFilterNode = null;
   }, 500);
 }
