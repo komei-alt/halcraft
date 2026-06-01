@@ -102,7 +102,7 @@ export const useStageConditionStore = create<StageConditionState>()((set, get) =
         createdAt,
       },
     });
-    playStageConditionSound(condition.effect.kind);
+    playStageConditionSound(condition.effect.kind, nextChain);
   };
 
   return {

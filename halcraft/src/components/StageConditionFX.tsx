@@ -112,6 +112,7 @@ export function StageConditionFX() {
   const phase = useGameStore((s) => s.phase);
   const stageId = useGameStore((s) => s.currentStage?.id ?? null);
   const activeUntil = useStageConditionStore((s) => s.activeUntil);
+  const activeChain = useStageConditionStore((s) => s.activeChain);
   const recentActivation = useStageConditionStore((s) => s.recentActivation);
   const { camera } = useThree();
 
@@ -143,9 +144,12 @@ export function StageConditionFX() {
       ? Math.max(0, now - recentActivation.createdAt)
       : 9999;
     const burst = Math.max(0, 1 - activationAge / 900);
+    const chain = Math.max(1, Math.min(9, activeChain));
+    const chainGlow = 1 + Math.min(0.85, (chain - 1) * 0.12);
+    const chainMotion = 1 + Math.min(0.7, (chain - 1) * 0.08);
     material.opacity = Math.min(
-      0.46,
-      config.opacity * fade * (0.76 + Math.sin(elapsed * 7) * 0.1 + burst * 0.42),
+      0.62,
+      config.opacity * fade * chainGlow * (0.76 + Math.sin(elapsed * 7) * 0.1 + burst * (0.42 + chain * 0.035)),
     );
 
     camera.getWorldDirection(_forward);
@@ -168,24 +172,24 @@ export function StageConditionFX() {
 
       if (condition.effect.kind === 'resource') {
         const lift = ((elapsed * 0.82 + particle.seed * config.height) % config.height) - config.height * 0.42;
-        const swirl = particle.angle + elapsed * particle.speed * 1.15;
-        x = Math.cos(swirl) * particle.radius * (0.65 + burst * 0.45);
-        y = lift + Math.sin(t * 1.8) * 0.12;
-        forwardOffset = Math.sin(swirl) * 0.28;
-        scale *= 0.9 + burst * 0.8;
+        const swirl = particle.angle + elapsed * particle.speed * 1.15 * chainMotion;
+        x = Math.cos(swirl) * particle.radius * (0.65 + burst * (0.45 + chain * 0.04));
+        y = lift + Math.sin(t * 1.8 * chainMotion) * (0.12 + chain * 0.006);
+        forwardOffset = Math.sin(swirl) * (0.28 + chain * 0.018);
+        scale *= (0.9 + burst * (0.8 + chain * 0.08)) * chainGlow;
       } else if (condition.effect.kind === 'regen') {
-        const orbit = particle.angle + elapsed * particle.speed * 0.75;
-        x = Math.cos(orbit) * particle.radius;
-        y = Math.sin(orbit) * config.height * 0.36 + 0.45 + Math.sin(t * 1.4) * 0.12;
-        forwardOffset = Math.cos(t * 0.7) * 0.22;
-        scale *= 0.92 + Math.max(0, Math.sin(t * 1.5)) * 0.48;
+        const orbit = particle.angle + elapsed * particle.speed * 0.75 * chainMotion;
+        x = Math.cos(orbit) * particle.radius * (1 + (chain - 1) * 0.025);
+        y = Math.sin(orbit) * config.height * 0.36 + 0.45 + Math.sin(t * 1.4 * chainMotion) * (0.12 + chain * 0.005);
+        forwardOffset = Math.cos(t * 0.7) * (0.22 + chain * 0.012);
+        scale *= (0.92 + Math.max(0, Math.sin(t * 1.5)) * (0.48 + chain * 0.04)) * chainGlow;
       } else {
-        const ring = particle.angle + elapsed * particle.speed;
-        const blast = 1 + burst * (1.5 + particle.seed * 0.8);
+        const ring = particle.angle + elapsed * particle.speed * chainMotion;
+        const blast = 1 + burst * (1.5 + particle.seed * 0.8 + chain * 0.12);
         x = Math.cos(ring) * particle.radius * blast;
         y = Math.sin(ring) * config.height * 0.42 * blast;
-        forwardOffset = 0.25 + burst * (0.55 + particle.seed * 0.6);
-        scale *= 1.05 + burst * 1.05;
+        forwardOffset = 0.25 + burst * (0.55 + particle.seed * 0.6 + chain * 0.055);
+        scale *= (1.05 + burst * (1.05 + chain * 0.08)) * chainGlow;
       }
 
       dummy.position

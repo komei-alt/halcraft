@@ -2133,16 +2133,19 @@ export function playStageOpportunitySound(kind: StageOpportunitySoundKind): void
   noise.stop(now + 0.18);
 }
 
-/** ステージ特性発動SE — 効果タイプごとに手触りを変える */
-export function playStageConditionSound(kind: StageConditionSoundKind): void {
+/** ステージ特性発動SE — 効果タイプと連鎖段階ごとに手触りを変える */
+export function playStageConditionSound(kind: StageConditionSoundKind, chain = 1): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('stageCondition', 450)) return;
+  const safeChain = Math.max(1, Math.min(9, Math.round(chain)));
+  if (!ctx || !canPlay('stageCondition', safeChain > 1 ? 300 : 450)) return;
   const now = ctx.currentTime;
   const notes = kind === 'rocket_ready'
     ? [196, 392, 784]
     : kind === 'regen'
       ? [392, 523.25, 659.25]
       : [523.25, 783.99, 1046.5];
+  const pitchLift = 1 + Math.min(0.18, (safeChain - 1) * 0.035);
+  const gainLift = 1 + Math.min(0.32, (safeChain - 1) * 0.08);
   const wave: OscillatorType = kind === 'rocket_ready'
     ? 'sawtooth'
     : kind === 'regen'
@@ -2151,18 +2154,19 @@ export function playStageConditionSound(kind: StageConditionSoundKind): void {
 
   for (let i = 0; i < notes.length; i++) {
     const t = now + i * 0.055;
+    const note = notes[i] * pitchLift;
     const osc = ctx.createOscillator();
     osc.type = wave;
-    osc.frequency.setValueAtTime(notes[i], t);
-    osc.frequency.exponentialRampToValueAtTime(notes[i] * 1.08, t + 0.18);
+    osc.frequency.setValueAtTime(note, t);
+    osc.frequency.exponentialRampToValueAtTime(note * (1.08 + Math.min(0.06, (safeChain - 1) * 0.012)), t + 0.18);
 
     const filter = ctx.createBiquadFilter();
     filter.type = kind === 'rocket_ready' ? 'bandpass' : 'lowpass';
-    filter.frequency.setValueAtTime(kind === 'rocket_ready' ? 900 : 2400, t);
-    filter.Q.setValueAtTime(kind === 'rocket_ready' ? 2.4 : 0.7, t);
+    filter.frequency.setValueAtTime(kind === 'rocket_ready' ? 900 + safeChain * 45 : 2400 + safeChain * 160, t);
+    filter.Q.setValueAtTime(kind === 'rocket_ready' ? 2.4 + safeChain * 0.12 : 0.7, t);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(kind === 'rocket_ready' ? 0.055 : 0.07, t);
+    gain.gain.setValueAtTime((kind === 'rocket_ready' ? 0.055 : 0.07) * gainLift, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
 
     osc.connect(filter);
@@ -2170,6 +2174,54 @@ export function playStageConditionSound(kind: StageConditionSoundKind): void {
     gain.connect(ctx.destination);
     osc.start(t);
     osc.stop(t + 0.28);
+  }
+
+  if (safeChain > 1) {
+    const chainNotes = kind === 'rocket_ready'
+      ? [988, 1318.51, 1567.98]
+      : kind === 'regen'
+        ? [783.99, 987.77, 1174.66]
+        : [1174.66, 1567.98, 2093];
+
+    chainNotes.slice(0, Math.min(3, safeChain)).forEach((note, index) => {
+      const t = now + 0.11 + index * 0.038;
+      const osc = ctx.createOscillator();
+      osc.type = kind === 'rocket_ready' ? 'square' : 'sine';
+      osc.frequency.setValueAtTime(note * pitchLift, t);
+      osc.frequency.exponentialRampToValueAtTime(note * pitchLift * 1.16, t + 0.16);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(kind === 'regen' ? 2400 : 3200, t);
+      filter.Q.setValueAtTime(kind === 'rocket_ready' ? 2.8 : 1.4, t);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.018 + Math.min(0.026, safeChain * 0.006), t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+
+    const shimmer = ctx.createBufferSource();
+    shimmer.buffer = getNoiseBuffer(ctx);
+
+    const shimmerFilter = ctx.createBiquadFilter();
+    shimmerFilter.type = 'highpass';
+    shimmerFilter.frequency.setValueAtTime(kind === 'rocket_ready' ? 2200 : 3600, now + 0.06);
+
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0.014 + Math.min(0.026, safeChain * 0.005), now + 0.06);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    shimmer.connect(shimmerFilter);
+    shimmerFilter.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmer.start(now + 0.06);
+    shimmer.stop(now + 0.26);
   }
 
   if (kind !== 'rocket_ready') return;
@@ -2182,7 +2234,7 @@ export function playStageConditionSound(kind: StageConditionSoundKind): void {
   noiseFilter.frequency.setValueAtTime(1800, now);
 
   const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.05, now);
+  noiseGain.gain.setValueAtTime(0.05 * gainLift, now);
   noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
   noise.connect(noiseFilter);
