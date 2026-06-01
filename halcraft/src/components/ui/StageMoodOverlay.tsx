@@ -68,19 +68,19 @@ const BIOME_PALETTE: Record<BiomeId, MoodPalette> = {
 const CATEGORY_MOOD: Record<StageCategory, CategoryMood> = {
   build: {
     mode: 'rgba(155, 220, 255, 0.24)',
-    opacity: 0.78,
-    stripeOpacity: 0.58,
-    lensOpacity: 0.74,
-    strataOpacity: 0.58,
+    opacity: 0.66,
+    stripeOpacity: 0.46,
+    lensOpacity: 0.54,
+    strataOpacity: 0.44,
     flowMs: 7800,
     tiltDeg: -2,
   },
   war: {
     mode: 'rgba(255, 120, 94, 0.3)',
-    opacity: 0.88,
-    stripeOpacity: 0.74,
-    lensOpacity: 0.84,
-    strataOpacity: 0.76,
+    opacity: 0.72,
+    stripeOpacity: 0.52,
+    lensOpacity: 0.58,
+    strataOpacity: 0.5,
     flowMs: 5200,
     tiltDeg: 5,
   },
@@ -186,6 +186,7 @@ export function StageMoodOverlay() {
       <div className="stage-mood-overlay__shaft stage-mood-overlay__shaft--a" />
       <div className="stage-mood-overlay__shaft stage-mood-overlay__shaft--b" />
       <div className="stage-mood-overlay__shaft stage-mood-overlay__shaft--c" />
+      <div className="stage-mood-overlay__vista" />
       <div className="stage-mood-overlay__grain" />
     </div>
   );

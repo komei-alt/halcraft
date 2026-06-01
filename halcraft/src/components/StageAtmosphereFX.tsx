@@ -13,6 +13,7 @@ type HorizonKind = 'dunes' | 'forestLine' | 'islands' | 'mountains';
 type WeatherRibbonKind = 'leaf' | 'spray' | 'snowfall' | 'sandGust';
 type SignatureVeilKind = 'forestShaft' | 'lagoonGlint' | 'aurora' | 'heatMirage';
 type DepthCurtainKind = 'forestLight' | 'lagoonShimmer' | 'iceAurora' | 'desertMirage';
+type VistaSilhouetteKind = 'forestCanopy' | 'lagoonPalms' | 'icePeaks' | 'duneCrests';
 
 interface AtmosphereConfig {
   count: number;
@@ -66,6 +67,19 @@ interface AtmosphereConfig {
     kind: DepthCurtainKind;
     color: number;
     secondaryColor: number;
+    opacity: number;
+    distance: number;
+    yOffset: number;
+    width: number;
+    height: number;
+    driftSpeed: number;
+    blending: THREE.Blending;
+  };
+  vista: {
+    kind: VistaSilhouetteKind;
+    color: number;
+    accentColor: number;
+    glowColor: number;
     opacity: number;
     distance: number;
     yOffset: number;
@@ -171,6 +185,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftSpeed: 0.08,
       blending: THREE.AdditiveBlending,
     },
+    vista: {
+      kind: 'forestCanopy',
+      color: 0x102a1b,
+      accentColor: 0x4da85a,
+      glowColor: 0xfff1a2,
+      opacity: 0.31,
+      distance: 78,
+      yOffset: 3.6,
+      width: 118,
+      height: 39,
+      driftSpeed: 0.052,
+      blending: THREE.NormalBlending,
+    },
   },
   tropical: {
     count: 48,
@@ -231,6 +258,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       height: 29,
       driftSpeed: 0.13,
       blending: THREE.AdditiveBlending,
+    },
+    vista: {
+      kind: 'lagoonPalms',
+      color: 0x06435b,
+      accentColor: 0x2bd4a8,
+      glowColor: 0xfff0a0,
+      opacity: 0.32,
+      distance: 74,
+      yOffset: 2.8,
+      width: 122,
+      height: 35,
+      driftSpeed: 0.075,
+      blending: THREE.NormalBlending,
     },
   },
   snow: {
@@ -293,6 +333,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftSpeed: 0.055,
       blending: THREE.AdditiveBlending,
     },
+    vista: {
+      kind: 'icePeaks',
+      color: 0x5f7f9e,
+      accentColor: 0xe9fbff,
+      glowColor: 0xb6fff2,
+      opacity: 0.3,
+      distance: 82,
+      yOffset: 7.5,
+      width: 124,
+      height: 45,
+      driftSpeed: 0.043,
+      blending: THREE.NormalBlending,
+    },
   },
   desert: {
     count: 58,
@@ -354,6 +407,19 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftSpeed: 0.16,
       blending: THREE.NormalBlending,
     },
+    vista: {
+      kind: 'duneCrests',
+      color: 0xb36a34,
+      accentColor: 0xffce76,
+      glowColor: 0xff8f58,
+      opacity: 0.29,
+      distance: 80,
+      yOffset: 2.6,
+      width: 126,
+      height: 34,
+      driftSpeed: 0.094,
+      blending: THREE.NormalBlending,
+    },
   },
 };
 
@@ -366,6 +432,7 @@ const _horizonRotation = new THREE.Euler();
 const _cameraRight = new THREE.Vector3();
 const _cameraForward = new THREE.Vector3();
 const _curtainForward = new THREE.Vector3();
+const _vistaForward = new THREE.Vector3();
 
 interface HorizonPanel {
   angle: number;
@@ -568,6 +635,277 @@ function colorToRgba(hex: number, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function createVistaTexture(config: AtmosphereConfig['vista']): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 384;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const { width, height } = canvas;
+  const horizonY = height * 0.66;
+  ctx.clearRect(0, 0, width, height);
+
+  const skyGlow = ctx.createLinearGradient(0, 0, 0, height);
+  skyGlow.addColorStop(0, colorToRgba(config.glowColor, 0));
+  skyGlow.addColorStop(0.38, colorToRgba(config.glowColor, 0.025));
+  skyGlow.addColorStop(0.72, colorToRgba(config.accentColor, 0.035));
+  skyGlow.addColorStop(1, colorToRgba(config.color, 0));
+  ctx.fillStyle = skyGlow;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (config.kind === 'forestCanopy') {
+    for (let i = 0; i < 19; i++) {
+      const seed = skylineNoise(i, 101.4);
+      const x = i * 58 - 46 + seed * 28;
+      const trunkHeight = 72 + skylineNoise(i, 103.9) * 84;
+      const trunkWidth = 7 + skylineNoise(i, 106.2) * 8;
+      const trunkGradient = ctx.createLinearGradient(0, horizonY - trunkHeight, 0, height);
+      trunkGradient.addColorStop(0, colorToRgba(config.color, 0.42));
+      trunkGradient.addColorStop(1, colorToRgba(config.color, 0.78));
+      ctx.fillStyle = trunkGradient;
+      ctx.fillRect(x, horizonY - trunkHeight * 0.34, trunkWidth, trunkHeight);
+    }
+
+    for (let i = 0; i < 24; i++) {
+      const seed = skylineNoise(i, 111.8);
+      const x = i * 45 - 30 + seed * 36;
+      const y = horizonY - 72 - skylineNoise(i, 114.6) * 74;
+      const rx = 46 + skylineNoise(i, 116.5) * 38;
+      const ry = 30 + skylineNoise(i, 117.7) * 32;
+      const foliageGradient = ctx.createRadialGradient(x, y, 5, x, y, Math.max(rx, ry));
+      foliageGradient.addColorStop(0, colorToRgba(config.accentColor, 0.5));
+      foliageGradient.addColorStop(0.62, colorToRgba(config.color, 0.68));
+      foliageGradient.addColorStop(1, colorToRgba(config.color, 0));
+      ctx.fillStyle = foliageGradient;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, -0.18 + seed * 0.36, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 10; i++) {
+      const x = 42 + skylineNoise(i, 124.2) * 930;
+      const rayWidth = 18 + skylineNoise(i, 125.7) * 42;
+      const ray = ctx.createLinearGradient(x - rayWidth, 42, x + rayWidth * 1.2, height);
+      ray.addColorStop(0, colorToRgba(config.glowColor, 0));
+      ray.addColorStop(0.5, colorToRgba(config.glowColor, 0.075));
+      ray.addColorStop(1, colorToRgba(config.accentColor, 0));
+      ctx.fillStyle = ray;
+      ctx.save();
+      ctx.translate(x, height * 0.52);
+      ctx.rotate(-0.16 + skylineNoise(i, 127.9) * 0.22);
+      ctx.fillRect(-rayWidth * 0.5, -height, rayWidth, height * 2);
+      ctx.restore();
+    }
+
+    for (let i = 0; i < 38; i++) {
+      const x = skylineNoise(i, 132.6) * width;
+      const y = horizonY - 132 + skylineNoise(i, 134.4) * 142;
+      const r = 1.2 + skylineNoise(i, 136.2) * 2.8;
+      ctx.fillStyle = colorToRgba(config.glowColor, 0.34 + skylineNoise(i, 137.9) * 0.32);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (config.kind === 'lagoonPalms') {
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 6; i++) {
+      const x = 66 + i * 176 + skylineNoise(i, 141.3) * 38;
+      const islandWidth = 92 + skylineNoise(i, 143.8) * 108;
+      const islandHeight = 28 + skylineNoise(i, 145.7) * 24;
+      const islandGradient = ctx.createLinearGradient(0, horizonY - islandHeight, 0, horizonY + islandHeight);
+      islandGradient.addColorStop(0, colorToRgba(config.accentColor, 0.38));
+      islandGradient.addColorStop(0.6, colorToRgba(config.color, 0.72));
+      islandGradient.addColorStop(1, colorToRgba(config.color, 0));
+      ctx.fillStyle = islandGradient;
+      ctx.beginPath();
+      ctx.ellipse(x, horizonY + 20, islandWidth, islandHeight, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+
+      const palmCount = 2 + Math.floor(skylineNoise(i, 147.8) * 3);
+      for (let p = 0; p < palmCount; p++) {
+        const px = x - islandWidth * 0.38 + p * islandWidth * 0.34 + skylineNoise(p + i * 5, 151.2) * 16;
+        const trunkTop = horizonY - 84 - skylineNoise(p + i, 153.5) * 46;
+        ctx.strokeStyle = colorToRgba(config.color, 0.78);
+        ctx.lineWidth = 5 + skylineNoise(p + i, 154.7) * 3;
+        ctx.beginPath();
+        ctx.moveTo(px, horizonY + 16);
+        ctx.quadraticCurveTo(px + 12, horizonY - 34, px + 22, trunkTop);
+        ctx.stroke();
+
+        ctx.strokeStyle = colorToRgba(config.accentColor, 0.66);
+        ctx.lineWidth = 4;
+        for (let f = 0; f < 7; f++) {
+          const angle = -2.45 + f * 0.82 + skylineNoise(f + p * 11 + i * 3, 157.6) * 0.12;
+          const frond = 34 + skylineNoise(f + p * 7 + i, 159.3) * 24;
+          ctx.beginPath();
+          ctx.moveTo(px + 22, trunkTop);
+          ctx.quadraticCurveTo(
+            px + 22 + Math.cos(angle) * frond * 0.5,
+            trunkTop + Math.sin(angle) * frond * 0.35,
+            px + 22 + Math.cos(angle) * frond,
+            trunkTop + Math.sin(angle) * frond,
+          );
+          ctx.stroke();
+        }
+      }
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 18; i++) {
+      const y = horizonY + 32 + skylineNoise(i, 166.2) * 72;
+      ctx.strokeStyle = colorToRgba(i % 2 === 0 ? config.glowColor : config.accentColor, 0.16 + skylineNoise(i, 168.5) * 0.22);
+      ctx.lineWidth = 2 + skylineNoise(i, 169.7) * 4;
+      ctx.beginPath();
+      for (let x = -16; x <= width + 16; x += 42) {
+        const wave = Math.sin(x * 0.036 + i * 1.4) * (5 + skylineNoise(i, 171.4) * 7);
+        if (x <= -16) {
+          ctx.moveTo(x, y + wave);
+        } else {
+          ctx.lineTo(x, y + wave);
+        }
+      }
+      ctx.stroke();
+    }
+  } else if (config.kind === 'icePeaks') {
+    const ridge = [
+      { x: -42, y: horizonY + 92 },
+      { x: 78, y: horizonY - 64 },
+      { x: 156, y: horizonY + 36 },
+      { x: 276, y: horizonY - 128 },
+      { x: 386, y: horizonY + 28 },
+      { x: 520, y: horizonY - 112 },
+      { x: 624, y: horizonY + 38 },
+      { x: 744, y: horizonY - 148 },
+      { x: 874, y: horizonY + 34 },
+      { x: 1018, y: horizonY - 82 },
+      { x: 1080, y: horizonY + 88 },
+    ];
+    const mountainGradient = ctx.createLinearGradient(0, horizonY - 160, 0, height);
+    mountainGradient.addColorStop(0, colorToRgba(config.accentColor, 0.54));
+    mountainGradient.addColorStop(0.52, colorToRgba(config.color, 0.72));
+    mountainGradient.addColorStop(1, colorToRgba(config.color, 0.05));
+    ctx.fillStyle = mountainGradient;
+    ctx.beginPath();
+    ctx.moveTo(ridge[0].x, ridge[0].y);
+    for (const point of ridge.slice(1)) {
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.lineTo(width + 40, height);
+    ctx.lineTo(-40, height);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = colorToRgba(config.accentColor, 0.46);
+    ctx.lineWidth = 7;
+    for (let i = 1; i < ridge.length - 1; i += 2) {
+      const peak = ridge[i];
+      ctx.beginPath();
+      ctx.moveTo(peak.x, peak.y);
+      ctx.lineTo(peak.x - 24 - skylineNoise(i, 181.2) * 18, peak.y + 56);
+      ctx.moveTo(peak.x, peak.y);
+      ctx.lineTo(peak.x + 28 + skylineNoise(i, 183.4) * 20, peak.y + 64);
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < 6; i++) {
+      const aurora = ctx.createLinearGradient(0, 0, width, 0);
+      aurora.addColorStop(0, colorToRgba(config.glowColor, 0));
+      aurora.addColorStop(0.3, colorToRgba(i % 2 === 0 ? config.glowColor : 0xd9adff, 0.16));
+      aurora.addColorStop(0.72, colorToRgba(config.accentColor, 0.12));
+      aurora.addColorStop(1, colorToRgba(config.glowColor, 0));
+      ctx.strokeStyle = aurora;
+      ctx.lineWidth = 12 + skylineNoise(i, 187.5) * 18;
+      ctx.beginPath();
+      for (let x = -20; x <= width + 20; x += 36) {
+        const y = 50 + i * 18 + Math.sin(x * 0.025 + i * 1.3) * (12 + skylineNoise(i, 189.2) * 14);
+        if (x <= -20) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+  } else {
+    const drawDune = (offsetY: number, alpha: number, amplitude: number, color: number) => {
+      const gradient = ctx.createLinearGradient(0, horizonY + offsetY - 70, 0, height);
+      gradient.addColorStop(0, colorToRgba(color, alpha * 0.2));
+      gradient.addColorStop(0.55, colorToRgba(color, alpha));
+      gradient.addColorStop(1, colorToRgba(config.color, 0));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(-28, height);
+      ctx.lineTo(-28, horizonY + offsetY);
+      for (let x = -28; x <= width + 28; x += 42) {
+        const y = horizonY + offsetY
+          + Math.sin(x * 0.011 + offsetY * 0.04) * amplitude
+          + Math.sin(x * 0.024 + offsetY * 0.02) * amplitude * 0.38;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(width + 28, height);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    drawDune(18, 0.46, 28, config.accentColor);
+    drawDune(54, 0.58, 34, config.color);
+    drawDune(96, 0.64, 42, config.color);
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 17; i++) {
+      const y = horizonY - 64 + skylineNoise(i, 196.6) * 168;
+      ctx.strokeStyle = colorToRgba(i % 2 === 0 ? config.glowColor : config.accentColor, 0.11 + skylineNoise(i, 198.3) * 0.14);
+      ctx.lineWidth = 3 + skylineNoise(i, 199.7) * 9;
+      ctx.beginPath();
+      for (let x = -24; x <= width + 24; x += 28) {
+        const heat = Math.sin(x * 0.052 + i * 2.2) * (5 + skylineNoise(i, 201.2) * 12);
+        if (x <= -24) {
+          ctx.moveTo(x, y + heat);
+        } else {
+          ctx.lineTo(x, y + heat);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+
+  ctx.globalCompositeOperation = 'destination-in';
+  const verticalFade = ctx.createLinearGradient(0, 0, 0, height);
+  verticalFade.addColorStop(0, 'rgba(255,255,255,0)');
+  verticalFade.addColorStop(0.08, 'rgba(255,255,255,0.72)');
+  verticalFade.addColorStop(0.84, 'rgba(255,255,255,1)');
+  verticalFade.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = verticalFade;
+  ctx.fillRect(0, 0, width, height);
+
+  const horizontalFade = ctx.createLinearGradient(0, 0, width, 0);
+  horizontalFade.addColorStop(0, 'rgba(255,255,255,0)');
+  horizontalFade.addColorStop(0.08, 'rgba(255,255,255,1)');
+  horizontalFade.addColorStop(0.92, 'rgba(255,255,255,1)');
+  horizontalFade.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = horizontalFade;
+  ctx.fillRect(0, 0, width, height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function createDepthCurtainTexture(config: AtmosphereConfig['curtain']): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
 
@@ -727,6 +1065,63 @@ function setMotionOffset(
 const sharedSphereGeometry = new THREE.SphereGeometry(1, 8, 6);
 const sharedWeatherGeometry = new THREE.PlaneGeometry(1, 1);
 const sharedSignatureGeometry = new THREE.PlaneGeometry(1, 1);
+
+function BiomeVistaCurtain({ config, phase }: { config: AtmosphereConfig; phase: string }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const { camera } = useThree();
+  const texture = useMemo(() => createVistaTexture(config.vista), [config.vista]);
+
+  useEffect(() => () => {
+    texture?.dispose();
+  }, [texture]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || !materialRef.current || !texture || phase !== 'playing') return;
+
+    const elapsed = clock.getElapsedTime();
+    camera.getWorldDirection(_vistaForward);
+    _vistaForward.y *= config.vista.kind === 'icePeaks' ? 0.34 : 0.18;
+    if (_vistaForward.lengthSq() < 0.001) {
+      _vistaForward.set(0, 0, -1);
+    } else {
+      _vistaForward.normalize();
+    }
+
+    meshRef.current.position
+      .copy(camera.position)
+      .addScaledVector(_vistaForward, config.vista.distance);
+    meshRef.current.position.y += config.vista.yOffset + Math.sin(elapsed * config.vista.driftSpeed * 1.7) * 0.52;
+    meshRef.current.quaternion.copy(camera.quaternion);
+    meshRef.current.rotateZ(Math.sin(elapsed * config.vista.driftSpeed * 2.6) * 0.018);
+    meshRef.current.scale.set(config.vista.width, config.vista.height, 1);
+
+    materialRef.current.opacity = config.vista.opacity * (0.9 + Math.sin(elapsed * 0.31) * 0.08);
+  });
+
+  if (!texture || phase !== 'playing') return null;
+
+  return (
+    <mesh
+      ref={meshRef}
+      geometry={sharedWeatherGeometry}
+      frustumCulled={false}
+      renderOrder={2}
+    >
+      <meshBasicMaterial
+        ref={materialRef}
+        map={texture}
+        transparent
+        depthWrite={false}
+        depthTest={false}
+        opacity={config.vista.opacity}
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        blending={config.vista.blending}
+      />
+    </mesh>
+  );
+}
 
 function BiomeDepthCurtain({ config, phase }: { config: AtmosphereConfig; phase: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -1177,6 +1572,7 @@ export function StageAtmosphereFX() {
 
   return (
     <>
+      <BiomeVistaCurtain config={config} phase={phase} />
       <BiomeDepthCurtain config={config} phase={phase} />
       <BiomeHorizon config={config} phase={phase} />
       <BiomeSignatureVeil config={config} phase={phase} />

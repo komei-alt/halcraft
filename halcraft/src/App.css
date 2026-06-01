@@ -114,14 +114,14 @@
   inset: 0 auto 0 0;
   width: 13vw;
   background: linear-gradient(90deg, var(--stage-mood-accent), transparent 72%);
-  opacity: 0.66;
+  opacity: 0.46;
 }
 
 .stage-mood-overlay__edge--right {
   inset: 0 0 0 auto;
   width: 13vw;
   background: linear-gradient(270deg, var(--stage-mood-secondary), transparent 72%);
-  opacity: 0.62;
+  opacity: 0.44;
 }
 
 .stage-mood-overlay__ribbon {
@@ -190,10 +190,62 @@
   transform: skewX(-22deg) rotate(var(--stage-mood-tilt));
 }
 
+.stage-mood-overlay__vista {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  mix-blend-mode: screen;
+  filter: saturate(1.14) contrast(1.04);
+  mask-image: linear-gradient(180deg, #000 0%, #000 19%, transparent 35%, transparent 66%, #000 84%, #000 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 19%, transparent 35%, transparent 66%, #000 84%, #000 100%);
+  animation: stageMoodVista 10s ease-in-out infinite alternate;
+}
+
+.stage-mood-overlay[data-biome="forest"] .stage-mood-overlay__vista {
+  background:
+    radial-gradient(circle at 8% 12%, rgba(202, 255, 124, 0.46) 0 1.5%, transparent 2.4%),
+    radial-gradient(circle at 18% 7%, rgba(98, 235, 120, 0.28) 0 2.2%, transparent 3.6%),
+    radial-gradient(circle at 31% 14%, rgba(255, 242, 158, 0.34) 0 1.2%, transparent 2.1%),
+    radial-gradient(circle at 74% 9%, rgba(130, 255, 142, 0.28) 0 2.4%, transparent 3.7%),
+    radial-gradient(circle at 88% 16%, rgba(255, 241, 172, 0.36) 0 1.4%, transparent 2.5%),
+    radial-gradient(circle at 15% 88%, rgba(184, 255, 118, 0.28) 0 2.4%, transparent 4.8%),
+    radial-gradient(circle at 42% 92%, rgba(105, 230, 128, 0.22) 0 3.8%, transparent 6.5%),
+    radial-gradient(circle at 82% 86%, rgba(255, 240, 164, 0.28) 0 2.1%, transparent 4.2%),
+    linear-gradient(180deg, rgba(78, 220, 110, 0.16), transparent 27%, transparent 76%, rgba(110, 255, 126, 0.12));
+}
+
+.stage-mood-overlay[data-biome="tropical"] .stage-mood-overlay__vista {
+  background:
+    conic-gradient(from 0.7turn at 12% 13%, transparent 0 0.09turn, rgba(126, 255, 224, 0.42) 0.11turn 0.14turn, transparent 0.16turn 0.32turn, rgba(255, 240, 152, 0.28) 0.34turn 0.37turn, transparent 0.4turn),
+    conic-gradient(from 0.58turn at 84% 14%, transparent 0 0.1turn, rgba(111, 255, 230, 0.36) 0.12turn 0.15turn, transparent 0.17turn 0.36turn, rgba(255, 236, 142, 0.26) 0.38turn 0.41turn, transparent 0.43turn),
+    repeating-linear-gradient(174deg, transparent 0 42px, rgba(120, 255, 232, 0.26) 44px 48px, transparent 58px 98px),
+    radial-gradient(ellipse at 22% 90%, rgba(115, 255, 221, 0.26) 0 11%, transparent 28%),
+    radial-gradient(ellipse at 78% 88%, rgba(255, 239, 150, 0.22) 0 9%, transparent 25%);
+}
+
+.stage-mood-overlay[data-biome="snow"] .stage-mood-overlay__vista {
+  background:
+    linear-gradient(112deg, transparent 0 36%, rgba(225, 250, 255, 0.32) 38% 41%, transparent 43%),
+    linear-gradient(64deg, transparent 0 55%, rgba(175, 255, 238, 0.28) 57% 60%, transparent 62%),
+    linear-gradient(145deg, transparent 0 62%, rgba(216, 184, 255, 0.24) 64% 67%, transparent 69%),
+    conic-gradient(from 0.62turn at 19% 88%, transparent 0 0.36turn, rgba(240, 252, 255, 0.34) 0.38turn 0.44turn, transparent 0.46turn),
+    conic-gradient(from 0.6turn at 72% 91%, transparent 0 0.35turn, rgba(214, 235, 255, 0.3) 0.38turn 0.45turn, transparent 0.48turn);
+}
+
+.stage-mood-overlay[data-biome="desert"] .stage-mood-overlay__vista {
+  background:
+    radial-gradient(ellipse at 16% 88%, rgba(255, 218, 140, 0.32) 0 12%, transparent 32%),
+    radial-gradient(ellipse at 52% 92%, rgba(255, 164, 96, 0.24) 0 17%, transparent 38%),
+    radial-gradient(ellipse at 88% 86%, rgba(255, 228, 158, 0.3) 0 11%, transparent 30%),
+    repeating-linear-gradient(173deg, transparent 0 48px, rgba(255, 234, 164, 0.22) 50px 54px, transparent 72px 118px),
+    repeating-linear-gradient(4deg, transparent 0 58px, rgba(255, 158, 88, 0.14) 60px 64px, transparent 78px 136px);
+}
+
 .stage-mood-overlay__grain {
   position: absolute;
   inset: 0;
-  opacity: 0.2;
+  opacity: 0.13;
   background:
     repeating-linear-gradient(
       90deg,
@@ -344,11 +396,22 @@
   }
 }
 
+@keyframes stageMoodVista {
+  0% {
+    transform: translate3d(-0.8vw, -0.2vh, 0) scale(1);
+  }
+
+  100% {
+    transform: translate3d(0.8vw, 0.25vh, 0) scale(1.015);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stage-mood-overlay__lens,
   .stage-mood-overlay__depth,
   .stage-mood-overlay__shaft,
   .stage-mood-overlay__ribbon,
+  .stage-mood-overlay__vista,
   .stage-mood-overlay__grain {
     animation: none;
   }
