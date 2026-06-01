@@ -967,6 +967,7 @@ export function StartScreen() {
   // 横画面かどうか（高さが極端に低い）
   const isLandscapeMobile = viewportSize.h < 500 && viewportSize.w > viewportSize.h;
   const compactLayout = isTouch || viewportSize.w < 560;
+  const showDesktopLaunchDock = showUpdateLog && !compactLayout;
   const briefingColumns = viewportSize.w < 380
     ? '1fr'
     : compactLayout || (showUpdateLog && viewportSize.w < 1100)
@@ -1295,8 +1296,234 @@ export function StartScreen() {
       {/* アップデート履歴パネル（十分な画面サイズの場合のみ表示） */}
       {showUpdateLog && <UpdateLog />}
 
+      {showDesktopLaunchDock && (
+        <div
+          id="start-launch-dock"
+          className="sg-rise"
+          style={{
+            position: 'fixed',
+            left: 'max(304px, calc((100vw - 860px) / 2))',
+            bottom: 18,
+            zIndex: 6,
+            width: 'min(860px, calc(100vw - 328px))',
+            minHeight: 94,
+            padding: '12px 14px',
+            borderRadius: 18,
+            border: `1px solid ${activeStage.color}66`,
+            background: 'linear-gradient(135deg, rgba(8,12,18,0.86), rgba(7,14,22,0.68))',
+            boxShadow: `0 18px 42px rgba(0,0,0,0.52), 0 0 34px ${activeStage.color}2f, inset 0 1px 0 rgba(255,255,255,0.13)`,
+            backdropFilter: 'blur(18px) saturate(1.16)',
+            WebkitBackdropFilter: 'blur(18px) saturate(1.16)',
+            color: '#fff',
+            fontFamily: SG.font,
+            pointerEvents: 'auto',
+            animationDelay: '0.18s',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              overflow: 'hidden',
+              borderRadius: 18,
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: '-12%',
+                top: '-85%',
+                width: '58%',
+                height: '210%',
+                background: `linear-gradient(105deg, transparent, ${activeStage.color}2f, rgba(255,255,255,0.16), transparent)`,
+                transform: 'rotate(10deg)',
+                animation: 'sgShine 5.2s ease-in-out infinite',
+              }}
+            />
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.08), transparent 48%, rgba(0,0,0,0.22))',
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              position: 'relative',
+              display: 'grid',
+              gridTemplateColumns: '140px minmax(0, 1fr) 164px 232px',
+              alignItems: 'center',
+              gap: 13,
+              minWidth: 0,
+            }}
+          >
+            <StageSceneryPreview stage={activeStage} compact={false} />
+
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  minWidth: 0,
+                  color: activeStage.color,
+                  fontSize: 11,
+                  lineHeight: '14px',
+                  fontWeight: 950,
+                  letterSpacing: 1.2,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ flex: '0 0 auto', fontSize: 13 }}>{activeStage.icon}</span>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  出発準備 / {activeStage.name}
+                </span>
+              </div>
+              <div
+                style={{
+                  marginTop: 4,
+                  color: '#fff',
+                  fontSize: 14,
+                  lineHeight: '18px',
+                  fontWeight: 950,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {activeRecordGoal.title}
+              </div>
+              <div
+                style={{
+                  marginTop: 4,
+                  color: 'rgba(255,255,255,0.64)',
+                  fontSize: 10,
+                  lineHeight: '13px',
+                  fontWeight: 820,
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                }}
+              >
+                {activePrepCues.slice(0, 2).map((cue) => `${cue.icon} ${cue.value}`).join(' / ')}
+              </div>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <input
+                id="player-name-input"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value.slice(0, 8))}
+                onKeyDown={handleKeyDown}
+                placeholder="ハル"
+                maxLength={8}
+                autoComplete="off"
+                autoFocus={!isTouch && showDesktopLaunchDock}
+                style={{
+                  width: '100%',
+                  padding: '11px 30px 11px 15px',
+                  fontSize: 19,
+                  fontWeight: 850,
+                  textAlign: 'center',
+                  background: 'rgba(2,6,10,0.68)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  border: '2px solid',
+                  borderColor: isValidName ? 'rgba(111,230,168,0.9)' : 'rgba(255,255,255,0.18)',
+                  borderRadius: 12,
+                  color: '#fff',
+                  outline: 'none',
+                  letterSpacing: 3,
+                  transition: 'border-color 0.3s, box-shadow 0.3s',
+                  boxShadow: isValidName ? `0 0 20px ${SG.emerald}55, var(--sg-inset-hi)` : 'var(--sg-shadow-sm)',
+                  fontFamily: SG.font,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 9,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'rgba(255,255,255,0.38)',
+                  fontSize: 9,
+                  fontWeight: 850,
+                  fontFamily: SG.font,
+                  pointerEvents: 'none',
+                }}
+              >
+                {name.trim().length}/8
+              </span>
+            </div>
+
+            <button
+              id="start-game-button"
+              type="button"
+              onClick={handleStart}
+              disabled={!isValidName || isStartPending}
+              style={{
+                appearance: 'none',
+                position: 'relative',
+                overflow: 'hidden',
+                width: '100%',
+                minHeight: 52,
+                padding: '13px 20px',
+                background: isValidName
+                  ? 'linear-gradient(165deg, #67ee9d 0%, #31b86d 100%)'
+                  : 'rgba(255,255,255,0.06)',
+                border: '2px solid',
+                borderColor: isValidName ? 'rgba(185,255,213,0.72)' : 'rgba(255,255,255,0.12)',
+                borderRadius: 13,
+                color: isValidName ? '#06210f' : 'rgba(255,255,255,0.34)',
+                fontSize: 17,
+                fontWeight: 950,
+                letterSpacing: 1.2,
+                fontFamily: SG.font,
+                animation: isValidName ? 'pulse 2.4s ease-in-out infinite' : 'none',
+                transition: 'all 0.25s var(--sg-ease)',
+                pointerEvents: isValidName ? 'auto' : 'none',
+                textShadow: isValidName ? '0 1px 0 rgba(255,255,255,0.26)' : 'none',
+                boxShadow: isValidName
+                  ? `0 12px 28px ${SG.emerald}5c, var(--sg-inset-hi)`
+                  : 'none',
+                cursor: isValidName ? 'pointer' : 'default',
+                textAlign: 'center',
+                boxSizing: 'border-box',
+              }}
+            >
+              <span style={{ position: 'relative', zIndex: 1 }}>
+                {isStartPending ? '接続中...' : '▶ クリックでスタート'}
+              </span>
+              {isValidName && !isStartPending && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '36%',
+                    height: '100%',
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.48), transparent)',
+                    animation: 'sgShine 2.8s ease-in-out infinite',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* スペーサー：コンテンツが少ない場合に下寄せする */}
-      <div style={{ flexGrow: 1, minHeight: isLandscapeMobile ? 20 : (isTouch ? 80 : 120) }} />
+      <div style={{ flexGrow: 1, minHeight: isLandscapeMobile ? 20 : (showDesktopLaunchDock ? 34 : (isTouch ? 80 : 120)) }} />
 
       {/* UI コンテンツ */}
       <div
@@ -1307,7 +1534,7 @@ export function StartScreen() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          paddingBottom: isTouch ? 24 : 40,
+          paddingBottom: showDesktopLaunchDock ? 160 : (isTouch ? 24 : 40),
           // アップデートログ表示時、中間幅ではコンテンツ列を右に寄せてログとの重なりを防ぐ
           paddingLeft: isTouch ? 12 : (showUpdateLog && viewportSize.w < 1280 ? 296 : 0),
           paddingRight: isTouch ? 12 : 0,
@@ -2365,6 +2592,7 @@ export function StartScreen() {
         </div>
 
         {/* STEP 4: なまえを入れてスタート */}
+        {!showDesktopLaunchDock && (
         <div
           className="sg-rise"
           style={{
@@ -2489,6 +2717,7 @@ export function StartScreen() {
             </button>
           </div>
         </div>
+        )}
 
         {/* スキン選択 */}
         <div style={{ marginTop: isTouch ? 8 : 12 }}>
