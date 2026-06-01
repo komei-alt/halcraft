@@ -1,7 +1,7 @@
 // ステージ別の空気感を出す軽量パーティクル演出
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import type { BiomeId } from '../types/stages';
@@ -12,6 +12,7 @@ type MotionKind = 'flutter' | 'sparkle' | 'snow' | 'dust';
 type HorizonKind = 'dunes' | 'forestLine' | 'islands' | 'mountains';
 type WeatherRibbonKind = 'leaf' | 'spray' | 'snowfall' | 'sandGust';
 type SignatureVeilKind = 'forestShaft' | 'lagoonGlint' | 'aurora' | 'heatMirage';
+type DepthCurtainKind = 'forestLight' | 'lagoonShimmer' | 'iceAurora' | 'desertMirage';
 
 interface AtmosphereConfig {
   count: number;
@@ -60,6 +61,18 @@ interface AtmosphereConfig {
     driftStrength: number;
     width: number;
     length: number;
+  };
+  curtain: {
+    kind: DepthCurtainKind;
+    color: number;
+    secondaryColor: number;
+    opacity: number;
+    distance: number;
+    yOffset: number;
+    width: number;
+    height: number;
+    driftSpeed: number;
+    blending: THREE.Blending;
   };
 }
 
@@ -146,6 +159,18 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       width: 1.1,
       length: 8.2,
     },
+    curtain: {
+      kind: 'forestLight',
+      color: 0xfff4a8,
+      secondaryColor: 0x78ff9b,
+      opacity: 0.105,
+      distance: 64,
+      yOffset: 9,
+      width: 84,
+      height: 34,
+      driftSpeed: 0.08,
+      blending: THREE.AdditiveBlending,
+    },
   },
   tropical: {
     count: 48,
@@ -194,6 +219,18 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       driftStrength: 1.7,
       width: 2.4,
       length: 0.42,
+    },
+    curtain: {
+      kind: 'lagoonShimmer',
+      color: 0x7ffff0,
+      secondaryColor: 0xfff2a8,
+      opacity: 0.12,
+      distance: 62,
+      yOffset: 6.5,
+      width: 88,
+      height: 29,
+      driftSpeed: 0.13,
+      blending: THREE.AdditiveBlending,
     },
   },
   snow: {
@@ -244,6 +281,18 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       width: 13,
       length: 1.15,
     },
+    curtain: {
+      kind: 'iceAurora',
+      color: 0x82fff0,
+      secondaryColor: 0xd6a8ff,
+      opacity: 0.11,
+      distance: 68,
+      yOffset: 15,
+      width: 94,
+      height: 38,
+      driftSpeed: 0.055,
+      blending: THREE.AdditiveBlending,
+    },
   },
   desert: {
     count: 58,
@@ -293,6 +342,18 @@ const CONFIGS: Record<BiomeId, AtmosphereConfig> = {
       width: 3.8,
       length: 0.34,
     },
+    curtain: {
+      kind: 'desertMirage',
+      color: 0xffdaa0,
+      secondaryColor: 0xff8b58,
+      opacity: 0.11,
+      distance: 66,
+      yOffset: 5.5,
+      width: 92,
+      height: 26,
+      driftSpeed: 0.16,
+      blending: THREE.NormalBlending,
+    },
   },
 };
 
@@ -304,6 +365,7 @@ const _horizonPosition = new THREE.Vector3();
 const _horizonRotation = new THREE.Euler();
 const _cameraRight = new THREE.Vector3();
 const _cameraForward = new THREE.Vector3();
+const _curtainForward = new THREE.Vector3();
 
 interface HorizonPanel {
   angle: number;
@@ -499,6 +561,124 @@ function createHorizonPanels(count: number): HorizonPanel[] {
   });
 }
 
+function colorToRgba(hex: number, alpha: number): string {
+  const r = (hex >> 16) & 255;
+  const g = (hex >> 8) & 255;
+  const b = hex & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function createDepthCurtainTexture(config: AtmosphereConfig['curtain']): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const baseGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  baseGradient.addColorStop(0, colorToRgba(config.color, 0));
+  baseGradient.addColorStop(0.2, colorToRgba(config.color, 0.12));
+  baseGradient.addColorStop(0.58, colorToRgba(config.secondaryColor, 0.24));
+  baseGradient.addColorStop(1, colorToRgba(config.color, 0));
+  ctx.fillStyle = baseGradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (config.kind === 'forestLight') {
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 11; i++) {
+      const x = 24 + skylineNoise(i, 22.4) * 468;
+      const width = 18 + skylineNoise(i, 24.1) * 36;
+      const gradient = ctx.createLinearGradient(x - width, 0, x + width * 1.6, canvas.height);
+      gradient.addColorStop(0, colorToRgba(config.secondaryColor, 0));
+      gradient.addColorStop(0.42, colorToRgba(config.color, 0.16 + skylineNoise(i, 25.7) * 0.12));
+      gradient.addColorStop(1, colorToRgba(config.secondaryColor, 0));
+      ctx.fillStyle = gradient;
+      ctx.save();
+      ctx.translate(x, canvas.height * 0.5);
+      ctx.rotate(-0.18 + skylineNoise(i, 26.9) * 0.24);
+      ctx.fillRect(-width * 0.5, -canvas.height, width, canvas.height * 2);
+      ctx.restore();
+    }
+  } else if (config.kind === 'lagoonShimmer') {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 16; i++) {
+      const y = 48 + skylineNoise(i, 32.2) * 152;
+      ctx.strokeStyle = colorToRgba(i % 2 === 0 ? config.color : config.secondaryColor, 0.12 + skylineNoise(i, 34.1) * 0.14);
+      ctx.lineWidth = 2 + skylineNoise(i, 35.8) * 7;
+      ctx.beginPath();
+      for (let x = -12; x <= canvas.width + 12; x += 34) {
+        const wave = Math.sin(x * 0.035 + i * 1.7) * (7 + skylineNoise(i, 37.6) * 8);
+        if (x <= -12) {
+          ctx.moveTo(x, y + wave);
+        } else {
+          ctx.lineTo(x, y + wave);
+        }
+      }
+      ctx.stroke();
+    }
+  } else if (config.kind === 'iceAurora') {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 7; i++) {
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      gradient.addColorStop(0, colorToRgba(config.color, 0));
+      gradient.addColorStop(0.3 + skylineNoise(i, 42.2) * 0.18, colorToRgba(i % 2 === 0 ? config.color : config.secondaryColor, 0.12));
+      gradient.addColorStop(0.72, colorToRgba(config.secondaryColor, 0.08 + skylineNoise(i, 43.8) * 0.1));
+      gradient.addColorStop(1, colorToRgba(config.color, 0));
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 9 + skylineNoise(i, 44.6) * 16;
+      ctx.beginPath();
+      for (let x = -20; x <= canvas.width + 20; x += 32) {
+        const y = 58 + i * 20 + Math.sin(x * 0.024 + i * 1.1) * (12 + i * 1.8);
+        if (x <= -20) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 18; i++) {
+      const y = 72 + skylineNoise(i, 52.5) * 116;
+      ctx.strokeStyle = colorToRgba(i % 3 === 0 ? config.secondaryColor : config.color, 0.07 + skylineNoise(i, 53.8) * 0.1);
+      ctx.lineWidth = 3 + skylineNoise(i, 55.1) * 8;
+      ctx.beginPath();
+      for (let x = -18; x <= canvas.width + 18; x += 26) {
+        const heat = Math.sin(x * 0.048 + i * 2.2) * (4 + skylineNoise(i, 56.4) * 9);
+        if (x <= -18) {
+          ctx.moveTo(x, y + heat);
+        } else {
+          ctx.lineTo(x, y + heat);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+
+  ctx.globalCompositeOperation = 'destination-in';
+  const edgeFade = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  edgeFade.addColorStop(0, 'rgba(255,255,255,0)');
+  edgeFade.addColorStop(0.16, 'rgba(255,255,255,1)');
+  edgeFade.addColorStop(0.84, 'rgba(255,255,255,1)');
+  edgeFade.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = edgeFade;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function setMotionOffset(
   target: THREE.Vector3,
   config: AtmosphereConfig,
@@ -547,6 +727,63 @@ function setMotionOffset(
 const sharedSphereGeometry = new THREE.SphereGeometry(1, 8, 6);
 const sharedWeatherGeometry = new THREE.PlaneGeometry(1, 1);
 const sharedSignatureGeometry = new THREE.PlaneGeometry(1, 1);
+
+function BiomeDepthCurtain({ config, phase }: { config: AtmosphereConfig; phase: string }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const { camera } = useThree();
+  const texture = useMemo(() => createDepthCurtainTexture(config.curtain), [config.curtain]);
+
+  useEffect(() => () => {
+    texture?.dispose();
+  }, [texture]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || !materialRef.current || !texture || phase !== 'playing') return;
+
+    const elapsed = clock.getElapsedTime();
+    camera.getWorldDirection(_curtainForward);
+    _curtainForward.y *= config.curtain.kind === 'iceAurora' ? 0.54 : 0.28;
+    if (_curtainForward.lengthSq() < 0.001) {
+      _curtainForward.set(0, 0, -1);
+    } else {
+      _curtainForward.normalize();
+    }
+
+    meshRef.current.position
+      .copy(camera.position)
+      .addScaledVector(_curtainForward, config.curtain.distance);
+    meshRef.current.position.y += config.curtain.yOffset + Math.sin(elapsed * 0.18 + config.curtain.opacity * 10) * 0.55;
+    meshRef.current.quaternion.copy(camera.quaternion);
+    meshRef.current.rotateZ(Math.sin(elapsed * config.curtain.driftSpeed * 2.2) * 0.024);
+    meshRef.current.scale.set(config.curtain.width, config.curtain.height, 1);
+
+    materialRef.current.opacity = config.curtain.opacity * (0.86 + Math.sin(elapsed * 0.34) * 0.08);
+  });
+
+  if (!texture || phase !== 'playing') return null;
+
+  return (
+    <mesh
+      ref={meshRef}
+      geometry={sharedWeatherGeometry}
+      frustumCulled={false}
+      renderOrder={0}
+    >
+      <meshBasicMaterial
+        ref={materialRef}
+        map={texture}
+        transparent
+        depthWrite={false}
+        depthTest
+        opacity={config.curtain.opacity}
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        blending={config.curtain.blending}
+      />
+    </mesh>
+  );
+}
 
 function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: string }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -940,6 +1177,7 @@ export function StageAtmosphereFX() {
 
   return (
     <>
+      <BiomeDepthCurtain config={config} phase={phase} />
       <BiomeHorizon config={config} phase={phase} />
       <BiomeSignatureVeil config={config} phase={phase} />
       <BiomeWeatherRibbons config={config} phase={phase} />
