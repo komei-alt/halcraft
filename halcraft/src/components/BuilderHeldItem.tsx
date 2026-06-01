@@ -111,6 +111,17 @@ function getBlockAccentColor(blockDef: BlockInfo): THREE.Color {
   return new THREE.Color('#ffe2a3');
 }
 
+function getBlockSheenStrength(blockDef: BlockInfo): number {
+  if (blockDef.lightColor || blockDef.emissiveColor || blockDef.emissive) return 0.9;
+  if (blockDef.isLiquid) return 0.78;
+  if (blockDef.blockCategory === 'ore') return 0.72;
+  if (blockDef.transparent) return 0.62;
+  if (blockDef.blockCategory === 'wood') return 0.38;
+  if (blockDef.blockCategory === 'stone') return 0.28;
+  if (blockDef.blockCategory === 'dirt') return 0.22;
+  return 0.32;
+}
+
 function getToolAccentColor(toolDef: ToolDef | null): THREE.Color {
   if (!toolDef) return new THREE.Color(FIRST_PERSON_SKIN_COLOR);
   return new THREE.Color(toolDef.color).lerp(new THREE.Color(TOOL_TYPE_ACCENTS[toolDef.type]), 0.42);
@@ -254,6 +265,7 @@ export function BuilderHeldItem() {
   const toolRef = useRef<THREE.Group>(null);
   const blockGlowRef = useRef<THREE.Mesh>(null);
   const blockRingRef = useRef<THREE.Mesh>(null);
+  const blockSheenRef = useRef<THREE.Mesh>(null);
   const toolTrailRef = useRef<THREE.Mesh>(null);
   const toolStatusGlowRef = useRef<THREE.Mesh>(null);
   const toolChipRef = useRef<THREE.Mesh>(null);
@@ -376,6 +388,19 @@ export function BuilderHeldItem() {
       blockRingRef.current.rotation.z += delta * (1.2 + pulse * 5.5);
       blockRingRef.current.scale.setScalar(1 + pulse * 0.18);
     }
+
+    if (blockSheenRef.current) {
+      const material = blockSheenRef.current.material as THREE.MeshBasicMaterial;
+      const richness = getBlockSheenStrength(blockDef);
+      const sweep = Math.sin(idleTimer.current * (blockDef.isLiquid ? 2.9 : 1.45)) * 0.5 + 0.5;
+      const pulse = switchPulse.current + placeKick.current * 0.75;
+      material.color.copy(accentColor);
+      material.opacity = Math.min(0.58, 0.05 + richness * 0.22 + pulse * 0.18 + sweep * richness * 0.08);
+      blockSheenRef.current.position.y = 0.22 + Math.sin(idleTimer.current * 1.25) * 0.08;
+      blockSheenRef.current.position.x = -0.1 + sweep * 0.2;
+      blockSheenRef.current.rotation.z = 0.58 + Math.sin(idleTimer.current * 0.9) * 0.16;
+      blockSheenRef.current.scale.set(0.86 + richness * 0.22 + pulse * 0.12, 1 + pulse * 0.2, 1);
+    }
   });
 
   return (
@@ -398,6 +423,18 @@ export function BuilderHeldItem() {
         </mesh>
         <mesh ref={blockRingRef} rotation={[Math.PI / 2, 0, 0]} renderOrder={33}>
           <torusGeometry args={[0.52, 0.02, 8, 40]} />
+          <meshBasicMaterial
+            color={accentColor}
+            transparent
+            opacity={0}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh ref={blockSheenRef} position={[0, 0.22, 0.535]} rotation={[0, 0, 0.58]} renderOrder={35}>
+          <boxGeometry args={[0.86, 0.024, 0.014]} />
           <meshBasicMaterial
             color={accentColor}
             transparent
