@@ -84,6 +84,7 @@ export function Crosshair() {
   const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
   const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
   const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const modeMeter = useModeFlowStore((s) => s.meter);
   const [now, setNow] = useState(() => performance.now());
 
   useEffect(() => {
@@ -146,6 +147,13 @@ export function Crosshair() {
       ? `MAP ${recommendedWeaponLabel}へ`
       : null;
   const stageAccent = stageStyle?.accent ?? recommendedStageStyle?.accent ?? activeColor;
+  const modeChargeRatio = modeRule
+    ? Math.max(0, Math.min(1, modeMeter / modeRule.threshold))
+    : 0;
+  const modeChargeActive = Boolean(modeRule && modeChargeRatio >= 0.36);
+  const modeChargeAccent = modeRule?.accent ?? activeColor;
+  const modeChargeSize = isCompact ? 52 : modeRule?.category === 'war' ? 62 : 66;
+  const modeChargeHeight = modeRule?.category === 'war' ? Math.round(modeChargeSize * 0.72) : modeChargeSize;
   const tacticalStatusLabel = buildFocusActive
     ? `FAST ${buildFocusSeconds}`
     : combatFocusActive
@@ -213,6 +221,26 @@ export function Crosshair() {
         zIndex: 100,
       }}
     >
+      {modeChargeActive && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: modeChargeSize,
+            height: modeChargeHeight,
+            transform: 'translate(-50%, -50%)',
+            borderRadius: '50%',
+            background: `conic-gradient(${modeChargeAccent} ${Math.round(modeChargeRatio * 360)}deg, rgba(255,255,255,0.1) 0deg)`,
+            WebkitMask: 'radial-gradient(circle, transparent 54%, #000 57%)',
+            mask: 'radial-gradient(circle, transparent 54%, #000 57%)',
+            filter: `drop-shadow(0 0 10px ${modeChargeAccent}cc)`,
+            opacity: modeChargeRatio > 0.88 ? 0.94 : 0.74,
+            animation: 'builderFocusReticle 0.7s ease-in-out infinite alternate',
+          }}
+        />
+      )}
+
       {!isCompact && mapStatusLabel && (
         <div
           style={{
