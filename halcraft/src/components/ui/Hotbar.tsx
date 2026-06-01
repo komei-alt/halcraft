@@ -9,6 +9,12 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
+import {
+  getMasteryProgress,
+  getMasteryTitle,
+  type MasteryItemState,
+  useMasteryStore,
+} from '../../stores/useMasteryStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import {
   getNextStageBuildMilestone,
@@ -28,6 +34,7 @@ import {
   getStageModeBuildGain,
   getStageModeRule,
 } from '../../types/stageModeRules';
+import { getNextMasteryPerkSummary } from '../../types/masteryPerks';
 import type { StageDefinition } from '../../types/stages';
 import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
@@ -59,6 +66,9 @@ interface WeaponTacticPanel {
   title: string;
   role: string;
   detail: string;
+  masteryLabel: string;
+  masteryDetail: string;
+  masteryRatio: number;
   statusLabel: string;
   ratio: number;
   accent: string;
@@ -240,12 +250,14 @@ function getItemReadinessBadge(args: {
 function getWeaponTacticPanel(args: {
   item: EquippedItem;
   stage: StageDefinition | null;
+  mastery: MasteryItemState | undefined;
   modeRule: ReturnType<typeof getStageModeRule>;
   readiness: ItemReadinessBadge | null;
   tactic: ItemTacticBadge | null;
 }): WeaponTacticPanel | null {
   if (args.item === 'builder') return null;
 
+  const mastery = args.mastery;
   const accent = args.tactic?.accent
     ?? args.readiness?.accent
     ?? (args.item === 'rocket_launcher' ? '#ffc06d' : args.item === 'machine_gun' ? '#ffe28a' : '#c8b0ff');
@@ -262,6 +274,14 @@ function getWeaponTacticPanel(args: {
   const meterLead = args.modeRule && args.stage?.category === 'war'
     ? `${args.modeRule.meterLabel}: ${args.modeRule.actionLabel}`
     : stageLead;
+  const masteryLevel = mastery?.level ?? 1;
+  const masteryTitle = getMasteryTitle(args.item, masteryLevel);
+  const nextPerk = getNextMasteryPerkSummary(args.item, masteryLevel);
+  const masteryLabel = `Lv.${masteryLevel} ${masteryTitle}`;
+  const masteryDetail = mastery
+    ? nextPerk ?? `${mastery.totalXp}XP / 特典MAX`
+    : '使うほど特典が育つ';
+  const masteryRatio = mastery ? getMasteryProgress(mastery) : 0;
 
   if (args.item === 'rocket_launcher') {
     return {
@@ -269,6 +289,9 @@ function getWeaponTacticPanel(args: {
       title: 'ロケット',
       role: '範囲火力',
       detail: args.tactic?.matched ? meterLead : `${stageLead} / ボス・密集対策`,
+      masteryLabel,
+      masteryDetail,
+      masteryRatio,
       statusLabel,
       ratio,
       accent,
@@ -281,6 +304,9 @@ function getWeaponTacticPanel(args: {
       title: '機関銃',
       role: '連射制圧',
       detail: args.stage?.category === 'war' ? meterLead : `${stageLead} / 近づく敵を止める`,
+      masteryLabel,
+      masteryDetail,
+      masteryRatio,
       statusLabel,
       ratio,
       accent,
@@ -292,6 +318,9 @@ function getWeaponTacticPanel(args: {
     title: '剣',
     role: '近距離突破',
     detail: args.stage?.category === 'war' ? meterLead : `${stageLead} / 硬い敵を崩す`,
+    masteryLabel,
+    masteryDetail,
+    masteryRatio,
     statusLabel,
     ratio,
     accent,
@@ -314,6 +343,7 @@ export function Hotbar() {
   const buildScore = useStageBuildScoreStore((s) => s.score);
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const modeMeter = useModeFlowStore((s) => s.meter);
+  const selectedMastery = useMasteryStore((s) => s.items[equippedItem]);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
@@ -337,6 +367,7 @@ export function Hotbar() {
   const selectedWeaponPanel = getWeaponTacticPanel({
     item: equippedItem,
     stage: currentStage,
+    mastery: selectedMastery,
     modeRule,
     readiness: selectedItemReadiness,
     tactic: selectedItemTactic,
@@ -740,6 +771,56 @@ export function Hotbar() {
               }}
             >
               {selectedWeaponPanel.detail}
+            </span>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+                color: selectedWeaponPanel.accent,
+                fontSize: isTouch ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 900,
+              }}
+            >
+              <span style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                {selectedWeaponPanel.masteryLabel}
+              </span>
+              <span
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  color: 'rgba(255,255,255,0.58)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {selectedWeaponPanel.masteryDetail}
+              </span>
+              <span
+                aria-hidden="true"
+                style={{
+                  flex: '0 0 auto',
+                  width: isTouch ? 34 : 44,
+                  height: 3,
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.14)',
+                  overflow: 'hidden',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    width: `${Math.round(selectedWeaponPanel.masteryRatio * 100)}%`,
+                    height: '100%',
+                    borderRadius: 999,
+                    background: selectedWeaponPanel.accent,
+                    boxShadow: `0 0 8px ${selectedWeaponPanel.accent}88`,
+                  }}
+                />
+              </span>
             </span>
           </span>
           <span
