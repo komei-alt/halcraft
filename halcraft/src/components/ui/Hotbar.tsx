@@ -54,6 +54,16 @@ interface ItemReadinessBadge {
   accent: string;
 }
 
+interface WeaponTacticPanel {
+  icon: string;
+  title: string;
+  role: string;
+  detail: string;
+  statusLabel: string;
+  ratio: number;
+  accent: string;
+}
+
 function clampRatio(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -227,6 +237,67 @@ function getItemReadinessBadge(args: {
   return null;
 }
 
+function getWeaponTacticPanel(args: {
+  item: EquippedItem;
+  stage: StageDefinition | null;
+  modeRule: ReturnType<typeof getStageModeRule>;
+  readiness: ItemReadinessBadge | null;
+  tactic: ItemTacticBadge | null;
+}): WeaponTacticPanel | null {
+  if (args.item === 'builder') return null;
+
+  const accent = args.tactic?.accent
+    ?? args.readiness?.accent
+    ?? (args.item === 'rocket_launcher' ? '#ffc06d' : args.item === 'machine_gun' ? '#ffe28a' : '#c8b0ff');
+  const statusLabel = args.readiness?.label
+    ?? (args.tactic?.matched ? 'MAP MATCH' : args.stage?.category === 'war' ? '作戦中' : '自由装備');
+  const ratio = args.readiness?.ratio ?? 1;
+  const stageLead = args.tactic?.matched
+    ? `このマップの主役: ${args.tactic.label}`
+    : args.tactic
+      ? `推奨は${args.tactic.label}`
+      : args.stage
+        ? args.stage.rules.shortPitch
+        : '好きなタイミングで切り替え';
+  const meterLead = args.modeRule && args.stage?.category === 'war'
+    ? `${args.modeRule.meterLabel}: ${args.modeRule.actionLabel}`
+    : stageLead;
+
+  if (args.item === 'rocket_launcher') {
+    return {
+      icon: '🚀',
+      title: 'ロケット',
+      role: '範囲火力',
+      detail: args.tactic?.matched ? meterLead : `${stageLead} / ボス・密集対策`,
+      statusLabel,
+      ratio,
+      accent,
+    };
+  }
+
+  if (args.item === 'machine_gun') {
+    return {
+      icon: '🔫',
+      title: '機関銃',
+      role: '連射制圧',
+      detail: args.stage?.category === 'war' ? meterLead : `${stageLead} / 近づく敵を止める`,
+      statusLabel,
+      ratio,
+      accent,
+    };
+  }
+
+  return {
+    icon: '⚔️',
+    title: '剣',
+    role: '近距離突破',
+    detail: args.stage?.category === 'war' ? meterLead : `${stageLead} / 硬い敵を崩す`,
+    statusLabel,
+    ratio,
+    accent,
+  };
+}
+
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
@@ -256,6 +327,20 @@ export function Hotbar() {
   const selectedCount = items[selectedBlock] ?? 0;
   const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
   const modeRule = getStageModeRule(currentStageId);
+  const selectedItemTactic = getItemTacticBadge(equippedItem, currentStage);
+  const selectedItemReadiness = getItemReadinessBadge({
+    item: equippedItem,
+    rocketCharge,
+    attackCharge,
+    tactic: selectedItemTactic,
+  });
+  const selectedWeaponPanel = getWeaponTacticPanel({
+    item: equippedItem,
+    stage: currentStage,
+    modeRule,
+    readiness: selectedItemReadiness,
+    tactic: selectedItemTactic,
+  });
   const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > now;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const buildFocusAccent = modeRule?.accent ?? selectedProfile.accent;
@@ -551,6 +636,130 @@ export function Hotbar() {
             }}
           >
             x{selectedCount}
+          </span>
+        </div>
+      )}
+
+      {selectedWeaponPanel && (
+        <div
+          id="weapon-tactic-panel"
+          style={{
+            minWidth: isTouch ? 250 : 320,
+            maxWidth: 'calc(100vw - 32px)',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: 12,
+            padding: isTouch ? '8px 12px' : '7px 12px',
+            borderRadius: 999,
+            border: `1px solid ${selectedWeaponPanel.accent}7a`,
+            background: `linear-gradient(135deg, ${selectedWeaponPanel.accent}22, rgba(10, 11, 18, 0.72))`,
+            color: '#fff',
+            boxShadow: `0 8px 24px rgba(0,0,0,0.22), 0 0 20px ${selectedWeaponPanel.accent}28`,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: 8,
+              right: 8,
+              bottom: 4,
+              height: 3,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <span
+              style={{
+                display: 'block',
+                width: `${Math.round(selectedWeaponPanel.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${selectedWeaponPanel.accent}, #ffffff)`,
+                boxShadow: `0 0 10px ${selectedWeaponPanel.accent}88`,
+              }}
+            />
+          </span>
+          <span
+            style={{
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              overflow: 'hidden',
+              position: 'relative',
+              zIndex: 1,
+            }}
+          >
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+                fontSize: isTouch ? 12 : 13,
+                fontWeight: 950,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{ flex: '0 0 auto', filter: `drop-shadow(0 0 7px ${selectedWeaponPanel.accent})` }}>
+                {selectedWeaponPanel.icon}
+              </span>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedWeaponPanel.title}
+              </span>
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  color: selectedWeaponPanel.accent,
+                  fontSize: isTouch ? 9 : 10,
+                  fontWeight: 950,
+                }}
+              >
+                {selectedWeaponPanel.role}
+              </span>
+            </span>
+            <span
+              style={{
+                color: 'rgba(255,255,255,0.72)',
+                fontSize: isTouch ? 10 : 11,
+                lineHeight: '13px',
+                fontWeight: 800,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedWeaponPanel.detail}
+            </span>
+          </span>
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              flexShrink: 0,
+              minWidth: isTouch ? 54 : 66,
+              textAlign: 'center',
+              padding: '4px 9px',
+              borderRadius: 999,
+              background: `${selectedWeaponPanel.accent}24`,
+              color: selectedWeaponPanel.accent,
+              fontSize: isTouch ? 11 : 12,
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {selectedWeaponPanel.statusLabel}
           </span>
         </div>
       )}
