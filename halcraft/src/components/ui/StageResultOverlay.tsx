@@ -19,7 +19,11 @@ import {
   formatStageBuildFocus,
   getStageBuildStyle,
 } from '../../types/stageBuildStyles';
-import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
+import {
+  formatStageRunBonusLabel,
+  getStageOpeningItemLabel,
+  getStageRunBonusForProgress,
+} from '../../types/stageRunBonuses';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { formatStageMasteryPerkLabel, getStageMasteryPerk, getStageMasterySummary } from '../../types/stageMastery';
 import { getStageRecordGoal } from '../../types/stageRecordGoals';
@@ -48,6 +52,14 @@ function getMedalColor(medal: string): string {
 }
 
 const FINAL_BUILD_SCORE = BUILD_SCORE_MILESTONES[BUILD_SCORE_MILESTONES.length - 1];
+
+interface NextRunPlanCard {
+  icon: string;
+  label: string;
+  title: string;
+  detail: string;
+  accent: string;
+}
 
 export function StageResultOverlay() {
   const phase = useGameStore((s) => s.phase);
@@ -202,6 +214,44 @@ export function StageResultOverlay() {
       ? `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 連続 x${bestModeStreak}`
       : `${getModeFlowRankLabel(modeRule.category, bestModeRank)} / 発動最多 ${bestModeActivationCount}回 / 作品BEST ${buildBest?.score ?? buildScore}pt / 素材x${Math.max(buildBest?.bestComboChain ?? 0, buildBestComboChain)} / 高速x${Math.max(buildBest?.bestFocusChain ?? 0, buildBestFocusChain)}`
     : 'このマップのクリア記録を保存中';
+  const nextRunPlanCards: NextRunPlanCard[] = [
+    {
+      icon: stage.category === 'build' ? '🧱' : '⚔️',
+      label: '開始',
+      title: `${getStageOpeningItemLabel(stage.id)}で再出発`,
+      detail: stage.category === 'build'
+        ? `${stage.rules.landmarkName}へ直行して、${buildStyle?.focusLabel ?? 'テーマ素材'}を先に伸ばす。`
+        : `${stage.rules.landmarkName}へ向かい、${modeRule?.actionLabel ?? '推奨武器'}を切らさず当てる。`,
+      accent: stage.color,
+    },
+    {
+      icon: nextRecordGoal.icon,
+      label: '狙い',
+      title: nextRecordGoal.title,
+      detail: nextRecordGoal.detail,
+      accent: nextRecordGoal.accent,
+    },
+    {
+      icon: signatureAward.icon,
+      label: signatureAward.unlocked ? '次回特典' : '称号',
+      title: signatureAward.unlocked
+        ? signaturePerk?.shortLabel ?? signatureAward.label
+        : signatureAward.nextLabel,
+      detail: signatureAward.unlocked
+        ? signaturePerk
+          ? formatStageSignaturePerkLabel(signaturePerk)
+          : signatureAward.detail
+        : `${signatureAward.requirementLabel}で${signatureAward.title}を解放する。`,
+      accent: signatureAward.accent,
+    },
+  ];
+  const nextRunRewardText = nextRunBonus
+    ? formatStageRunBonusLabel(nextRunBonus)
+    : nextMasteryPerk
+      ? formatStageMasteryPerkLabel(nextMasteryPerk)
+      : signatureAward.unlocked && signaturePerk
+        ? formatStageSignaturePerkLabel(signaturePerk)
+        : '次の記録を更新すると開始支度が強くなる';
 
   return (
     <div
@@ -1198,6 +1248,170 @@ export function StageResultOverlay() {
             </div>
           </div>
         )}
+
+        <div
+          id="stage-next-run-plan"
+          style={{
+            marginBottom: 16,
+            padding: isCompact ? '10px 10px' : '12px 12px',
+            borderRadius: 12,
+            color: '#fff',
+            background: `linear-gradient(135deg, ${stage.color}24, rgba(255,255,255,0.06))`,
+            border: `1px solid ${stage.color}66`,
+            boxShadow: `0 0 24px ${stage.color}24, inset 0 1px 0 rgba(255,255,255,0.12)`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              marginBottom: 9,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: stage.color,
+                  fontSize: isCompact ? 10 : 11,
+                  lineHeight: '13px',
+                  fontWeight: 950,
+                  letterSpacing: 1,
+                }}
+              >
+                NEXT RUN PLAN
+              </div>
+              <div
+                style={{
+                  color: '#fff',
+                  fontSize: isCompact ? 15 : 17,
+                  lineHeight: isCompact ? '19px' : '22px',
+                  fontWeight: 950,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                次の一走は「{nextRecordGoal.title}」を狙う
+              </div>
+            </div>
+            <div
+              style={{
+                flex: '0 0 auto',
+                color: stage.category === 'build' ? '#9bdcff' : '#ff9b7c',
+                fontSize: isCompact ? 10 : 11,
+                fontWeight: 950,
+                fontFamily: 'monospace',
+                textAlign: 'right',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {stage.category === 'build' ? 'BUILD ROUTE' : 'WAR ROUTE'}
+            </div>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isCompact ? '1fr' : 'repeat(3, minmax(0, 1fr))',
+              gap: 8,
+            }}
+          >
+            {nextRunPlanCards.map((card) => (
+              <div
+                key={`${card.label}-${card.title}`}
+                style={{
+                  minWidth: 0,
+                  padding: '9px 9px',
+                  borderRadius: 10,
+                  background: `${card.accent}18`,
+                  border: `1px solid ${card.accent}42`,
+                  boxShadow: `inset 0 0 13px ${card.accent}12`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: '0 0 auto',
+                      width: 25,
+                      height: 25,
+                      borderRadius: 7,
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: `${card.accent}22`,
+                      border: `1px solid ${card.accent}55`,
+                      fontSize: 15,
+                    }}
+                  >
+                    {card.icon}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        color: card.accent,
+                        fontSize: 9,
+                        lineHeight: '11px',
+                        fontWeight: 950,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {card.label}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 1,
+                        color: '#fff',
+                        fontSize: isCompact ? 12 : 13,
+                        lineHeight: isCompact ? '15px' : '16px',
+                        fontWeight: 950,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {card.title}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    color: 'rgba(255,255,255,0.72)',
+                    fontSize: isCompact ? 10 : 11,
+                    lineHeight: isCompact ? '14px' : '15px',
+                    fontWeight: 820,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {card.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
+              marginTop: 9,
+              padding: '8px 9px',
+              borderRadius: 9,
+              color: 'rgba(255,255,255,0.78)',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              fontSize: isCompact ? 10 : 11,
+              lineHeight: '15px',
+              fontWeight: 850,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            次回に効く支度: {nextRunRewardText}
+          </div>
+        </div>
 
         <div
           style={{
