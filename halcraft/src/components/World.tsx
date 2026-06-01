@@ -83,13 +83,62 @@ function getMaterialProps(blockDef: BlockInfo): THREE.MeshStandardMaterialParame
   return props;
 }
 
+/** ブロックの角と面に薄い陰影を足し、平板な見え方を抑える */
+function applyVoxelDepthShader(mat: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  if (mat.userData.halcraftVoxelDepthShader === true) return mat;
+
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vHalcraftBlockLocalPosition;
+varying vec3 vHalcraftBlockLocalNormal;`,
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+vHalcraftBlockLocalNormal = objectNormal;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+vHalcraftBlockLocalPosition = transformed;`,
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vHalcraftBlockLocalPosition;
+varying vec3 vHalcraftBlockLocalNormal;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+vec3 halcraftAbsPos = clamp(abs(vHalcraftBlockLocalPosition), vec3(0.0), vec3(0.5));
+float halcraftNearX = smoothstep(0.39, 0.5, halcraftAbsPos.x);
+float halcraftNearY = smoothstep(0.39, 0.5, halcraftAbsPos.y);
+float halcraftNearZ = smoothstep(0.39, 0.5, halcraftAbsPos.z);
+float halcraftEdgeShade = smoothstep(1.18, 1.9, halcraftNearX + halcraftNearY + halcraftNearZ);
+float halcraftTopLift = max(vHalcraftBlockLocalNormal.y, 0.0) * 0.045;
+float halcraftBottomShade = max(-vHalcraftBlockLocalNormal.y, 0.0) * 0.095;
+float halcraftSideShade = (1.0 - abs(vHalcraftBlockLocalNormal.y)) * 0.025;
+diffuseColor.rgb *= clamp(1.0 + halcraftTopLift - halcraftBottomShade - halcraftSideShade - halcraftEdgeShade * 0.075, 0.72, 1.12);`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'halcraft-voxel-depth-v1';
+  mat.userData.halcraftVoxelDepthShader = true;
+  return mat;
+}
+
 function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
   const key = `${blockDef.id}:${blockDef.texture}`;
   if (materialCache.has(key)) return materialCache.get(key)!;
-  const mat = new THREE.MeshStandardMaterial({
+  const mat = applyVoxelDepthShader(new THREE.MeshStandardMaterial({
     map: getBlockTexture(blockDef.texture),
     ...getMaterialProps(blockDef),
-  });
+  }));
   materialCache.set(key, mat);
   return mat;
 }
@@ -106,12 +155,12 @@ function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial
   const props = getMaterialProps(blockDef);
 
   const mats = [
-    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
-    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
-    new THREE.MeshStandardMaterial({ map: topTex, ...props }),
-    new THREE.MeshStandardMaterial({ map: bottomTex, ...props }),
-    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
-    new THREE.MeshStandardMaterial({ map: sideTex, ...props }),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: topTex, ...props })),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: bottomTex, ...props })),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
+    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
   ];
   faceMaterialCache.set(key, mats);
   return mats;
