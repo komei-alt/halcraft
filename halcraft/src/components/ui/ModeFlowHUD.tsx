@@ -69,6 +69,14 @@ export function ModeFlowHUD() {
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const activeCombatFocusChain = combatFocusChainExpiresAt > now ? combatFocusChain : 0;
   const activeActivation = recentActivation?.stageId === stage.id ? recentActivation : null;
+  const modeSignalActive = Boolean(activeActivation || buildFocusActive || combatFocusActive);
+  const modeSignalLabel = rule.category === 'build'
+    ? buildFocusActive
+      ? 'OPENING BUILD'
+      : 'BUILD FLOW'
+    : combatFocusActive
+      ? 'TACTICAL FOCUS'
+      : 'WAR FLOW';
   const activeTitle = activeActivation ? activeActivation.title : rule.title;
   const visibleRank = activeActivation ? activeActivation.flowRank : flowRank;
   const nextRank = getModeFlowRank(activationCount + 1) || 1;
@@ -123,9 +131,10 @@ export function ModeFlowHUD() {
           style={{
             fontSize: isCompact ? 18 : 21,
             flex: '0 0 auto',
-            filter: recentActivation?.stageId === stage.id
+            filter: modeSignalActive
               ? `drop-shadow(0 0 8px ${rule.accent})`
               : 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))',
+            animation: modeSignalActive ? 'modeFlowSignalIcon 1.05s ease-in-out infinite alternate' : undefined,
           }}
         >
           {rule.icon}
@@ -142,7 +151,7 @@ export function ModeFlowHUD() {
               textOverflow: 'ellipsis',
             }}
           >
-            {rule.category === 'build' ? '建築モード' : '戦争モード'} / {rule.meterLabel}
+            {rule.category === 'build' ? '建築モード' : '戦争モード'} / {rule.meterLabel} / {modeSignalLabel}
           </div>
           <div
             style={{
@@ -209,6 +218,9 @@ export function ModeFlowHUD() {
           borderRadius: 999,
           background: 'rgba(255,255,255,0.12)',
           overflow: 'hidden',
+          boxShadow: modeSignalActive
+            ? `0 0 12px ${rule.accent}44, inset 0 0 8px rgba(255,255,255,0.13)`
+            : 'inset 0 0 6px rgba(0,0,0,0.18)',
         }}
       >
         <div
@@ -220,6 +232,8 @@ export function ModeFlowHUD() {
               ? `linear-gradient(90deg, #fff2a6, ${rule.accent})`
               : `linear-gradient(90deg, ${stage.color}, ${rule.accent})`,
             transition: 'width 0.24s ease',
+            boxShadow: modeSignalActive ? `0 0 14px ${rule.accent}aa` : 'none',
+            animation: modeSignalActive ? 'modeFlowSignalBar 1.15s ease-in-out infinite alternate' : undefined,
           }}
         />
       </div>

@@ -5,7 +5,11 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore, type StageBuildScoreBest } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
 import { formatStageBuildFocus, getStageBuildStyle } from '../../types/stageBuildStyles';
-import { formatStageCombatBonus, getStageCombatStyle } from '../../types/stageCombatStyles';
+import {
+  formatStageCombatBonus,
+  getStageCombatStyle,
+  getStageCombatWeaponLabel,
+} from '../../types/stageCombatStyles';
 import { getStageCondition } from '../../types/stageConditions';
 import { getStageEvent } from '../../types/stageEvents';
 import { getStageChallenges } from '../../types/stageChallenges';
@@ -46,6 +50,28 @@ interface BriefingRouteStep {
   detail: string;
   accent: string;
   valueText: string;
+}
+
+interface ModeOpeningSignal {
+  glyph: string;
+  badge: string;
+  title: string;
+  detail: string;
+  rhythm: string;
+  accent: string;
+  glow: string;
+  pattern: 'build' | 'war';
+  chips: Array<{
+    icon: string;
+    label: string;
+    value: string;
+    accent: string;
+  }>;
+}
+
+function formatOpeningSeconds(ms: number | undefined): string | null {
+  if (!ms || ms <= 0) return null;
+  return `${Math.max(1, Math.round(ms / 1000))}秒`;
 }
 
 function getBriefingPoints(
@@ -209,6 +235,100 @@ function getBriefingRouteSteps(
   ];
 }
 
+function getModeOpeningSignal(
+  stage: StageDefinition,
+  masteryPerk: StageMasteryPerk | null,
+  signaturePerk: StageSignaturePerk | null,
+): ModeOpeningSignal {
+  const modeRule = getStageModeRule(stage.id);
+  const buildStyle = getStageBuildStyle(stage.id);
+  const combatStyle = getStageCombatStyle(stage.id);
+
+  if (stage.category === 'build') {
+    const buildFocusSeconds = formatOpeningSeconds(
+      signaturePerk?.buildFocusMs ?? masteryPerk?.buildFocusMs,
+    );
+    const focusSource = signaturePerk?.buildFocusMs
+      ? signaturePerk.shortLabel
+      : masteryPerk?.buildFocusMs
+        ? masteryPerk.shortLabel
+        : null;
+
+    return {
+      glyph: '▦',
+      badge: 'CREATE MODE',
+      title: '飛行して、置いて、作品点を伸ばす',
+      detail: buildStyle
+        ? `${buildStyle.shortLabel}の素材を使うほど、マップらしい作品として評価が伸びる。`
+        : '開幕から自由に飛んで、好きな形を立体で作り込める。',
+      rhythm: 'PLACE TO SCORE',
+      accent: buildStyle?.accent ?? modeRule?.accent ?? '#9bdcff',
+      glow: buildStyle?.glow ?? 'rgba(120, 220, 255, 0.3)',
+      pattern: 'build',
+      chips: [
+        {
+          icon: '✦',
+          label: '開幕',
+          value: buildFocusSeconds && focusSource
+            ? `${focusSource} ${buildFocusSeconds}高速`
+            : '飛行建築',
+          accent: '#9bdcff',
+        },
+        {
+          icon: '▧',
+          label: '評価',
+          value: buildStyle?.focusLabel ?? modeRule?.meterLabel ?? '作品点',
+          accent: buildStyle?.accent ?? '#80deea',
+        },
+        {
+          icon: '↗',
+          label: '伸ばす',
+          value: modeRule?.actionLabel ?? 'テーマ素材を置く',
+          accent: modeRule?.accent ?? '#b9f6ca',
+        },
+      ],
+    };
+  }
+
+  const combatFocusSeconds = formatOpeningSeconds(signaturePerk?.combatFocusMs);
+  const weaponLabel = combatStyle ? getStageCombatWeaponLabel(combatStyle.weapon) : '推奨武器';
+
+  return {
+    glyph: '◇',
+    badge: 'WAR MODE',
+    title: '狙って、倒して、戦意を爆発させる',
+    detail: combatStyle
+      ? `${combatStyle.shortLabel}で敵を止めると、戦線を押し返す作戦集中につながる。`
+      : '敵を連続で倒してゲージをため、強い発動タイミングを作る。',
+    rhythm: 'CHAIN TO SURGE',
+    accent: combatStyle?.accent ?? modeRule?.accent ?? '#ffb36d',
+    glow: 'rgba(255, 150, 90, 0.3)',
+    pattern: 'war',
+    chips: [
+      {
+        icon: combatStyle?.icon ?? '⚔️',
+        label: '武器',
+        value: weaponLabel,
+        accent: combatStyle?.accent ?? '#ffd180',
+      },
+      {
+        icon: '✧',
+        label: '開幕',
+        value: combatFocusSeconds && signaturePerk
+          ? `${signaturePerk.shortLabel} ${combatFocusSeconds}`
+          : '安全時間で前進',
+        accent: '#ffcc80',
+      },
+      {
+        icon: '×',
+        label: '伸ばす',
+        value: modeRule?.actionLabel ?? '連続撃破',
+        accent: modeRule?.accent ?? '#ff8a65',
+      },
+    ],
+  };
+}
+
 export function StageOpeningBriefing() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -262,6 +382,10 @@ export function StageOpeningBriefing() {
     () => (stage ? getBriefingPoints(stage, isCompact, runBonus, masteryPerk, signaturePerk) : []),
     [isCompact, masteryPerk, runBonus, signaturePerk, stage],
   );
+  const modeSignal = useMemo(
+    () => (stage ? getModeOpeningSignal(stage, masteryPerk, signaturePerk) : null),
+    [masteryPerk, signaturePerk, stage],
+  );
   const routeSteps = useMemo(
     () => (stage
       ? getBriefingRouteSteps(
@@ -274,8 +398,9 @@ export function StageOpeningBriefing() {
       : []),
     [bestByStage, buildBestByStage, masteryPerk, signaturePerk, stage],
   );
+  const visibleRouteSteps = isCompact ? routeSteps.slice(0, 3) : routeSteps;
 
-  if (phase !== 'playing' || !stage || stageElapsedSeconds > 4.3) return null;
+  if (phase !== 'playing' || !stage || !modeSignal || stageElapsedSeconds > 4.3) return null;
 
   const startLabel = stage.category === 'build' ? 'BUILD START' : 'MISSION START';
   const accent = stage.color;
@@ -286,9 +411,9 @@ export function StageOpeningBriefing() {
       style={{
         position: 'fixed',
         left: '50%',
-        top: isCompact ? '47%' : '45%',
+        top: isCompact ? '43%' : '45%',
         transform: 'translate(-50%, -50%)',
-        zIndex: 126,
+        zIndex: 170,
         width: isCompact ? 'min(338px, calc(100vw - 28px))' : 470,
         padding: isCompact ? '13px 14px' : '16px 18px',
         borderRadius: 8,
@@ -401,6 +526,157 @@ export function StageOpeningBriefing() {
         style={{
           position: 'relative',
           marginTop: isCompact ? 11 : 13,
+          padding: isCompact ? '8px 8px 7px' : '9px 10px 8px',
+          borderRadius: 7,
+          border: `1px solid ${modeSignal.accent}62`,
+          background: modeSignal.pattern === 'build'
+            ? `linear-gradient(135deg, ${modeSignal.accent}24, rgba(255,255,255,0.06)), repeating-linear-gradient(90deg, transparent 0 13px, ${modeSignal.accent}16 13px 14px)`
+            : `radial-gradient(circle at 18% 50%, ${modeSignal.accent}34, transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.07), ${modeSignal.accent}18)`,
+          boxShadow: `0 0 22px ${modeSignal.glow}, inset 0 1px 0 rgba(255,255,255,0.16)`,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: modeSignal.pattern === 'build'
+              ? `linear-gradient(90deg, transparent, ${modeSignal.accent}24, transparent)`
+              : `linear-gradient(120deg, transparent 0%, ${modeSignal.accent}2a 48%, transparent 66%)`,
+            animation: modeSignal.pattern === 'build'
+              ? 'stageOpeningBuildGrid 2.2s linear infinite'
+              : 'stageOpeningWarPulse 1.15s ease-in-out infinite alternate',
+          }}
+        />
+        <div
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: isCompact ? '1fr' : 'minmax(0, 1fr) auto',
+            gap: isCompact ? 7 : 10,
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div
+              style={{
+                width: isCompact ? 30 : 34,
+                height: isCompact ? 30 : 34,
+                borderRadius: 7,
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                background: `${modeSignal.accent}33`,
+                border: `1px solid ${modeSignal.accent}7a`,
+                boxShadow: `0 0 16px ${modeSignal.accent}44`,
+                fontSize: isCompact ? 15 : 17,
+                fontWeight: 950,
+                animation: 'stageOpeningModeGlyph 0.8s ease-out',
+              }}
+            >
+              {modeSignal.glyph}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: modeSignal.accent,
+                  fontSize: isCompact ? 9 : 10,
+                  lineHeight: '12px',
+                  fontWeight: 950,
+                  fontFamily: 'monospace',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {modeSignal.badge} / {modeSignal.rhythm}
+              </div>
+              <div
+                style={{
+                  marginTop: 1,
+                  color: 'rgba(255,255,255,0.95)',
+                  fontSize: isCompact ? 12 : 13,
+                  lineHeight: isCompact ? '15px' : '16px',
+                  fontWeight: 950,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {modeSignal.title}
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  color: 'rgba(255,255,255,0.64)',
+                  fontSize: isCompact ? 9 : 10,
+                  lineHeight: '13px',
+                  fontWeight: 760,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {modeSignal.detail}
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isCompact ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, 72px)',
+              gap: 5,
+              minWidth: 0,
+            }}
+          >
+            {modeSignal.chips.map((chip) => (
+              <div
+                key={`${chip.label}-${chip.value}`}
+                style={{
+                  minWidth: 0,
+                  padding: isCompact ? '4px 5px' : '5px 6px',
+                  borderRadius: 6,
+                  background: 'rgba(0,0,0,0.18)',
+                  border: `1px solid ${chip.accent}4f`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    color: chip.accent,
+                    fontSize: isCompact ? 8 : 9,
+                    lineHeight: '11px',
+                    fontWeight: 950,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>{chip.icon}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{chip.label}</span>
+                </div>
+                <div
+                  style={{
+                    marginTop: 1,
+                    color: 'rgba(255,255,255,0.78)',
+                    fontSize: isCompact ? 8 : 9,
+                    lineHeight: '11px',
+                    fontWeight: 850,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {chip.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: 'relative',
+          marginTop: isCompact ? 11 : 13,
           display: 'grid',
           gridTemplateColumns: isCompact ? '1fr' : 'repeat(2, minmax(0, 1fr))',
           gap: isCompact ? 6 : 8,
@@ -465,11 +741,11 @@ export function StageOpeningBriefing() {
           display: 'grid',
           gridTemplateColumns: isCompact
             ? '1fr'
-            : `repeat(${Math.min(4, Math.max(1, routeSteps.length))}, minmax(0, 1fr))`,
+            : `repeat(${Math.min(4, Math.max(1, visibleRouteSteps.length))}, minmax(0, 1fr))`,
           gap: isCompact ? 5 : 7,
         }}
       >
-        {routeSteps.map((step) => (
+        {visibleRouteSteps.map((step) => (
           <div
             key={`${step.label}-${step.valueText}`}
             style={{

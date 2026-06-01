@@ -622,6 +622,67 @@
   }
 }
 
+@keyframes stageOpeningModeGlyph {
+  0% {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+
+  62% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes stageOpeningBuildGrid {
+  0% {
+    opacity: 0.28;
+    transform: translateX(-24px);
+  }
+
+  100% {
+    opacity: 0.56;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes stageOpeningWarPulse {
+  0% {
+    opacity: 0.3;
+    transform: scaleX(0.96);
+  }
+
+  100% {
+    opacity: 0.72;
+    transform: scaleX(1.04);
+  }
+}
+
+@keyframes modeFlowSignalIcon {
+  0% {
+    transform: scale(1);
+  }
+
+  100% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes modeFlowSignalBar {
+  0% {
+    filter: brightness(1) saturate(1);
+  }
+
+  100% {
+    filter: brightness(1.32) saturate(1.32);
+  }
+}
+
 @keyframes builderFocusPanel {
   0% {
     filter: saturate(1) brightness(1);
