@@ -260,6 +260,10 @@ function getModeMeterText(modeMeter: number, threshold: number): string {
   return `${Math.min(Math.floor(modeMeter), threshold)}/${threshold}`;
 }
 
+function getNextLevelText(currentXp: number, xpToNextLevel: number): string {
+  return `次Lvまで ${Math.max(0, xpToNextLevel - currentXp)}XP`;
+}
+
 function getItemMapSynergyStatus({
   equippedItem,
   masteryLevel,
@@ -448,6 +452,7 @@ export function MasteryHUD() {
     swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
   });
   const techniqueRecord = getItemTechniqueRecord(equippedItem, mastery, def);
+  const techniqueProgress = getMasteryTechniqueProgress(equippedItem, mastery);
   const modeRule = getStageModeRule(currentStageId);
   const synergyStatus = getItemMapSynergyStatus({
     equippedItem,
@@ -564,6 +569,129 @@ export function MasteryHUD() {
             transition: 'width 0.28s ease',
           }}
         />
+      </div>
+
+      <div
+        id="item-growth-route"
+        style={{
+          marginTop: 6,
+          padding: isTouch ? '5px 7px' : '6px 8px',
+          borderRadius: 9,
+          background: `linear-gradient(90deg, ${def.glow}, rgba(0,0,0,0.08))`,
+          border: `1px solid ${def.accent}34`,
+          boxShadow: `0 0 14px ${def.glow}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 7,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: def.accent,
+              fontSize: isTouch ? 8 : 9,
+              lineHeight: '11px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+            }}
+          >
+            NEXT
+          </span>
+          <span
+            style={{
+              minWidth: 0,
+              flex: 1,
+              color: 'rgba(255,255,255,0.86)',
+              fontSize: isTouch ? 9 : 10,
+              lineHeight: '12px',
+              fontWeight: 880,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {getNextLevelText(mastery.xp, mastery.xpToNextLevel)}
+          </span>
+          <span
+            style={{
+              flex: '0 0 auto',
+              color: techniqueProgress.currentTier > 0 ? def.accent : 'rgba(255,255,255,0.56)',
+              fontSize: isTouch ? 8 : 9,
+              lineHeight: '11px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+            }}
+          >
+            {techniqueProgress.valueText}
+          </span>
+        </div>
+        <div
+          style={{
+            marginTop: 4,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              height: 3,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(progress * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${def.accent}, #ffffff)`,
+                transition: 'width 0.26s ease',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              height: 3,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(techniqueProgress.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${techniqueRecord.accent}, #ffffff)`,
+                transition: 'width 0.26s ease',
+              }}
+            />
+          </div>
+        </div>
+        {!isTouch && (
+          <div
+            style={{
+              marginTop: 3,
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: 9,
+              lineHeight: '12px',
+              fontWeight: 760,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            技: {techniqueProgress.nextTargetText}
+          </div>
+        )}
       </div>
 
       <div

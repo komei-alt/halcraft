@@ -38,6 +38,7 @@ import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
 import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
+import { ItemMasteryPulseFX } from './components/ItemMasteryPulseFX';
 import {
   CanvasResolutionPipeline,
   GraphicsPostFX,
@@ -181,6 +182,7 @@ function GameCanvas() {
           <StageLandmarkBeaconFX />
           <StageModeFlowFX />
           <FunctionalBlockAuraFX />
+          <ItemMasteryPulseFX />
           <World />
           <TorchRenderer />
           <BedRenderer />
