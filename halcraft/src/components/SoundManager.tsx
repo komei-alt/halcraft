@@ -8,7 +8,7 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useGameStore } from '../stores/useGameStore';
 import {
-  playFootstep,
+  playBiomeFootstepSound,
   playAllyMove,
   playZombieGrunt,
   playHelicopterRotor,
@@ -86,7 +86,11 @@ export function SoundManager() {
     if (horizontalSpeed > FOOTSTEP_MIN_SPEED) {
       footstepTimer.current += dt;
       if (footstepTimer.current >= FOOTSTEP_INTERVAL) {
-        playFootstep();
+        playBiomeFootstepSound(
+          gameState.currentStage?.biome,
+          gameState.currentStage?.category ?? null,
+          Math.min(1.32, horizontalSpeed / 5.5),
+        );
         footstepTimer.current = 0;
       }
     } else {

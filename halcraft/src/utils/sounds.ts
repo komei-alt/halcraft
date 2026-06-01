@@ -158,45 +158,170 @@ export function playHurtSound(): void {
 // 3. 足音
 // ============================================
 
+interface FootstepProfile {
+  key: string;
+  filterType: BiquadFilterType;
+  noiseFrequency: number;
+  noiseQ: number;
+  noiseGain: number;
+  noiseDuration: number;
+  thudFrequency: number;
+  thudGain: number;
+  thudDuration: number;
+  gritFrequency: number;
+  gritGain: number;
+  gritDuration: number;
+  modeClickFrequency: number;
+}
+
+const FOOTSTEP_PROFILES: Record<BiomeId, FootstepProfile> = {
+  forest: {
+    key: 'forest',
+    filterType: 'bandpass',
+    noiseFrequency: 1250,
+    noiseQ: 3.4,
+    noiseGain: 0.105,
+    noiseDuration: 0.066,
+    thudFrequency: 68,
+    thudGain: 0.055,
+    thudDuration: 0.046,
+    gritFrequency: 2800,
+    gritGain: 0.035,
+    gritDuration: 0.035,
+    modeClickFrequency: 980,
+  },
+  tropical: {
+    key: 'tropical',
+    filterType: 'bandpass',
+    noiseFrequency: 920,
+    noiseQ: 1.8,
+    noiseGain: 0.12,
+    noiseDuration: 0.078,
+    thudFrequency: 74,
+    thudGain: 0.05,
+    thudDuration: 0.052,
+    gritFrequency: 1900,
+    gritGain: 0.046,
+    gritDuration: 0.046,
+    modeClickFrequency: 1220,
+  },
+  snow: {
+    key: 'snow',
+    filterType: 'highpass',
+    noiseFrequency: 1850,
+    noiseQ: 0.78,
+    noiseGain: 0.09,
+    noiseDuration: 0.09,
+    thudFrequency: 48,
+    thudGain: 0.035,
+    thudDuration: 0.07,
+    gritFrequency: 3300,
+    gritGain: 0.04,
+    gritDuration: 0.052,
+    modeClickFrequency: 1460,
+  },
+  desert: {
+    key: 'desert',
+    filterType: 'bandpass',
+    noiseFrequency: 1450,
+    noiseQ: 1.25,
+    noiseGain: 0.115,
+    noiseDuration: 0.086,
+    thudFrequency: 58,
+    thudGain: 0.045,
+    thudDuration: 0.054,
+    gritFrequency: 2450,
+    gritGain: 0.052,
+    gritDuration: 0.044,
+    modeClickFrequency: 840,
+  },
+};
+
 export function playFootstep(): void {
+  playBiomeFootstepSound();
+}
+
+export function playBiomeFootstepSound(
+  biome: BiomeId = 'forest',
+  category: StageCategory | null = null,
+  intensity = 1,
+): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('step', 280)) return;
+  const profile = FOOTSTEP_PROFILES[biome];
+  if (!ctx || !canPlay(`step:${profile.key}`, 92)) return;
 
   const now = ctx.currentTime;
+  const strength = Math.min(1.35, Math.max(0.72, intensity));
+  const warPush = category === 'war' ? 1.18 : 1;
+  const buildSoftness = category === 'build' ? 0.84 : 1;
+  const pitchJitter = 0.92 + Math.random() * 0.18;
+  const timingJitter = 0.9 + Math.random() * 0.16;
 
-  // フィルタードノイズの短バースト
+  // 地面素材ごとの接地音。森は葉、南国は湿った砂、雪は圧雪、砂漠は乾いた砂を狙う。
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
 
   const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  // ランダムなバリエーション
-  filter.frequency.setValueAtTime(800 + Math.random() * 400, now);
-  filter.Q.setValueAtTime(2, now);
+  filter.type = profile.filterType;
+  filter.frequency.setValueAtTime(profile.noiseFrequency * pitchJitter * warPush, now);
+  filter.Q.setValueAtTime(profile.noiseQ, now);
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.12, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  gain.gain.setValueAtTime(profile.noiseGain * strength * buildSoftness, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + profile.noiseDuration * timingJitter);
 
   noise.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination);
   noise.start(now);
-  noise.stop(now + 0.05);
+  noise.stop(now + profile.noiseDuration * timingJitter);
 
   // 低い衝撃音（地面の振動）
   const thud = ctx.createOscillator();
   thud.type = 'sine';
-  thud.frequency.setValueAtTime(60 + Math.random() * 20, now);
+  thud.frequency.setValueAtTime(profile.thudFrequency * (0.95 + Math.random() * 0.12), now);
 
   const thudGain = ctx.createGain();
-  thudGain.gain.setValueAtTime(0.08, now);
-  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  thudGain.gain.setValueAtTime(profile.thudGain * strength * (category === 'war' ? 1.12 : 0.92), now);
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + profile.thudDuration * timingJitter);
 
   thud.connect(thudGain);
   thudGain.connect(ctx.destination);
   thud.start(now);
-  thud.stop(now + 0.04);
+  thud.stop(now + profile.thudDuration * timingJitter);
+
+  // 表面の粒立ち。走っている時ほど少しだけ増え、足元の質感を耳で拾える。
+  const grit = ctx.createBufferSource();
+  grit.buffer = getNoiseBuffer(ctx);
+
+  const gritFilter = ctx.createBiquadFilter();
+  gritFilter.type = 'highpass';
+  gritFilter.frequency.setValueAtTime(profile.gritFrequency * pitchJitter, now);
+
+  const gritGain = ctx.createGain();
+  gritGain.gain.setValueAtTime(profile.gritGain * Math.max(0.7, strength - 0.08), now + 0.012);
+  gritGain.gain.exponentialRampToValueAtTime(0.001, now + profile.gritDuration * timingJitter);
+
+  grit.connect(gritFilter);
+  gritFilter.connect(gritGain);
+  gritGain.connect(ctx.destination);
+  grit.start(now + 0.006);
+  grit.stop(now + profile.gritDuration * timingJitter);
+
+  if (category === 'war') {
+    const tick = ctx.createOscillator();
+    tick.type = 'square';
+    tick.frequency.setValueAtTime(profile.modeClickFrequency * pitchJitter, now + 0.014);
+
+    const tickGain = ctx.createGain();
+    tickGain.gain.setValueAtTime(0.018 * strength, now + 0.014);
+    tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.048);
+
+    tick.connect(tickGain);
+    tickGain.connect(ctx.destination);
+    tick.start(now + 0.014);
+    tick.stop(now + 0.052);
+  }
 }
 
 // ============================================
