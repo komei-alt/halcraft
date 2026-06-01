@@ -4,6 +4,7 @@
 
 import type { BlockUseFeedbackSoundKind } from './blockUseFeedback';
 import type { BiomeId, StageCategory } from '../types/stages';
+import type { StageChallengeMedal } from '../types/stageChallenges';
 
 /** AudioContext のシングルトン */
 let audioCtx: AudioContext | null = null;
@@ -1901,6 +1902,106 @@ export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId):
   textureGain.connect(ctx.destination);
   texture.start(now + 0.1);
   texture.stop(now + 0.36);
+}
+
+/** ステージクリアSE — モードとメダルで達成の質が分かる長めの勝利ファンファーレ */
+export function playStageClearFanfareSound(
+  kind: StageCategory,
+  medal: StageChallengeMedal,
+  strongFinish: boolean,
+): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay(`stageClear:${kind}`, 1600)) return;
+
+  const now = ctx.currentTime;
+  const isBuild = kind === 'build';
+  const medalRank = medal === 'gold'
+    ? 3
+    : medal === 'silver'
+      ? 2
+      : medal === 'bronze'
+        ? 1
+        : 0;
+  const notes = isBuild
+    ? [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98]
+    : [196, 293.66, 392, 523.25, 783.99, 987.77];
+  const noteCount = Math.min(notes.length, 4 + medalRank + (strongFinish ? 1 : 0));
+  const wave: OscillatorType = isBuild ? 'triangle' : 'sawtooth';
+  const finishScale = strongFinish ? 1.12 : 1;
+
+  for (let i = 0; i < noteCount; i++) {
+    const t = now + i * (isBuild ? 0.07 : 0.065);
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(notes[i], t);
+    osc.frequency.exponentialRampToValueAtTime(notes[i] * (isBuild ? 1.08 : 0.94), t + 0.28);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = isBuild ? 'lowpass' : 'bandpass';
+    filter.frequency.setValueAtTime(isBuild ? 3400 + medalRank * 260 : 820 + medalRank * 120, t);
+    filter.Q.setValueAtTime(isBuild ? 0.72 : 2.15, t);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime((isBuild ? 0.052 : 0.058) * finishScale + medalRank * 0.006, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.34);
+  }
+
+  const padNotes = isBuild ? [261.63, 329.63, 392] : [73.42, 110, 146.83];
+  padNotes.forEach((note, index) => {
+    const osc = ctx.createOscillator();
+    osc.type = isBuild ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(note, now + 0.02);
+    osc.frequency.exponentialRampToValueAtTime(note * (isBuild ? 1.04 : 0.9), now + 0.72);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime((isBuild ? 0.018 : 0.026) + medalRank * 0.003, now + index * 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now + index * 0.01);
+    osc.stop(now + 0.78);
+  });
+
+  const texture = ctx.createBufferSource();
+  texture.buffer = getNoiseBuffer(ctx);
+
+  const textureFilter = ctx.createBiquadFilter();
+  textureFilter.type = isBuild ? 'highpass' : 'bandpass';
+  textureFilter.frequency.setValueAtTime(isBuild ? 2600 : 760, now + 0.04);
+  textureFilter.Q.setValueAtTime(isBuild ? 0.8 : 2.4, now + 0.04);
+
+  const textureGain = ctx.createGain();
+  textureGain.gain.setValueAtTime(isBuild ? 0.014 + medalRank * 0.004 : 0.028 + medalRank * 0.007, now + 0.04);
+  textureGain.gain.exponentialRampToValueAtTime(0.001, now + (isBuild ? 0.3 : 0.24));
+
+  texture.connect(textureFilter);
+  textureFilter.connect(textureGain);
+  textureGain.connect(ctx.destination);
+  texture.start(now + 0.04);
+  texture.stop(now + (isBuild ? 0.3 : 0.24));
+
+  if (medalRank < 2 && !strongFinish) return;
+
+  const crown = ctx.createOscillator();
+  crown.type = 'sine';
+  crown.frequency.setValueAtTime(isBuild ? 1760 : 1174.66, now + 0.26);
+  crown.frequency.exponentialRampToValueAtTime(isBuild ? 2349.32 : 1567.98, now + 0.56);
+
+  const crownGain = ctx.createGain();
+  crownGain.gain.setValueAtTime(0.034 + medalRank * 0.007, now + 0.26);
+  crownGain.gain.exponentialRampToValueAtTime(0.001, now + 0.66);
+
+  crown.connect(crownGain);
+  crownGain.connect(ctx.destination);
+  crown.start(now + 0.26);
+  crown.stop(now + 0.66);
 }
 
 /** モードゲージ進行SE — 発動前の近づき具合を耳でも返す */

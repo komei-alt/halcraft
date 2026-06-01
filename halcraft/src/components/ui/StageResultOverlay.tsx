@@ -34,7 +34,7 @@ import {
 } from '../../types/stageSignaturePerks';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 import { isTouchDevice } from '../../utils/device';
-import { playLevelUpSound } from '../../utils/sounds';
+import { playStageClearFanfareSound } from '../../utils/sounds';
 import { SG } from './startScreenTheme';
 
 function formatElapsed(seconds: number): string {
@@ -95,6 +95,7 @@ export function StageResultOverlay() {
 
   const challenges = useMemo(() => getStageChallenges(stage?.id), [stage?.id]);
   const isGold = challenges.length > 0 && completedIds.length >= challenges.length;
+  const resultMedal = getStageChallengeMedal(completedIds.length, challenges.length);
   const buildStyle = useMemo(() => getStageBuildStyle(stage?.id), [stage?.id]);
   const bossEncounter = useMemo(() => getStageBossEncounter(stage?.id), [stage?.id]);
   const modeRule = useMemo(() => getStageModeRule(stage?.id), [stage?.id]);
@@ -106,7 +107,7 @@ export function StageResultOverlay() {
   );
 
   useEffect(() => {
-    if (phase !== 'playing' || !stageCleared || resultDismissed) return;
+    if (phase !== 'playing' || !stage || !stageCleared || resultDismissed) return;
     document.exitPointerLock?.();
     if (recordedClearRunRef.current !== runId) {
       recordStageClear({
@@ -118,8 +119,9 @@ export function StageResultOverlay() {
       recordedClearRunRef.current = runId;
     }
     completeStage();
-    playLevelUpSound();
+    playStageClearFanfareSound(stage.category, resultMedal, isGold || buildScoreCleared);
   }, [
+    buildScoreCleared,
     completeStage,
     modeActivations,
     modeBestStreak,
@@ -127,7 +129,10 @@ export function StageResultOverlay() {
     phase,
     recordStageClear,
     resultDismissed,
+    resultMedal,
     runId,
+    isGold,
+    stage,
     stageCleared,
     stageElapsedSeconds,
   ]);
@@ -155,7 +160,7 @@ export function StageResultOverlay() {
 
   if (phase !== 'stageclear' || !stage || !stageCleared) return null;
 
-  const medal = getStageChallengeMedal(completedIds.length, challenges.length);
+  const medal = resultMedal;
   const medalLabel = getStageChallengeMedalLabel(medal);
   const medalColor = getMedalColor(medal);
   const resultTitle = isGold
