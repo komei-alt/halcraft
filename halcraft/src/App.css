@@ -220,6 +220,28 @@
   }
 }
 
+@keyframes equippedMasteryPulse {
+  0% {
+    opacity: 0;
+    transform: translateY(7px) scale(0.96);
+  }
+
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1.03);
+  }
+
+  76% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
 @keyframes stageMoodIn {
   0% {
     opacity: 0;

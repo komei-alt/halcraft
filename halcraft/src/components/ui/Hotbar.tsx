@@ -12,6 +12,8 @@ import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import {
   getMasteryProgress,
   getMasteryTitle,
+  MASTERY_DEFS,
+  type MasteryEvent,
   type MasteryItemState,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
@@ -72,6 +74,16 @@ interface WeaponTacticPanel {
   statusLabel: string;
   ratio: number;
   accent: string;
+}
+
+interface EquippedMasteryPulse {
+  id: number;
+  icon: string;
+  label: string;
+  detail: string;
+  xpText: string;
+  accent: string;
+  glow: string;
 }
 
 function clampRatio(value: number): number {
@@ -327,6 +339,47 @@ function getWeaponTacticPanel(args: {
   };
 }
 
+function getEquippedMasteryPulse(
+  event: MasteryEvent | null,
+  equippedItem: EquippedItem,
+  fallbackAccent: string,
+): EquippedMasteryPulse | null {
+  if (!event || event.item !== equippedItem) return null;
+
+  const def = MASTERY_DEFS[equippedItem];
+  const isBigMoment = event.techniqueTierUnlocked || event.leveledUp || event.techniqueRecordUpdated;
+  const accent = event.techniqueTierUnlocked
+    ? def.accent
+    : event.leveledUp
+      ? '#ffe678'
+      : event.techniqueRecordUpdated
+        ? def.accent
+        : fallbackAccent;
+  const label = event.techniqueTierUnlocked
+    ? `${event.techniqueTierLabel} 解放`
+    : event.leveledUp
+      ? `Lv.${event.level} レベルアップ`
+      : event.techniqueRecordUpdated
+        ? '技記録更新'
+        : event.label;
+  const streakText = event.streak >= 3 ? ` / x${event.streak}` : '';
+  const detail = event.techniqueTierUnlocked
+    ? event.techniqueBonusLabel
+    : isBigMoment
+      ? `${event.label}${streakText}`
+      : `${def.shortLabel} 成長${streakText}`;
+
+  return {
+    id: event.id,
+    icon: def.icon,
+    label,
+    detail,
+    xpText: `+${event.xp}XP`,
+    accent,
+    glow: def.glow,
+  };
+}
+
 export function Hotbar() {
   const selectedSlot = usePlayerStore((s) => s.selectedSlot);
   const selectSlot = usePlayerStore((s) => s.selectSlot);
@@ -344,6 +397,7 @@ export function Hotbar() {
   const buildMilestones = useStageBuildScoreStore((s) => s.achievedMilestones);
   const modeMeter = useModeFlowStore((s) => s.meter);
   const selectedMastery = useMasteryStore((s) => s.items[equippedItem]);
+  const recentMasteryEvent = useMasteryStore((s) => s.recentEvent);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
@@ -372,6 +426,11 @@ export function Hotbar() {
     readiness: selectedItemReadiness,
     tactic: selectedItemTactic,
   });
+  const equippedMasteryPulse = getEquippedMasteryPulse(
+    recentMasteryEvent,
+    equippedItem,
+    selectedWeaponPanel?.accent ?? selectedProfile.accent,
+  );
   const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > now;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const buildFocusAccent = modeRule?.accent ?? selectedProfile.accent;
@@ -440,6 +499,119 @@ export function Hotbar() {
         zIndex: isTouch ? 125 : 100,
       }}
     >
+      {equippedMasteryPulse && (
+        <div
+          id="equipped-mastery-pulse"
+          key={`equipped-mastery-pulse-${equippedMasteryPulse.id}`}
+          style={{
+            minWidth: isTouch ? 224 : 300,
+            maxWidth: 'calc(100vw - 32px)',
+            display: 'grid',
+            gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: isTouch ? 8 : 10,
+            padding: isTouch ? '7px 10px' : '7px 12px',
+            borderRadius: 999,
+            border: `1px solid ${equippedMasteryPulse.accent}88`,
+            background: `linear-gradient(135deg, ${equippedMasteryPulse.accent}2e, rgba(8, 10, 16, 0.72))`,
+            color: '#fff',
+            boxShadow: `0 8px 22px rgba(0,0,0,0.26), 0 0 22px ${equippedMasteryPulse.accent}38`,
+            backdropFilter: 'blur(9px)',
+            WebkitBackdropFilter: 'blur(9px)',
+            fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            pointerEvents: 'none',
+            position: 'relative',
+            overflow: 'hidden',
+            animation: 'equippedMasteryPulse 1.9s ease-out both',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(100deg, transparent, ${equippedMasteryPulse.accent}45, transparent)`,
+              transform: 'translateX(-72%)',
+              animation: 'hotbarSelectSweep 0.72s ease-out both',
+            }}
+          />
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              width: isTouch ? 24 : 28,
+              height: isTouch ? 24 : 28,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 999,
+              background: `${equippedMasteryPulse.accent}24`,
+              border: `1px solid ${equippedMasteryPulse.accent}55`,
+              boxShadow: `0 0 12px ${equippedMasteryPulse.glow}`,
+              fontSize: isTouch ? 14 : 16,
+            }}
+          >
+            {equippedMasteryPulse.icon}
+          </span>
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+            }}
+          >
+            <span
+              style={{
+                color: equippedMasteryPulse.accent,
+                fontSize: isTouch ? 10 : 11,
+                lineHeight: '13px',
+                fontWeight: 950,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {equippedMasteryPulse.label}
+            </span>
+            {!isTouch && (
+              <span
+                style={{
+                  color: 'rgba(255,255,255,0.66)',
+                  fontSize: 10,
+                  lineHeight: '12px',
+                  fontWeight: 800,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {equippedMasteryPulse.detail}
+              </span>
+            )}
+          </span>
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              color: '#fff',
+              background: `${equippedMasteryPulse.accent}2a`,
+              border: `1px solid ${equippedMasteryPulse.accent}55`,
+              borderRadius: 999,
+              padding: '3px 8px',
+              fontSize: isTouch ? 10 : 11,
+              lineHeight: '12px',
+              fontWeight: 950,
+              fontFamily: 'monospace',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {equippedMasteryPulse.xpText}
+          </span>
+        </div>
+      )}
+
       {equippedItem === 'builder' && selectedDef && (
         <div
           style={{
