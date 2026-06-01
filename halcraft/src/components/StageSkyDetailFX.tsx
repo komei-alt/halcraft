@@ -446,6 +446,7 @@ export function StageSkyDetailFX() {
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.blending}
+        alphaTest={0.035}
       />
     </instancedMesh>
   );
