@@ -14,6 +14,8 @@ export function StageConditionHUD() {
   const stage = useGameStore((s) => s.currentStage);
   const charge = useStageConditionStore((s) => s.charge);
   const activeUntil = useStageConditionStore((s) => s.activeUntil);
+  const activeChain = useStageConditionStore((s) => s.activeChain);
+  const bestChain = useStageConditionStore((s) => s.bestChain);
   const recentActivation = useStageConditionStore((s) => s.recentActivation);
   const clearRecentActivation = useStageConditionStore((s) => s.clearRecentActivation);
   const [now, setNow] = useState(() => performance.now());
@@ -39,6 +41,11 @@ export function StageConditionHUD() {
   const activeRemainingSeconds = Math.max(0, Math.ceil((activeUntil - now) / 1000));
   const active = activeRemainingSeconds > 0;
   const progress = getStageConditionProgress(charge, condition.target);
+  const statusLabel = active && activeChain > 1
+    ? `${condition.effect.label} x${activeChain}`
+    : bestChain > 1
+      ? `BEST x${bestChain}`
+      : '';
 
   return (
     <div
@@ -99,7 +106,7 @@ export function StageConditionHUD() {
         </div>
         <div
           style={{
-            minWidth: 54,
+            minWidth: active && activeChain > 1 ? 68 : 54,
             textAlign: 'right',
             color: active ? '#fff1a8' : 'rgba(255,255,255,0.68)',
             fontSize: isCompact ? 9 : 10,
@@ -108,7 +115,7 @@ export function StageConditionHUD() {
             fontFamily: 'monospace',
           }}
         >
-          {active ? `${activeRemainingSeconds}s` : `${charge}/${condition.target}`}
+          {active ? `${activeRemainingSeconds}s${activeChain > 1 ? ` x${activeChain}` : ''}` : `${charge}/${condition.target}`}
         </div>
       </div>
 
@@ -128,7 +135,7 @@ export function StageConditionHUD() {
           {condition.triggerLabel}
         </span>
         <span style={{ flex: '0 0 auto', color: active ? '#fff1a8' : 'rgba(255,255,255,0.64)' }}>
-          {condition.effect.label}
+          {statusLabel || condition.effect.label}
         </span>
       </div>
 
@@ -177,7 +184,7 @@ export function StageConditionHUD() {
             {recentActivation.icon} {recentActivation.title}
           </span>
           <span style={{ flex: '0 0 auto', fontFamily: 'monospace' }}>
-            {recentActivation.label}
+            {recentActivation.chain > 1 ? recentActivation.bonusLabel : recentActivation.label}
           </span>
         </div>
       )}

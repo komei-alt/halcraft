@@ -8,6 +8,10 @@ import { usePlayerStore } from '../stores/usePlayerStore';
 import { useStageConditionStore } from '../stores/useStageConditionStore';
 import { getStageCondition } from '../types/stageConditions';
 
+function getConditionChain(chain: number): number {
+  return Math.max(1, Math.floor(chain));
+}
+
 export function StageConditionSystem() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
@@ -21,18 +25,21 @@ export function StageConditionSystem() {
     if (!condition || condition.id !== recentActivation.conditionId) return;
 
     appliedActivationId.current = recentActivation.id;
+    const chain = getConditionChain(recentActivation.chain);
     if (condition.effect.kind === 'resource') {
-      useInventoryStore.getState().addItem(condition.effect.blockId, condition.effect.count);
+      const chainBonus = Math.ceil(condition.effect.count * Math.min(0.7, (chain - 1) * 0.22));
+      useInventoryStore.getState().addItem(condition.effect.blockId, condition.effect.count + chainBonus);
       return;
     }
 
     if (condition.effect.kind === 'regen') {
-      usePlayerStore.getState().heal(condition.effect.healOnActivate);
+      const chainBonus = Math.min(4, chain - 1);
+      usePlayerStore.getState().heal(condition.effect.healOnActivate + chainBonus);
       return;
     }
 
     if (condition.effect.kind === 'rocket_ready') {
-      usePlayerStore.getState().grantRocketReady({ pulseMs: 1100 });
+      usePlayerStore.getState().grantRocketReady({ pulseMs: 1100 + Math.min(1800, (chain - 1) * 260) });
     }
   }, [recentActivation, stage?.id]);
 

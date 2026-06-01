@@ -17,6 +17,8 @@ export interface StageConditionActivation {
   title: string;
   icon: string;
   label: string;
+  chain: number;
+  bonusLabel: string;
   activeUntil: number;
   createdAt: number;
 }
@@ -25,6 +27,8 @@ interface StageConditionState {
   currentStageId: string | null;
   charge: number;
   activeUntil: number;
+  activeChain: number;
+  bestChain: number;
   recentActivation: StageConditionActivation | null;
   startRun: (stageId: string | null) => void;
   recordBlockPlace: (blockId: BlockId) => void;
@@ -47,6 +51,21 @@ function isHostileDefeat(mobType: MobType): boolean {
   return mobType === 'zombie' || mobType === 'spider' || mobType === 'darwin';
 }
 
+function getChainBonusLabel(condition: StageConditionDefinition, chain: number): string {
+  if (chain <= 1) return condition.effect.label;
+
+  if (condition.effect.kind === 'resource') {
+    const bonusCount = Math.ceil(condition.effect.count * Math.min(0.7, (chain - 1) * 0.22));
+    return `${condition.effect.label} +連鎖${bonusCount}`;
+  }
+
+  if (condition.effect.kind === 'regen') {
+    return `${condition.effect.label} x${chain}`;
+  }
+
+  return `${condition.effect.label} x${chain}`;
+}
+
 export const useStageConditionStore = create<StageConditionState>()((set, get) => {
   const advance = (amount: number) => {
     const state = get();
@@ -61,16 +80,24 @@ export const useStageConditionStore = create<StageConditionState>()((set, get) =
     }
 
     const createdAt = nowMs();
-    const activeUntil = createdAt + condition.activeDurationMs;
+    const nextChain = state.activeUntil > createdAt
+      ? Math.min(9, state.activeChain + 1)
+      : 1;
+    const chainDurationBonusMs = Math.min(5200, Math.max(0, nextChain - 1) * 950);
+    const activeUntil = createdAt + condition.activeDurationMs + chainDurationBonusMs;
     set({
       charge: 0,
       activeUntil,
+      activeChain: nextChain,
+      bestChain: Math.max(state.bestChain, nextChain),
       recentActivation: {
         id: `${condition.id}-${Math.round(createdAt)}`,
         conditionId: condition.id,
         title: condition.title,
         icon: condition.icon,
         label: condition.effect.label,
+        chain: nextChain,
+        bonusLabel: getChainBonusLabel(condition, nextChain),
         activeUntil,
         createdAt,
       },
@@ -82,6 +109,8 @@ export const useStageConditionStore = create<StageConditionState>()((set, get) =
     currentStageId: null,
     charge: 0,
     activeUntil: 0,
+    activeChain: 0,
+    bestChain: 0,
     recentActivation: null,
 
     startRun: (stageId) => {
@@ -89,6 +118,8 @@ export const useStageConditionStore = create<StageConditionState>()((set, get) =
         currentStageId: stageId,
         charge: 0,
         activeUntil: 0,
+        activeChain: 0,
+        bestChain: 0,
         recentActivation: null,
       });
     },
