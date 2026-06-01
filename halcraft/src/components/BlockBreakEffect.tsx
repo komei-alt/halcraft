@@ -58,19 +58,31 @@ interface VoxelShard {
   color: THREE.Color;
 }
 
+interface BreakRing {
+  x: number; y: number; z: number;
+  life: number; totalLife: number;
+  startRadius: number;
+  endRadius: number;
+  color: THREE.Color;
+  lift: number;
+}
+
 interface BreakEffect {
   id: string;
   particles: Particle[];
   shards: VoxelShard[];
+  rings: BreakRing[];
 }
 
 const PARTICLE_LIFETIME = 0.8;
 const SHARD_LIFETIME = 0.92;
 const DUST_PER_BREAK = 18;
 const SHARDS_PER_BREAK = 11;
+const RINGS_PER_BREAK = 2;
 const PARTICLE_GRAVITY = -15;
 const SHARD_GRAVITY = -18;
 const MAX_EFFECTS = 18;
+const HORIZONTAL_RING_QUATERNION = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
 
 let effectIdCounter = 0;
 
@@ -87,8 +99,10 @@ function createColorVariation(baseColor: THREE.Color, lightJitter = 0.3, saturat
 export function BlockBreakEffect() {
   const effectsRef = useRef<BreakEffect[]>([]);
   const shardMeshRef = useRef<THREE.InstancedMesh>(null);
+  const ringMeshRef = useRef<THREE.InstancedMesh>(null);
   const maxParticles = MAX_EFFECTS * DUST_PER_BREAK;
   const maxShards = MAX_EFFECTS * SHARDS_PER_BREAK;
+  const maxRings = MAX_EFFECTS * RINGS_PER_BREAK;
 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -103,6 +117,7 @@ export function BlockBreakEffect() {
   }, [maxParticles]);
 
   const shardGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  const ringGeometry = useMemo(() => new THREE.RingGeometry(1, 1.14, 56), []);
 
   const shardMaterial = useMemo(() => new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -111,6 +126,16 @@ export function BlockBreakEffect() {
     transparent: true,
     opacity: 0.96,
     depthWrite: false,
+  }), []);
+
+  const ringMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.62,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
   }), []);
 
   const dummyObject = useMemo(() => new THREE.Object3D(), []);
@@ -123,10 +148,16 @@ export function BlockBreakEffect() {
     });
   }, []);
 
+  useEffect(() => {
+    if (shardMeshRef.current) shardMeshRef.current.count = 0;
+    if (ringMeshRef.current) ringMeshRef.current.count = 0;
+  }, []);
+
   const spawnEffect = useCallback((blockId: BlockId, x: number, y: number, z: number) => {
     const baseColor = getBlockColor(blockId);
     const particles: Particle[] = [];
     const shards: VoxelShard[] = [];
+    const rings: BreakRing[] = [];
     const centerX = x + 0.5;
     const centerY = y + 0.5;
     const centerZ = z + 0.5;
@@ -176,10 +207,35 @@ export function BlockBreakEffect() {
       });
     }
 
+    const ringBase = createColorVariation(baseColor, 0.18, 0.08).lerp(new THREE.Color(0xffffff), 0.24);
+    rings.push({
+      x: centerX,
+      y: y + 0.04,
+      z: centerZ,
+      life: 0.42,
+      totalLife: 0.42,
+      startRadius: 0.18,
+      endRadius: 1.08,
+      color: ringBase,
+      lift: 0.08,
+    });
+    rings.push({
+      x: centerX,
+      y: centerY,
+      z: centerZ,
+      life: 0.32,
+      totalLife: 0.32,
+      startRadius: 0.12,
+      endRadius: 0.68,
+      color: ringBase.clone().lerp(new THREE.Color(0xffffff), 0.16),
+      lift: 0.18,
+    });
+
     const effect: BreakEffect = {
       id: `brk_${effectIdCounter++}`,
       particles,
       shards,
+      rings,
     };
 
     const effects = effectsRef.current;
@@ -200,6 +256,7 @@ export function BlockBreakEffect() {
     if (effects.length === 0) {
       geometry.setDrawRange(0, 0);
       if (shardMeshRef.current) shardMeshRef.current.count = 0;
+      if (ringMeshRef.current) ringMeshRef.current.count = 0;
       return;
     }
 
@@ -215,6 +272,11 @@ export function BlockBreakEffect() {
           if (shard.life > 0) { allDead = false; break; }
         }
       }
+      if (allDead) {
+        for (const ring of effects[i].rings) {
+          if (ring.life > 0) { allDead = false; break; }
+        }
+      }
       if (allDead) effects.splice(i, 1);
     }
 
@@ -227,8 +289,26 @@ export function BlockBreakEffect() {
 
     let idx = 0;
     let shardIdx = 0;
+    let ringIdx = 0;
 
     for (const effect of effects) {
+      for (const ring of effect.rings) {
+        if (ring.life <= 0 || ringIdx >= maxRings || !ringMeshRef.current) continue;
+
+        ring.life -= clampedDelta;
+        const progress = 1 - Math.max(0, ring.life / ring.totalLife);
+        const alpha = Math.max(0, ring.life / ring.totalLife);
+        const radius = THREE.MathUtils.lerp(ring.startRadius, ring.endRadius, progress);
+        dummyObject.position.set(ring.x, ring.y + ring.lift * progress, ring.z);
+        dummyObject.quaternion.copy(HORIZONTAL_RING_QUATERNION);
+        dummyObject.scale.setScalar(radius);
+        dummyObject.updateMatrix();
+        ringMeshRef.current.setMatrixAt(ringIdx, dummyObject.matrix);
+        tempColor.copy(ring.color).multiplyScalar(alpha * 0.88);
+        ringMeshRef.current.setColorAt(ringIdx, tempColor);
+        ringIdx++;
+      }
+
       for (const shard of effect.shards) {
         if (shard.life <= 0 || shardIdx >= maxShards) continue;
 
@@ -295,12 +375,23 @@ export function BlockBreakEffect() {
       shardMeshRef.current.instanceMatrix.needsUpdate = true;
       if (shardMeshRef.current.instanceColor) shardMeshRef.current.instanceColor.needsUpdate = true;
     }
+    if (ringMeshRef.current) {
+      ringMeshRef.current.count = ringIdx;
+      ringMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (ringMeshRef.current.instanceColor) ringMeshRef.current.instanceColor.needsUpdate = true;
+    }
 
     material.opacity = 0.9;
   });
 
   return (
     <>
+      <instancedMesh
+        ref={ringMeshRef}
+        args={[ringGeometry, ringMaterial, maxRings]}
+        frustumCulled={false}
+        renderOrder={3}
+      />
       <instancedMesh
         ref={shardMeshRef}
         args={[shardGeometry, shardMaterial, maxShards]}

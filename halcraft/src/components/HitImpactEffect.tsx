@@ -34,11 +34,22 @@ interface HitRing {
   color: THREE.Color;
 }
 
+interface HitCore {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  life: number;
+  totalLife: number;
+  startSize: number;
+  endSize: number;
+  color: THREE.Color;
+}
+
 interface HitImpact {
   id: string;
   sparks: HitSpark[];
   slashes: HitSlash[];
   rings: HitRing[];
+  cores: HitCore[];
 }
 
 const MAX_IMPACTS = 12;
@@ -47,11 +58,13 @@ const CRITICAL_SPARK_BONUS = 8;
 const SLASHES_PER_HIT = 2;
 const CRITICAL_SLASH_BONUS = 1;
 const RINGS_PER_HIT = 1;
+const CORES_PER_HIT = 1;
 const PARTICLE_GRAVITY = -8;
 const UP = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const slashGeometry = new THREE.PlaneGeometry(1, 1);
 const ringGeometry = new THREE.RingGeometry(1, 1.16, 48);
+const coreGeometry = new THREE.CircleGeometry(1, 42);
 
 let impactIdCounter = 0;
 
@@ -81,11 +94,13 @@ export function HitImpactEffect() {
   const pointsRef = useRef<THREE.Points>(null);
   const slashMeshRef = useRef<THREE.InstancedMesh>(null);
   const ringMeshRef = useRef<THREE.InstancedMesh>(null);
+  const coreMeshRef = useRef<THREE.InstancedMesh>(null);
   const dummyObject = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
   const maxSparks = MAX_IMPACTS * (SPARKS_PER_HIT + CRITICAL_SPARK_BONUS);
   const maxSlashes = MAX_IMPACTS * (SLASHES_PER_HIT + CRITICAL_SLASH_BONUS);
   const maxRings = MAX_IMPACTS * RINGS_PER_HIT;
+  const maxCores = MAX_IMPACTS * CORES_PER_HIT;
 
   const sparkGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -127,9 +142,21 @@ export function HitImpactEffect() {
     blending: THREE.AdditiveBlending,
   }), []);
 
+  const coreMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+  }), []);
+
   useEffect(() => {
     if (slashMeshRef.current) slashMeshRef.current.count = 0;
     if (ringMeshRef.current) ringMeshRef.current.count = 0;
+    if (coreMeshRef.current) coreMeshRef.current.count = 0;
   }, []);
 
   const spawnImpact = useCallback((
@@ -150,6 +177,7 @@ export function HitImpactEffect() {
     const sparks: HitSpark[] = [];
     const slashes: HitSlash[] = [];
     const rings: HitRing[] = [];
+    const cores: HitCore[] = [];
 
     const sparkCount = SPARKS_PER_HIT + (isCritical ? CRITICAL_SPARK_BONUS : 0);
     for (let i = 0; i < sparkCount; i++) {
@@ -208,8 +236,18 @@ export function HitImpactEffect() {
       color: ringColor,
     });
 
+    cores.push({
+      position: center.clone().add(hitDir.clone().multiplyScalar(-0.035)),
+      quaternion: baseQuaternion,
+      life: isCritical ? 0.18 : 0.14,
+      totalLife: isCritical ? 0.18 : 0.14,
+      startSize: isCritical ? 0.42 : 0.32,
+      endSize: isCritical ? 0.74 : 0.52,
+      color: ringColor.clone().lerp(new THREE.Color(0xffffff), isCritical ? 0.28 : 0.42),
+    });
+
     const impacts = impactsRef.current;
-    impacts.push({ id: `hit_${impactIdCounter++}`, sparks, slashes, rings });
+    impacts.push({ id: `hit_${impactIdCounter++}`, sparks, slashes, rings, cores });
     if (impacts.length > MAX_IMPACTS) {
       impacts.splice(0, impacts.length - MAX_IMPACTS);
     }
@@ -226,6 +264,7 @@ export function HitImpactEffect() {
       sparkGeometry.setDrawRange(0, 0);
       if (slashMeshRef.current) slashMeshRef.current.count = 0;
       if (ringMeshRef.current) ringMeshRef.current.count = 0;
+      if (coreMeshRef.current) coreMeshRef.current.count = 0;
       return;
     }
 
@@ -235,7 +274,8 @@ export function HitImpactEffect() {
       const sparksAlive = impact.sparks.some((p) => p.life > 0);
       const slashesAlive = impact.slashes.some((s) => s.life > 0);
       const ringsAlive = impact.rings.some((r) => r.elapsed < r.life);
-      if (!sparksAlive && !slashesAlive && !ringsAlive) impacts.splice(i, 1);
+      const coresAlive = impact.cores.some((c) => c.life > 0);
+      if (!sparksAlive && !slashesAlive && !ringsAlive && !coresAlive) impacts.splice(i, 1);
     }
 
     const posAttr = sparkGeometry.getAttribute('position') as THREE.BufferAttribute;
@@ -245,6 +285,7 @@ export function HitImpactEffect() {
     let sparkIndex = 0;
     let slashIndex = 0;
     let ringIndex = 0;
+    let coreIndex = 0;
 
     for (const impact of impacts) {
       for (const p of impact.sparks) {
@@ -300,6 +341,23 @@ export function HitImpactEffect() {
         ringMeshRef.current.setColorAt(ringIndex, tempColor);
         ringIndex++;
       }
+
+      for (const core of impact.cores) {
+        if (core.life <= 0 || coreIndex >= maxCores || !coreMeshRef.current) continue;
+
+        core.life -= dt;
+        const progress = 1 - THREE.MathUtils.clamp(core.life / core.totalLife, 0, 1);
+        const alpha = 1 - progress;
+        const size = THREE.MathUtils.lerp(core.startSize, core.endSize, progress);
+        dummyObject.position.copy(core.position);
+        dummyObject.quaternion.copy(core.quaternion);
+        dummyObject.scale.set(size, size, 1);
+        dummyObject.updateMatrix();
+        coreMeshRef.current.setMatrixAt(coreIndex, dummyObject.matrix);
+        tempColor.copy(core.color).multiplyScalar(alpha * alpha);
+        coreMeshRef.current.setColorAt(coreIndex, tempColor);
+        coreIndex++;
+      }
     }
 
     sparkGeometry.setDrawRange(0, sparkIndex);
@@ -316,10 +374,21 @@ export function HitImpactEffect() {
       ringMeshRef.current.instanceMatrix.needsUpdate = true;
       if (ringMeshRef.current.instanceColor) ringMeshRef.current.instanceColor.needsUpdate = true;
     }
+    if (coreMeshRef.current) {
+      coreMeshRef.current.count = coreIndex;
+      coreMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (coreMeshRef.current.instanceColor) coreMeshRef.current.instanceColor.needsUpdate = true;
+    }
   });
 
   return (
     <>
+      <instancedMesh
+        ref={coreMeshRef}
+        args={[coreGeometry, coreMaterial, maxCores]}
+        frustumCulled={false}
+        renderOrder={6}
+      />
       <instancedMesh
         ref={ringMeshRef}
         args={[ringGeometry, ringMaterial, maxRings]}
