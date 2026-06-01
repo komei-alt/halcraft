@@ -31,6 +31,7 @@ import { StageCinematicLightingFX } from './components/StageCinematicLightingFX'
 import { StageForegroundWeatherFX } from './components/StageForegroundWeatherFX';
 import { StageGroundLightFX } from './components/StageGroundLightFX';
 import { StageSurfaceDetailFX } from './components/StageSurfaceDetailFX';
+import { StageScenicPropFX } from './components/StageScenicPropFX';
 import { StageSkyDetailFX } from './components/StageSkyDetailFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
@@ -174,6 +175,7 @@ function GameCanvas() {
           <StageSkyDetailFX />
           <StageGroundLightFX />
           <StageSurfaceDetailFX />
+          <StageScenicPropFX />
           <StageConditionFX />
           <StageEventFX />
           <StageLandmarkBeaconFX />
