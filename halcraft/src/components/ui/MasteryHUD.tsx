@@ -1,10 +1,11 @@
 // 熟練度HUD
 // 現在装備している道具の成長と、直近の上達イベントを表示する
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
+import { getModeFlowRankLabel, useModeFlowStore } from '../../stores/useModeFlowStore';
 import {
   getMasteryProgress,
   getMasteryTitle,
@@ -25,6 +26,7 @@ import {
   getStageCombatWeaponLabel,
   type StageCombatStyle,
 } from '../../types/stageCombatStyles';
+import { getStageModeRule, type StageModeRule } from '../../types/stageModeRules';
 import { getBlockUseHint } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
@@ -48,6 +50,17 @@ interface ItemTechniqueRecord {
   accent: string;
 }
 
+interface ItemMapSynergyStatus {
+  icon: string;
+  label: string;
+  detail: string;
+  meterLabel: string;
+  meterText: string;
+  ratio: number;
+  accent: string;
+  active: boolean;
+}
+
 interface ItemActionStatusOptions {
   equippedItem: EquippedItem;
   selectedBlock: BlockId;
@@ -60,6 +73,24 @@ interface ItemActionStatusOptions {
   attackCharge: number;
   stageStyle: StageCombatStyle | null;
   recommendedStageStyle: StageCombatStyle | null;
+  swapActionLabel: string;
+}
+
+interface ItemMapSynergyStatusOptions {
+  equippedItem: EquippedItem;
+  masteryLevel: number;
+  modeRule: StageModeRule | null;
+  modeMeter: number;
+  flowRank: number;
+  activationCount: number;
+  buildFocusActive: boolean;
+  combatFocusActive: boolean;
+  combatFocusItem: EquippedItem | null;
+  combatFocusRank: number;
+  combatFocusLabel: string | null;
+  stageStyle: StageCombatStyle | null;
+  recommendedStageStyle: StageCombatStyle | null;
+  techniqueRecord: ItemTechniqueRecord;
   swapActionLabel: string;
 }
 
@@ -225,6 +256,119 @@ function getItemActionStatus({
   };
 }
 
+function getModeMeterText(modeMeter: number, threshold: number): string {
+  return `${Math.min(Math.floor(modeMeter), threshold)}/${threshold}`;
+}
+
+function getItemMapSynergyStatus({
+  equippedItem,
+  masteryLevel,
+  modeRule,
+  modeMeter,
+  flowRank,
+  activationCount,
+  buildFocusActive,
+  combatFocusActive,
+  combatFocusItem,
+  combatFocusRank,
+  combatFocusLabel,
+  stageStyle,
+  recommendedStageStyle,
+  techniqueRecord,
+  swapActionLabel,
+}: ItemMapSynergyStatusOptions): ItemMapSynergyStatus | null {
+  if (!modeRule) return null;
+
+  const modeRatio = clampRatio(modeMeter / modeRule.threshold);
+  const earnedRank = Math.max(flowRank, activationCount > 0 ? 1 : 0);
+  const rankLabel = getModeFlowRankLabel(modeRule.category, earnedRank);
+  const meterText = getModeMeterText(modeMeter, modeRule.threshold);
+
+  if (modeRule.category === 'build') {
+    if (equippedItem === 'builder') {
+      const activeRatio = buildFocusActive ? Math.max(modeRatio, 0.88) : modeRatio;
+      return {
+        icon: modeRule.icon,
+        label: buildFocusActive ? '高速建築連携中' : 'マップ制作連携',
+        detail: buildFocusActive
+          ? `${rankLabel} / ${techniqueRecord.meterLabel} ${techniqueRecord.meterText} / Lv.${masteryLevel}`
+          : `${modeRule.actionLabel}で${modeRule.meterLabel}上昇 / 技記録も同時に伸びる`,
+        meterLabel: modeRule.meterLabel,
+        meterText: buildFocusActive ? 'FOCUS' : meterText,
+        ratio: activeRatio,
+        accent: modeRule.accent,
+        active: buildFocusActive || modeRatio >= 0.68,
+      };
+    }
+
+    return {
+      icon: '🏗️',
+      label: '制作は建築装備が本命',
+      detail: `${swapActionLabel}建築へ / ${modeRule.actionLabel}`,
+      meterLabel: 'MAP',
+      meterText: 'BUILD',
+      ratio: 0.2,
+      accent: modeRule.accent,
+      active: false,
+    };
+  }
+
+  if (stageStyle && recommendedStageStyle?.weapon === equippedItem) {
+    const focusActive = combatFocusActive && combatFocusItem === equippedItem;
+    const focusRank = Math.max(1, combatFocusRank || earnedRank || 1);
+    return {
+      icon: recommendedStageStyle.icon,
+      label: focusActive ? '作戦集中連携中' : '推奨武器連携',
+      detail: focusActive
+        ? `${combatFocusLabel ?? recommendedStageStyle.shortLabel} Lv.${focusRank} / ${formatStageCombatBonus(recommendedStageStyle)}`
+        : `${recommendedStageStyle.shortLabel}: ${formatStageCombatBonus(recommendedStageStyle)} / ${modeRule.actionLabel}`,
+      meterLabel: modeRule.meterLabel,
+      meterText: focusActive ? `FOCUS${focusRank}` : meterText,
+      ratio: focusActive ? Math.max(modeRatio, 0.9) : modeRatio,
+      accent: recommendedStageStyle.accent,
+      active: focusActive || modeRatio >= 0.68,
+    };
+  }
+
+  if (equippedItem === 'builder') {
+    const weaponLabel = recommendedStageStyle ? getStageCombatWeaponLabel(recommendedStageStyle.weapon) : '武器';
+    return {
+      icon: modeRule.icon,
+      label: '防衛建築補助',
+      detail: `灯り・タレット・TNTで戦線づくり / 本命は${weaponLabel}`,
+      meterLabel: 'MAP',
+      meterText: 'SUPPORT',
+      ratio: Math.max(0.22, modeRatio * 0.52),
+      accent: modeRule.accent,
+      active: false,
+    };
+  }
+
+  if (recommendedStageStyle) {
+    return {
+      icon: recommendedStageStyle.icon,
+      label: '推奨外の武器',
+      detail: `${swapActionLabel}${getStageCombatWeaponLabel(recommendedStageStyle.weapon)}へ / ${formatStageCombatBonus(recommendedStageStyle)}`,
+      meterLabel: 'MAP',
+      meterText: 'SWAP',
+      ratio: 0.18,
+      accent: recommendedStageStyle.accent,
+      active: false,
+    };
+  }
+
+  return {
+    icon: modeRule.icon,
+    label: `${modeRule.meterLabel}連携`,
+    detail: modeRule.actionLabel,
+    meterLabel: modeRule.meterLabel,
+    meterText,
+    ratio: modeRatio,
+    accent: modeRule.accent,
+    active: modeRatio >= 0.68,
+  };
+}
+
 export function MasteryHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
@@ -239,7 +383,16 @@ export function MasteryHUD() {
   const recentEvent = useMasteryStore((s) => s.recentEvent);
   const clearRecentEvent = useMasteryStore((s) => s.clearRecentEvent);
   const items = useInventoryStore((s) => s.items);
+  const modeMeter = useModeFlowStore((s) => s.meter);
+  const flowRank = useModeFlowStore((s) => s.flowRank);
+  const activationCount = useModeFlowStore((s) => s.activationCount);
+  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
+  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
+  const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
+  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
+  const combatFocusLabel = useModeFlowStore((s) => s.combatFocusLabel);
   const isTouch = isTouchDevice();
+  const [focusNowMs, setFocusNowMs] = useState(0);
 
   useEffect(() => {
     if (!recentEvent) return undefined;
@@ -248,6 +401,21 @@ export function MasteryHUD() {
     }, 1900);
     return () => window.clearTimeout(timer);
   }, [clearRecentEvent, recentEvent]);
+
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+
+    const syncNow = () => {
+      setFocusNowMs(typeof performance !== 'undefined' ? performance.now() : Date.now());
+    };
+    syncNow();
+
+    const hasFocusWindow = buildFocusUntil > 0 || combatFocusUntil > 0;
+    if (!hasFocusWindow) return undefined;
+
+    const timer = window.setInterval(syncNow, 300);
+    return () => window.clearInterval(timer);
+  }, [buildFocusUntil, combatFocusUntil, phase]);
 
   if (phase !== 'playing' || !mastery) return null;
 
@@ -280,6 +448,24 @@ export function MasteryHUD() {
     swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
   });
   const techniqueRecord = getItemTechniqueRecord(equippedItem, mastery, def);
+  const modeRule = getStageModeRule(currentStageId);
+  const synergyStatus = getItemMapSynergyStatus({
+    equippedItem,
+    masteryLevel: mastery.level,
+    modeRule,
+    modeMeter,
+    flowRank,
+    activationCount,
+    buildFocusActive: buildFocusUntil > focusNowMs,
+    combatFocusActive: combatFocusUntil > focusNowMs,
+    combatFocusItem,
+    combatFocusRank,
+    combatFocusLabel,
+    stageStyle,
+    recommendedStageStyle,
+    techniqueRecord,
+    swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
+  });
 
   return (
     <div
@@ -477,6 +663,99 @@ export function MasteryHUD() {
           {actionStatus.detail}
         </div>
       </div>
+
+      {synergyStatus && (
+        <div
+          id="item-map-synergy"
+          style={{
+            marginTop: 7,
+            padding: isTouch ? '6px 8px 6px 9px' : '7px 9px 7px 10px',
+            borderLeft: `3px solid ${synergyStatus.accent}`,
+            borderRadius: 10,
+            background: synergyStatus.active
+              ? `linear-gradient(90deg, ${synergyStatus.accent}2c, rgba(0,0,0,0.12))`
+              : 'rgba(0,0,0,0.1)',
+            boxShadow: synergyStatus.active ? `0 0 18px ${synergyStatus.accent}22` : 'none',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 7,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ flex: '0 0 auto', fontSize: isTouch ? 11 : 12 }}>
+              {synergyStatus.icon}
+            </span>
+            <span
+              style={{
+                minWidth: 0,
+                flex: 1,
+                color: synergyStatus.active ? '#fff' : synergyStatus.accent,
+                fontSize: isTouch ? 9 : 10,
+                lineHeight: '12px',
+                fontWeight: 950,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {synergyStatus.label}
+            </span>
+            <span
+              style={{
+                flex: '0 0 auto',
+                color: synergyStatus.accent,
+                fontSize: isTouch ? 8 : 9,
+                lineHeight: '12px',
+                fontWeight: 950,
+                fontFamily: 'monospace',
+              }}
+            >
+              {synergyStatus.meterLabel} {synergyStatus.meterText}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              height: 3,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(synergyStatus.ratio * 100)}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${synergyStatus.accent}, #ffffff)`,
+                boxShadow: `0 0 8px ${synergyStatus.accent}66`,
+                transition: 'width 0.22s ease',
+              }}
+            />
+          </div>
+          {!isTouch && (
+            <div
+              style={{
+                marginTop: 3,
+                color: 'rgba(255,255,255,0.56)',
+                fontSize: 10,
+                lineHeight: '13px',
+                fontWeight: 760,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {synergyStatus.detail}
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         id="item-technique-record"
