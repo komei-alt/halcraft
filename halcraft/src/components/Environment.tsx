@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import { BIOME_CONFIGS } from '../types/biomes';
 import { getPerformanceProfile } from '../utils/performance';
-import { useSettingsStore } from '../stores/useSettingsStore';
+import { useSettingsStore, type AtmosphereQuality, type LightingQuality } from '../stores/useSettingsStore';
 
 /** 再利用用オブジェクト（GCプレッシャー削減） */
 const _skyColor = new THREE.Color();
@@ -47,6 +47,61 @@ const SUN_HALO_RADIUS = 31;
 const MOON_DISC_RADIUS = 10.5;
 const MOON_HALO_RADIUS = 22;
 const STAR_COUNT = 190;
+
+interface AtmosphereTuning {
+  mode: 'none' | 'linear' | 'exponential';
+  nearScale: number;
+  farScale: number;
+  targetTransmittance: number;
+  ambientScale: number;
+  sunScale: number;
+  fillScale: number;
+}
+
+const ATMOSPHERE_TUNINGS: Record<AtmosphereQuality, AtmosphereTuning> = {
+  off: {
+    mode: 'none',
+    nearScale: 1,
+    farScale: 1,
+    targetTransmittance: 1,
+    ambientScale: 1,
+    sunScale: 1,
+    fillScale: 0.82,
+  },
+  simple: {
+    mode: 'linear',
+    nearScale: 1.2,
+    farScale: 1.28,
+    targetTransmittance: 0.5,
+    ambientScale: 1,
+    sunScale: 1,
+    fillScale: 0.9,
+  },
+  standard: {
+    mode: 'exponential',
+    nearScale: 1,
+    farScale: 1,
+    targetTransmittance: 0.38,
+    ambientScale: 1.03,
+    sunScale: 0.98,
+    fillScale: 1,
+  },
+  rich: {
+    mode: 'exponential',
+    nearScale: 0.86,
+    farScale: 0.9,
+    targetTransmittance: 0.26,
+    ambientScale: 1.06,
+    sunScale: 0.96,
+    fillScale: 1.12,
+  },
+};
+
+const LIGHTING_SCALE: Record<LightingQuality, { ambient: number; sun: number; fill: number; hemi: number }> = {
+  simple: { ambient: 0.96, sun: 0.98, fill: 0.65, hemi: 0.9 },
+  standard: { ambient: 1, sun: 1, fill: 1, hemi: 1 },
+  rich: { ambient: 1.04, sun: 1.03, fill: 1.18, hemi: 1.1 },
+};
 
 function smoothRange(min: number, max: number, value: number): number {
   const t = THREE.MathUtils.clamp((value - min) / (max - min), 0, 1);
@@ -121,17 +176,66 @@ interface SkyUniforms extends Record<string, THREE.IUniform<THREE.Color | THREE.
   uNightMix: THREE.IUniform<number>;
 }
 
-function ensureSceneEnvironment(scene: THREE.Scene): { background: THREE.Color; fog: THREE.Fog } {
+function ensureSceneBackground(scene: THREE.Scene): THREE.Color {
   if (!(scene.background instanceof THREE.Color)) {
     scene.background = new THREE.Color(0x87ceeb);
   }
-  if (!(scene.fog instanceof THREE.Fog)) {
+  return scene.background;
+}
+
+function ensureLinearFog(scene: THREE.Scene): THREE.Fog {
+  if (!(scene.fog instanceof THREE.Fog) || scene.fog instanceof THREE.FogExp2) {
     scene.fog = new THREE.Fog(0x87ceeb, cachedFogNear, cachedFogFar);
   }
-  return {
-    background: scene.background,
-    fog: scene.fog,
-  };
+  return scene.fog;
+}
+
+function ensureExponentialFog(scene: THREE.Scene): THREE.FogExp2 {
+  if (!(scene.fog instanceof THREE.FogExp2)) {
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.0025);
+  }
+  return scene.fog;
+}
+
+function getAtmosphereTuning(quality: AtmosphereQuality): AtmosphereTuning {
+  return ATMOSPHERE_TUNINGS[quality];
+}
+
+function getAtmosphericDensity(fogFar: number, targetTransmittance: number): number {
+  const safeFar = Math.max(80, fogFar);
+  const safeTransmittance = THREE.MathUtils.clamp(targetTransmittance, 0.08, 0.92);
+  return Math.sqrt(-Math.log(safeTransmittance)) / safeFar;
+}
+
+function applySceneAtmosphere(
+  scene: THREE.Scene,
+  quality: AtmosphereQuality,
+  fogColor: THREE.Color,
+  dimension: string,
+): AtmosphereTuning {
+  const base = getAtmosphereTuning(quality);
+  const netherMultiplier = dimension === 'nether' ? 1.45 : 1;
+
+  if (base.mode === 'none') {
+    scene.fog = null;
+    return base;
+  }
+
+  const fogNear = Math.max(18, cachedFogNear * base.nearScale);
+  const fogFar = Math.max(fogNear + 32, cachedFogFar * base.farScale);
+
+  if (base.mode === 'linear') {
+    const fog = ensureLinearFog(scene);
+    fog.color.copy(fogColor);
+    fog.near = fogNear;
+    fog.far = fogFar;
+    return base;
+  }
+
+  const fog = ensureExponentialFog(scene);
+  fog.color.copy(fogColor);
+  fog.density = getAtmosphericDensity(fogFar, base.targetTransmittance) * netherMultiplier;
+  return base;
 }
 
 function updateBiomeColors(biomeId: string): void {
@@ -193,6 +297,8 @@ export function Environment() {
   const starMaterialRef = useRef<THREE.PointsMaterial>(null);
   const skyUniforms = useMemo(() => createSkyUniforms(), []);
   const starGeometry = useMemo(() => createStarGeometry(), []);
+  const atmosphereQuality = useSettingsStore((s) => s.atmosphereQuality);
+  const lightingQuality = useSettingsStore((s) => s.lightingQuality);
   useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
 
@@ -201,7 +307,7 @@ export function Environment() {
   // scene の初期設定（マウント時に一度だけ実行）
   // scene は R3F が管理する外部オブジェクトであり、副作用として初期化する必要がある
   useEffect(() => {
-    ensureSceneEnvironment(scene);
+    ensureSceneBackground(scene);
   }, [scene]);
 
   // 毎フレーム昼夜サイクルを更新
@@ -216,11 +322,7 @@ export function Environment() {
     // バイオーム色を更新
     const biomeId = gameState.currentBiome?.id ?? 'forest';
     updateBiomeColors(biomeId);
-    const sceneEnvironment = ensureSceneEnvironment(scene);
-
-    // 霧距離をバイオームに合わせる
-    sceneEnvironment.fog.near = cachedFogNear;
-    sceneEnvironment.fog.far = cachedFogFar;
+    const sceneBackground = ensureSceneBackground(scene);
 
     // 時間帯に応じた環境を計算（再利用オブジェクトで0アロケーション）
     let sunIntensity: number;
@@ -280,8 +382,12 @@ export function Environment() {
     const stageAmbientBoost = gameState.dimension === 'overworld'
       ? gameState.currentStage?.rules.ambientIntensity ?? 1
       : 1;
+    const atmosphereTuning = applySceneAtmosphere(scene, atmosphereQuality, _fogColor, gameState.dimension);
+    const lightingScale = LIGHTING_SCALE[lightingQuality];
     ambientIntensity *= stageAmbientBoost;
     sunIntensity *= THREE.MathUtils.lerp(1, stageAmbientBoost, 0.35);
+    ambientIntensity *= atmosphereTuning.ambientScale * lightingScale.ambient;
+    sunIntensity *= atmosphereTuning.sunScale * lightingScale.sun;
 
     // 太陽の位置を時間に連動（円弧を描く）
     const sunAngle = gameTime * Math.PI * 2;
@@ -292,8 +398,7 @@ export function Environment() {
     );
 
     // シーンに適用
-    sceneEnvironment.background.copy(_skyColor);
-    sceneEnvironment.fog.color.copy(_fogColor);
+    sceneBackground.copy(_skyColor);
 
     // 空ドームはカメラに追従させ、背景に立体的なグラデーションと太陽光を重ねる
     if (skyRef.current) {
@@ -371,7 +476,7 @@ export function Environment() {
       ambientRef.current.intensity = ambientIntensity;
     }
     if (hemiRef.current) {
-      hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.7);
+      hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.7 * lightingScale.hemi);
     }
     if (viewFillRef.current) {
       const playingFill = gameState.phase === 'playing' ? 1 : 0;
@@ -379,7 +484,12 @@ export function Environment() {
       const dimensionBoost = gameState.dimension === 'nether' ? 1.22 : 1;
       viewFillRef.current.position.copy(camera.position);
       viewFillRef.current.color.copy(_fogColor).lerp(_sunColor, 0.38);
-      viewFillRef.current.intensity = playingFill * tierScale * dimensionBoost * (0.12 + nightMix * 0.48);
+      viewFillRef.current.intensity = playingFill
+        * tierScale
+        * dimensionBoost
+        * atmosphereTuning.fillScale
+        * lightingScale.fill
+        * (0.12 + nightMix * 0.48);
       viewFillRef.current.distance = 18 + nightMix * 10;
     }
   });

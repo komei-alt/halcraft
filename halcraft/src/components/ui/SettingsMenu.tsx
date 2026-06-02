@@ -4,6 +4,7 @@
 import { useEffect, type ChangeEvent, type CSSProperties } from 'react';
 import {
   useSettingsStore,
+  type AtmosphereQuality,
   type GraphicsPreset,
   type LightingQuality,
   type ResolutionScale,
@@ -79,6 +80,13 @@ const lightingOptions: Array<SegmentOption<LightingQuality>> = [
   { value: 'simple', label: '軽い', icon: '1' },
   { value: 'standard', label: '標準', icon: '2' },
   { value: 'rich', label: 'リッチ', icon: '3' },
+];
+
+const atmosphereOptions: Array<SegmentOption<AtmosphereQuality>> = [
+  { value: 'off', label: 'なし', icon: '0' },
+  { value: 'simple', label: '軽い', icon: '1' },
+  { value: 'standard', label: '標準', icon: '2' },
+  { value: 'rich', label: '深い', icon: '3' },
 ];
 
 const shadowOptions: Array<SegmentOption<ShadowQuality>> = [
@@ -254,6 +262,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const renderDistance = useSettingsStore((s) => s.renderDistance);
   const lightingQuality = useSettingsStore((s) => s.lightingQuality);
+  const atmosphereQuality = useSettingsStore((s) => s.atmosphereQuality);
   const shadowQuality = useSettingsStore((s) => s.shadowQuality);
   const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const waterAnimation = useSettingsStore((s) => s.waterAnimation);
@@ -262,6 +271,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setGraphicsPreset = useSettingsStore((s) => s.setGraphicsPreset);
   const setRenderDistance = useSettingsStore((s) => s.setRenderDistance);
   const setLightingQuality = useSettingsStore((s) => s.setLightingQuality);
+  const setAtmosphereQuality = useSettingsStore((s) => s.setAtmosphereQuality);
   const setShadowQuality = useSettingsStore((s) => s.setShadowQuality);
   const setResolutionScale = useSettingsStore((s) => s.setResolutionScale);
   const setWaterAnimation = useSettingsStore((s) => s.setWaterAnimation);
@@ -470,6 +480,21 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               onChange={(value) => {
                 setGraphicsPreset('balanced');
                 setLightingQuality(value);
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={labelStyle}>
+              <span>空気感</span>
+              <span style={valueStyle}>{atmosphereOptions.find((o) => o.value === atmosphereQuality)?.label}</span>
+            </div>
+            <Segment
+              value={atmosphereQuality}
+              options={atmosphereOptions}
+              onChange={(value) => {
+                setGraphicsPreset('balanced');
+                setAtmosphereQuality(value);
               }}
             />
           </div>

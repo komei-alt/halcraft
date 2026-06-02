@@ -7,6 +7,7 @@ const SETTINGS_STORAGE_KEY = 'halcraft-settings';
 
 export type GraphicsPreset = 'auto' | 'light' | 'balanced' | 'quality';
 export type LightingQuality = 'simple' | 'standard' | 'rich';
+export type AtmosphereQuality = 'off' | 'simple' | 'standard' | 'rich';
 export type ShadowQuality = 'off' | 'low' | 'standard' | 'high';
 export type ResolutionScale = 'performance' | 'balanced' | 'crisp';
 
@@ -14,6 +15,7 @@ export interface SettingsSnapshot {
   graphicsPreset: GraphicsPreset;
   renderDistance: number;
   lightingQuality: LightingQuality;
+  atmosphereQuality: AtmosphereQuality;
   shadowQuality: ShadowQuality;
   resolutionScale: ResolutionScale;
   waterAnimation: boolean;
@@ -25,6 +27,7 @@ interface SettingsState extends SettingsSnapshot {
   applyGraphicsPreset: (preset: GraphicsPreset) => void;
   setRenderDistance: (distance: number) => void;
   setLightingQuality: (quality: LightingQuality) => void;
+  setAtmosphereQuality: (quality: AtmosphereQuality) => void;
   setShadowQuality: (quality: ShadowQuality) => void;
   setResolutionScale: (scale: ResolutionScale) => void;
   setWaterAnimation: (enabled: boolean) => void;
@@ -36,6 +39,7 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   graphicsPreset: 'auto',
   renderDistance: 7,
   lightingQuality: 'standard',
+  atmosphereQuality: 'standard',
   shadowQuality: 'standard',
   resolutionScale: 'balanced',
   waterAnimation: true,
@@ -48,6 +52,7 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     graphicsPreset: 'light',
     renderDistance: 5,
     lightingQuality: 'simple',
+    atmosphereQuality: 'off',
     shadowQuality: 'off',
     resolutionScale: 'performance',
     waterAnimation: false,
@@ -57,6 +62,7 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     graphicsPreset: 'balanced',
     renderDistance: 7,
     lightingQuality: 'standard',
+    atmosphereQuality: 'standard',
     shadowQuality: 'standard',
     resolutionScale: 'balanced',
     waterAnimation: true,
@@ -66,6 +72,7 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     graphicsPreset: 'quality',
     renderDistance: 9,
     lightingQuality: 'rich',
+    atmosphereQuality: 'rich',
     shadowQuality: 'high',
     resolutionScale: 'crisp',
     waterAnimation: true,
@@ -79,6 +86,10 @@ function isGraphicsPreset(value: unknown): value is GraphicsPreset {
 
 function isLightingQuality(value: unknown): value is LightingQuality {
   return value === 'simple' || value === 'standard' || value === 'rich';
+}
+
+function isAtmosphereQuality(value: unknown): value is AtmosphereQuality {
+  return value === 'off' || value === 'simple' || value === 'standard' || value === 'rich';
 }
 
 function isShadowQuality(value: unknown): value is ShadowQuality {
@@ -98,6 +109,7 @@ function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot
     graphicsPreset: state.graphicsPreset,
     renderDistance: state.renderDistance,
     lightingQuality: state.lightingQuality,
+    atmosphereQuality: state.atmosphereQuality,
     shadowQuality: state.shadowQuality,
     resolutionScale: state.resolutionScale,
     waterAnimation: state.waterAnimation,
@@ -130,6 +142,9 @@ function loadSettings(): SettingsSnapshot {
       lightingQuality: isLightingQuality(parsed.lightingQuality)
         ? parsed.lightingQuality
         : DEFAULT_SETTINGS.lightingQuality,
+      atmosphereQuality: isAtmosphereQuality(parsed.atmosphereQuality)
+        ? parsed.atmosphereQuality
+        : DEFAULT_SETTINGS.atmosphereQuality,
       shadowQuality: isShadowQuality(parsed.shadowQuality) ? parsed.shadowQuality : DEFAULT_SETTINGS.shadowQuality,
       resolutionScale: isResolutionScale(parsed.resolutionScale)
         ? parsed.resolutionScale
@@ -165,6 +180,7 @@ export const useSettingsStore = create<SettingsState>((set) => {
     applyGraphicsPreset: (preset) => setAndSave(PRESET_SETTINGS[preset]),
     setRenderDistance: (renderDistance) => setAndSave({ renderDistance: clampRenderDistance(renderDistance) }),
     setLightingQuality: (lightingQuality) => setAndSave({ lightingQuality }),
+    setAtmosphereQuality: (atmosphereQuality) => setAndSave({ atmosphereQuality }),
     setShadowQuality: (shadowQuality) => setAndSave({ shadowQuality }),
     setResolutionScale: (resolutionScale) => setAndSave({ resolutionScale }),
     setWaterAnimation: (waterAnimation) => setAndSave({ waterAnimation }),
