@@ -12,7 +12,7 @@ import {
   MASTERY_DEFS,
   useMasteryStore,
 } from '../../stores/useMasteryStore';
-import { BLOCK_DEFS, HOTBAR_BLOCKS, type BlockId } from '../../types/blocks';
+import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
 import { getMasteryPerkSummary, getNextMasteryPerkSummary } from '../../types/masteryPerks';
 import {
   formatMasteryTechniqueBonus,
@@ -377,8 +377,7 @@ export function MasteryHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
-  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const isPlaceMode = usePlayerStore((s) => s.isPlaceMode);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const rocketCooldown = usePlayerStore((s) => s.rocketCooldown);
@@ -434,7 +433,6 @@ export function MasteryHUD() {
   const statLabel = equippedItem === 'builder'
     ? `${mastery.blocksChanged} ブロック`
     : `${mastery.hits} HIT / ${mastery.defeats} DOWN`;
-  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? HOTBAR_BLOCKS[0];
   const selectedDef = BLOCK_DEFS[selectedBlock];
   const selectedCount = items[selectedBlock] ?? 0;
   const actionStatus = getItemActionStatus({
@@ -449,7 +447,7 @@ export function MasteryHUD() {
     attackCharge,
     stageStyle,
     recommendedStageStyle,
-    swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
+    swapActionLabel: 'ホットバーで',
   });
   const techniqueRecord = getItemTechniqueRecord(equippedItem, mastery, def);
   const techniqueProgress = getMasteryTechniqueProgress(equippedItem, mastery);
@@ -469,7 +467,7 @@ export function MasteryHUD() {
     stageStyle,
     recommendedStageStyle,
     techniqueRecord,
-    swapActionLabel: isTouch ? '装備ボタンで' : 'Vで',
+    swapActionLabel: 'ホットバーで',
   });
 
   return (

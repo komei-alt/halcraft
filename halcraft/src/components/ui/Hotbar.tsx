@@ -1,5 +1,5 @@
-// ホットバー（ブロック選択UI）コンポーネント
-// 画面下部にマイクラ風のブロック選択バーを表示
+// ホットバー（ブロック・武器選択UI）コンポーネント
+// 画面下部にマイクラ風の持ち物選択バーを表示
 // モバイルではタップで選択可能
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +18,13 @@ import {
   useMasteryStore,
 } from '../../stores/useMasteryStore';
 import { BLOCK_DEFS, type BlockId } from '../../types/blocks';
+import {
+  getFirstHotbarBlock,
+  getHotbarItemBlockId,
+  isBlockHotbarItem,
+  isWeaponHotbarItem,
+  type WeaponItem,
+} from '../../types/hotbar';
 import {
   getNextStageBuildMilestone,
   getStageBuildBlockScore,
@@ -85,6 +92,34 @@ interface EquippedMasteryPulse {
   accent: string;
   glow: string;
 }
+
+interface WeaponHotbarMeta {
+  icon: string;
+  label: string;
+  accent: string;
+  glow: string;
+}
+
+const WEAPON_HOTBAR_META: Record<WeaponItem, WeaponHotbarMeta> = {
+  rocket_launcher: {
+    icon: '🚀',
+    label: 'ロケット',
+    accent: '#ffc06d',
+    glow: 'rgba(255, 145, 72, 0.3)',
+  },
+  machine_gun: {
+    icon: '🔫',
+    label: '機関銃',
+    accent: '#ffe28a',
+    glow: 'rgba(255, 220, 90, 0.28)',
+  },
+  lightsaber: {
+    icon: '⚔️',
+    label: '剣',
+    accent: '#c8b0ff',
+    glow: 'rgba(170, 130, 255, 0.3)',
+  },
+};
 
 function clampRatio(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -385,7 +420,6 @@ export function Hotbar() {
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const setEquippedItem = usePlayerStore((s) => s.setEquippedItem);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
   const items = useInventoryStore((s) => s.items);
@@ -406,7 +440,12 @@ export function Hotbar() {
   const previousSelectionKeyRef = useRef<string | null>(null);
 
   const isTouch = isTouchDevice();
-  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0];
+  const selectedHotbarItem = hotbarSlots[selectedSlot];
+  const selectedIsBlock = isBlockHotbarItem(selectedHotbarItem);
+  const selectedBlock = getHotbarItemBlockId(
+    selectedHotbarItem,
+    getFirstHotbarBlock(hotbarSlots),
+  );
   const selectedDef = BLOCK_DEFS[selectedBlock];
   const selectedCount = items[selectedBlock] ?? 0;
   const selectedProfile = getBlockUseProfile(selectedBlock, currentStageId);
@@ -434,15 +473,17 @@ export function Hotbar() {
   const buildFocusActive = currentStage?.category === 'build' && buildFocusUntil > now;
   const activeBuildFocusChain = buildFocusChainExpiresAt > now ? buildFocusChain : 0;
   const buildFocusAccent = modeRule?.accent ?? selectedProfile.accent;
-  const selectedStageHint = getSelectedBlockStageHint({
-    stage: currentStage,
-    blockId: selectedBlock,
-    challengeStats,
-    completedChallengeIds,
-    buildScore,
-    buildMilestones,
-    modeMeter,
-  });
+  const selectedStageHint = selectedIsBlock
+    ? getSelectedBlockStageHint({
+        stage: currentStage,
+        blockId: selectedBlock,
+        challengeStats,
+        completedChallengeIds,
+        buildScore,
+        buildMilestones,
+        modeMeter,
+      })
+    : null;
 
   // セルサイズ（モバイルではやや小さめ）
   const cellSize = isTouch ? 40 : 48;
@@ -455,29 +496,30 @@ export function Hotbar() {
   }, [currentStage?.category]);
 
   useEffect(() => {
-    const selectionKey = `${selectedSlot}:${selectedBlock}`;
+    const selectionKey = `${selectedSlot}:${String(selectedHotbarItem)}`;
     if (previousSelectionKeyRef.current === null) {
       previousSelectionKeyRef.current = selectionKey;
       return;
     }
     if (previousSelectionKeyRef.current === selectionKey) return;
     previousSelectionKeyRef.current = selectionKey;
-    if (equippedItem === 'builder') {
+    if (equippedItem === 'builder' && selectedIsBlock) {
       playBlockUseFeedbackSound(selectedProfile.soundKind);
     }
     const timer = window.setTimeout(() => {
       setSelectionPulseKey((value) => value + 1);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [equippedItem, selectedBlock, selectedProfile.soundKind, selectedSlot]);
+  }, [equippedItem, selectedHotbarItem, selectedIsBlock, selectedProfile.soundKind, selectedSlot]);
 
   // テクスチャをdata URLに変換して表示用に準備（hotbarSlotsが変わるたび再計算）
   const textures = useMemo(() => {
     const map = new Map<number, string>();
-    hotbarSlots.forEach((blockId) => {
-      const def = BLOCK_DEFS[blockId];
+    hotbarSlots.forEach((item) => {
+      if (!isBlockHotbarItem(item)) return;
+      const def = BLOCK_DEFS[item];
       if (def) {
-        map.set(blockId, `/textures/blocks/${def.texture}`);
+        map.set(item, `/textures/blocks/${def.texture}`);
       }
     });
     return map;
@@ -612,7 +654,7 @@ export function Hotbar() {
         </div>
       )}
 
-      {equippedItem === 'builder' && selectedDef && (
+      {equippedItem === 'builder' && selectedIsBlock && selectedDef && (
         <div
           style={{
             minWidth: isTouch ? 250 : 320,
@@ -1018,143 +1060,6 @@ export function Hotbar() {
       )}
 
       <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          padding: 4,
-          background: 'rgba(8, 11, 17, 0.4)',
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.14)',
-          backdropFilter: 'blur(11px)',
-          WebkitBackdropFilter: 'blur(11px)',
-        }}
-      >
-        {([
-          { id: 'builder', icon: '⛏️', label: '建築' },
-          { id: 'rocket_launcher', icon: '🚀', label: 'ロケット' },
-          { id: 'machine_gun', icon: '🔫', label: '機関銃' },
-          { id: 'lightsaber', icon: '⚔️', label: '剣' },
-        ] satisfies Array<{ id: EquippedItem; icon: string; label: string }>).map((item) => {
-          const isSelected = equippedItem === item.id;
-          const tactic = getItemTacticBadge(item.id, currentStage);
-          const isMatchedTactic = Boolean(tactic?.matched);
-          const readiness = getItemReadinessBadge({
-            item: item.id,
-            rocketCharge,
-            attackCharge,
-            tactic,
-          });
-          const showReadinessLabel = Boolean(
-            readiness && (!tactic?.matched || item.id === 'rocket_launcher' || item.id === 'lightsaber'),
-          );
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setEquippedItem(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                position: 'relative',
-                overflow: 'hidden',
-                padding: isTouch ? '7px 10px' : '6px 10px',
-                borderRadius: 999,
-                border: isSelected
-                  ? `1px solid ${tactic?.accent ?? 'rgba(255, 206, 120, 0.62)'}`
-                  : isMatchedTactic
-                    ? `1px solid ${tactic?.accent}88`
-                  : '1px solid rgba(255,255,255,0.08)',
-                background: isSelected
-                  ? item.id === 'rocket_launcher'
-                    ? 'rgba(255, 145, 72, 0.22)'
-                    : item.id === 'machine_gun'
-                      ? 'rgba(255, 210, 90, 0.18)'
-                      : item.id === 'lightsaber'
-                        ? 'rgba(170, 130, 255, 0.2)'
-                        : 'rgba(180, 220, 255, 0.14)'
-                  : 'rgba(255,255,255,0.04)',
-                color: isSelected ? '#fff0d0' : 'rgba(255,255,255,0.65)',
-                fontSize: isTouch ? 12 : 11,
-                fontWeight: 700,
-                letterSpacing: 0,
-                cursor: 'pointer',
-                boxShadow: isMatchedTactic
-                  ? `0 0 12px ${tactic?.accent}44`
-                  : undefined,
-              }}
-            >
-              {readiness && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    left: 6,
-                    right: 6,
-                    bottom: 3,
-                    height: 2,
-                    borderRadius: 999,
-                    background: 'rgba(255,255,255,0.12)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <span
-                    style={{
-                      display: 'block',
-                      width: `${Math.round(readiness.ratio * 100)}%`,
-                      height: '100%',
-                      borderRadius: 999,
-                      background: readiness.accent,
-                      boxShadow: `0 0 8px ${readiness.accent}88`,
-                    }}
-                  />
-                </span>
-              )}
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-              {!isTouch && tactic && (
-                <span
-                  style={{
-                    padding: '1px 4px',
-                    borderRadius: 999,
-                    color: tactic.accent,
-                    background: `${tactic.accent}18`,
-                    border: `1px solid ${tactic.accent}55`,
-                    fontSize: 8,
-                    lineHeight: '10px',
-                    fontWeight: 900,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {tactic.label}
-                </span>
-              )}
-              {!isTouch && readiness && showReadinessLabel && (
-                <span
-                  style={{
-                    padding: '1px 4px',
-                    borderRadius: 999,
-                    color: readiness.accent,
-                    background: `${readiness.accent}16`,
-                    border: `1px solid ${readiness.accent}44`,
-                    fontSize: 8,
-                    lineHeight: '10px',
-                    fontWeight: 900,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {readiness.label}
-                </span>
-              )}
-              {!isTouch && item.id !== 'builder' && (
-                <span style={{ fontSize: 9, opacity: 0.7 }}>V</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <div
         id="hotbar"
         style={{
           display: 'flex',
@@ -1171,17 +1076,33 @@ export function Hotbar() {
           scrollbarWidth: 'none',
         }}
       >
-        {hotbarSlots.map((blockId, index) => {
-          const def = BLOCK_DEFS[blockId];
+        {hotbarSlots.map((item, index) => {
           const isSelected = index === selectedSlot;
-          const texUrl = textures.get(blockId);
-          const count = items[blockId] ?? 0;
-          const hasItem = count > 0;
-          const profile = getBlockUseProfile(blockId, currentStageId);
+          const isWeapon = isWeaponHotbarItem(item);
+          const blockId = isBlockHotbarItem(item) ? item : null;
+          const weaponId = isWeapon ? item : null;
+          const def = blockId !== null ? BLOCK_DEFS[blockId] : null;
+          const texUrl = blockId !== null ? textures.get(blockId) : null;
+          const count = blockId !== null ? (items[blockId] ?? 0) : 0;
+          const hasItem = isWeapon || count > 0;
+          const weaponMeta = weaponId ? WEAPON_HOTBAR_META[weaponId] : null;
+          const blockProfile = blockId !== null ? getBlockUseProfile(blockId, currentStageId) : null;
+          const tactic = weaponId ? getItemTacticBadge(weaponId, currentStage) : null;
+          const readiness = weaponId
+            ? getItemReadinessBadge({
+                item: weaponId,
+                rocketCharge,
+                attackCharge,
+                tactic,
+              })
+            : null;
+          const accent = weaponMeta?.accent ?? blockProfile?.accent ?? '#ffffff';
+          const glow = weaponMeta?.glow ?? blockProfile?.glow ?? 'rgba(255,255,255,0.2)';
+          const slotLabel = weaponMeta?.label ?? def?.name ?? 'アイテム';
 
           return (
             <div
-              key={`${blockId}-${index}`}
+              key={`${String(item)}-${index}`}
               onClick={() => selectSlot(index)}
               onTouchStart={(e) => {
                 // モバイルではタッチで選択
@@ -1194,11 +1115,11 @@ export function Hotbar() {
                 width: cellSize,
                 height: cellSize,
                 border: isSelected
-                  ? `3px solid ${profile.accent}`
-                  : `2px solid ${hasItem ? `${profile.accent}66` : 'rgba(255,255,255,0.18)'}`,
+                  ? `3px solid ${accent}`
+                  : `2px solid ${hasItem ? `${accent}66` : 'rgba(255,255,255,0.18)'}`,
                 borderRadius: 4,
                 background: isSelected
-                  ? `linear-gradient(135deg, ${profile.glow}, rgba(255,255,255,0.14))`
+                  ? `linear-gradient(135deg, ${glow}, rgba(255,255,255,0.14))`
                   : 'rgba(0,0,0,0.3)',
                 opacity: hasItem ? 1 : 0.46,
                 display: 'flex',
@@ -1207,7 +1128,7 @@ export function Hotbar() {
                 position: 'relative',
                 transition: 'border 0.1s, background 0.1s',
                 boxShadow: isSelected
-                  ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 14px ${profile.glow}`
+                  ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 14px ${glow}`
                   : 'none',
                 animation: isSelected && selectionPulseKey > 0 ? 'hotbarSlotSelectPop 0.42s ease-out both' : undefined,
                 imageRendering: 'pixelated',
@@ -1224,16 +1145,29 @@ export function Hotbar() {
                     position: 'absolute',
                     inset: -7,
                     borderRadius: 8,
-                    border: `2px solid ${profile.accent}`,
-                    boxShadow: `0 0 18px ${profile.glow}`,
+                    border: `2px solid ${accent}`,
+                    boxShadow: `0 0 18px ${glow}`,
                     animation: 'hotbarSlotSelectRing 0.48s ease-out both',
                   }}
                 />
               )}
-              {texUrl && (
+              {weaponMeta ? (
+                <span
+                  aria-label={weaponMeta.label}
+                  style={{
+                    fontSize: isTouch ? 22 : 26,
+                    lineHeight: 1,
+                    filter: `drop-shadow(0 0 7px ${accent})`,
+                    transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {weaponMeta.icon}
+                </span>
+              ) : texUrl ? (
                 <img
                   src={texUrl}
-                  alt={def?.name}
+                  alt={slotLabel}
                   style={{
                     width: imgSize,
                     height: imgSize,
@@ -1242,10 +1176,10 @@ export function Hotbar() {
                     pointerEvents: 'none',
                   }}
                 />
-              )}
+              ) : null}
               {hasItem && (
                 <span
-                  title={profile.eyebrow}
+                  title={weaponMeta?.label ?? blockProfile?.eyebrow}
                   style={{
                     position: 'absolute',
                     top: 3,
@@ -1253,31 +1187,58 @@ export function Hotbar() {
                     width: isSelected ? 8 : 6,
                     height: isSelected ? 8 : 6,
                     borderRadius: 999,
-                    background: profile.accent,
-                    boxShadow: `0 0 8px ${profile.glow}`,
+                    background: accent,
+                    boxShadow: `0 0 8px ${glow}`,
                     border: '1px solid rgba(0,0,0,0.35)',
                   }}
                 />
               )}
-              <span
-                style={{
-                  position: 'absolute',
-                  right: 3,
-                  bottom: 1,
-                  minWidth: 12,
-                  padding: '0 2px',
-                  borderRadius: 3,
-                  color: hasItem ? '#fff' : '#ff9c9c',
-                  fontSize: isTouch ? 9 : 10,
-                  fontFamily: 'monospace',
-                  fontWeight: 900,
-                  lineHeight: '12px',
-                  textAlign: 'right',
-                  textShadow: '1px 1px 2px #000',
-                }}
-              >
-                {count}
-              </span>
+              {weaponMeta && readiness ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: 5,
+                    right: 5,
+                    bottom: 3,
+                    height: 3,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.13)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: `${Math.round(readiness.ratio * 100)}%`,
+                      height: '100%',
+                      borderRadius: 999,
+                      background: readiness.accent,
+                      boxShadow: `0 0 8px ${readiness.accent}88`,
+                    }}
+                  />
+                </span>
+              ) : (
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: 3,
+                    bottom: 1,
+                    minWidth: 12,
+                    padding: '0 2px',
+                    borderRadius: 3,
+                    color: hasItem ? '#fff' : '#ff9c9c',
+                    fontSize: isTouch ? 9 : 10,
+                    fontFamily: 'monospace',
+                    fontWeight: 900,
+                    lineHeight: '12px',
+                    textAlign: 'right',
+                    textShadow: '1px 1px 2px #000',
+                  }}
+                >
+                  {count}
+                </span>
+              )}
               {/* ショートカット番号（デスクトップのみ表示） */}
               {!isTouch && (
                 <span

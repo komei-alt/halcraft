@@ -26,13 +26,6 @@ import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
 import { LavaRenderer, WaterRenderer } from './components/WaterRenderer';
 import { LiquidSurfaceFX } from './components/LiquidSurfaceFX';
-import { StageAtmosphereFX } from './components/StageAtmosphereFX';
-import { StageCinematicLightingFX } from './components/StageCinematicLightingFX';
-import { StageForegroundWeatherFX } from './components/StageForegroundWeatherFX';
-import { StageGroundLightFX } from './components/StageGroundLightFX';
-import { StageSurfaceDetailFX } from './components/StageSurfaceDetailFX';
-import { StageScenicPropFX } from './components/StageScenicPropFX';
-import { StageSkyDetailFX } from './components/StageSkyDetailFX';
 import { StageConditionFX } from './components/StageConditionFX';
 import { StageEventFX } from './components/StageEventFX';
 import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
@@ -170,13 +163,6 @@ function GameCanvas() {
         <SceneReflectionPipeline />
         <Suspense fallback={null}>
           <Environment />
-          <StageAtmosphereFX />
-          <StageCinematicLightingFX />
-          <StageForegroundWeatherFX />
-          <StageSkyDetailFX />
-          <StageGroundLightFX />
-          <StageSurfaceDetailFX />
-          <StageScenicPropFX />
           <StageConditionFX />
           <StageEventFX />
           <StageLandmarkBeaconFX />

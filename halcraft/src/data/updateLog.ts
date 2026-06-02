@@ -45,6 +45,14 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-06-02',
+    items: [
+      { type: 'fix', text: '目の前に葉っぱや光の板が重なって見づらくなる演出を外して、ブロックや敵が見やすくなったよ！' },
+      { type: 'fix', text: 'ロケットを撃った瞬間に近くで爆発しやすい不具合を直して、前に飛んでから当たるようにしたよ！' },
+      { type: 'feature', text: 'ロケット・機関銃・剣もホットバーに入り、ブロックと同じように数字キーやタップで持ち替えられるようになったよ！' },
+    ],
+  },
+  {
     date: '2026-06-01',
     items: [
       { type: 'improve', text: 'タイトル画面の下に出発ドックが出て、選んだマップの景色・今回のねらい・名前・スタートがすぐ見えるようになったよ！' },

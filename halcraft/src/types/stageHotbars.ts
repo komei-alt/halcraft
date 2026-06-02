@@ -2,6 +2,11 @@
 // 支給品とマップ特性がすぐ遊びに出るよう、1-9番に置くブロックを優先する
 
 import { BLOCK_DEFS, BLOCK_IDS, HOTBAR_BLOCKS, type BlockId } from './blocks';
+import {
+  createHotbarSlotsWithWeapons,
+  isBlockHotbarItem,
+  type HotbarSlotItem,
+} from './hotbar';
 import type { StageDefinition } from './stages';
 
 export type HotbarItemCounts = Readonly<Record<number, number | undefined>>;
@@ -133,9 +138,8 @@ function getStockedBlocks(items: HotbarItemCounts): BlockId[] {
     .map((entry) => entry.blockId);
 }
 
-function fillHotbar(primaryBlocks: BlockId[]): BlockId[] {
-  return uniqueUsableBlocks([...primaryBlocks, ...HOTBAR_BLOCKS])
-    .slice(0, HOTBAR_BLOCKS.length);
+function fillHotbar(primaryBlocks: BlockId[]): HotbarSlotItem[] {
+  return createHotbarSlotsWithWeapons(uniqueUsableBlocks([...primaryBlocks, ...HOTBAR_BLOCKS]));
 }
 
 function getShortBlockName(blockId: BlockId): string {
@@ -174,7 +178,7 @@ export function getStageStarterHotbarItemCounts(
 export function getStageHotbarSlots(
   stageId: string | null | undefined,
   items?: HotbarItemCounts,
-): BlockId[] {
+): HotbarSlotItem[] {
   const priority = stageId ? STAGE_HOTBAR_PRIORITIES[stageId] ?? [] : [];
   if (!items) return fillHotbar(priority);
 
@@ -196,6 +200,7 @@ export function formatStageHotbarPreview(
   limit: number,
 ): string {
   const preview = getStageHotbarSlots(stageId, items)
+    .filter(isBlockHotbarItem)
     .filter((blockId) => (items[blockId] ?? 0) > 0)
     .slice(0, limit)
     .map((blockId) => `${getShortBlockName(blockId)}x${items[blockId] ?? 0}`);

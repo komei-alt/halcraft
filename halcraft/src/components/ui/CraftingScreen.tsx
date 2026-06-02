@@ -13,6 +13,11 @@ import {
   type BlockId,
   BLOCK_IDS,
 } from '../../types/blocks';
+import {
+  isBlockHotbarItem,
+  isWeaponHotbarItem,
+  type WeaponItem,
+} from '../../types/hotbar';
 import { CRAFTING_RECIPES } from '../../types/crafting';
 import { type ToolId, TOOL_DEFS } from '../../types/tools';
 import { type ArmorId, ARMOR_DEFS } from '../../types/armor';
@@ -87,6 +92,12 @@ const cellStyle = (isSelected: boolean, isHoverable: boolean): React.CSSProperti
 const ALL_BLOCKS = Object.values(BLOCK_DEFS)
   .filter((def) => def.id !== BLOCK_IDS.AIR && def.id !== BLOCK_IDS.BEDROCK)
   .map((def) => def.id);
+
+const WEAPON_CRAFTING_META: Record<WeaponItem, { icon: string; label: string; accent: string }> = {
+  rocket_launcher: { icon: '🚀', label: 'ロケット', accent: '#ffc06d' },
+  machine_gun: { icon: '🔫', label: '機関銃', accent: '#ffe28a' },
+  lightsaber: { icon: '⚔️', label: '剣', accent: '#c8b0ff' },
+};
 
 // === コンポーネント ===
 
@@ -201,12 +212,16 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const handleSelectItem = useCallback(
     (blockId: BlockId) => {
       // 既にホットバーにある場合はそのスロットを選択
-      const hotbarIndex = hotbarSlots.indexOf(blockId);
+      const hotbarIndex = hotbarSlots.findIndex((item) => isBlockHotbarItem(item) && item === blockId);
       if (hotbarIndex >= 0) {
         selectSlot(hotbarIndex);
       } else {
         // ホットバーにないブロック→現在のスロットにセット
-        assignHotbarSlot(selectedSlot, blockId);
+        const targetSlot = isWeaponHotbarItem(hotbarSlots[selectedSlot])
+          ? Math.max(0, hotbarSlots.findIndex(isBlockHotbarItem))
+          : selectedSlot;
+        assignHotbarSlot(targetSlot, blockId);
+        selectSlot(targetSlot);
       }
     },
     [selectSlot, hotbarSlots, assignHotbarSlot, selectedSlot],
@@ -301,16 +316,21 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
               border: `1px solid ${STONE_SHADOW}`,
             }}
           >
-            {hotbarSlots.map((blockId, idx) => {
+            {hotbarSlots.map((item, idx) => {
               const isSelected = idx === selectedSlot;
-              const texUrl = getTextureUrl(blockId);
-              const count = items[blockId] ?? 0;
+              const blockId = isBlockHotbarItem(item) ? item : null;
+              const weaponId = isWeaponHotbarItem(item) ? item : null;
+              const weaponMeta = weaponId ? WEAPON_CRAFTING_META[weaponId] : null;
+              const texUrl = blockId !== null ? getTextureUrl(blockId) : '';
+              const count = blockId !== null ? (items[blockId] ?? 0) : 0;
 
               return (
                 <div
                   key={`hotbar-${idx}`}
                   onClick={() => selectSlot(idx)}
-                  onMouseMove={(e) => handleItemMouseMove(e, blockId)}
+                  onMouseMove={(e) => {
+                    if (blockId !== null) handleItemMouseMove(e, blockId);
+                  }}
                   onMouseLeave={handleItemMouseLeave}
                   style={{
                     ...cellStyle(isSelected, true),
@@ -324,10 +344,21 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                     background: isSelected ? 'rgba(180,180,255,0.35)' : CELL_BG,
                   }}
                 >
-                  {texUrl && (
+                  {weaponMeta ? (
+                    <span
+                      aria-label={weaponMeta.label}
+                      style={{
+                        color: weaponMeta.accent,
+                        fontSize: 24,
+                        filter: `drop-shadow(0 0 6px ${weaponMeta.accent})`,
+                      }}
+                    >
+                      {weaponMeta.icon}
+                    </span>
+                  ) : texUrl ? (
                     <img
                       src={texUrl}
-                      alt={getBlockName(blockId)}
+                      alt={blockId !== null ? getBlockName(blockId) : ''}
                       draggable={false}
                       style={{
                         width: 30,
@@ -336,7 +367,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
                         objectFit: 'contain',
                       }}
                     />
-                  )}
+                  ) : null}
                   {count > 0 && (
                     <span
                       style={{
@@ -392,7 +423,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
 
               const { blockId, count } = entry;
               const texUrl = getTextureUrl(blockId);
-              const isInHotbar = hotbarSlots.includes(blockId);
+              const isInHotbar = hotbarSlots.some((item) => isBlockHotbarItem(item) && item === blockId);
 
               return (
                 <div

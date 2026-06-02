@@ -57,7 +57,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     controls: [
       '左クリック: こわす / 攻撃',
       '右クリック: ブロック設置',
-      'V: ロケットに切り替え',
+      '1-9 / ホイール: 武器も選べる',
     ],
     accent: '#b6e2ff',
     glow: 'rgba(116, 194, 255, 0.28)',
@@ -70,7 +70,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
       '左クリック または R: 発射',
       '遠距離直撃: ダメージと戦意アップ',
       '爆風: 周囲まとめてダメージ',
-      'V: 機関銃に切り替え',
+      '1-9 / ホイール: 持ち替え',
     ],
     accent: '#ffc48a',
     glow: 'rgba(255, 145, 72, 0.3)',
@@ -82,7 +82,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     controls: [
       '左クリック長押し: 連射',
       '右クリック長押し: スコープ',
-      'V: ライトセイバーに切り替え',
+      '1-9 / ホイール: 持ち替え',
     ],
     accent: '#ffe28a',
     glow: 'rgba(255, 220, 90, 0.28)',
@@ -94,7 +94,7 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     controls: [
       '左クリック: コンボ攻撃（5段）',
       '連続クリックでコンボが繋がる',
-      'V: 建築モードに戻る',
+      '1-9 / ホイール: ブロックへ戻る',
     ],
     accent: '#c8b0ff',
     glow: 'rgba(170, 130, 255, 0.3)',
@@ -109,7 +109,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
       controls: [
         'タップ: こわす',
         '長押し: ブロック設置',
-        '右上の装備ボタンで切り替え',
+        'ホットバーで武器も選べる',
       ],
     };
   }
@@ -121,7 +121,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
         '💥 ボタン: ロケット発射',
         '遠距離直撃: ダメージと戦意アップ',
         '爆風: 周囲まとめてダメージ',
-        '右上の装備ボタンで切り替え',
+        'ホットバーで持ち替え',
       ],
     };
   }
@@ -132,7 +132,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
       controls: [
         '🔫 ボタン長押し: 連射',
         '小ダメージ / 低反動',
-        '右上の装備ボタンで切り替え',
+        'ホットバーで持ち替え',
       ],
     };
   }
@@ -143,7 +143,7 @@ function getMobileContent(item: EquippedItem): PopoverContent {
       controls: [
         'タップ: コンボ攻撃',
         '連続タップでコンボが繋がる',
-        '右上の装備ボタンで切り替え',
+        'ホットバーでブロックへ戻る',
       ],
     };
   }

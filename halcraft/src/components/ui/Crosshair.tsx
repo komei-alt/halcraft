@@ -7,7 +7,6 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
-import { BLOCK_IDS } from '../../types/blocks';
 import {
   getStageCombatStyle,
   getStageCombatStyleForItem,
@@ -75,8 +74,7 @@ export function Crosshair() {
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
   const worldPosition = usePlayerStore((s) => s.worldPosition);
-  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
-  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const inventoryItems = useInventoryStore((s) => s.items);
   const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
@@ -108,7 +106,6 @@ export function Crosshair() {
   const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
-  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
   const selectedBlockCount = inventoryItems[selectedBlock] ?? 0;
   const selectedBlockProfile = getBlockUseProfile(selectedBlock, currentStageId);
   const builderHasStock = selectedBlockCount > 0;

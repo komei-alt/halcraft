@@ -111,8 +111,7 @@ function WalkingControls() {
           <ControlRow keyName="5段コンボ" action="連続で強くなる" keyColor="#c8b0ff" />
         </>
       )}
-      <ControlRow keyName="V" action="武器切り替え" keyColor="#ffd56d" />
-      <ControlRow keyName="1-9" action="ホットバー選択" />
+      <ControlRow keyName="1-9 / ホイール" action="ブロック・武器を選択" />
       <Divider />
       <ControlRow keyName="E" action="クラフト画面" />
       <ControlRow keyName="F" action="乗り物に乗る" keyColor="#88ccff" />
@@ -271,7 +270,7 @@ function MobileWalkingControls() {
       ) : (
         <ControlRow keyName="🔫" action="機関銃を連射" />
       )}
-      <ControlRow keyName="🔁" action="武器切り替え" />
+      <ControlRow keyName="ホットバー" action="ブロック・武器を選択" />
     </>
   );
 }

@@ -1156,7 +1156,7 @@ export function StageProgressHUD() {
         lastComboBonus,
         lastFocusBonus,
         equippedItem,
-        isCompact ? '装備ボタン' : 'Vで切替',
+        'ホットバーで切替',
       );
   const buildTopMaterial = buildStyle
     ? Object.entries(buildStyleHits).sort((a, b) => b[1] - a[1])[0]

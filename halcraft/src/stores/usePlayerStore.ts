@@ -3,6 +3,16 @@
 
 import { create } from 'zustand';
 import { HOTBAR_BLOCKS, type BlockId } from '../types/blocks';
+import {
+  createHotbarSlotsWithWeapons,
+  getFirstHotbarBlock,
+  getHotbarItemBlockId,
+  getHotbarItemEquippedItem,
+  HOTBAR_SLOT_COUNT,
+  isWeaponHotbarItem,
+  type EquippedItem,
+  type HotbarSlotItem,
+} from '../types/hotbar';
 import { getSocket } from '../utils/socket';
 import { useGameStore } from './useGameStore';
 import { type SkinId, DEFAULT_SKIN_ID, isValidSkinId } from '../types/skins';
@@ -27,11 +37,7 @@ function loadSkinId(): SkinId {
   return DEFAULT_SKIN_ID;
 }
 
-/** ホットバーのスロット数 */
-const HOTBAR_SLOT_COUNT = HOTBAR_BLOCKS.length;
-
-/** 徒歩時に装備できるアイテム */
-export type EquippedItem = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+export type { EquippedItem, HotbarSlotItem, WeaponItem } from '../types/hotbar';
 
 /** 落下ダメージの閾値（これ以上落ちるとダメージ） */
 const FALL_DAMAGE_THRESHOLD = 3;
@@ -80,8 +86,8 @@ interface PlayerState {
   /** ホットバーの選択インデックス (0-8) */
   selectedSlot: number;
 
-  /** 動的ホットバースロット（ブロックIDの配列） */
-  hotbarSlots: BlockId[];
+  /** 動的ホットバースロット（ブロックと武器の配列） */
+  hotbarSlots: HotbarSlotItem[];
 
   /** 現在装備中の徒歩用アイテム */
   equippedItem: EquippedItem;
@@ -241,7 +247,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   maxHp: 20,
   worldPosition: null,
   selectedSlot: 0,
-  hotbarSlots: [...HOTBAR_BLOCKS] as BlockId[],
+  hotbarSlots: createHotbarSlotsWithWeapons([...HOTBAR_BLOCKS]),
   equippedItem: 'builder',
   isDamageFlash: false,
   isDead: false,
@@ -270,12 +276,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   getSelectedBlock: () => {
     const state = get();
-    return state.hotbarSlots[state.selectedSlot] ?? HOTBAR_BLOCKS[0];
+    const fallback = getFirstHotbarBlock(state.hotbarSlots, HOTBAR_BLOCKS[0]);
+    return getHotbarItemBlockId(state.hotbarSlots[state.selectedSlot], fallback);
   },
 
   selectSlot: (slot) => {
-    if (slot >= 0 && slot < HOTBAR_SLOT_COUNT) {
-      set({ selectedSlot: slot });
+    const state = get();
+    if (slot < 0 || slot >= state.hotbarSlots.length) return;
+
+    const nextEquippedItem = getHotbarItemEquippedItem(state.hotbarSlots[slot]);
+    set({
+      selectedSlot: slot,
+      equippedItem: nextEquippedItem,
+    });
+
+    if (state.equippedItem !== nextEquippedItem) {
+      playEquippedItemSwitchFeedback(nextEquippedItem);
     }
   },
 
@@ -287,27 +303,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   cycleEquippedItem: () => {
-    let switchedTo: EquippedItem = get().equippedItem;
-    set((state) => {
-      const next: Record<EquippedItem, EquippedItem> = {
-        builder: 'rocket_launcher',
-        rocket_launcher: 'machine_gun',
-        machine_gun: 'lightsaber',
-        lightsaber: 'builder',
-      };
-      switchedTo = next[state.equippedItem];
-      return { equippedItem: switchedTo };
-    });
-    playEquippedItemSwitchFeedback(switchedTo);
+    const state = get();
+    const weaponSlots = state.hotbarSlots
+      .map((item, slot) => ({ item, slot }))
+      .filter((entry) => isWeaponHotbarItem(entry.item));
+    if (weaponSlots.length === 0) return;
+
+    const currentWeaponIndex = weaponSlots.findIndex((entry) => entry.item === state.equippedItem);
+    const nextWeaponSlot = weaponSlots[
+      currentWeaponIndex >= 0
+        ? (currentWeaponIndex + 1) % weaponSlots.length
+        : 0
+    ];
+    if (nextWeaponSlot) {
+      get().selectSlot(nextWeaponSlot.slot);
+    }
   },
 
   assignHotbarSlot: (slot, blockId) => {
     if (slot < 0 || slot >= HOTBAR_SLOT_COUNT) return;
+    const current = get();
     set((state) => {
       const newSlots = [...state.hotbarSlots];
       newSlots[slot] = blockId;
-      return { hotbarSlots: newSlots };
+      return {
+        hotbarSlots: newSlots,
+        ...(slot === state.selectedSlot ? { equippedItem: 'builder' as EquippedItem } : {}),
+      };
     });
+    if (slot === current.selectedSlot && current.equippedItem !== 'builder') {
+      playEquippedItemSwitchFeedback('builder');
+    }
   },
 
   performAttack: (options) => {

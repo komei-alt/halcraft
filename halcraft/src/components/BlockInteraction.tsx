@@ -591,8 +591,6 @@ export function BlockInteraction() {
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const setBlock = useWorldStore((s) => s.setBlock);
   const getSelectedBlock = usePlayerStore((s) => s.getSelectedBlock);
-  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
-  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const inventoryItems = useInventoryStore((s) => s.items);
   const dropItem = useDroppedItemStore((s) => s.dropItem);
   const damageMob = useMobStore((s) => s.damageMob);
@@ -646,7 +644,7 @@ export function BlockInteraction() {
 
   const [target, setTarget] = useState<TargetBlock | null>(null);
   const targetRef = useRef<TargetBlock | null>(null);
-  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
+  const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const selectedCount = inventoryItems[selectedBlock] ?? 0;
   const canPlaceAtTarget = Boolean(
     target?.hasPlaceTarget

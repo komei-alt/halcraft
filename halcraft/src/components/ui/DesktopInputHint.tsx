@@ -65,7 +65,7 @@ export function DesktopInputHint() {
       <span style={{ fontSize: '15px' }}>🖱️</span>
       <span>クリックで操作開始</span>
       <span style={{ color: 'rgba(255, 255, 255, 0.58)', fontSize: '11px', fontWeight: 600 }}>
-        Vで武器切替
+        1-9で持ち替え
       </span>
     </button>
   );

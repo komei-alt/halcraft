@@ -248,11 +248,9 @@ export function BuilderHeldItem() {
   const phase = useGameStore((s) => s.phase);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isDead = usePlayerStore((s) => s.isDead);
-  const selectedSlot = usePlayerStore((s) => s.selectedSlot);
-  const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
+  const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const equippedToolId = usePlayerStore((s) => s.equippedToolId);
   const tools = usePlayerStore((s) => s.tools);
-  const selectedBlock = hotbarSlots[selectedSlot] ?? hotbarSlots[0] ?? BLOCK_IDS.GRASS;
   const blockDef = BLOCK_DEFS[selectedBlock] ?? BLOCK_DEFS[BLOCK_IDS.GRASS];
   const blockMaterial = useMemo(() => getBlockViewMaterial(selectedBlock), [selectedBlock]);
   const toolDef = equippedToolId ? TOOL_DEFS[equippedToolId] : null;

@@ -6,14 +6,11 @@ import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
   BrightnessContrast,
-  DepthOfField,
   EffectComposer,
   HueSaturation,
   N8AO,
-  Noise,
   SMAA,
   ToneMapping,
-  Vignette,
 } from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
@@ -28,12 +25,8 @@ interface QualityTuning {
   bloomThreshold: number;
   aoIntensity: number;
   aoRadius: number;
-  vignetteDarkness: number;
   saturation: number;
   contrast: number;
-  grainOpacity: number;
-  dofBokehScale: number;
-  dofResolutionScale: number;
   resolutionScale: number;
   smaaPreset: SMAAPreset;
   aoQuality: 'performance' | 'low' | 'medium';
@@ -46,7 +39,6 @@ interface StageLookTuning {
   bloomThresholdOffset: number;
   saturationOffset: number;
   contrastOffset: number;
-  vignetteDarknessOffset: number;
   hue: number;
   middleGrey: number;
   whitePoint: number;
@@ -57,7 +49,6 @@ const DEFAULT_STAGE_LOOK: StageLookTuning = {
   bloomThresholdOffset: 0,
   saturationOffset: 0,
   contrastOffset: 0,
-  vignetteDarknessOffset: 0,
   hue: 0,
   middleGrey: 0.62,
   whitePoint: 7.5,
@@ -77,12 +68,8 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
       bloomThreshold: 0.74,
       aoIntensity: 1.1,
       aoRadius: 3.2,
-      vignetteDarkness: 0.32,
       saturation: 0.06,
       contrast: 0.036,
-      grainOpacity: 0.032,
-      dofBokehScale: 0.58,
-      dofResolutionScale: 0.52,
       resolutionScale: 1,
       smaaPreset: SMAAPreset.HIGH,
       aoQuality: 'medium',
@@ -96,12 +83,8 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     bloomThreshold: 0.78,
     aoIntensity: isTouch ? 0.45 : 0.7,
     aoRadius: isTouch ? 1.8 : 2.4,
-    vignetteDarkness: isTouch ? 0.12 : 0.2,
     saturation: isTouch ? 0.025 : 0.04,
     contrast: isTouch ? 0.012 : 0.022,
-    grainOpacity: isTouch ? 0.012 : 0.022,
-    dofBokehScale: 0.36,
-    dofResolutionScale: 0.42,
     resolutionScale: isTouch ? 0.72 : 0.85,
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
@@ -121,7 +104,6 @@ function getStageLookTuning(
       bloomThresholdOffset: -0.05,
       saturationOffset: 0.035,
       contrastOffset: 0.014,
-      vignetteDarknessOffset: 0.08,
       hue: 0.018,
       middleGrey: 0.56,
       whitePoint: 6.8,
@@ -134,7 +116,6 @@ function getStageLookTuning(
       bloomThresholdOffset: -0.01,
       saturationOffset: 0.018,
       contrastOffset: 0.006,
-      vignetteDarknessOffset: 0.018,
       hue: -0.006,
       middleGrey: 0.61,
       whitePoint: 7.6,
@@ -144,7 +125,6 @@ function getStageLookTuning(
       bloomThresholdOffset: -0.04,
       saturationOffset: 0.045,
       contrastOffset: 0.004,
-      vignetteDarknessOffset: -0.045,
       hue: 0.012,
       middleGrey: 0.66,
       whitePoint: 7.9,
@@ -154,7 +134,6 @@ function getStageLookTuning(
       bloomThresholdOffset: -0.03,
       saturationOffset: -0.012,
       contrastOffset: -0.006,
-      vignetteDarknessOffset: -0.025,
       hue: -0.018,
       middleGrey: 0.68,
       whitePoint: 8.2,
@@ -164,7 +143,6 @@ function getStageLookTuning(
       bloomThresholdOffset: -0.02,
       saturationOffset: 0.02,
       contrastOffset: 0.01,
-      vignetteDarknessOffset: 0.012,
       hue: 0.024,
       middleGrey: 0.64,
       whitePoint: 7.3,
@@ -181,7 +159,6 @@ function getStageLookTuning(
     bloomThresholdOffset: base.bloomThresholdOffset + (isWar ? -0.018 : -0.006),
     saturationOffset: base.saturationOffset + (isWar ? 0.014 : 0.006),
     contrastOffset: base.contrastOffset + (isWar ? 0.012 : 0.004),
-    vignetteDarknessOffset: base.vignetteDarknessOffset + (isWar ? 0.045 : -0.012),
     middleGrey: base.middleGrey + (isWar ? -0.02 : 0.015),
   };
 }
@@ -428,12 +405,6 @@ export function GraphicsPostFX() {
   );
   const saturation = THREE.MathUtils.clamp(tuning.saturation + stageLook.saturationOffset, -0.08, 0.14);
   const contrast = THREE.MathUtils.clamp(tuning.contrast + stageLook.contrastOffset, 0, 0.075);
-  const vignetteDarkness = THREE.MathUtils.clamp(
-    tuning.vignetteDarkness + stageLook.vignetteDarknessOffset,
-    0.08,
-    0.45,
-  );
-  const cinematicFocus = isHighQuality && !isTouch;
 
   return (
     <EffectComposer
@@ -455,17 +426,9 @@ export function GraphicsPostFX() {
           depthAwareUpsampling
         />
       ) : <></>}
-      {cinematicFocus ? (
-        <DepthOfField
-          worldFocusDistance={22}
-          worldFocusRange={52}
-          bokehScale={tuning.dofBokehScale}
-          resolutionScale={tuning.dofResolutionScale}
-        />
-      ) : <></>}
       <Bloom
         blendFunction={BlendFunction.SCREEN}
-        intensity={tuning.bloomIntensity * stageLook.bloomMultiplier}
+        intensity={tuning.bloomIntensity * stageLook.bloomMultiplier * 0.62}
         luminanceThreshold={bloomThreshold}
         luminanceSmoothing={0.18}
         mipmapBlur
@@ -485,16 +448,6 @@ export function GraphicsPostFX() {
         blendFunction={BlendFunction.NORMAL}
         brightness={dimension === 'nether' ? -0.006 : 0.002}
         contrast={contrast}
-      />
-      <Vignette
-        blendFunction={BlendFunction.NORMAL}
-        offset={0.24}
-        darkness={vignetteDarkness}
-      />
-      <Noise
-        blendFunction={BlendFunction.SOFT_LIGHT}
-        opacity={tuning.grainOpacity}
-        premultiply
       />
       <SMAA preset={tuning.smaaPreset} />
     </EffectComposer>

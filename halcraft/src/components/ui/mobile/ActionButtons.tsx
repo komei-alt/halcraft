@@ -15,12 +15,10 @@ import {
   type StageChallengeMetric,
 } from '../../../types/stageChallenges';
 import {
-  getStageCombatStyle,
   getStageCombatStyleForItem,
-  getStageCombatWeaponLabel,
 } from '../../../types/stageCombatStyles';
 import { getStageModeRule } from '../../../types/stageModeRules';
-import { mobileActions, resetMobileActionTriggers } from '../../../utils/touchInput';
+import { mobileActions } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
 const RIGHT = 20;
@@ -209,13 +207,6 @@ function formatFocusBadge(rank: number, remainingMs: number): string {
   return `F${Math.max(1, rank)} ${Math.max(1, Math.ceil(remainingMs / 1000))}s`;
 }
 
-function getWeaponIcon(item: EquippedItem): ReactNode {
-  if (item === 'rocket_launcher') return '🚀';
-  if (item === 'machine_gun') return '🔫';
-  if (item === 'lightsaber') return '⚔️';
-  return '⛏️';
-}
-
 function getVehicleTactic(stageId: string | null, activeVehicle: VehicleType): {
   badge: string | null;
   meterRatio: number | null;
@@ -402,9 +393,7 @@ interface WalkingActionsProps {
   combatFocusActive: boolean;
   combatFocusBadge: string | null;
   combatFocusRatio: number | null;
-  recommendedLabel: string | null;
   combatMatched: boolean;
-  onWeaponSwitch: TouchHandler;
   onRocket: TouchHandler;
   onMachineGunStart: TouchHandler;
   onMachineGunEnd: TouchHandler;
@@ -424,9 +413,7 @@ function WalkingActions({
   combatFocusActive,
   combatFocusBadge,
   combatFocusRatio,
-  recommendedLabel,
   combatMatched,
-  onWeaponSwitch,
   onRocket,
   onMachineGunStart,
   onMachineGunEnd,
@@ -438,22 +425,6 @@ function WalkingActions({
 
   return (
     <>
-      <ActionButton
-        ariaLabel={
-          combatFocusBadge
-            ? `装備切り替え 作戦集中 ${combatFocusBadge}`
-            : recommendedLabel
-              ? `装備切り替え ${recommendedLabel}`
-              : '装備切り替え'
-        }
-        badge={combatFocusBadge ?? recommendedLabel ?? null}
-        bottom={getBottom(2)}
-        icon={getWeaponIcon(equippedItem)}
-        onTouchStart={onWeaponSwitch}
-        pulse={combatFocusActive || Boolean(recommendedLabel)}
-        tone={actionTone}
-      />
-
       {equippedItem === 'rocket_launcher' ? (
         <ActionButton
           ariaLabel="ロケット発射"
@@ -522,8 +493,7 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const currentStageId = useGameStore((s) => s.currentStageId);
   const isPlaceMode = usePlayerStore((s) => s.isPlaceMode);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const selectedBlock = usePlayerStore((s) => s.hotbarSlots[s.selectedSlot]);
-  const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
+  const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const togglePlaceMode = usePlayerStore((s) => s.togglePlaceMode);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const challengeStats = useStageChallengeStore((s) => s.stats);
@@ -552,7 +522,6 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     };
   }, [combatFocusUntil]);
 
-  const stageCombatStyle = getStageCombatStyle(currentStageId);
   const matchedCombatStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const stageBuildStyle = getStageBuildStyle(currentStageId);
   const buildBlockScore = getStageBuildBlockScore(currentStageId, selectedBlock);
@@ -568,9 +537,6 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
       ? '作品+'
       : null;
   const meterRatio = modeRule ? clampRatio(modeMeter / modeRule.threshold) : null;
-  const recommendedLabel = stageCombatStyle && !matchedCombatStyle
-    ? getStageCombatWeaponLabel(stageCombatStyle.weapon)
-    : null;
   const combatFocusRemainingMs = Math.max(0, combatFocusUntil - now);
   const combatFocusActive = combatFocusItem === equippedItem && combatFocusRemainingMs > 0;
   const combatFocusDurationMs = modeRule && combatFocusRank > 0
@@ -599,13 +565,6 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     e.stopPropagation();
     onOpenCrafting();
   }, [onOpenCrafting]);
-
-  const handleWeaponSwitch = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    resetMobileActionTriggers();
-    cycleEquippedItem();
-  }, [cycleEquippedItem]);
 
   // ロケット発射
   const handleRocket = useCallback((e: React.TouchEvent) => {
@@ -689,8 +648,6 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
       onMachineGunStart={handleMachineGunStart}
       onRocket={handleRocket}
       onTogglePlace={handleTogglePlace}
-      onWeaponSwitch={handleWeaponSwitch}
-      recommendedLabel={recommendedLabel}
       selectedBlockName={selectedBlockName}
     />
   );

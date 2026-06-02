@@ -2791,8 +2791,7 @@ export function StartScreen() {
                 { key: 'Space×2', label: '飛行' },
                 { key: 'L-Click', label: '破壊' },
                 { key: 'R-Click', label: '設置' },
-                { key: 'V', label: '武器切替' },
-                { key: '1-9', label: 'ブロック' },
+                { key: '1-9', label: 'ブロック/武器' },
                 { key: 'F', label: '✈ 飛行機' },
               ]
           ).map((c) => (

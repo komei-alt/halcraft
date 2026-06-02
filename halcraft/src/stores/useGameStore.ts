@@ -276,6 +276,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       starterItems[block.blockId] = (starterItems[block.blockId] ?? 0) + block.count;
     }
     const stageHotbarSlots = getStageHotbarSlots(currentStage?.id, starterItems);
+    const openingItem = getStageOpeningItem(currentStage?.id);
+    const openingSlot = openingItem === 'builder'
+      ? 0
+      : stageHotbarSlots.findIndex((item) => item === openingItem);
     useInventoryStore.setState({ items: starterItems });
     useMobStore.getState().clearAllMobs();
     useExperienceStore.getState().resetXp();
@@ -336,9 +340,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       knockbackVx: 0,
       knockbackVz: 0,
       cameraShake: 0,
-      selectedSlot: 0,
+      selectedSlot: openingSlot >= 0 ? openingSlot : 0,
       hotbarSlots: stageHotbarSlots,
-      equippedItem: getStageOpeningItem(currentStage?.id),
+      equippedItem: openingItem,
       attackCooldown: 0,
       attackCharge: 1,
       rocketCooldown: 0,

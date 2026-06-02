@@ -196,7 +196,6 @@ export function Player() {
   const airplaneCameraActive = useRef(false);
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
-  const cycleEquippedItem = usePlayerStore((s) => s.cycleEquippedItem);
   const getBlock = useWorldStore((s) => s.getBlock);
   const sendPosition = useMultiplayerStore((s) => s.sendPosition);
   const sendHelicopterBoard = useMultiplayerStore((s) => s.sendHelicopterBoard);
@@ -322,11 +321,6 @@ export function Player() {
             interactPressed.current = true;
           }
           break;
-        case 'KeyV':
-          if (!e.repeat && isDesktopGameplayInputActive()) {
-            cycleEquippedItem();
-          }
-          break;
       }
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const digit = parseInt(e.code.replace('Digit', ''));
@@ -390,7 +384,7 @@ export function Player() {
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('wheel', onWheel);
     };
-  }, [cycleEquippedItem, selectSlot, sendHelicopterBoard]);
+  }, [selectSlot, sendHelicopterBoard]);
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {

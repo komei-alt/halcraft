@@ -53,6 +53,10 @@ const DEBRIS_COUNT = 22;
 /** 照準補正 */
 const ROCKET_AIM_DISTANCE = 80;
 const ROCKET_MIN_AIM_DISTANCE = 1.5;
+const ROCKET_SAFE_LAUNCH_OFFSET = 1.35;
+const ROCKET_MIN_CAMERA_CLEARANCE = 0.85;
+const ROCKET_COLLISION_ARM_DISTANCE = 2.4;
+const ROCKET_SELF_DAMAGE_SAFE_DISTANCE = 4.2;
 
 /** 残煙・トレイル */
 const TRAIL_INTERVAL = 0.03;
@@ -112,6 +116,15 @@ interface ExplosionEffect {
   smoke: ExplosionParticle[];
   fireballs: ExplosionParticle[];
   debris: ExplosionDebris[];
+}
+
+interface PendingExplosion {
+  pos: THREE.Vector3;
+  syncId: string;
+  applyGameplay: boolean;
+  notifyRemote: boolean;
+  directHit?: RocketDirectHitContext;
+  suppressSelfDamage?: boolean;
 }
 
 interface RocketDirectHitContext {
@@ -352,6 +365,7 @@ export function RocketLauncher() {
   const shootDir = useRef(new THREE.Vector3());
   const moveDir = useRef(new THREE.Vector3());
   const muzzleWorld = useRef(new THREE.Vector3());
+  const launchWorld = useRef(new THREE.Vector3());
   const cameraAimDir = useRef(new THREE.Vector3());
   const aimPoint = useRef(new THREE.Vector3());
   const playerCenter = useRef(new THREE.Vector3());
@@ -427,7 +441,11 @@ export function RocketLauncher() {
     }
   }, []);
 
-  const applyExplosionDamage = useCallback((center: THREE.Vector3, directHit?: RocketDirectHitContext) => {
+  const applyExplosionDamage = useCallback((
+    center: THREE.Vector3,
+    directHit?: RocketDirectHitContext,
+    suppressSelfDamage = false,
+  ) => {
     const mobStore = useMobStore.getState();
     const multi = useMultiplayerStore.getState();
     const combatFocus = getCombatFocusModifier('rocket_launcher');
@@ -435,15 +453,17 @@ export function RocketLauncher() {
     const damageMultiplier = combatFocus.damageMultiplier;
     let masteryHits = 0;
 
-    playerCenter.current.set(camera.position.x, camera.position.y - 0.85, camera.position.z);
-    const selfDistance = playerCenter.current.distanceTo(center);
-    const selfDamage = calculateExplosionDamage(selfDistance);
-    if (selfDamage > 0) {
-      takeDamage(
-        selfDamage,
-        playerCenter.current.x - center.x,
-        playerCenter.current.z - center.z,
-      );
+    if (!suppressSelfDamage) {
+      playerCenter.current.set(camera.position.x, camera.position.y - 0.85, camera.position.z);
+      const selfDistance = playerCenter.current.distanceTo(center);
+      const selfDamage = calculateExplosionDamage(selfDistance);
+      if (selfDamage > 0) {
+        takeDamage(
+          selfDamage,
+          playerCenter.current.x - center.x,
+          playerCenter.current.z - center.z,
+        );
+      }
     }
 
     for (const mob of mobStore.mobs) {
@@ -544,11 +564,12 @@ export function RocketLauncher() {
     pos: THREE.Vector3,
     applyGameplay: boolean = true,
     directHit?: RocketDirectHitContext,
+    suppressSelfDamage = false,
   ) => {
     if (applyGameplay) {
       const combatFocus = getCombatFocusModifier('rocket_launcher');
       destroyExplosionBlocks(pos, EXPLOSION_BLOCK_RADIUS * combatFocus.rocketRadiusMultiplier);
-      applyExplosionDamage(pos, directHit);
+      applyExplosionDamage(pos, directHit, suppressSelfDamage);
       useStageChallengeStore.getState().recordDetonation();
       useStageConditionStore.getState().recordDetonation();
     }
@@ -599,8 +620,12 @@ export function RocketLauncher() {
     }
 
     muzzleWorld.current.addScaledVector(cameraAimDir.current, 0.22);
+    launchWorld.current.copy(camera.position).addScaledVector(cameraAimDir.current, ROCKET_SAFE_LAUNCH_OFFSET);
+    if (launchWorld.current.distanceTo(camera.position) < ROCKET_MIN_CAMERA_CLEARANCE) {
+      launchWorld.current.copy(camera.position).addScaledVector(cameraAimDir.current, ROCKET_MIN_CAMERA_CLEARANCE);
+    }
 
-    shootDir.current.copy(aimPoint.current).sub(muzzleWorld.current);
+    shootDir.current.copy(aimPoint.current).sub(launchWorld.current);
     if (shootDir.current.lengthSq() < ROCKET_MIN_AIM_DISTANCE * ROCKET_MIN_AIM_DISTANCE) {
       shootDir.current.copy(cameraAimDir.current);
     } else {
@@ -615,13 +640,13 @@ export function RocketLauncher() {
     const projectile: RocketProjectile = {
       id: nextRocketId++,
       syncId: rocketId,
-      launchPos: muzzleWorld.current.clone(),
-      pos: muzzleWorld.current.clone(),
+      launchPos: launchWorld.current.clone(),
+      pos: launchWorld.current.clone(),
       vel: velocity,
       age: 0,
       maxAge: ROCKET_MAX_AGE,
       trailTimer: 0,
-      trailPoints: [muzzleWorld.current.clone()],
+      trailPoints: [muzzleWorld.current.clone(), launchWorld.current.clone()],
       orientation: new THREE.Quaternion().setFromUnitVectors(MODEL_FORWARD, shootDir.current),
     };
 
@@ -633,7 +658,7 @@ export function RocketLauncher() {
     useMasteryStore.getState().recordItemUse('rocket_launcher');
     multi.sendRocketFire(
       rocketId,
-      [muzzleWorld.current.x, muzzleWorld.current.y, muzzleWorld.current.z],
+      [launchWorld.current.x, launchWorld.current.y, launchWorld.current.z],
       [velocity.x, velocity.y, velocity.z],
     );
   }, [camera, fireRocket, getBlock, syncProjectiles]);
@@ -770,13 +795,7 @@ export function RocketLauncher() {
     }
 
     const trailSpawns: TrailPuff[] = [];
-    const explosionsToSpawn: Array<{
-      pos: THREE.Vector3;
-      syncId: string;
-      applyGameplay: boolean;
-      notifyRemote: boolean;
-      directHit?: RocketDirectHitContext;
-    }> = [];
+    const explosionsToSpawn: PendingExplosion[] = [];
 
     if (projectilesRef.current.length > 0) {
       const alive: RocketProjectile[] = [];
@@ -805,8 +824,19 @@ export function RocketLauncher() {
         projectile.vel.y -= ROCKET_GRAVITY * dt;
         moveDir.current.copy(projectile.vel).normalize();
         const moveDist = projectile.vel.length() * dt;
+        const traveledDistance = projectile.launchPos.distanceTo(projectile.pos);
 
         if (projectile.isRemote) {
+          projectile.pos.addScaledVector(moveDir.current, moveDist);
+          projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
+          projectile.trailPoints.push(projectile.pos.clone());
+          if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+          alive.push(projectile);
+          continue;
+        }
+
+        if (traveledDistance < ROCKET_COLLISION_ARM_DISTANCE) {
+          // 発射直後は肩元や目の前のブロック判定で即爆発しないよう安全距離を取る
           projectile.pos.addScaledVector(moveDir.current, moveDist);
           projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
           projectile.trailPoints.push(projectile.pos.clone());
@@ -831,6 +861,7 @@ export function RocketLauncher() {
 
         if (hitResult.type !== 'none') {
           const hitDistance = projectile.launchPos.distanceTo(hitResult.hitPos);
+          const suppressSelfDamage = hitDistance < ROCKET_SELF_DAMAGE_SAFE_DISTANCE;
           const directHit = hitResult.type === 'mob' || hitResult.type === 'player'
             ? {
                 targetType: hitResult.type,
@@ -847,6 +878,7 @@ export function RocketLauncher() {
             applyGameplay: true,
             notifyRemote: true,
             directHit,
+            suppressSelfDamage,
           });
           continue;
         }
@@ -877,6 +909,7 @@ export function RocketLauncher() {
               distance: hitDistance,
               precision,
             },
+            suppressSelfDamage: hitDistance < ROCKET_SELF_DAMAGE_SAFE_DISTANCE,
           });
           continue;
         }
@@ -967,11 +1000,12 @@ export function RocketLauncher() {
     if (explosionsToSpawn.length > 0) {
       const multi = useMultiplayerStore.getState();
       for (const explosion of explosionsToSpawn) {
-        if (explosion.directHit) {
-          spawnExplosionAt(explosion.pos, explosion.applyGameplay, explosion.directHit);
-        } else {
-          spawnExplosionAt(explosion.pos, explosion.applyGameplay);
-        }
+        spawnExplosionAt(
+          explosion.pos,
+          explosion.applyGameplay,
+          explosion.directHit,
+          explosion.suppressSelfDamage,
+        );
         if (explosion.notifyRemote) {
           multi.sendRocketExplode(
             explosion.syncId,
