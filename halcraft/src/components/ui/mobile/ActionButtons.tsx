@@ -22,6 +22,8 @@ import { mobileActions } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
 const RIGHT = 20;
+const LEFT_ATTACK = 56;
+const PRIMARY_ATTACK_BOTTOM = 172;
 const BASE_BOTTOM = 64 + 80;
 const STACK_GAP = 12;
 
@@ -43,6 +45,7 @@ interface ActionButtonProps {
   badge?: string | null;
   meterRatio?: number | null;
   pulse?: boolean;
+  placement?: 'right-stack' | 'left-attack';
   onTouchStart: TouchHandler;
   onTouchEnd?: TouchHandler;
   onTouchCancel?: TouchHandler;
@@ -233,10 +236,20 @@ function ActionButton({
   badge,
   meterRatio,
   pulse,
+  placement = 'right-stack',
   onTouchStart,
   onTouchEnd,
   onTouchCancel,
 }: ActionButtonProps) {
+  const positionStyle: CSSProperties = placement === 'left-attack'
+    ? {
+        left: LEFT_ATTACK,
+        right: 'auto',
+      }
+    : {
+        right: RIGHT,
+      };
+
   return (
     <div
       aria-label={ariaLabel}
@@ -245,6 +258,7 @@ function ActionButton({
       onTouchCancel={onTouchCancel}
       style={{
         ...buttonBaseStyle,
+        ...positionStyle,
         bottom: `calc(${bottom}px + env(safe-area-inset-bottom))`,
         background: tone.background,
         border: tone.border,
@@ -359,12 +373,13 @@ function VehicleActions({
       <ActionButton
         ariaLabel={activeVehicle === 'tank' ? '戦車ガトリング' : '飛行機機銃'}
         badge={tactic.badge}
-        bottom={getBottom(0)}
+        bottom={PRIMARY_ATTACK_BOTTOM}
         icon="🔫"
         meterRatio={tactic.meterRatio}
         onTouchCancel={onGunEnd}
         onTouchEnd={onGunEnd}
         onTouchStart={onGunStart}
+        placement="left-attack"
         pulse={tactic.pulse}
         tone={TONES.machineGun}
       />
@@ -429,10 +444,11 @@ function WalkingActions({
         <ActionButton
           ariaLabel="ロケット発射"
           badge={combatFocusBadge ?? combatProgress ?? combatBadge}
-          bottom={getBottom(0)}
+          bottom={PRIMARY_ATTACK_BOTTOM}
           icon="💥"
           meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchStart={onRocket}
+          placement="left-attack"
           pulse={combatFocusActive || combatMatched}
           tone={combatFocusActive ? actionTone : TONES.rocket}
         />
@@ -440,12 +456,13 @@ function WalkingActions({
         <ActionButton
           ariaLabel="機関銃"
           badge={combatFocusBadge ?? combatProgress ?? combatBadge}
-          bottom={getBottom(0)}
+          bottom={PRIMARY_ATTACK_BOTTOM}
           icon="🔫"
           meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchCancel={onMachineGunEnd}
           onTouchEnd={onMachineGunEnd}
           onTouchStart={onMachineGunStart}
+          placement="left-attack"
           pulse={combatFocusActive || combatMatched}
           tone={combatFocusActive ? actionTone : TONES.machineGun}
         />
@@ -453,10 +470,11 @@ function WalkingActions({
         <ActionButton
           ariaLabel="ライトセイバー"
           badge={combatFocusBadge ?? combatProgress ?? combatBadge}
-          bottom={getBottom(0)}
+          bottom={PRIMARY_ATTACK_BOTTOM}
           icon="⚔️"
           meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
           onTouchStart={onLightsaber}
+          placement="left-attack"
           pulse={combatFocusActive || combatMatched}
           tone={combatFocusActive ? actionTone : TONES.lightsaber}
         />

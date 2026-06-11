@@ -37,7 +37,7 @@ interface CelebrationToast {
 }
 
 const DISPLAY_MS = 3400;
-const MAX_TOASTS = 3;
+const MAX_TOASTS = 1;
 const CELEBRATION_SPARKS = [
   { x: '6%', y: '18%', delay: 0, size: 4 },
   { x: '16%', y: '76%', delay: 0.1, size: 5 },
@@ -403,15 +403,14 @@ export function ProgressCelebration() {
       id="progress-celebration"
       style={{
         position: 'fixed',
-        top: isCompact ? 92 : 70,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        top: isCompact ? 'calc(62px + env(safe-area-inset-top))' : 70,
+        right: isCompact ? 10 : 16,
         zIndex: 125,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        gap: isCompact ? 7 : 8,
-        width: isCompact ? 'min(330px, calc(100vw - 28px))' : 390,
+        alignItems: 'flex-end',
+        gap: isCompact ? 6 : 8,
+        width: isCompact ? 'min(268px, calc(100vw - 120px))' : 390,
         pointerEvents: 'none',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
       }}
@@ -428,7 +427,7 @@ export function ProgressCelebration() {
               display: 'flex',
               alignItems: 'center',
               gap: isCompact ? 9 : 11,
-              padding: isCompact ? '9px 11px' : '11px 13px',
+              padding: isCompact ? '7px 9px' : '11px 13px',
               borderRadius: 8,
               border: `1px solid ${toast.accent}96`,
               background: `linear-gradient(135deg, ${toast.accent}1c, rgba(12, 16, 24, 0.88) 42%, rgba(20, 26, 36, 0.68))`,
@@ -481,15 +480,15 @@ export function ProgressCelebration() {
               style={{
                 position: 'relative',
                 flex: '0 0 auto',
-                width: isCompact ? 34 : 38,
-                height: isCompact ? 34 : 38,
+                width: isCompact ? 30 : 38,
+                height: isCompact ? 30 : 38,
                 borderRadius: 8,
                 display: 'grid',
                 placeItems: 'center',
                 background: `${toast.accent}2c`,
                 border: `1px solid ${toast.accent}88`,
                 boxShadow: `0 0 16px ${toast.glow}`,
-                fontSize: isCompact ? 19 : 21,
+                fontSize: isCompact ? 17 : 21,
                 animation: 'celebrationIconPop 0.55s ease-out',
               }}
             >
@@ -538,8 +537,8 @@ export function ProgressCelebration() {
                 style={{
                   marginTop: 1,
                   color: 'rgba(255,255,255,0.96)',
-                  fontSize: isCompact ? 14 : 15,
-                  lineHeight: isCompact ? '17px' : '18px',
+                  fontSize: isCompact ? 12 : 15,
+                  lineHeight: isCompact ? '15px' : '18px',
                   fontWeight: 950,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -548,20 +547,22 @@ export function ProgressCelebration() {
               >
                 {toast.title}
               </div>
-              <div
-                style={{
-                  marginTop: 2,
-                  color: 'rgba(255,255,255,0.72)',
-                  fontSize: isCompact ? 10 : 11,
-                  lineHeight: '14px',
-                  fontWeight: 800,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {toast.detail}
-              </div>
+              {!isCompact && (
+                <div
+                  style={{
+                    marginTop: 2,
+                    color: 'rgba(255,255,255,0.72)',
+                    fontSize: 11,
+                    lineHeight: '14px',
+                    fontWeight: 800,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {toast.detail}
+                </div>
+              )}
             </div>
             <div
               style={{

@@ -223,6 +223,8 @@ function GameCanvas() {
 export default function App() {
   const phase = useGameStore((s) => s.phase);
   const isTouch = isTouchDevice();
+  const compactGameplayHud = isTouch || window.innerWidth <= 560;
+  const showDetailedHud = !compactGameplayHud;
   const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
   const spawnTank = useVehicleStore((s) => s.spawnTank);
   const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
@@ -336,24 +338,24 @@ export default function App() {
           <Crosshair />
           <Hotbar />
           <HealthBar />
-          <ToolHUD />
-          <ArmorHUD />
-          <EffectIcons />
+          {showDetailedHud && <ToolHUD />}
+          {showDetailedHud && <ArmorHUD />}
+          {showDetailedHud && <EffectIcons />}
           <XPBar />
-          <TimeDisplay />
-          <StageProgressHUD />
+          {showDetailedHud && <TimeDisplay />}
+          {showDetailedHud && <StageProgressHUD />}
           <StageLandmarkMomentHUD />
           <StageMasteryMomentHUD />
-          <StageChallengeHUD />
-          <StageConditionHUD />
-          <StageEventHUD />
-          <StagePressureHUD />
+          {showDetailedHud && <StageChallengeHUD />}
+          {showDetailedHud && <StageConditionHUD />}
+          {showDetailedHud && <StageEventHUD />}
+          {showDetailedHud && <StagePressureHUD />}
           <StageOpeningBriefing />
           <BossEncounterHUD />
-          <ModeFlowHUD />
+          {showDetailedHud && <ModeFlowHUD />}
           <StageChallengeRewardSystem />
           <StageResultOverlay />
-          <MasteryHUD />
+          {showDetailedHud && <MasteryHUD />}
           <CombatFeedbackHUD />
           <ProgressCelebration />
           <DamageOverlay />
@@ -362,7 +364,7 @@ export default function App() {
           <WeaponSwitchPopover />
           <VehicleAimHUD />
           <CockpitHUD />
-          <MinimapHUD />
+          {showDetailedHud && <MinimapHUD />}
           <CoasterHUD />
           <MultiplayerConnectionHUD />
           <AirSupplyBar />

@@ -570,11 +570,11 @@ export function CombatFeedbackHUD() {
       key={feedback.id}
       style={{
         position: 'fixed',
-        // 照準（画面中央のクロスヘア）に重ならないよう、デスクトップはクロスヘアの右上へ寄せる。
-        // 射撃の視界中心と射線を空けつつ、手応えのパネルは視界の隅で確認できる位置に置く。
-        left: isCompact ? '50%' : 'calc(50% + 52px)',
-        top: isCompact ? 204 : 'calc(50% - 156px)',
-        transform: isCompact ? 'translateX(-50%)' : 'none',
+        // 射撃の視界中心と射線を空けつつ、手応えは画面端へ寄せる。
+        left: isCompact ? 'auto' : 'calc(50% + 52px)',
+        right: isCompact ? 10 : 'auto',
+        top: isCompact ? 'calc(118px + env(safe-area-inset-top))' : 'calc(50% - 156px)',
+        transform: 'none',
         zIndex: 121,
         pointerEvents: 'none',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
@@ -582,7 +582,7 @@ export function CombatFeedbackHUD() {
     >
       <div
         style={{
-          width: isCompact ? 'min(236px, calc(100vw - 32px))' : 222,
+          width: isCompact ? 'min(206px, calc(100vw - 128px))' : 222,
           padding: isCompact ? '5px 7px' : '6px 9px',
           borderRadius: 6,
           border: `1px solid ${accent}73`,
@@ -657,10 +657,26 @@ export function CombatFeedbackHUD() {
             +{feedback.xp}
           </span>
         </div>
+        {isCompact ? (
+          <div
+            style={{
+              marginTop: 4,
+              color: accent,
+              fontSize: 8,
+              lineHeight: '11px',
+              fontWeight: 900,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {technique.eyebrow}: {technique.meterText}
+          </div>
+        ) : (
         <div
           style={{
             marginTop: 6,
-            padding: isCompact ? '5px 6px' : '6px 7px',
+            padding: '6px 7px',
             borderRadius: 5,
             background: `${accent}14`,
             border: `1px solid ${accent}38`,
@@ -729,7 +745,8 @@ export function CombatFeedbackHUD() {
             {technique.detail}
           </div>
         </div>
-        {stageTactic && (
+        )}
+        {!isCompact && stageTactic && (
           <div
             style={{
               marginTop: 5,
@@ -807,7 +824,7 @@ export function CombatFeedbackHUD() {
             </div>
           </div>
         )}
-        {challenge && (
+        {!isCompact && challenge && (
           <div
             style={{
               marginTop: 5,

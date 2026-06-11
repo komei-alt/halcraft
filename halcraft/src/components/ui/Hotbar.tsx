@@ -440,6 +440,7 @@ export function Hotbar() {
   const previousSelectionKeyRef = useRef<string | null>(null);
 
   const isTouch = isTouchDevice();
+  const isCompactHud = isTouch || window.innerWidth <= 560;
   const selectedHotbarItem = hotbarSlots[selectedSlot];
   const selectedIsBlock = isBlockHotbarItem(selectedHotbarItem);
   const selectedBlock = getHotbarItemBlockId(
@@ -541,7 +542,7 @@ export function Hotbar() {
         zIndex: isTouch ? 125 : 100,
       }}
     >
-      {equippedMasteryPulse && (
+      {!isCompactHud && equippedMasteryPulse && (
         <div
           id="equipped-mastery-pulse"
           key={`equipped-mastery-pulse-${equippedMasteryPulse.id}`}
@@ -654,7 +655,7 @@ export function Hotbar() {
         </div>
       )}
 
-      {equippedItem === 'builder' && selectedIsBlock && selectedDef && (
+      {!isCompactHud && equippedItem === 'builder' && selectedIsBlock && selectedDef && (
         <div
           style={{
             minWidth: isTouch ? 250 : 320,
@@ -885,7 +886,7 @@ export function Hotbar() {
         </div>
       )}
 
-      {selectedWeaponPanel && (
+      {!isCompactHud && selectedWeaponPanel && (
         <div
           id="weapon-tactic-panel"
           style={{
