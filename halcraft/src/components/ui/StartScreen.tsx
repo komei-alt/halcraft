@@ -1217,8 +1217,13 @@ export function StartScreen() {
         fontFamily: SG.font,
         padding: 0,
         /* モバイルでスクロール可能にする */
+        height: '100dvh',
+        maxHeight: '100dvh',
         overflowX: 'hidden',
         overflowY: 'auto',
+        overscrollBehaviorY: 'contain',
+        touchAction: 'pan-y',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
       {/* ハルが描いたタイトル画像（背景全面・スクロールに追従しない） */}
@@ -1534,11 +1539,15 @@ export function StartScreen() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          paddingBottom: showDesktopLaunchDock ? 160 : (isTouch ? 24 : 40),
+          paddingBottom: showDesktopLaunchDock
+            ? 160
+            : (isTouch ? 'calc(24px + env(safe-area-inset-bottom, 0px))' : 40),
           // アップデートログ表示時、中間幅ではコンテンツ列を右に寄せてログとの重なりを防ぐ
           paddingLeft: isTouch ? 12 : (showUpdateLog && viewportSize.w < 1280 ? 296 : 0),
           paddingRight: isTouch ? 12 : 0,
           gap: 0,
+          minHeight: 'min-content',
+          touchAction: 'pan-y',
         }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -296,8 +296,36 @@ body {
 
 /* === スタート画面のモバイルスクロール許可 === */
 #start-screen {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
   touch-action: pan-y !important;
   -webkit-overflow-scrolling: touch;
+}
+
+#start-screen,
+#start-screen * {
+  touch-action: pan-y !important;
+}
+
+#start-screen input,
+#start-screen textarea {
+  touch-action: manipulation !important;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#start-screen button,
+#start-screen [role="button"] {
+  touch-action: manipulation !important;
+}
+
+#start-screen-content {
+  min-height: min-content;
+  touch-action: pan-y !important;
 }
 
 /* === モバイルレスポンシブ === */
