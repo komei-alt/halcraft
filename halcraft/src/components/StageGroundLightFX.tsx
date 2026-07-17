@@ -362,12 +362,14 @@ export function StageGroundLightFX() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
   const dummyRef = useRef(new THREE.Object3D());
+  const lastUpdateRef = useRef(0);
   const phase = useGameStore((s) => s.phase);
   const biomeId = useGameStore((s) => s.currentStage?.biome ?? null);
   const category = useGameStore((s) => s.currentStage?.category ?? null);
   useSettingsStore((s) => s.graphicsPreset);
   useSettingsStore((s) => s.resolutionScale);
   const { camera } = useThree();
+  const updateInterval = getPerformanceProfile().tier === 'high' ? 1 / 30 : 1 / 22;
 
   const config = biomeId ? CONFIGS[biomeId] : null;
   const patches = useMemo(() => {
@@ -402,6 +404,8 @@ export function StageGroundLightFX() {
     if (!meshRef.current || !materialRef.current || !config || phase !== 'playing') return;
 
     const elapsed = clock.getElapsedTime();
+    if (elapsed - lastUpdateRef.current < updateInterval) return;
+    lastUpdateRef.current = elapsed;
     const mesh = meshRef.current;
     const dummy = dummyRef.current;
     const modeScale = getModeOpacityScale(category);

@@ -694,6 +694,7 @@ export function VehicleWeapons() {
     const remotePlayers = useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>;
 
     setBullets((prev) => {
+      if (prev.length === 0) return prev;
       const alive: BulletProjectile[] = [];
       for (const bullet of prev) {
         if (now - bullet.createdAt > BULLET_MAX_AGE) continue;
@@ -758,6 +759,7 @@ export function VehicleWeapons() {
     });
 
     setRockets((prev) => {
+      if (prev.length === 0) return prev;
       const alive: CannonRocket[] = [];
       for (const rocket of prev) {
         rocket.age += delta;
@@ -805,12 +807,15 @@ export function VehicleWeapons() {
       return alive;
     });
 
-    setExplosions((prev) => prev
-      .map((explosion) => ({ ...explosion, life: explosion.life - delta }))
-      .filter((explosion) => explosion.life > 0));
+    setExplosions((prev) => prev.length === 0
+      ? prev
+      : prev
+        .map((explosion) => ({ ...explosion, life: explosion.life - delta }))
+        .filter((explosion) => explosion.life > 0));
 
     // === 爆弾の物理更新 ===
     setBombs((prev) => {
+      if (prev.length === 0) return prev;
       const alive: BombProjectile[] = [];
       for (const bomb of prev) {
         bomb.age += delta;

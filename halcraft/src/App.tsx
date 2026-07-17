@@ -32,6 +32,7 @@ import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
 import { StageModeFlowFX } from './components/StageModeFlowFX';
 import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
 import { ItemMasteryPulseFX } from './components/ItemMasteryPulseFX';
+import { AdaptiveGraphicsGovernor, AdaptiveStageVisuals } from './components/AdaptiveGraphics';
 import {
   CanvasResolutionPipeline,
   GraphicsPostFX,
@@ -146,7 +147,7 @@ function GameCanvas() {
           near: 0.1,
           far: performanceProfile.cameraFar,
         }}
-        dpr={[1, performanceProfile.maxDpr]}
+        dpr={[0.75, performanceProfile.maxDpr]}
         gl={{
           antialias: false,
           powerPreference: isTouch ? 'default' : 'high-performance',
@@ -157,11 +158,13 @@ function GameCanvas() {
         tabIndex={0}
         style={{ width: '100%', height: '100%', outline: 'none' }}
       >
+        <AdaptiveGraphicsGovernor />
         <CanvasResolutionPipeline />
         <RendererColorPipeline />
         <SceneReflectionPipeline />
         <Suspense fallback={null}>
           <Environment />
+          <AdaptiveStageVisuals />
           <StageConditionFX />
           <StageEventFX />
           <StageLandmarkBeaconFX />

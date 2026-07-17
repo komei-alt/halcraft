@@ -45,6 +45,14 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-17',
+    items: [
+      { type: 'improve', text: '空にやわらかな雲が流れ、水面は空と太陽を映してきらめき、昼も夜も景色がもっと立体的になったよ！' },
+      { type: 'improve', text: '太陽・月・たいまつの光と影が近くの世界をしっかり照らして、暗い場所でも冒険しやすくなったよ！' },
+      { type: 'feature', text: '遊んでいる端末の速さを見ながら画質を自動調整して、きれいなまま動きやすくなったよ！' },
+    ],
+  },
+  {
     date: '2026-06-02',
     items: [
       { type: 'fix', text: '画面全体に薄い縦線のようなノイズが出る演出を外して、距離感は3D空間の自然な空気遠近法で出すようにしたよ！' },

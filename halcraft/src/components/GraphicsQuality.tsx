@@ -14,6 +14,10 @@ import {
 } from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
+import {
+  GRAPHICS_PRESSURE_DPR_SCALE,
+  useGraphicsRuntimeStore,
+} from '../stores/useGraphicsRuntimeStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useGameStore } from '../stores/useGameStore';
 import type { BiomeId, StageCategory } from '../types/stages';
@@ -27,7 +31,7 @@ interface QualityTuning {
   aoRadius: number;
   saturation: number;
   contrast: number;
-  resolutionScale: number;
+  bloomLevels: number;
   smaaPreset: SMAAPreset;
   aoQuality: 'performance' | 'low' | 'medium';
   aoSamples: number;
@@ -40,8 +44,6 @@ interface StageLookTuning {
   saturationOffset: number;
   contrastOffset: number;
   hue: number;
-  middleGrey: number;
-  whitePoint: number;
 }
 
 const DEFAULT_STAGE_LOOK: StageLookTuning = {
@@ -50,8 +52,6 @@ const DEFAULT_STAGE_LOOK: StageLookTuning = {
   saturationOffset: 0,
   contrastOffset: 0,
   hue: 0,
-  middleGrey: 0.62,
-  whitePoint: 7.5,
 };
 
 interface ReflectionRig {
@@ -66,11 +66,11 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     return {
       bloomIntensity: 0.34,
       bloomThreshold: 0.74,
-      aoIntensity: 1.1,
-      aoRadius: 3.2,
+      aoIntensity: 0.88,
+      aoRadius: 2.8,
       saturation: 0.06,
       contrast: 0.036,
-      resolutionScale: 1,
+      bloomLevels: 6,
       smaaPreset: SMAAPreset.HIGH,
       aoQuality: 'medium',
       aoSamples: 12,
@@ -85,7 +85,7 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     aoRadius: isTouch ? 1.8 : 2.4,
     saturation: isTouch ? 0.025 : 0.04,
     contrast: isTouch ? 0.012 : 0.022,
-    resolutionScale: isTouch ? 0.72 : 0.85,
+    bloomLevels: isTouch ? 4 : 5,
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
     aoSamples: isTouch ? 5 : 8,
@@ -105,8 +105,6 @@ function getStageLookTuning(
       saturationOffset: 0.035,
       contrastOffset: 0.014,
       hue: 0.018,
-      middleGrey: 0.56,
-      whitePoint: 6.8,
     };
   }
 
@@ -117,8 +115,6 @@ function getStageLookTuning(
       saturationOffset: 0.018,
       contrastOffset: 0.006,
       hue: -0.006,
-      middleGrey: 0.61,
-      whitePoint: 7.6,
     },
     tropical: {
       bloomMultiplier: 1.18,
@@ -126,8 +122,6 @@ function getStageLookTuning(
       saturationOffset: 0.045,
       contrastOffset: 0.004,
       hue: 0.012,
-      middleGrey: 0.66,
-      whitePoint: 7.9,
     },
     snow: {
       bloomMultiplier: 1.08,
@@ -135,8 +129,6 @@ function getStageLookTuning(
       saturationOffset: -0.012,
       contrastOffset: -0.006,
       hue: -0.018,
-      middleGrey: 0.68,
-      whitePoint: 8.2,
     },
     desert: {
       bloomMultiplier: 1.14,
@@ -144,8 +136,6 @@ function getStageLookTuning(
       saturationOffset: 0.02,
       contrastOffset: 0.01,
       hue: 0.024,
-      middleGrey: 0.64,
-      whitePoint: 7.3,
     },
   };
 
@@ -159,7 +149,6 @@ function getStageLookTuning(
     bloomThresholdOffset: base.bloomThresholdOffset + (isWar ? -0.018 : -0.006),
     saturationOffset: base.saturationOffset + (isWar ? 0.014 : 0.006),
     contrastOffset: base.contrastOffset + (isWar ? 0.012 : 0.004),
-    middleGrey: base.middleGrey + (isWar ? -0.02 : 0.015),
   };
 }
 
@@ -237,6 +226,7 @@ function getDarkSceneLift(gameTime: number, dimension: string): number {
 export function CanvasResolutionPipeline() {
   const { gl, camera, setDpr, setSize } = useThree();
   const lastSyncTime = useRef(0);
+  const pressure = useGraphicsRuntimeStore((s) => s.pressure);
 
   const syncCanvasResolution = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -246,7 +236,13 @@ export function CanvasResolutionPipeline() {
     const width = Math.max(1, Math.round(canvas.clientWidth || parent?.clientWidth || window.innerWidth));
     const height = Math.max(1, Math.round(canvas.clientHeight || parent?.clientHeight || window.innerHeight));
     const profile = getPerformanceProfile();
-    const targetDpr = Math.max(1, Math.min(window.devicePixelRatio || 1, profile.maxDpr));
+    const targetDpr = Math.max(
+      0.75,
+      Math.min(
+        window.devicePixelRatio || 1,
+        profile.maxDpr * GRAPHICS_PRESSURE_DPR_SCALE[pressure],
+      ),
+    );
     const targetBufferWidth = Math.max(1, Math.round(width * targetDpr));
     const targetBufferHeight = Math.max(1, Math.round(height * targetDpr));
     const currentDpr = gl.getPixelRatio();
@@ -268,7 +264,7 @@ export function CanvasResolutionPipeline() {
       camera.updateProjectionMatrix();
     }
     /* eslint-enable react-hooks/immutability */
-  }, [camera, gl, setDpr, setSize]);
+  }, [camera, gl, pressure, setDpr, setSize]);
 
   useEffect(() => {
     syncCanvasResolution();
@@ -296,6 +292,7 @@ export function RendererColorPipeline() {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const profile = getPerformanceProfile();
+  const postProcessingEnabled = graphicsPreset !== 'light' && profile.tier !== 'low';
   const exposure = profile.tier === 'high' || graphicsPreset === 'quality'
     ? 1.06
     : resolutionScale === 'performance'
@@ -306,9 +303,10 @@ export function RendererColorPipeline() {
   /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    // EffectComposer 使用時は最後の ToneMappingEffect だけに色変換を任せる。
+    gl.toneMapping = postProcessingEnabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = exposure;
-  }, [gl, exposure]);
+  }, [gl, exposure, postProcessingEnabled]);
 
   useFrame(() => {
     const gameState = useGameStore.getState();
@@ -317,7 +315,7 @@ export function RendererColorPipeline() {
       : 1;
     const darkLift = getDarkSceneLift(gameState.gameTime, gameState.dimension);
     const dynamicExposure = exposure
-      * (1 + darkLift * 0.24)
+      * (1 + darkLift * 0.34)
       * (1 + Math.max(0, stageBoost - 1) * 0.08);
     gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, dynamicExposure, 0.08);
   });
@@ -388,16 +386,18 @@ export function GraphicsPostFX() {
   const stageBiome = useGameStore((s) => s.currentStage?.biome ?? null);
   const stageCategory = useGameStore((s) => s.currentStage?.category ?? null);
   const dimension = useGameStore((s) => s.dimension);
+  const pressure = useGraphicsRuntimeStore((s) => s.pressure);
   const profile = getPerformanceProfile();
   const isTouch = isTouchDevice();
-  const isHighQuality = profile.tier === 'high' || graphicsPreset === 'quality' || lightingQuality === 'rich';
+  const isHighQuality = pressure === 0
+    && (profile.tier === 'high' || graphicsPreset === 'quality' || lightingQuality === 'rich');
   const enabled = graphicsPreset !== 'light' && profile.tier !== 'low';
 
   if (!enabled) return null;
 
   const tuning = getQualityTuning(isHighQuality, isTouch);
   const stageLook = getStageLookTuning(stageBiome, stageCategory, dimension);
-  const aoEnabled = shadowQuality !== 'off';
+  const aoEnabled = shadowQuality !== 'off' && pressure < 2;
   const bloomThreshold = THREE.MathUtils.clamp(
     tuning.bloomThreshold + stageLook.bloomThresholdOffset,
     0.56,
@@ -409,19 +409,18 @@ export function GraphicsPostFX() {
   return (
     <EffectComposer
       multisampling={0}
-      resolutionScale={tuning.resolutionScale}
       depthBuffer={aoEnabled}
       renderPriority={1}
     >
       {aoEnabled ? (
         <N8AO
-          halfRes={!isHighQuality || isTouch}
-          quality={tuning.aoQuality}
+          halfRes={pressure > 0 || !isHighQuality || isTouch}
+          quality={pressure > 0 ? 'performance' : tuning.aoQuality}
           aoRadius={tuning.aoRadius}
           distanceFalloff={1.35}
           intensity={tuning.aoIntensity}
-          aoSamples={tuning.aoSamples}
-          denoiseSamples={tuning.denoiseSamples}
+          aoSamples={pressure > 0 ? Math.min(5, tuning.aoSamples) : tuning.aoSamples}
+          denoiseSamples={pressure > 0 ? Math.min(2, tuning.denoiseSamples) : tuning.denoiseSamples}
           denoiseRadius={isHighQuality ? 14 : 10}
           depthAwareUpsampling
         />
@@ -431,14 +430,10 @@ export function GraphicsPostFX() {
         intensity={tuning.bloomIntensity * stageLook.bloomMultiplier * 0.62}
         luminanceThreshold={bloomThreshold}
         luminanceSmoothing={0.18}
+        levels={pressure > 0 ? Math.min(4, tuning.bloomLevels) : tuning.bloomLevels}
         mipmapBlur
       />
-      <ToneMapping
-        mode={ToneMappingMode.ACES_FILMIC}
-        whitePoint={stageLook.whitePoint}
-        middleGrey={stageLook.middleGrey}
-        minLuminance={0.015}
-      />
+      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <HueSaturation
         blendFunction={BlendFunction.NORMAL}
         hue={stageLook.hue}
@@ -449,7 +444,7 @@ export function GraphicsPostFX() {
         brightness={dimension === 'nether' ? -0.006 : 0.002}
         contrast={contrast}
       />
-      <SMAA preset={tuning.smaaPreset} />
+      <SMAA preset={pressure > 0 ? SMAAPreset.LOW : tuning.smaaPreset} />
     </EffectComposer>
   );
 }

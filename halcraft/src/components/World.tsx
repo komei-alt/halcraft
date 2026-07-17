@@ -414,19 +414,21 @@ export function World() {
     const visible: [number, number][] = [];
     const keyParts: string[] = [];
     const currentChunks = useWorldStore.getState().chunks;
-    currentChunks.forEach((_, key) => {
-      const [cx, cz] = key.split(',').map(Number);
-      const dx = Math.abs(cx - camX);
-      const dz = Math.abs(cz - camZ);
-      // チェビシェフ距離で判定（正方形の範囲）
-      if (Math.max(dx, dz) <= visibleDistance) {
+    // 全生成済みチャンクを走査せず、現在の描画半径だけを直接引く。
+    // 長距離を移動してチャンクが増えても、ここでの処理量は一定になる。
+    for (let dx = -visibleDistance; dx <= visibleDistance; dx++) {
+      for (let dz = -visibleDistance; dz <= visibleDistance; dz++) {
+        const cx = camX + dx;
+        const cz = camZ + dz;
+        const key = `${cx},${cz}`;
+        if (!currentChunks.has(key)) continue;
         visible.push([cx, cz]);
         keyParts.push(key);
       }
-    });
+    }
 
     // 前回と同じ構成ならstateを更新しない（不要な再レンダリング防止）
-    const newKey = keyParts.sort().join(';');
+    const newKey = keyParts.join(';');
     if (newKey === prevChunkKey.current) return;
     prevChunkKey.current = newKey;
 

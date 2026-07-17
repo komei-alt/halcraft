@@ -7,6 +7,7 @@ import { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import { BIOME_CONFIGS } from '../types/biomes';
+import { useGraphicsRuntimeStore } from '../stores/useGraphicsRuntimeStore';
 import { getPerformanceProfile } from '../utils/performance';
 import { useSettingsStore, type AtmosphereQuality, type LightingQuality } from '../stores/useSettingsStore';
 
@@ -23,6 +24,15 @@ const _moonPosition = new THREE.Vector3();
 const _starfieldRotation = new THREE.Euler();
 const _sunDiscColor = new THREE.Color();
 const _sunDiscLiftColor = new THREE.Color(0xffffff);
+const _sunLightDirection = new THREE.Vector3();
+const _moonLightDirection = new THREE.Vector3();
+const _shadowAnchor = new THREE.Vector3();
+const _hemiSkyColor = new THREE.Color();
+const _hemiGroundColor = new THREE.Color();
+const _viewFillColor = new THREE.Color();
+const _viewFillDirection = new THREE.Vector3();
+const _moonLightColor = new THREE.Color(0x9fb8ff);
+const _nightGroundColor = new THREE.Color(0x101629);
 
 /** バイオーム色キャッシュ用 */
 const _daySky = new THREE.Color();
@@ -47,6 +57,8 @@ const SUN_HALO_RADIUS = 31;
 const MOON_DISC_RADIUS = 10.5;
 const MOON_HALO_RADIUS = 22;
 const STAR_COUNT = 190;
+const CLOUD_TEXTURE_WIDTH = 256;
+const CLOUD_TEXTURE_HEIGHT = 128;
 
 interface AtmosphereTuning {
   mode: 'none' | 'linear' | 'exponential';
@@ -128,6 +140,67 @@ function createStarGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
+function seededCloudUnit(index: number, salt: number): number {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+/** 小さなテクスチャを一度だけ生成し、空シェーダーでは2回の参照だけで雲を描く */
+function createCloudTexture(): THREE.Texture {
+  if (typeof document === 'undefined') {
+    const data = new Uint8Array([0, 0, 0, 255]);
+    const fallback = new THREE.DataTexture(data, 1, 1);
+    fallback.needsUpdate = true;
+    return fallback;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CLOUD_TEXTURE_WIDTH;
+  canvas.height = CLOUD_TEXTURE_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let i = 0; i < 72; i++) {
+      const x = seededCloudUnit(i, 1.7) * canvas.width;
+      const y = 22 + seededCloudUnit(i, 3.1) * 78;
+      const radiusX = 10 + seededCloudUnit(i, 4.9) * 30;
+      const radiusY = 3.5 + seededCloudUnit(i, 6.3) * 10;
+      const opacity = 0.1 + seededCloudUnit(i, 8.1) * 0.22;
+      const drawOval = (drawX: number) => {
+        ctx.save();
+        ctx.translate(drawX, y);
+        ctx.scale(radiusX, radiusY);
+        const gradient = ctx.createRadialGradient(0, 0, 0.04, 0, 0, 1);
+        gradient.addColorStop(0, `rgba(255,255,255,${opacity})`);
+        gradient.addColorStop(0.52, `rgba(255,255,255,${opacity * 0.62})`);
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      };
+
+      drawOval(x);
+      if (x < radiusX) drawOval(x + canvas.width);
+      if (x > canvas.width - radiusX) drawOval(x - canvas.width);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 const SKY_VERTEX_SHADER = /* glsl */ `
   varying vec3 vDirection;
 
@@ -145,6 +218,9 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uSunColor;
   uniform vec3 uSunDirection;
   uniform float uNightMix;
+  uniform float uTime;
+  uniform float uCloudOpacity;
+  uniform sampler2D uCloudMap;
 
   varying vec3 vDirection;
 
@@ -162,18 +238,45 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
 
     sky += uSunColor * (horizonGlow + sunHalo * 0.28 + sunCore * 1.85);
     sky += uTopColor * zenithLift;
+
+    // 低解像度の雲マスクを二層だけ参照し、重いボリューム計算なしで奥行きを作る
+    vec2 skyUv = vec2(
+      atan(direction.z, direction.x) * 0.15915494 + 0.5,
+      asin(clamp(direction.y, -1.0, 1.0)) * 0.31830989 + 0.5
+    );
+    float cloudLow = texture2D(
+      uCloudMap,
+      vec2(skyUv.x * 1.14 + uTime * 0.0014, skyUv.y * 1.32)
+    ).r;
+    float cloudHigh = texture2D(
+      uCloudMap,
+      vec2(skyUv.x * 2.27 - uTime * 0.0021, skyUv.y * 2.46 + 0.13)
+    ).r;
+    float cloudField = cloudLow * 0.74 + cloudHigh * 0.34;
+    float cloudBand = smoothstep(-0.04, 0.16, direction.y)
+                    * (1.0 - smoothstep(0.72, 0.96, direction.y));
+    float cloudMask = smoothstep(0.24, 0.62, cloudField)
+                    * cloudBand
+                    * uCloudOpacity;
+    vec3 cloudShade = mix(uHorizonColor * 0.82, vec3(1.0), 0.58 - uNightMix * 0.28);
+    float silverLining = pow(sunDot, 8.0) * cloudMask * (1.0 - uNightMix) * 0.72;
+    sky = mix(sky, cloudShade, cloudMask);
+    sky += uSunColor * silverLining;
     sky = mix(sky, sky * 0.58 + vec3(0.014, 0.024, 0.055), uNightMix * 0.38);
 
     gl_FragColor = vec4(sky, 1.0);
   }
 `;
 
-interface SkyUniforms extends Record<string, THREE.IUniform<THREE.Color | THREE.Vector3 | number>> {
+interface SkyUniforms extends Record<string, THREE.IUniform<THREE.Color | THREE.Vector3 | THREE.Texture | number>> {
   uTopColor: THREE.IUniform<THREE.Color>;
   uHorizonColor: THREE.IUniform<THREE.Color>;
   uSunColor: THREE.IUniform<THREE.Color>;
   uSunDirection: THREE.IUniform<THREE.Vector3>;
   uNightMix: THREE.IUniform<number>;
+  uTime: THREE.IUniform<number>;
+  uCloudOpacity: THREE.IUniform<number>;
+  uCloudMap: THREE.IUniform<THREE.Texture>;
 }
 
 function ensureSceneBackground(scene: THREE.Scene): THREE.Color {
@@ -267,23 +370,28 @@ function getNightMix(gameTime: number, dimension: string): number {
   return 1;
 }
 
-function createSkyUniforms(): SkyUniforms {
+function createSkyUniforms(cloudTexture: THREE.Texture): SkyUniforms {
   return {
     uTopColor: { value: new THREE.Color(0x87ceeb) },
     uHorizonColor: { value: new THREE.Color(0xd8f1ff) },
     uSunColor: { value: new THREE.Color(0xfff5e0) },
     uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.2).normalize() },
     uNightMix: { value: 0 },
+    uTime: { value: 0 },
+    uCloudOpacity: { value: 0.35 },
+    uCloudMap: { value: cloudTexture },
   };
 }
 
 export function Environment() {
-  const { camera, scene } = useThree();
+  const { camera, gl, scene } = useThree();
   const skyRef = useRef<THREE.Mesh>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const moonLightRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
-  const viewFillRef = useRef<THREE.PointLight>(null);
+  const viewFillRef = useRef<THREE.DirectionalLight>(null);
+  const lastShadowUpdateRef = useRef(0);
   const celestialGroupRef = useRef<THREE.Group>(null);
   const sunDiscRef = useRef<THREE.Mesh>(null);
   const sunHaloRef = useRef<THREE.Mesh>(null);
@@ -295,10 +403,14 @@ export function Environment() {
   const moonDiscMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const moonHaloMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.PointsMaterial>(null);
-  const skyUniforms = useMemo(() => createSkyUniforms(), []);
+  const cloudTexture = useMemo(() => createCloudTexture(), []);
+  const skyUniforms = useMemo(() => createSkyUniforms(cloudTexture), [cloudTexture]);
   const starGeometry = useMemo(() => createStarGeometry(), []);
+  const lightTarget = useMemo(() => new THREE.Object3D(), []);
+  const viewFillTarget = useMemo(() => new THREE.Object3D(), []);
   const atmosphereQuality = useSettingsStore((s) => s.atmosphereQuality);
   const lightingQuality = useSettingsStore((s) => s.lightingQuality);
+  const graphicsPressure = useGraphicsRuntimeStore((s) => s.pressure);
   useSettingsStore((s) => s.shadowQuality);
   const performanceProfile = getPerformanceProfile();
 
@@ -309,6 +421,23 @@ export function Environment() {
   useEffect(() => {
     ensureSceneBackground(scene);
   }, [scene]);
+
+  useEffect(() => () => {
+    cloudTexture.dispose();
+    starGeometry.dispose();
+  }, [cloudTexture, starGeometry]);
+
+  /* eslint-disable react-hooks/immutability */
+  useEffect(() => {
+    const previousAutoUpdate = gl.shadowMap.autoUpdate;
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    return () => {
+      gl.shadowMap.autoUpdate = previousAutoUpdate;
+      gl.shadowMap.needsUpdate = true;
+    };
+  }, [gl]);
+  /* eslint-enable react-hooks/immutability */
 
   // 毎フレーム昼夜サイクルを更新
   /* eslint-disable react-hooks/immutability */
@@ -332,8 +461,8 @@ export function Environment() {
       const t = gameTime / 0.05;
       _skyColor.copy(_nightSky).lerp(_sunsetSky, t);
       _fogColor.copy(_nightFog).lerp(_sunsetFog, t);
-      sunIntensity = 0.3 + t * 0.8;
-      ambientIntensity = 0.15 + t * 0.3;
+      sunIntensity = 0.14 + t * 0.96;
+      ambientIntensity = 0.3 + t * 0.15;
       _sunColor.copy(_nightSun).lerp(_daySun, t);
     } else if (gameTime < 0.1) {
       const t = (gameTime - 0.05) / 0.05;
@@ -359,14 +488,14 @@ export function Environment() {
       const t = (gameTime - 0.5) / 0.05;
       _skyColor.copy(_sunsetSky).lerp(_nightSky, t);
       _fogColor.copy(_sunsetFog).lerp(_nightFog, t);
-      sunIntensity = 0.6 - t * 0.25;
-      ambientIntensity = 0.25 - t * 0.03;
+      sunIntensity = 0.6 - t * 0.46;
+      ambientIntensity = 0.25 + t * 0.05;
       _sunColor.copy(_sunsetSun).lerp(_nightSun, t);
     } else {
       _skyColor.copy(_nightSky);
       _fogColor.copy(_nightFog);
-      sunIntensity = 0.35;
-      ambientIntensity = 0.22;
+      sunIntensity = 0.14;
+      ambientIntensity = 0.3;
       _sunColor.copy(_nightSun);
     }
 
@@ -389,13 +518,26 @@ export function Environment() {
     ambientIntensity *= atmosphereTuning.ambientScale * lightingScale.ambient;
     sunIntensity *= atmosphereTuning.sunScale * lightingScale.sun;
 
-    // 太陽の位置を時間に連動（円弧を描く）
+    // 天体の向きは時間に連動し、実際の影ライトはカメラ周辺へ追従させる。
     const sunAngle = gameTime * Math.PI * 2;
-    _sunPosition.set(
-      Math.cos(sunAngle) * 60,
-      Math.sin(sunAngle) * 80 + 10,
-      30,
+    _skySunDirection.set(Math.cos(sunAngle), Math.sin(sunAngle), 0.38).normalize();
+
+    const shadowMapSize = Math.max(1, performanceProfile.shadowMapSize);
+    const shadowWorldSize = Math.max(1, performanceProfile.shadowCameraSize * 2);
+    const shadowTexelSize = shadowWorldSize / shadowMapSize;
+    _shadowAnchor.set(
+      Math.round(camera.position.x / shadowTexelSize) * shadowTexelSize,
+      camera.position.y - 4,
+      Math.round(camera.position.z / shadowTexelSize) * shadowTexelSize,
     );
+    lightTarget.position.copy(_shadowAnchor);
+    _sunLightDirection.copy(_skySunDirection);
+    _sunLightDirection.y = Math.max(0.18, _sunLightDirection.y);
+    _sunLightDirection.normalize();
+    _sunPosition.copy(_shadowAnchor).addScaledVector(_sunLightDirection, 92);
+    _moonLightDirection.copy(_skySunDirection).multiplyScalar(-1);
+    _moonLightDirection.y = Math.max(0.2, _moonLightDirection.y);
+    _moonLightDirection.normalize();
 
     // シーンに適用
     sceneBackground.copy(_skyColor);
@@ -407,13 +549,36 @@ export function Environment() {
     _skyTopColor.copy(_skyColor).multiplyScalar(gameState.dimension === 'nether' ? 0.8 : 1.08);
     _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.14);
     _skySunGlowColor.copy(_sunColor).multiplyScalar(gameState.dimension === 'nether' ? 0.65 : 0.95);
-    _skySunDirection.copy(_sunPosition).normalize();
     const nightMix = getNightMix(gameTime, gameState.dimension);
     skyUniforms.uTopColor.value.copy(_skyTopColor);
     skyUniforms.uHorizonColor.value.copy(_skyHorizonColor);
     skyUniforms.uSunColor.value.copy(_skySunGlowColor);
     skyUniforms.uSunDirection.value.copy(_skySunDirection);
     skyUniforms.uNightMix.value = nightMix;
+    skyUniforms.uTime.value += delta;
+    const cloudBase = atmosphereQuality === 'rich'
+      ? 0.62
+      : atmosphereQuality === 'standard'
+        ? 0.46
+        : atmosphereQuality === 'simple'
+          ? 0.26
+          : 0;
+    const pressureScale = graphicsPressure === 0 ? 1 : graphicsPressure === 1 ? 0.72 : 0.42;
+    skyUniforms.uCloudOpacity.value = cloudBase * pressureScale * (1 - nightMix * 0.38);
+
+    const shadowUpdateInterval = graphicsPressure > 0
+      ? 1 / 14
+      : performanceProfile.tier === 'high'
+        ? 1 / 24
+        : 1 / 18;
+    if (
+      performanceProfile.shadowsEnabled
+      && graphicsPressure < 2
+      && skyUniforms.uTime.value - lastShadowUpdateRef.current >= shadowUpdateInterval
+    ) {
+      lastShadowUpdateRef.current = skyUniforms.uTime.value;
+      gl.shadowMap.needsUpdate = true;
+    }
 
     // 視界の奥に、昼は太陽・夜は月と星が見える天体レイヤーを重ねる
     if (celestialGroupRef.current) {
@@ -472,25 +637,38 @@ export function Environment() {
       sunRef.current.intensity = sunIntensity;
       sunRef.current.color.copy(_sunColor);
     }
+    if (moonLightRef.current) {
+      moonLightRef.current.position.copy(_shadowAnchor).addScaledVector(_moonLightDirection, 74);
+      moonLightRef.current.intensity = gameState.dimension === 'nether'
+        ? 0
+        : nightMix * 0.52 * lightingScale.fill * stageAmbientBoost;
+      moonLightRef.current.color.copy(_moonLightColor);
+    }
     if (ambientRef.current) {
       ambientRef.current.intensity = ambientIntensity;
     }
     if (hemiRef.current) {
-      hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.7 * lightingScale.hemi);
+      _hemiSkyColor.copy(_skyColor).lerp(_moonLightColor, nightMix * 0.62);
+      _hemiGroundColor.copy(_fogColor).multiplyScalar(0.32).lerp(_nightGroundColor, nightMix * 0.58);
+      hemiRef.current.color.copy(_hemiSkyColor);
+      hemiRef.current.groundColor.copy(_hemiGroundColor);
+      hemiRef.current.intensity = Math.max(0.1, ambientIntensity * 0.82 * lightingScale.hemi);
     }
     if (viewFillRef.current) {
       const playingFill = gameState.phase === 'playing' ? 1 : 0;
       const tierScale = performanceProfile.tier === 'low' ? 0.55 : performanceProfile.tier === 'balanced' ? 0.78 : 1;
       const dimensionBoost = gameState.dimension === 'nether' ? 1.22 : 1;
-      viewFillRef.current.position.copy(camera.position);
-      viewFillRef.current.color.copy(_fogColor).lerp(_sunColor, 0.38);
+      camera.getWorldDirection(_viewFillDirection);
+      viewFillRef.current.position.copy(camera.position).addScaledVector(_viewFillDirection, -2);
+      viewFillTarget.position.copy(camera.position).addScaledVector(_viewFillDirection, 18);
+      _viewFillColor.copy(_fogColor).lerp(_sunColor, 0.28).lerp(_moonLightColor, nightMix * 0.72);
+      viewFillRef.current.color.copy(_viewFillColor);
       viewFillRef.current.intensity = playingFill
         * tierScale
         * dimensionBoost
         * atmosphereTuning.fillScale
         * lightingScale.fill
-        * (0.12 + nightMix * 0.48);
-      viewFillRef.current.distance = 18 + nightMix * 10;
+        * (0.12 + nightMix * 0.56);
     }
   });
   /* eslint-enable react-hooks/immutability */
@@ -585,12 +763,16 @@ export function Environment() {
       {/* 環境光（全体を柔らかく照らす） */}
       <ambientLight ref={ambientRef} intensity={0.6} color={0xffffff} />
 
+      <primitive object={lightTarget} />
+      <primitive object={viewFillTarget} />
+
       {/* 太陽光（影を落とす主光源） */}
       <directionalLight
         ref={sunRef}
         position={[50, 80, 30]}
         intensity={1.8}
-        castShadow={performanceProfile.shadowsEnabled}
+        target={lightTarget}
+        castShadow={performanceProfile.shadowsEnabled && graphicsPressure < 2}
         shadow-mapSize-width={performanceProfile.shadowMapSize}
         shadow-mapSize-height={performanceProfile.shadowMapSize}
         shadow-camera-far={performanceProfile.shadowCameraFar}
@@ -604,18 +786,26 @@ export function Environment() {
         color={0xfff5e0}
       />
 
+      {/* 夜の輪郭を起こす、影なしの月光。追加シャドウパスは発生させない。 */}
+      <directionalLight
+        ref={moonLightRef}
+        target={lightTarget}
+        intensity={0}
+        color={0x9fb8ff}
+        castShadow={false}
+      />
+
       {/* 半球ライト（空の色→地面の色の2色で自然な環境光） */}
       <hemisphereLight
         ref={hemiRef}
         args={[0x87ceeb, 0x6b8e23, 0.4]}
       />
 
-      {/* 暗い時間帯でも足元と前方の素材感を失わない、影を落とさない補助光 */}
-      <pointLight
+      {/* 暗い時間帯でも前方の素材感を失わない、カメラ追従・影なしの補助光 */}
+      <directionalLight
         ref={viewFillRef}
+        target={viewFillTarget}
         intensity={0}
-        distance={22}
-        decay={2}
         castShadow={false}
       />
     </>

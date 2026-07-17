@@ -452,8 +452,8 @@ export function StageCinematicLightingFX() {
         opacity={config.opacity}
         alphaTest={0.012}
         depthWrite={false}
-        depthTest={false}
-        fog={false}
+        depthTest
+        fog
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.blending}

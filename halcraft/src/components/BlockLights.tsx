@@ -6,7 +6,7 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
+import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { getPerformanceProfile } from '../utils/performance';
@@ -111,9 +111,34 @@ function clusterLightSources(sources: LightSource[]): LightCluster[] {
   return clusters;
 }
 
-/** カメラ周辺のチャンクから発光ブロックを収集する（毎フレーム再計算を避けるためキャッシュ） */
-function collectNearbyLightSources(): LightSource[] {
-  return useWorldStore.getState().getIndexedLightBlockPositions();
+/** カメラ周辺のチャンクだけから発光ブロックを収集する */
+function collectNearbyLightSources(cameraX: number, cameraZ: number, range: number): LightSource[] {
+  const { chunkBlockIndexes } = useWorldStore.getState();
+  const centerCx = Math.floor(cameraX / CHUNK_SIZE);
+  const centerCz = Math.floor(cameraZ / CHUNK_SIZE);
+  const chunkRadius = Math.ceil(range / CHUNK_SIZE) + 1;
+  const sources: LightSource[] = [];
+
+  for (let dx = -chunkRadius; dx <= chunkRadius; dx++) {
+    for (let dz = -chunkRadius; dz <= chunkRadius; dz++) {
+      const index = chunkBlockIndexes.get(`${centerCx + dx},${centerCz + dz}`);
+      if (!index) continue;
+
+      for (const [blockId, positions] of index.entries()) {
+        if (!BLOCK_DEFS[blockId]?.lightColor) continue;
+        for (const position of positions) {
+          sources.push({
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            blockId,
+          });
+        }
+      }
+    }
+  }
+
+  return sources;
 }
 
 /** ワールド内の発光ブロックをスキャンし、クラスタリングして PointLight を配置 */
@@ -150,25 +175,29 @@ export function BlockLights() {
       const cz = camera.position.z;
 
       // カメラ周辺のチャンクから光源を収集
-      const allSources = collectNearbyLightSources();
+      const allSources = collectNearbyLightSources(cx, cz, performanceProfile.lightCollectRange);
 
       // プレイヤー近くの光源をフィルタ
-      const nearSources = allSources.filter((s) => {
-        const dx = s.x - cx;
-        const dy = s.y - cy;
-        const dz = s.z - cz;
-        return dx * dx + dy * dy + dz * dz < lightCollectRangeSq;
-      });
+      const nearSources: Array<LightSource & { distanceSq: number }> = [];
+      for (const source of allSources) {
+        const dx = source.x - cx;
+        const dy = source.y - cy;
+        const dz = source.z - cz;
+        const distanceSq = dx * dx + dy * dy + dz * dz;
+        if (distanceSq < lightCollectRangeSq) {
+          nearSources.push({ ...source, distanceSq });
+        }
+      }
 
       // 距離でソート
-      nearSources.sort((a, b) => {
-        const da = (a.x - cx) ** 2 + (a.y - cy) ** 2 + (a.z - cz) ** 2;
-        const db = (b.x - cx) ** 2 + (b.y - cy) ** 2 + (b.z - cz) ** 2;
-        return da - db;
-      });
+      nearSources.sort((a, b) => a.distanceSq - b.distanceSq);
+
+      // O(n²) のクラスタリング前に候補を絞り、光源が増えても処理量を固定する。
+      const candidateLimit = Math.max(24, maxLights * 8);
+      const candidates = nearSources.slice(0, candidateLimit);
 
       // クラスタリングして端末ごとの上限個数に
-      const clusters = clusterLightSources(nearSources);
+      const clusters = clusterLightSources(candidates);
       activeClusters.current = clusters.slice(0, maxLights);
     }
 

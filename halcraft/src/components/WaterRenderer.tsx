@@ -7,6 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, CHUNK_SIZE, RENDER_DISTANCE, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { useGameStore } from '../stores/useGameStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { getPerformanceProfile } from '../utils/performance';
 
@@ -18,19 +19,23 @@ function createWaterMaterial(): THREE.ShaderMaterial {
     side: THREE.DoubleSide,
     uniforms: {
       uTime: { value: 0 },
-      uColor: { value: new THREE.Color(0x1a5276) },
+      uColor: { value: new THREE.Color(0x16758f) },
       uOpacity: { value: 0.55 },
+      uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.2).normalize() },
+      uNightMix: { value: 0 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
       varying vec3 vWorldPos;
       varying float vWave;
       varying float vTopSurface;
+      varying vec3 vWorldNormal;
 
       void main() {
         vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
         vWorldPos = worldPos.xyz;
         vTopSurface = smoothstep(0.32, 0.5, position.y);
+        vWorldNormal = normalize(mat3(modelMatrix * instanceMatrix) * normal);
 
         // 水面の波（上面の頂点のみ動かす）
         float wave = 0.0;
@@ -49,17 +54,40 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       uniform vec3 uColor;
       uniform float uOpacity;
       uniform float uTime;
+      uniform vec3 uSunDirection;
+      uniform float uNightMix;
       varying vec3 vWorldPos;
       varying float vWave;
       varying float vTopSurface;
+      varying vec3 vWorldNormal;
 
       void main() {
-        // 深さによる色の変化（浅い = 明るい、深い = 暗い）
-        float depth = clamp(vWorldPos.y / 10.0, 0.0, 1.0);
-        vec3 shallowColor = vec3(0.15, 0.55, 0.75);
-        vec3 deepColor = vec3(0.05, 0.2, 0.35);
-        vec3 color = mix(deepColor, shallowColor, depth);
+        // 波の解析的な傾きから法線を作り、追加テクスチャなしで反射を出す
+        float waveDx = cos(vWorldPos.x * 1.5 + uTime * 1.2) * 0.06
+                     + cos((vWorldPos.x + vWorldPos.z) * 0.8 + uTime * 1.5) * 0.016;
+        float waveDz = cos(vWorldPos.z * 1.8 + uTime * 0.8) * 0.054
+                     + cos((vWorldPos.x + vWorldPos.z) * 0.8 + uTime * 1.5) * 0.016;
+        vec3 waveNormal = normalize(vec3(-waveDx, 1.0, -waveDz));
+        vec3 surfaceNormal = normalize(mix(vWorldNormal, waveNormal, vTopSurface));
+        vec3 viewDirection = normalize(cameraPosition - vWorldPos);
+        float fresnel = pow(1.0 - clamp(dot(surfaceNormal, viewDirection), 0.0, 1.0), 3.2);
+
+        float heightTint = clamp((vWorldPos.y - 3.0) / 18.0, 0.0, 1.0);
+        vec3 shallowColor = mix(uColor, vec3(0.24, 0.78, 0.9), 0.58);
+        vec3 deepColor = uColor * 0.48;
+        vec3 color = mix(deepColor, shallowColor, 0.34 + heightTint * 0.46);
         color = mix(color * 0.72, color, 0.72 + vTopSurface * 0.28);
+
+        vec3 dayReflection = mix(vec3(0.32, 0.66, 0.88), vec3(0.82, 0.94, 1.0), max(surfaceNormal.y, 0.0));
+        vec3 nightReflection = mix(vec3(0.025, 0.055, 0.13), vec3(0.18, 0.28, 0.52), max(surfaceNormal.y, 0.0));
+        vec3 reflectionColor = mix(dayReflection, nightReflection, uNightMix);
+        color = mix(color, reflectionColor, fresnel * (0.42 + vTopSurface * 0.34));
+
+        vec3 reflectedSun = reflect(-normalize(uSunDirection), surfaceNormal);
+        float sunSpecular = pow(max(dot(reflectedSun, viewDirection), 0.0), 92.0)
+                          * (1.0 - uNightMix * 0.72)
+                          * vTopSurface;
+        color += vec3(1.0, 0.86, 0.58) * sunSpecular * 1.35;
 
         // 波の頂点でハイライト
         float highlight = smoothstep(0.02, 0.06, vWave) * 0.16 * vTopSurface;
@@ -79,7 +107,8 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         color += vec3(0.42, 0.95, 1.0) * caustic;
         color += vec3(0.78, 1.0, 0.95) * whiteRibbon;
 
-        gl_FragColor = vec4(color, uOpacity);
+        float alpha = clamp(uOpacity * (0.9 + vTopSurface * 0.1) + fresnel * 0.14, 0.42, 0.76);
+        gl_FragColor = vec4(color, alpha);
       }
     `,
   });
@@ -152,6 +181,15 @@ function createLavaMaterial(): THREE.ShaderMaterial {
 /** 共有boxGeometry（流体ブロック用） */
 const liquidGeometry = new THREE.BoxGeometry(1, 1, 1);
 const LIQUID_CENTER_UPDATE_INTERVAL_MS = 650;
+
+function getLiquidNightMix(gameTime: number, dimension: string): number {
+  if (dimension === 'nether') return 0.9;
+  if (gameTime < 0.05) return 1;
+  if (gameTime < 0.1) return 1 - ((gameTime - 0.05) / 0.05);
+  if (gameTime < 0.4) return 0;
+  if (gameTime < 0.55) return (gameTime - 0.4) / 0.15;
+  return 1;
+}
 
 interface LiquidRendererProps {
   blockId: BlockId;
@@ -246,10 +284,21 @@ function LiquidRenderer({
       ));
     }
 
-    if (!liquidAnimation) return;
     const liquidMaterial = meshRef.current?.material;
     if (liquidMaterial instanceof THREE.ShaderMaterial) {
-      liquidMaterial.uniforms.uTime.value += delta;
+      if (liquidAnimation) {
+        liquidMaterial.uniforms.uTime.value += delta;
+      }
+
+      const sunDirectionUniform = liquidMaterial.uniforms.uSunDirection;
+      const nightMixUniform = liquidMaterial.uniforms.uNightMix;
+      if (sunDirectionUniform && nightMixUniform) {
+        const gameState = useGameStore.getState();
+        const sunAngle = gameState.gameTime * Math.PI * 2;
+        const sunDirection = sunDirectionUniform.value as THREE.Vector3;
+        sunDirection.set(Math.cos(sunAngle), Math.max(0.16, Math.sin(sunAngle)), 0.38).normalize();
+        nightMixUniform.value = getLiquidNightMix(gameState.gameTime, gameState.dimension);
+      }
     }
   });
   /* eslint-enable react-hooks/immutability */
