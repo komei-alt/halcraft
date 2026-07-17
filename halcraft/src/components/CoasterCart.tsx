@@ -13,6 +13,9 @@ import { COASTER_MAX_SPEED } from '../utils/coasterPhysics';
 const CART_BODY_COLOR = 0xdd3333;  // 赤いカート
 const CART_TRIM_COLOR = 0xffcc00;  // 黄色いトリム
 const CART_WHEEL_COLOR = 0x333333; // 車輪
+const CART_METAL_COLOR = 0x58616c;
+const CART_SEAT_COLOR = 0x6f351d;
+const CART_LIGHT_COLOR = 0xfff0a0;
 
 /** カートのボクセル3Dモデルを構築 */
 function createCartGeometry(): THREE.BufferGeometry {
@@ -23,26 +26,53 @@ function createCartGeometry(): THREE.BufferGeometry {
   const bodyColor = new THREE.Color(CART_BODY_COLOR);
   const trimColor = new THREE.Color(CART_TRIM_COLOR);
   const wheelColor = new THREE.Color(CART_WHEEL_COLOR);
+  const metalColor = new THREE.Color(CART_METAL_COLOR);
+  const seatColor = new THREE.Color(CART_SEAT_COLOR);
+  const lightColor = new THREE.Color(CART_LIGHT_COLOR);
 
-  // 車体本体（箱型）
-  addColoredBox(positions, normals, colors, 0, 0.35, 0, 0.8, 0.5, 1.2, bodyColor);
-  // 前面トリム
-  addColoredBox(positions, normals, colors, 0, 0.55, -0.55, 0.85, 0.12, 0.12, trimColor);
-  // 後面トリム
-  addColoredBox(positions, normals, colors, 0, 0.55, 0.55, 0.85, 0.12, 0.12, trimColor);
-  // サイドトリム左
-  addColoredBox(positions, normals, colors, -0.42, 0.55, 0, 0.04, 0.12, 1.2, trimColor);
-  // サイドトリム右
-  addColoredBox(positions, normals, colors, 0.42, 0.55, 0, 0.04, 0.12, 1.2, trimColor);
-  // 車輪4つ
-  addColoredBox(positions, normals, colors, -0.35, 0.05, -0.35, 0.15, 0.15, 0.15, wheelColor);
-  addColoredBox(positions, normals, colors, 0.35, 0.05, -0.35, 0.15, 0.15, 0.15, wheelColor);
-  addColoredBox(positions, normals, colors, -0.35, 0.05, 0.35, 0.15, 0.15, 0.15, wheelColor);
-  addColoredBox(positions, normals, colors, 0.35, 0.05, 0.35, 0.15, 0.15, 0.15, wheelColor);
-  // 座席
-  addColoredBox(positions, normals, colors, 0, 0.3, 0.1, 0.55, 0.08, 0.5, new THREE.Color(0x8b4513));
-  // 背もたれ
-  addColoredBox(positions, normals, colors, 0, 0.5, 0.35, 0.55, 0.35, 0.08, new THREE.Color(0x8b4513));
+  // 低いシャシーと左右の外板。中央を開けて、座席と拘束バーが読める形にする。
+  addColoredBox(positions, normals, colors, 0, 0.22, 0, 0.82, 0.26, 1.16, bodyColor);
+  addColoredBox(positions, normals, colors, -0.37, 0.46, 0.02, 0.1, 0.34, 1.08, bodyColor);
+  addColoredBox(positions, normals, colors, 0.37, 0.46, 0.02, 0.1, 0.34, 1.08, bodyColor);
+  addColoredBox(positions, normals, colors, 0, 0.42, 0.51, 0.68, 0.34, 0.12, bodyColor);
+
+  // 2段ノーズとバンパーで、進行方向（-Z）が一目で分かるシルエットにする。
+  addColoredBox(positions, normals, colors, 0, 0.35, -0.52, 0.72, 0.28, 0.2, bodyColor);
+  addColoredBox(positions, normals, colors, 0, 0.25, -0.65, 0.58, 0.18, 0.12, bodyColor);
+  addColoredBox(positions, normals, colors, 0, 0.28, -0.73, 0.76, 0.1, 0.08, trimColor);
+  addColoredBox(positions, normals, colors, -0.23, 0.39, -0.635, 0.14, 0.09, 0.035, lightColor);
+  addColoredBox(positions, normals, colors, 0.23, 0.39, -0.635, 0.14, 0.09, 0.035, lightColor);
+
+  // 車体を一周する黄色い安全トリム。
+  addColoredBox(positions, normals, colors, 0, 0.6, -0.49, 0.82, 0.1, 0.1, trimColor);
+  addColoredBox(positions, normals, colors, 0, 0.6, 0.5, 0.82, 0.1, 0.1, trimColor);
+  addColoredBox(positions, normals, colors, -0.43, 0.57, 0, 0.04, 0.1, 1.06, trimColor);
+  addColoredBox(positions, normals, colors, 0.43, 0.57, 0, 0.04, 0.1, 1.06, trimColor);
+
+  // 座面・背もたれ・ヘッドレスト。
+  addColoredBox(positions, normals, colors, 0, 0.39, 0.12, 0.56, 0.1, 0.46, seatColor);
+  addColoredBox(positions, normals, colors, 0, 0.62, 0.36, 0.56, 0.42, 0.1, seatColor);
+  addColoredBox(positions, normals, colors, 0, 0.84, 0.39, 0.32, 0.16, 0.1, seatColor);
+
+  // 肩から下りる拘束バー。車体と同じ統合ジオメトリ内なので追加ドローは発生しない。
+  addColoredBox(positions, normals, colors, -0.24, 0.74, 0.12, 0.07, 0.44, 0.07, metalColor);
+  addColoredBox(positions, normals, colors, 0.24, 0.74, 0.12, 0.07, 0.44, 0.07, metalColor);
+  addColoredBox(positions, normals, colors, 0, 0.56, -0.02, 0.58, 0.08, 0.09, metalColor);
+  addColoredBox(positions, normals, colors, 0, 0.53, -0.08, 0.22, 0.1, 0.14, trimColor);
+
+  // 前後ボギーと車軸。
+  for (const z of [-0.34, 0.34]) {
+    addColoredBox(positions, normals, colors, 0, 0.08, z, 0.62, 0.1, 0.18, metalColor);
+    addColoredBox(positions, normals, colors, 0, 0.03, z, 0.92, 0.06, 0.08, metalColor);
+    addColoredBox(positions, normals, colors, -0.43, 0.04, z, 0.17, 0.18, 0.18, wheelColor);
+    addColoredBox(positions, normals, colors, 0.43, 0.04, z, 0.17, 0.18, 0.18, wheelColor);
+  }
+
+  // 編成を連結できる前後カプラー。
+  addColoredBox(positions, normals, colors, 0, 0.12, -0.76, 0.09, 0.09, 0.24, metalColor);
+  addColoredBox(positions, normals, colors, 0, 0.12, -0.9, 0.24, 0.12, 0.08, metalColor);
+  addColoredBox(positions, normals, colors, 0, 0.12, 0.68, 0.09, 0.09, 0.24, metalColor);
+  addColoredBox(positions, normals, colors, 0, 0.12, 0.82, 0.24, 0.12, 0.08, metalColor);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));

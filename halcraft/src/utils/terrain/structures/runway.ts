@@ -64,12 +64,24 @@ function getRunwaySurfaceBlock(
   inRunway: boolean,
   inParking: boolean,
 ): BlockId {
-  if (inParking) return BLOCK_IDS.IRON_CRACKED;
+  if (inParking) {
+    const parkingEdge = Math.abs(relX + 8) === 5 || Math.abs(relZ - (Math.floor(RUNWAY_WIDTH / 2) + 7)) === 5;
+    return parkingEdge ? BLOCK_IDS.ELECTRIC : BLOCK_IDS.IRON_CRACKED;
+  }
   if (!inRunway) return BLOCK_IDS.IRON;
 
+  const halfLength = Math.floor(RUNWAY_LENGTH / 2);
+  const halfWidth = Math.floor(RUNWAY_WIDTH / 2);
   const centerLine = relZ === 0 && Math.abs(relX) % 6 <= 2;
-  const thresholdMark = Math.abs(Math.abs(relX) - Math.floor(RUNWAY_LENGTH / 2) + 5) <= 1 && Math.abs(relZ) <= 3;
-  if (centerLine || thresholdMark) return BLOCK_IDS.ELECTRIC;
+  const edgeLine = Math.abs(relZ) === halfWidth;
+  const thresholdBand = Math.abs(Math.abs(relX) - halfLength + 4) <= 1;
+  const thresholdBar = thresholdBand && Math.abs(relZ) >= 2 && Math.abs(relZ) <= halfWidth - 1;
+  const touchdownDistance = Math.abs(relX) >= halfLength - 15 && Math.abs(relX) <= halfLength - 11;
+  const touchdownBars = touchdownDistance && (Math.abs(relZ) === 2 || Math.abs(relZ) === 3);
+  if (centerLine || edgeLine || thresholdBar || touchdownBars) return BLOCK_IDS.ELECTRIC;
+
+  // 路肩を一段暗くして舗装面の厚みを見せる
+  if (Math.abs(relZ) === halfWidth - 1) return BLOCK_IDS.IRON_CRACKED;
   return BLOCK_IDS.IRON;
 }
 

@@ -1,18 +1,72 @@
 // クモモブコンポーネント
-// 夜間にスポーンする敵モブ。ゾンビより速く、体高が低い
-// ボクセルスタイルの8本脚クモ
+// 低ポリゴンの節足造形を、インスタンス描画で軽量に表現する
 
-import { useMemo } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
-/** クモの色定義 */
-const SPIDER_BODY_COLOR = new THREE.Color(0x2a2a2a);     // 暗い黒（体）
-const SPIDER_HEAD_COLOR = new THREE.Color(0x333333);      // 少し明るい黒（頭）
-const SPIDER_LEG_COLOR = new THREE.Color(0x3a2a1a);       // 暗い茶（脚）
-const SPIDER_EYE_COLOR = new THREE.Color(0xff0000);       // 赤い目
-const SPIDER_DAMAGED_COLOR = new THREE.Color(0xff4444);   // ダメージ時
+const SPIDER_BODY_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x292528,
+  roughness: 0.78,
+  metalness: 0.05,
+  flatShading: true,
+});
+const SPIDER_HEAD_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x373034,
+  roughness: 0.72,
+  metalness: 0.06,
+  flatShading: true,
+});
+const SPIDER_LEG_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x473322,
+  roughness: 0.86,
+  flatShading: true,
+});
+const SPIDER_DAMAGED_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0xff5b50,
+  emissive: 0x661510,
+  emissiveIntensity: 0.45,
+  roughness: 0.64,
+  flatShading: true,
+});
+const SPIDER_EYE_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0xff261f,
+  emissive: 0xff1208,
+  emissiveIntensity: 1.5,
+  roughness: 0.28,
+});
+const SPIDER_FANG_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0xd6c9a8,
+  roughness: 0.58,
+});
+
+const BODY_GEOMETRY = new THREE.DodecahedronGeometry(0.5, 0);
+const LEG_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+const EYE_GEOMETRY = new THREE.OctahedronGeometry(1, 0);
+const FANG_GEOMETRY = new THREE.ConeGeometry(0.5, 1, 5);
+
+const LEG_DEFS = [
+  { side: -1, pair: 0, z: 0.24 },
+  { side: 1, pair: 0, z: 0.24 },
+  { side: -1, pair: 1, z: 0.08 },
+  { side: 1, pair: 1, z: 0.08 },
+  { side: -1, pair: 2, z: -0.1 },
+  { side: 1, pair: 2, z: -0.1 },
+  { side: -1, pair: 3, z: -0.28 },
+  { side: 1, pair: 3, z: -0.28 },
+] as const;
+
+const EYE_POSITIONS = [
+  [-0.12, 0.35, 0.51, 0.052],
+  [0.12, 0.35, 0.51, 0.052],
+  [-0.05, 0.27, 0.535, 0.037],
+  [0.05, 0.27, 0.535, 0.037],
+  [-0.2, 0.33, 0.47, 0.034],
+  [0.2, 0.33, 0.47, 0.034],
+  [-0.18, 0.25, 0.485, 0.03],
+  [0.18, 0.25, 0.485, 0.03],
+] as const;
 
 interface SpiderProps {
   mob: MobData;
@@ -20,70 +74,87 @@ interface SpiderProps {
 }
 
 export function Spider({ mob, animTime }: SpiderProps) {
+  const upperLegsRef = useRef<THREE.InstancedMesh>(null);
+  const lowerLegsRef = useRef<THREE.InstancedMesh>(null);
+  const eyesRef = useRef<THREE.InstancedMesh>(null);
+  const fangsRef = useRef<THREE.InstancedMesh>(null);
   const isDamaged = mob.hitTimer > 0;
-
-  // 歩行アニメーション（クモは脚が速く動く）
   const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
-  const walkCycle = isMoving ? animTime * 10 : animTime * 1.5;
-
-  // 脚のアニメーション（4対の脚が交互に動く）
-  const leg1 = Math.sin(walkCycle) * 0.3;
-  const leg2 = Math.sin(walkCycle + Math.PI * 0.5) * 0.3;
-  const leg3 = Math.sin(walkCycle + Math.PI) * 0.3;
-  const leg4 = Math.sin(walkCycle + Math.PI * 1.5) * 0.3;
-
+  const walkCycle = animTime * (isMoving ? 10 : 1.5);
   const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 20) * 0.1 : 0;
+  const bodyMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_BODY_MATERIAL;
+  const headMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_HEAD_MATERIAL;
+  const legMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_LEG_MATERIAL;
 
-  const bodyColor = isDamaged ? SPIDER_DAMAGED_COLOR : SPIDER_BODY_COLOR;
-  const headColor = isDamaged ? SPIDER_DAMAGED_COLOR : SPIDER_HEAD_COLOR;
-  const legColor = isDamaged ? SPIDER_DAMAGED_COLOR : SPIDER_LEG_COLOR;
+  useLayoutEffect(() => {
+    const upperLegs = upperLegsRef.current;
+    const lowerLegs = lowerLegsRef.current;
+    if (!upperLegs || !lowerLegs) return;
 
-  // マテリアル
-  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7 }), [bodyColor]);
-  const headMat = useMemo(() => new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.7 }), [headColor]);
-  const legMat = useMemo(() => new THREE.MeshStandardMaterial({ color: legColor, roughness: 0.8 }), [legColor]);
-  const eyeMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: SPIDER_EYE_COLOR,
-    emissive: SPIDER_EYE_COLOR,
-    emissiveIntensity: 0.8,
-  }), []);
+    const part = new THREE.Object3D();
+    LEG_DEFS.forEach((leg, index) => {
+      const phase = leg.pair * Math.PI * 0.5 + (leg.side < 0 ? Math.PI : 0);
+      const gait = Math.sin(walkCycle + phase);
+      const lift = isMoving ? Math.max(0, gait) * 0.07 : Math.sin(walkCycle + phase) * 0.012;
+      const stride = isMoving ? Math.cos(walkCycle + phase) * 0.06 : 0;
+      const splay = (leg.pair - 1.5) * 0.16;
 
-  // HPバー
+      part.position.set(leg.side * 0.48, 0.25 + lift, leg.z + stride * 0.45);
+      part.rotation.set(0, -leg.side * splay, -leg.side * (0.2 + gait * 0.08));
+      part.scale.set(0.45, 0.065, 0.075);
+      part.updateMatrix();
+      upperLegs.setMatrixAt(index, part.matrix);
+
+      part.position.set(leg.side * 0.8, 0.1 + lift * 0.3, leg.z + stride);
+      part.rotation.set(0, -leg.side * splay * 1.15, -leg.side * (0.52 - gait * 0.09));
+      part.scale.set(0.36, 0.052, 0.065);
+      part.updateMatrix();
+      lowerLegs.setMatrixAt(index, part.matrix);
+    });
+
+    upperLegs.instanceMatrix.needsUpdate = true;
+    lowerLegs.instanceMatrix.needsUpdate = true;
+    upperLegs.computeBoundingSphere();
+    lowerLegs.computeBoundingSphere();
+  }, [isMoving, walkCycle]);
+
+  useLayoutEffect(() => {
+    const eyes = eyesRef.current;
+    const fangs = fangsRef.current;
+    if (!eyes || !fangs) return;
+
+    const part = new THREE.Object3D();
+    EYE_POSITIONS.forEach(([x, y, z, size], index) => {
+      part.position.set(x, y, z);
+      part.rotation.set(0, 0, index % 2 === 0 ? -0.16 : 0.16);
+      part.scale.setScalar(size);
+      part.updateMatrix();
+      eyes.setMatrixAt(index, part.matrix);
+    });
+    eyes.instanceMatrix.needsUpdate = true;
+    eyes.computeBoundingSphere();
+
+    [-1, 1].forEach((side, index) => {
+      part.position.set(side * 0.105, 0.16, 0.53);
+      part.rotation.set(Math.PI - 0.22, 0, side * 0.12);
+      part.scale.set(0.065, 0.16, 0.065);
+      part.updateMatrix();
+      fangs.setMatrixAt(index, part.matrix);
+    });
+    fangs.instanceMatrix.needsUpdate = true;
+    fangs.computeBoundingSphere();
+  }, []);
+
   const hpRatio = mob.hp / mob.maxHp;
   const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
-  const traitAccent = mob.traitAccent;
-
-  // 脚を生成するヘルパー
-  const renderLeg = (side: number, zOffset: number, swing: number) => {
-    const xDir = side > 0 ? 1 : -1;
-    return (
-      <group position={[xDir * 0.3, 0.2, zOffset]}>
-        {/* 上脚（体から横に出る） */}
-        <group rotation={[swing * 0.5, 0, xDir * (-0.8 + swing * 0.2)]}>
-          <mesh position={[xDir * 0.15, 0.05, 0]} material={legMat}>
-            <boxGeometry args={[0.3, 0.06, 0.06]} />
-          </mesh>
-          {/* 下脚（地面に向かう） */}
-          <group position={[xDir * 0.3, 0, 0]} rotation={[0, 0, xDir * (1.2 + swing * 0.15)]}>
-            <mesh position={[xDir * 0.12, -0.05, 0]} material={legMat}>
-              <boxGeometry args={[0.25, 0.05, 0.05]} />
-            </mesh>
-          </group>
-        </group>
-      </group>
-    );
-  };
 
   return (
-    <group
-      position={[mob.x, mob.y, mob.z]}
-      rotation={[0, mob.rotation, 0]}
-    >
-      {traitAccent && (
+    <group position={[mob.x, mob.y, mob.z]} rotation={[0, mob.rotation, 0]}>
+      {mob.traitAccent && (
         <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.44, 0.58, 28]} />
+          <ringGeometry args={[0.5, 0.64, 24]} />
           <meshBasicMaterial
-            color={traitAccent}
+            color={mob.traitAccent}
             transparent
             opacity={0.5}
             side={THREE.DoubleSide}
@@ -93,56 +164,61 @@ export function Spider({ mob, animTime }: SpiderProps) {
       )}
 
       <group rotation={[hitTilt, 0, hitTilt * 0.3]}>
-        {/* 腹部（大きい後方の体） */}
-        <mesh position={[0, 0.25, -0.15]} material={bodyMat}>
-          <boxGeometry args={[0.5, 0.35, 0.5]} />
-        </mesh>
+        {/* 多面体の腹部と頭胸部で、低ポリのまま丸い輪郭を作る */}
+        <mesh
+          geometry={BODY_GEOMETRY}
+          material={bodyMaterial}
+          position={[0, 0.28, -0.18]}
+          scale={[0.66, 0.46, 0.74]}
+          castShadow
+          receiveShadow
+          dispose={null}
+        />
+        <mesh
+          geometry={BODY_GEOMETRY}
+          material={headMaterial}
+          position={[0, 0.28, 0.29]}
+          scale={[0.48, 0.38, 0.46]}
+          castShadow
+          receiveShadow
+          dispose={null}
+        />
 
-        {/* 頭部（小さい前方） */}
-        <mesh position={[0, 0.25, 0.25]} material={headMat}>
-          <boxGeometry args={[0.35, 0.3, 0.3]} />
-        </mesh>
-
-        {/* 目（4対の赤い目 — 2列×2） */}
-        {/* 上段 */}
-        <mesh position={[-0.08, 0.32, 0.41]} material={eyeMat}>
-          <boxGeometry args={[0.06, 0.06, 0.02]} />
-        </mesh>
-        <mesh position={[0.08, 0.32, 0.41]} material={eyeMat}>
-          <boxGeometry args={[0.06, 0.06, 0.02]} />
-        </mesh>
-        {/* 下段 */}
-        <mesh position={[-0.06, 0.24, 0.41]} material={eyeMat}>
-          <boxGeometry args={[0.04, 0.04, 0.02]} />
-        </mesh>
-        <mesh position={[0.06, 0.24, 0.41]} material={eyeMat}>
-          <boxGeometry args={[0.04, 0.04, 0.02]} />
-        </mesh>
-
-        {/* 8本の脚（左右4対） */}
-        {/* 前脚（第1対） */}
-        {renderLeg(1, 0.15, leg1)}
-        {renderLeg(-1, 0.15, leg1)}
-        {/* 第2対 */}
-        {renderLeg(1, 0.0, leg2)}
-        {renderLeg(-1, 0.0, leg2)}
-        {/* 第3対 */}
-        {renderLeg(1, -0.15, leg3)}
-        {renderLeg(-1, -0.15, leg3)}
-        {/* 後脚（第4対） */}
-        {renderLeg(1, -0.3, leg4)}
-        {renderLeg(-1, -0.3, leg4)}
+        <instancedMesh
+          ref={upperLegsRef}
+          args={[LEG_GEOMETRY, legMaterial, LEG_DEFS.length]}
+          castShadow
+          receiveShadow
+          dispose={null}
+        />
+        <instancedMesh
+          ref={lowerLegsRef}
+          args={[LEG_GEOMETRY, legMaterial, LEG_DEFS.length]}
+          castShadow
+          receiveShadow
+          dispose={null}
+        />
+        <instancedMesh
+          ref={eyesRef}
+          args={[EYE_GEOMETRY, SPIDER_EYE_MATERIAL, EYE_POSITIONS.length]}
+          dispose={null}
+        />
+        <instancedMesh
+          ref={fangsRef}
+          args={[FANG_GEOMETRY, SPIDER_FANG_MATERIAL, 2]}
+          castShadow
+          dispose={null}
+        />
       </group>
 
-      {/* HPバー */}
       {mob.hp < mob.maxHp && (
-        <Billboard position={[0, 0.7, 0]}>
+        <Billboard position={[0, 0.86, 0]}>
           <mesh>
-            <planeGeometry args={[0.5, 0.06]} />
+            <planeGeometry args={[0.56, 0.06]} />
             <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} />
           </mesh>
-          <mesh position={[-(0.5 - 0.5 * hpRatio) / 2, 0, 0.001]}>
-            <planeGeometry args={[0.5 * hpRatio, 0.04]} />
+          <mesh position={[-(0.56 - 0.56 * hpRatio) / 2, 0, 0.001]}>
+            <planeGeometry args={[0.56 * hpRatio, 0.04]} />
             <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} />
           </mesh>
         </Billboard>

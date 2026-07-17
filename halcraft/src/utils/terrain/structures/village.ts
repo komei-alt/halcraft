@@ -2,9 +2,25 @@
 // 複数の家、道、街灯で構成される村
 
 import { getTerrainHeight } from '../heightmap';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT } from '../../../types/blocks';
+import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../../../types/blocks';
 import { VILLAGE_CENTER, VILLAGE_HOUSES } from '../constants';
 import type { ChunkData } from '../types';
+
+function setVillageBlock(
+  chunk: ChunkData,
+  cx: number,
+  cz: number,
+  wx: number,
+  y: number,
+  wz: number,
+  blockId: BlockId,
+): void {
+  const lx = wx - cx * CHUNK_SIZE;
+  const lz = wz - cz * CHUNK_SIZE;
+  if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return;
+  if (y < 0 || y >= WORLD_HEIGHT) return;
+  chunk[lx][y][lz] = blockId;
+}
 
 /**
  * 村の建物1棟を配置する
@@ -15,12 +31,17 @@ function placeVillageHouse(
   cx: number, cz: number,
   centerWorldX: number, centerWorldZ: number,
   width: number, depth: number, wallHeight: number,
+  variant: number,
 ): void {
   const startWX = centerWorldX - Math.floor(width / 2);
   const startWZ = centerWorldZ - Math.floor(depth / 2);
 
   // 建物の基準高さ
   const floorY = getTerrainHeight(centerWorldX, centerWorldZ);
+  const wallPalette: readonly BlockId[] = [BLOCK_IDS.WOOD, BLOCK_IDS.IRON_MOSSY, BLOCK_IDS.STONE];
+  const roofPalette: readonly BlockId[] = [BLOCK_IDS.WOOD, BLOCK_IDS.IRON_CRACKED, BLOCK_IDS.RAW_WOOD];
+  const wallBlock = wallPalette[variant % wallPalette.length];
+  const roofBlock = roofPalette[variant % roofPalette.length];
 
   for (let wx = startWX; wx < startWX + width; wx++) {
     for (let wz = startWZ; wz < startWZ + depth; wz++) {
@@ -60,13 +81,15 @@ function placeVillageHouse(
             ) {
               chunk[lx][y][lz] = BLOCK_IDS.GLASS;
             } else {
-              chunk[lx][y][lz] = BLOCK_IDS.WOOD; // 壁
+              const isCornerPost = isEdgeX && isEdgeZ;
+              const isTopBeam = y === floorY + wallHeight;
+              chunk[lx][y][lz] = isCornerPost || isTopBeam ? BLOCK_IDS.RAW_WOOD : wallBlock;
             }
           } else {
             chunk[lx][y][lz] = BLOCK_IDS.AIR; // 内部空間
           }
         } else if (y === floorY + wallHeight + 1) {
-          chunk[lx][y][lz] = BLOCK_IDS.WOOD; // 屋根
+          chunk[lx][y][lz] = BLOCK_IDS.AIR;
         } else {
           chunk[lx][y][lz] = BLOCK_IDS.AIR;
         }
@@ -80,6 +103,62 @@ function placeVillageHouse(
       }
     }
   }
+
+  // 切妻屋根。全棟を寸法違いの箱にせず、屋根勾配と軒で街並みの輪郭を作る
+  const roofBaseY = floorY + wallHeight + 1;
+  const halfRoof = Math.floor(width / 2);
+  for (let slope = 0; slope <= halfRoof; slope++) {
+    const leftWX = startWX + slope;
+    const rightWX = startWX + width - 1 - slope;
+    const y = roofBaseY + slope;
+    for (let wz = startWZ - 1; wz <= startWZ + depth; wz++) {
+      setVillageBlock(chunk, cx, cz, leftWX, y, wz, roofBlock);
+      setVillageBlock(chunk, cx, cz, rightWX, y, wz, roofBlock);
+    }
+  }
+
+  // 妻壁は壁材で塞ぎ、中央に小さな明かり取りを設ける
+  for (const wz of [startWZ, startWZ + depth - 1]) {
+    for (let level = 0; level < halfRoof; level++) {
+      const inset = level + 1;
+      for (let wx = startWX + inset; wx <= startWX + width - 1 - inset; wx++) {
+        const atticWindow = width >= 6 && level === 1 && wx === centerWorldX;
+        setVillageBlock(
+          chunk,
+          cx,
+          cz,
+          wx,
+          roofBaseY + level,
+          wz,
+          atticWindow ? BLOCK_IDS.GLASS : wallBlock,
+        );
+      }
+    }
+  }
+
+  // 玄関ポーチ、支柱、庇。建物ごとに庇材を変えて反復感を抑える
+  const doorWX = startWX + Math.floor(width / 2);
+  for (let wx = doorWX - 1; wx <= doorWX + 1; wx++) {
+    setVillageBlock(chunk, cx, cz, wx, floorY, startWZ - 1, BLOCK_IDS.WOOD);
+    setVillageBlock(chunk, cx, cz, wx, floorY + 3, startWZ - 1, roofBlock);
+  }
+  setVillageBlock(chunk, cx, cz, doorWX - 1, floorY + 1, startWZ - 1, BLOCK_IDS.RAW_WOOD);
+  setVillageBlock(chunk, cx, cz, doorWX + 1, floorY + 1, startWZ - 1, BLOCK_IDS.RAW_WOOD);
+
+  // 大きな家には煙突、小屋には荷箱を付け、用途の違いを形で見せる
+  if (width >= 6) {
+    const chimneyWX = startWX + 1;
+    const chimneyWZ = startWZ + depth - 2;
+    for (let y = roofBaseY; y <= roofBaseY + halfRoof + 1; y++) {
+      setVillageBlock(chunk, cx, cz, chimneyWX, y, chimneyWZ, y === roofBaseY + halfRoof + 1 ? BLOCK_IDS.FURNACE : BLOCK_IDS.STONE);
+    }
+  } else {
+    setVillageBlock(chunk, cx, cz, startWX + width - 2, floorY + 1, startWZ + depth - 2, BLOCK_IDS.CHEST);
+  }
+
+  // 入口脇の植栽。専用スプラウトRendererで軽量に描画される
+  setVillageBlock(chunk, cx, cz, doorWX - 2, floorY + 1, startWZ - 1, BLOCK_IDS.WHEAT_SEEDS);
+  setVillageBlock(chunk, cx, cz, doorWX + 2, floorY + 1, startWZ - 1, BLOCK_IDS.WHEAT_SEEDS);
 
   // 松明を配置（建物内の角）
   const torchPositions = [
@@ -158,14 +237,15 @@ export function placeVillage(chunk: ChunkData, cx: number, cz: number): void {
   placeVillagePaths(chunk, cx, cz);
 
   // 各家を配置
-  for (const house of VILLAGE_HOUSES) {
+  VILLAGE_HOUSES.forEach((house, index) => {
     placeVillageHouse(
       chunk, cx, cz,
       VILLAGE_CENTER.x + house.dx,
       VILLAGE_CENTER.z + house.dz,
       house.w, house.d, house.h,
+      index,
     );
-  }
+  });
 
   // 村の中心に焚き火と松明街灯を配置
   const centerLX = VILLAGE_CENTER.x - cx * CHUNK_SIZE;

@@ -1031,17 +1031,35 @@ export function RocketLauncher() {
             <meshStandardMaterial color="#524b43" roughness={0.72} metalness={0.22} />
           </mesh>
 
-          {/* 前方リング */}
-          <mesh position={[0.18, 0.02, -1.36]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.17, 0.17, 0.08, 18]} />
+          {/* 前方保持リング — 穴の開いたトーラスで砲身の開口を残す */}
+          <mesh position={[0.18, 0.02, -1.35]}>
+            <torusGeometry args={[0.145, 0.025, 8, 24]} />
             <meshStandardMaterial color="#2b2724" roughness={0.65} metalness={0.3} />
           </mesh>
 
-          {/* 砲口リング */}
-          <mesh position={[0.18, 0.02, -1.54]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.12, 0.12, 0.08, 18]} />
+          {/* 砲口リングと暗い内筒。正面から蓋付き円柱に見えない構造 */}
+          <mesh position={[0.18, 0.02, -1.53]}>
+            <torusGeometry args={[0.13, 0.025, 8, 24]} />
             <meshStandardMaterial color="#181614" roughness={0.55} metalness={0.4} emissive="#331100" emissiveIntensity={0.35} />
           </mesh>
+          <mesh position={[0.18, 0.02, -1.43]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.108, 0.108, 0.25, 16, 1, true]} />
+            <meshStandardMaterial color="#080909" roughness={0.5} metalness={0.58} side={THREE.DoubleSide} />
+          </mesh>
+
+          {/* 後部ベンチュリ。バックブラストの出口を広げ、肩載せ火器らしい輪郭にする */}
+          <mesh position={[0.18, 0.02, 0.045]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.205, 0.22, 16, 1, true]} />
+            <meshStandardMaterial color="#292521" roughness={0.64} metalness={0.32} side={THREE.DoubleSide} />
+          </mesh>
+
+          {/* チューブ保持バンド */}
+          {[-1.05, -0.36].map((z) => (
+            <mesh key={z} position={[0.18, 0.02, z]}>
+              <torusGeometry args={[0.153, 0.018, 7, 18]} />
+              <meshStandardMaterial color="#877c68" roughness={0.46} metalness={0.55} />
+            </mesh>
+          ))}
 
           {/* 肩当て */}
           <mesh position={[0.02, -0.02, 0.08]} rotation={[0.08, 0, -0.08]}>
@@ -1080,6 +1098,11 @@ export function RocketLauncher() {
             <boxGeometry args={[0.1, 0.25, 0.12]} />
             <meshStandardMaterial color="#2c2420" roughness={0.82} metalness={0.08} />
           </mesh>
+          {/* トリガーガード */}
+          <mesh position={[0.15, -0.285, -0.4]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.064, 0.011, 6, 14, Math.PI]} />
+            <meshStandardMaterial color="#17191a" roughness={0.42} metalness={0.62} />
+          </mesh>
 
           {/* 補助グリップ */}
           <mesh position={[0.17, -0.15, -0.98]} rotation={[-0.22, 0, 0]}>
@@ -1106,7 +1129,7 @@ export function RocketLauncher() {
           </mesh>
           <mesh position={[0.18, 0.28, -0.96]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.055, 0.055, 0.035, 12]} />
-            <meshStandardMaterial color="#202426" roughness={0.45} metalness={0.55} />
+            <meshStandardMaterial color="#20394a" emissive={rocketAccentSoft} emissiveIntensity={0.28} roughness={0.3} metalness={0.48} />
           </mesh>
 
           {/* 装填状態が見えるエネルギーリング */}

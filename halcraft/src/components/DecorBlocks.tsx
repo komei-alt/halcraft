@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
@@ -91,6 +91,133 @@ const glowGeom = new THREE.SphereGeometry(0.34, 10, 10);
 const candlePlateGeom = new THREE.CylinderGeometry(0.24, 0.28, 0.04, 16);
 const candleWaxGeom = new THREE.CylinderGeometry(0.12, 0.14, 0.34, 14);
 const wickGeom = new THREE.BoxGeometry(0.02, 0.08, 0.02);
+
+// 種・レバーは配置数が増えても描画回数が増えないよう、部品単位でインスタンス化する。
+const wheatSproutMat = new THREE.MeshStandardMaterial({
+  color: 0x7fbe46,
+  emissive: new THREE.Color(0x213d12),
+  emissiveIntensity: 0.12,
+  roughness: 0.86,
+  side: THREE.DoubleSide,
+});
+const leverBaseMat = new THREE.MeshStandardMaterial({ color: 0x59606a, metalness: 0.34, roughness: 0.5 });
+const leverHandleMat = new THREE.MeshStandardMaterial({ color: 0x9a6a34, metalness: 0.18, roughness: 0.7 });
+const leverKnobMat = new THREE.MeshStandardMaterial({
+  color: 0xd84b35,
+  emissive: new THREE.Color(0x5f130b),
+  emissiveIntensity: 0.28,
+  roughness: 0.46,
+});
+
+/** 互い違いの若葉を1メッシュにまとめた、小麦の芽の軽量ジオメトリ */
+function createWheatSproutGeometry(): THREE.BufferGeometry {
+  const positions = new Float32Array([
+    0, 0.03, 0, -0.22, 0.2, 0, -0.035, 0.43, 0,
+    0, 0.06, 0.006, 0.22, 0.23, 0.006, 0.035, 0.47, 0.006,
+    0, 0.03, 0, 0, 0.2, -0.22, 0, 0.43, -0.035,
+    0.006, 0.06, 0, 0.006, 0.23, 0.22, 0.006, 0.47, 0.035,
+  ]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+const wheatSproutGeom = createWheatSproutGeometry();
+const leverBaseGeom = new THREE.BoxGeometry(0.58, 0.12, 0.42);
+const leverHandleGeom = new THREE.CylinderGeometry(0.045, 0.065, 0.46, 8);
+const leverKnobGeom = new THREE.SphereGeometry(0.1, 10, 7);
+
+/** 小麦の種を、成長し始めた小さな若葉として描画する */
+export function WheatSeedsRenderer() {
+  const positions = usePlacedBlockPositions(BLOCK_IDS.WHEAT_SEEDS);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const dummy = new THREE.Object3D();
+    positions.forEach((pos, index) => {
+      const variation = Math.abs((pos.x * 73856093) ^ (pos.z * 19349663)) % 997;
+      const unit = variation / 997;
+      dummy.position.set(pos.x + 0.5, pos.y + 0.025, pos.z + 0.5);
+      dummy.rotation.set(0, unit * Math.PI * 2, 0);
+      dummy.scale.setScalar(0.86 + unit * 0.24);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    });
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [positions]);
+
+  if (positions.length === 0) return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[wheatSproutGeom, wheatSproutMat, positions.length]}
+      castShadow
+      receiveShadow
+    />
+  );
+}
+
+/** TNT遠隔起爆用レバーを、台座・ハンドル・警告色ノブの3ドローで一括描画する */
+export function LeverRenderer() {
+  const positions = usePlacedBlockPositions(BLOCK_IDS.LEVER);
+  const baseRef = useRef<THREE.InstancedMesh>(null);
+  const handleRef = useRef<THREE.InstancedMesh>(null);
+  const knobRef = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const base = baseRef.current;
+    const handle = handleRef.current;
+    const knob = knobRef.current;
+    if (!base || !handle || !knob) return;
+
+    const dummy = new THREE.Object3D();
+    const handleQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -0.62));
+    const handleDirection = new THREE.Vector3(0, 1, 0).applyQuaternion(handleQuaternion);
+
+    positions.forEach((pos, index) => {
+      const center = new THREE.Vector3(pos.x + 0.5, pos.y + 0.13, pos.z + 0.5);
+
+      dummy.position.set(pos.x + 0.5, pos.y + 0.07, pos.z + 0.5);
+      dummy.quaternion.identity();
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      base.setMatrixAt(index, dummy.matrix);
+
+      dummy.position.copy(center).addScaledVector(handleDirection, 0.21);
+      dummy.quaternion.copy(handleQuaternion);
+      dummy.updateMatrix();
+      handle.setMatrixAt(index, dummy.matrix);
+
+      dummy.position.copy(center).addScaledVector(handleDirection, 0.46);
+      dummy.quaternion.identity();
+      dummy.updateMatrix();
+      knob.setMatrixAt(index, dummy.matrix);
+    });
+
+    for (const mesh of [base, handle, knob]) {
+      mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  }, [positions]);
+
+  if (positions.length === 0) return null;
+
+  return (
+    <group>
+      <instancedMesh ref={baseRef} args={[leverBaseGeom, leverBaseMat, positions.length]} castShadow receiveShadow />
+      <instancedMesh ref={handleRef} args={[leverHandleGeom, leverHandleMat, positions.length]} castShadow />
+      <instancedMesh ref={knobRef} args={[leverKnobGeom, leverKnobMat, positions.length]} castShadow />
+    </group>
+  );
+}
 
 export function DoorRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.DOOR);

@@ -1,7 +1,7 @@
 // 戦車・飛行機の武器制御
 // 左クリック長押し = ガトリング、右クリック = 戦車主砲ロケット、B / 右クリック(飛行機) = 爆弾投下
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -75,6 +75,8 @@ const BOMB_EXPLOSION_MAX_DESTROY_BLOCKS = 120;
 const BOMB_DROP_OFFSET_LEFT = new THREE.Vector3(-2.0, -1.5, 0);
 const BOMB_DROP_OFFSET_RIGHT = new THREE.Vector3(2.0, -1.5, 0);
 const BOMB_DROP_DELAY = 0.1; // 2発目の遅延（秒）
+const ROCKET_MODEL_FORWARD = new THREE.Vector3(0, 1, 0);
+const BOMB_MODEL_FORWARD = new THREE.Vector3(0, -1, 0);
 
 interface BulletProjectile {
   id: number;
@@ -872,33 +874,29 @@ export function VehicleWeapons() {
       {rockets.map((rocket) => (
         <group key={rocket.id}>
           <Tracer start={rocket.prev} end={rocket.pos} color="#ff9a40" radius={0.08} />
-          <mesh position={rocket.pos}>
-            <sphereGeometry args={[0.18, 12, 8]} />
-            <meshBasicMaterial color="#ffb14a" />
-          </mesh>
+          <VehicleRocketModel
+            x={rocket.pos.x}
+            y={rocket.pos.y}
+            z={rocket.pos.z}
+            previousX={rocket.prev.x}
+            previousY={rocket.prev.y}
+            previousZ={rocket.prev.z}
+          />
           <pointLight position={rocket.pos} color="#ff9a40" intensity={2.4} distance={10} />
         </group>
       ))}
       {bombs.map((bomb) => (
         <group key={bomb.id}>
-          {/* 爆弾本体（大型化） */}
-          <mesh position={bomb.pos}>
-            <capsuleGeometry args={[0.4, 0.8, 8, 12]} />
-            <meshStandardMaterial color="#3a3a3a" metalness={0.8} roughness={0.3} />
-          </mesh>
-          {/* 爆弾の尾翼（赤いマーカー・大型化） */}
-          <mesh position={[bomb.pos.x, bomb.pos.y + 0.55, bomb.pos.z]}>
-            <boxGeometry args={[0.55, 0.06, 0.55]} />
-            <meshStandardMaterial color="#cc3333" metalness={0.4} roughness={0.6} />
-          </mesh>
-          {/* 十字の尾翼（もう一枚） */}
-          <mesh position={[bomb.pos.x, bomb.pos.y + 0.55, bomb.pos.z]} rotation={[0, Math.PI / 4, 0]}>
-            <boxGeometry args={[0.55, 0.06, 0.55]} />
-            <meshStandardMaterial color="#cc3333" metalness={0.4} roughness={0.6} />
-          </mesh>
+          <VehicleBombModel
+            x={bomb.pos.x}
+            y={bomb.pos.y}
+            z={bomb.pos.z}
+            previousX={bomb.prev.x}
+            previousY={bomb.prev.y}
+            previousZ={bomb.prev.z}
+          />
           {/* 落下の軌跡（太く） */}
           <Tracer start={bomb.prev} end={bomb.pos} color="#666666" radius={0.07} />
-          <pointLight position={bomb.pos} color="#ff4400" intensity={1.5} distance={8} />
         </group>
       ))}
       {explosions.map((explosion) => (
@@ -907,6 +905,81 @@ export function VehicleWeapons() {
           <meshBasicMaterial color="#ff7b22" transparent opacity={Math.max(0, explosion.life / 0.65) * 0.35} />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+interface ProjectileModelProps {
+  x: number;
+  y: number;
+  z: number;
+  previousX: number;
+  previousY: number;
+  previousZ: number;
+}
+
+/** 戦車砲弾。発光球ではなく、進行方向を向く弾頭・胴体・尾部として描画する */
+function VehicleRocketModel({ x, y, z, previousX, previousY, previousZ }: ProjectileModelProps) {
+  const quaternion = useMemo(() => {
+    const result = new THREE.Quaternion();
+    const direction = new THREE.Vector3(x - previousX, y - previousY, z - previousZ);
+    if (direction.lengthSq() > 0.000001) {
+      result.setFromUnitVectors(ROCKET_MODEL_FORWARD, direction.normalize());
+    }
+    return result;
+  }, [previousX, previousY, previousZ, x, y, z]);
+
+  return (
+    <group position={[x, y, z]} quaternion={quaternion}>
+      <mesh>
+        <cylinderGeometry args={[0.1, 0.13, 0.4, 10]} />
+        <meshStandardMaterial color="#697079" roughness={0.38} metalness={0.68} />
+      </mesh>
+      <mesh position={[0, 0.28, 0]}>
+        <coneGeometry args={[0.1, 0.18, 10]} />
+        <meshStandardMaterial color="#c57933" emissive="#542006" emissiveIntensity={0.24} roughness={0.36} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.12, 0.018, 6, 12]} />
+        <meshStandardMaterial color="#30343a" roughness={0.5} metalness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+/** 航空爆弾。速度方向へ機首を向け、弾頭・安全帯・垂直尾翼を明確にする */
+function VehicleBombModel({ x, y, z, previousX, previousY, previousZ }: ProjectileModelProps) {
+  const quaternion = useMemo(() => {
+    const result = new THREE.Quaternion();
+    const direction = new THREE.Vector3(x - previousX, y - previousY, z - previousZ);
+    if (direction.lengthSq() > 0.000001) {
+      result.setFromUnitVectors(BOMB_MODEL_FORWARD, direction.normalize());
+    }
+    return result;
+  }, [previousX, previousY, previousZ, x, y, z]);
+
+  return (
+    <group position={[x, y, z]} quaternion={quaternion}>
+      <mesh>
+        <capsuleGeometry args={[0.4, 0.72, 8, 12]} />
+        <meshStandardMaterial color="#34383d" metalness={0.74} roughness={0.36} />
+      </mesh>
+      <mesh position={[0, -0.57, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.35, 0.34, 12]} />
+        <meshStandardMaterial color="#272b30" metalness={0.7} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.4, 0.035, 6, 16]} />
+        <meshStandardMaterial color="#b7372c" emissive="#4d0b07" emissiveIntensity={0.26} roughness={0.46} metalness={0.42} />
+      </mesh>
+      <mesh position={[0, 0.52, 0]}>
+        <boxGeometry args={[0.68, 0.34, 0.07]} />
+        <meshStandardMaterial color="#b7372c" metalness={0.4} roughness={0.58} />
+      </mesh>
+      <mesh position={[0, 0.52, 0]}>
+        <boxGeometry args={[0.07, 0.34, 0.68]} />
+        <meshStandardMaterial color="#b7372c" metalness={0.4} roughness={0.58} />
+      </mesh>
     </group>
   );
 }

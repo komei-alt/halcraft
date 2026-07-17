@@ -5,11 +5,12 @@
 // スキン対応: skinId で各パーツの色を変更
 // ============================================
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { type SkinDef, type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
 import type { EquippedItem } from '../stores/usePlayerStore';
 
 interface VoxelAvatarProps {
@@ -35,6 +36,177 @@ interface VoxelAvatarProps {
 const DEATH_ANIM_DURATION = 1.2;
 const WARDEN_MODEL_PATH = '/models/2026-04-29/warden.glb';
 const MAX_REMOTE_AIM_PITCH = Math.PI / 3;
+
+const SHARED_HEAD_GEOMETRY = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+const SHARED_BODY_GEOMETRY = new THREE.BoxGeometry(0.6, 0.8, 0.4);
+const SHARED_ARM_GEOMETRY = new THREE.BoxGeometry(0.25, 0.7, 0.25);
+const SHARED_DETAIL_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+const SHARED_DETAIL_MATERIAL = new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  vertexColors: true,
+});
+const SHARED_LEG_MATERIAL = new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  vertexColors: true,
+});
+const LEG_GEOMETRY_CACHE = new Map<string, THREE.BufferGeometry>();
+
+type DetailTuple = readonly [number, number, number];
+
+interface AvatarDetailPart {
+  position: DetailTuple;
+  scale: DetailTuple;
+  color: string;
+  rotation?: DetailTuple;
+}
+
+interface AvatarDetailPalette {
+  face: string;
+  hair: string;
+  accent: string;
+  trim: string;
+  faceStyle: 'human' | 'visor' | 'creeper';
+}
+
+function setGeometryColor(geometry: THREE.BufferGeometry, color: THREE.Color): void {
+  const position = geometry.getAttribute('position');
+  const colors = new Float32Array(position.count * 3);
+  for (let index = 0; index < position.count; index++) {
+    colors[index * 3] = color.r;
+    colors[index * 3 + 1] = color.g;
+    colors[index * 3 + 2] = color.b;
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+function getAvatarLegGeometry(legColor: string, shoeColor: string): THREE.BufferGeometry {
+  const cacheKey = `${legColor}:${shoeColor}`;
+  const cached = LEG_GEOMETRY_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  const trousers = new THREE.BoxGeometry(0.25, 0.42, 0.3);
+  trousers.translate(0, 0.09, 0);
+  setGeometryColor(trousers, new THREE.Color(legColor));
+
+  const shoe = new THREE.BoxGeometry(0.27, 0.18, 0.34);
+  shoe.translate(0, -0.21, 0.02);
+  setGeometryColor(shoe, new THREE.Color(shoeColor));
+
+  const merged = mergeGeometries([trousers, shoe], false);
+  if (!merged) {
+    shoe.dispose();
+    LEG_GEOMETRY_CACHE.set(cacheKey, trousers);
+    return trousers;
+  }
+
+  trousers.dispose();
+  shoe.dispose();
+  LEG_GEOMETRY_CACHE.set(cacheKey, merged);
+  return merged;
+}
+
+function getAvatarDetailPalette(skinId: SkinId, skin: SkinDef): AvatarDetailPalette {
+  switch (skinId) {
+    case 'ironman':
+      return { face: '#9ff8ff', hair: '#e2b944', accent: '#82f3ff', trim: '#6f1111', faceStyle: 'visor' };
+    case 'red_warden':
+      return { face: '#ffbd58', hair: skin.accessoryColor ?? '#731600', accent: '#ffcf64', trim: '#2d1512', faceStyle: 'visor' };
+    case 'hero':
+      return { face: '#2e211d', hair: '#543520', accent: '#e6c36a', trim: '#40362c', faceStyle: 'human' };
+    case 'creeper':
+      return { face: '#102310', hair: '#286e30', accent: '#173e1c', trim: '#102b15', faceStyle: 'creeper' };
+    default:
+      return { face: '#3a241c', hair: '#5b3422', accent: '#76d4e6', trim: '#27365e', faceStyle: 'human' };
+  }
+}
+
+function getHeadDetails(palette: AvatarDetailPalette, hasAccessory: boolean): readonly AvatarDetailPart[] {
+  const details: AvatarDetailPart[] = [
+    { position: [0, 0.255, 0], scale: [0.51, 0.045, 0.51], color: palette.hair },
+    { position: [0, 0.17, 0.258], scale: [0.5, 0.13, 0.025], color: palette.hair },
+    { position: [-0.255, 0.05, 0], scale: [0.025, 0.38, 0.5], color: palette.hair },
+    { position: [0.255, 0.05, 0], scale: [0.025, 0.38, 0.5], color: palette.hair },
+  ];
+
+  if (palette.faceStyle === 'creeper') {
+    details.push(
+      { position: [-0.11, 0.06, 0.263], scale: [0.09, 0.1, 0.018], color: palette.face },
+      { position: [0.11, 0.06, 0.263], scale: [0.09, 0.1, 0.018], color: palette.face },
+      { position: [0, -0.09, 0.263], scale: [0.09, 0.12, 0.018], color: palette.face },
+      { position: [-0.06, -0.17, 0.263], scale: [0.055, 0.08, 0.018], color: palette.face },
+      { position: [0.06, -0.17, 0.263], scale: [0.055, 0.08, 0.018], color: palette.face },
+    );
+  } else if (palette.faceStyle === 'visor') {
+    details.push(
+      { position: [-0.11, 0.05, 0.263], scale: [0.12, 0.055, 0.018], color: palette.face, rotation: [0, 0, -0.12] },
+      { position: [0.11, 0.05, 0.263], scale: [0.12, 0.055, 0.018], color: palette.face, rotation: [0, 0, 0.12] },
+      { position: [0, -0.13, 0.263], scale: [0.18, 0.035, 0.018], color: palette.trim },
+    );
+  } else {
+    details.push(
+      { position: [-0.1, 0.04, 0.263], scale: [0.065, 0.065, 0.018], color: palette.face },
+      { position: [0.1, 0.04, 0.263], scale: [0.065, 0.065, 0.018], color: palette.face },
+      { position: [0, -0.12, 0.263], scale: [0.12, 0.035, 0.018], color: palette.face },
+    );
+  }
+
+  if (hasAccessory) {
+    details.push(
+      { position: [-0.15, 0.34, 0], scale: [0.08, 0.22, 0.08], color: palette.hair, rotation: [0, 0, -0.2] },
+      { position: [0.15, 0.34, 0], scale: [0.08, 0.22, 0.08], color: palette.hair, rotation: [0, 0, 0.2] },
+    );
+  }
+
+  return details;
+}
+
+function getBodyDetails(palette: AvatarDetailPalette): readonly AvatarDetailPart[] {
+  return [
+    { position: [0, 0.24, 0.207], scale: [0.4, 0.06, 0.018], color: palette.trim },
+    { position: [0, 0.06, 0.21], scale: [0.2, 0.2, 0.02], color: palette.accent, rotation: [0, 0, Math.PI / 4] },
+    { position: [0, -0.3, 0.207], scale: [0.58, 0.075, 0.018], color: palette.trim },
+  ];
+}
+
+function ColoredDetailInstances({
+  details,
+  dimmed,
+}: {
+  details: readonly AvatarDetailPart[];
+  dimmed: boolean;
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const part = new THREE.Object3D();
+    const color = new THREE.Color();
+
+    details.forEach((detail, index) => {
+      part.position.set(...detail.position);
+      part.rotation.set(...(detail.rotation ?? [0, 0, 0]));
+      part.scale.set(...detail.scale);
+      part.updateMatrix();
+      mesh.setMatrixAt(index, part.matrix);
+      color.set(detail.color);
+      if (dimmed) color.multiplyScalar(0.35);
+      mesh.setColorAt(index, color);
+    });
+
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [details, dimmed]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[SHARED_DETAIL_GEOMETRY, SHARED_DETAIL_MATERIAL, details.length]}
+      dispose={null}
+    />
+  );
+}
 
 /** 各パーツの崩壊パラメータ */
 interface PartPhysics {
@@ -174,6 +346,7 @@ export function VoxelAvatar({
     if (skinId && skinId in SKIN_DEFS) return SKIN_DEFS[skinId];
     return SKIN_DEFS[DEFAULT_SKIN_ID];
   }, [skinId]);
+  const resolvedSkinId = skinId && skinId in SKIN_DEFS ? skinId : DEFAULT_SKIN_ID;
 
   // フォールバック色（skinIdが無くcolorが渡された場合の旧互換用）
   const fallbackColor = color && !skinId ? color : null;
@@ -191,9 +364,12 @@ export function VoxelAvatar({
     new THREE.MeshLambertMaterial({ color: fallbackColor || skin.colors.arms }),
     [skin, fallbackColor]);
 
-  const legMat = useMemo(() =>
-    new THREE.MeshLambertMaterial({ color: fallbackColor ? new THREE.Color(fallbackColor).multiplyScalar(0.7) : skin.colors.legs }),
-    [skin, fallbackColor]);
+  const legColor = fallbackColor
+    ? `#${new THREE.Color(fallbackColor).multiplyScalar(0.7).getHexString()}`
+    : skin.colors.legs;
+  const shoeColor = fallbackColor
+    ? `#${new THREE.Color(fallbackColor).multiplyScalar(0.42).getHexString()}`
+    : skin.colors.shoes;
 
   // 死亡時のグレーアウトマテリアル
   const deadHeadMat = useMemo(() => {
@@ -214,18 +390,16 @@ export function VoxelAvatar({
     return new THREE.MeshLambertMaterial({ color: c });
   }, [skin, fallbackColor]);
 
-  // ツノ用アクセサリーマテリアル
-  const accessoryMat = useMemo(() => {
-    if (!skin.hasHeadAccessory) return null;
-    return new THREE.MeshLambertMaterial({ color: skin.accessoryColor || '#881100' });
-  }, [skin]);
-
-  // ジオメトリをメモ化
-  const headGeom = useMemo(() => new THREE.BoxGeometry(0.5, 0.5, 0.5), []);
-  const bodyGeom = useMemo(() => new THREE.BoxGeometry(0.6, 0.8, 0.4), []);
-  const armGeom = useMemo(() => new THREE.BoxGeometry(0.25, 0.7, 0.25), []);
-  const legGeom = useMemo(() => new THREE.BoxGeometry(0.25, 0.6, 0.3), []);
-  const hornGeom = useMemo(() => new THREE.BoxGeometry(0.08, 0.2, 0.08), []);
+  const legGeom = useMemo(() => getAvatarLegGeometry(legColor, shoeColor), [legColor, shoeColor]);
+  const detailPalette = useMemo(
+    () => getAvatarDetailPalette(resolvedSkinId, skin),
+    [resolvedSkinId, skin],
+  );
+  const headDetails = useMemo(
+    () => getHeadDetails(detailPalette, skin.hasHeadAccessory === true),
+    [detailPalette, skin.hasHeadAccessory],
+  );
+  const bodyDetails = useMemo(() => getBodyDetails(detailPalette), [detailPalette]);
 
   // 元の位置（各パーツ）
   const origPositions = useMemo(() => ({
@@ -306,8 +480,8 @@ export function VoxelAvatar({
       bodyRef.current.material = bodyMat;
       leftArmRef.current.material = armMat;
       rightArmRef.current.material = armMat;
-      leftLegRef.current.material = legMat;
-      rightLegRef.current.material = legMat;
+      leftLegRef.current.material = SHARED_LEG_MATERIAL;
+      rightLegRef.current.material = SHARED_LEG_MATERIAL;
 
       // 位置リセット
       headRef.current.position.copy(origPositions.head);
@@ -359,6 +533,19 @@ export function VoxelAvatar({
         rightLegRef.current.rotation.x = 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'lightsaber') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        // 刃を体の前へ構え、両手が同じ柄へ自然に集まる姿勢
+        rightArmRef.current.position.set(0.36, 0.9, -0.12);
+        leftArmRef.current.position.set(-0.2, 0.88, -0.13);
+        rightArmRef.current.rotation.x = 1.32 + pitch * 0.34;
+        leftArmRef.current.rotation.x = 1.18 + pitch * 0.3;
+        rightArmRef.current.rotation.z = -0.28;
+        leftArmRef.current.rotation.z = 0.42;
+        leftLegRef.current.rotation.x = 0;
+        rightLegRef.current.rotation.x = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'builder') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
         rightArmRef.current.position.set(0.48, 0.68, -0.1);
@@ -404,66 +591,74 @@ export function VoxelAvatar({
 
   return (
     <group ref={groupRef}>
-      {/* 頭 */}
-      <mesh ref={headRef} geometry={headGeom} material={headMat} position={[0, 1.55, 0]} castShadow />
-
-      {/* ツノ（赤ウォーデンなど、headAccessory付きスキン） */}
-      {skin.hasHeadAccessory && accessoryMat && (
-        <>
-          <mesh
-            geometry={hornGeom}
-            material={accessoryMat}
-            position={[-0.15, 1.88, 0]}
-            rotation={[0, 0, -0.2]}
-            castShadow
-          />
-          <mesh
-            geometry={hornGeom}
-            material={accessoryMat}
-            position={[0.15, 1.88, 0]}
-            rotation={[0, 0, 0.2]}
-            castShadow
-          />
-        </>
-      )}
+      {/* 顔・髪・ヘルメット・ツノを1つのインスタンス描画へまとめる */}
+      <mesh
+        ref={headRef}
+        geometry={SHARED_HEAD_GEOMETRY}
+        material={headMat}
+        position={[0, 1.55, 0]}
+        castShadow
+        receiveShadow
+        dispose={null}
+      >
+        <ColoredDetailInstances details={headDetails} dimmed={isDead} />
+      </mesh>
 
       {/* 体 */}
-      <mesh ref={bodyRef} geometry={bodyGeom} material={bodyMat} position={[0, 0.9, 0]} castShadow />
+      <mesh
+        ref={bodyRef}
+        geometry={SHARED_BODY_GEOMETRY}
+        material={bodyMat}
+        position={[0, 0.9, 0]}
+        castShadow
+        receiveShadow
+        dispose={null}
+      >
+        <ColoredDetailInstances details={bodyDetails} dimmed={isDead} />
+      </mesh>
 
       {/* 左腕 */}
       <mesh
         ref={leftArmRef}
-        geometry={armGeom}
+        geometry={SHARED_ARM_GEOMETRY}
         material={armMat}
         position={[-0.42, 0.85, 0]}
         castShadow
+        receiveShadow
+        dispose={null}
       />
 
       {/* 右腕 */}
       <mesh
         ref={rightArmRef}
-        geometry={armGeom}
+        geometry={SHARED_ARM_GEOMETRY}
         material={armMat}
         position={[0.42, 0.85, 0]}
         castShadow
+        receiveShadow
+        dispose={null}
       />
 
       {/* 左足 */}
       <mesh
         ref={leftLegRef}
         geometry={legGeom}
-        material={legMat}
+        material={SHARED_LEG_MATERIAL}
         position={[-0.15, 0.3, 0]}
         castShadow
+        receiveShadow
+        dispose={null}
       />
 
       {/* 右足 */}
       <mesh
         ref={rightLegRef}
         geometry={legGeom}
-        material={legMat}
+        material={SHARED_LEG_MATERIAL}
         position={[0.15, 0.3, 0]}
         castShadow
+        receiveShadow
+        dispose={null}
       />
     </group>
   );

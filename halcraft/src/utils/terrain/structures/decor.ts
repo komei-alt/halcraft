@@ -27,33 +27,59 @@ function inStructureZone(worldX: number, worldZ: number): boolean {
   return false;
 }
 
-/** 茂み（葉ブロックの小さな盛り上がり） */
-function placeBush(chunk: ChunkData, lx: number, surfaceY: number, lz: number): void {
+/** 茂み（大小で輪郭を変える低い葉の塊） */
+function placeBush(chunk: ChunkData, lx: number, surfaceY: number, lz: number, big: boolean): void {
   const y = surfaceY + 1;
   if (y >= WORLD_HEIGHT) return;
   chunk[lx][y][lz] = BLOCK_IDS.LEAVES;
+  if (!big) return;
+
+  const offsets = ((lx + lz) & 1) === 0
+    ? [[1, 0], [0, 1]]
+    : [[-1, 0], [0, -1]];
+  for (const [dx, dz] of offsets) {
+    const bx = lx + dx;
+    const bz = lz + dz;
+    if (bx > 0 && bx < CHUNK_SIZE - 1 && bz > 0 && bz < CHUNK_SIZE - 1) {
+      chunk[bx][y][bz] = BLOCK_IDS.LEAVES;
+    }
+  }
 }
 
 /** 岩（石ブロック1〜2段） */
 function placeRock(chunk: ChunkData, lx: number, surfaceY: number, lz: number, big: boolean): void {
   if (surfaceY + 1 < WORLD_HEIGHT) chunk[lx][surfaceY + 1][lz] = BLOCK_IDS.STONE;
-  if (big && surfaceY + 2 < WORLD_HEIGHT) chunk[lx][surfaceY + 2][lz] = BLOCK_IDS.STONE;
+  if (big) {
+    const sideX = lx + (((lx + lz) & 1) === 0 ? 1 : -1);
+    if (sideX > 0 && sideX < CHUNK_SIZE - 1 && surfaceY + 1 < WORLD_HEIGHT) {
+      chunk[sideX][surfaceY + 1][lz] = BLOCK_IDS.IRON_CRACKED;
+    }
+    if (surfaceY + 2 < WORLD_HEIGHT) chunk[lx][surfaceY + 2][lz] = BLOCK_IDS.STONE;
+  }
 }
 
 /** 雪の岩（雪塊） */
 function placeSnowRock(chunk: ChunkData, lx: number, surfaceY: number, lz: number): void {
   if (surfaceY + 1 < WORLD_HEIGHT) chunk[lx][surfaceY + 1][lz] = BLOCK_IDS.SNOW;
+  if (((lx + lz) & 3) === 0 && surfaceY + 1 < WORLD_HEIGHT && lx + 1 < CHUNK_SIZE) {
+    chunk[lx + 1][surfaceY + 1][lz] = BLOCK_IDS.GLASS;
+  }
 }
 
 /** 枯れ木（砂漠の枯れ枝） */
 function placeDeadBush(chunk: ChunkData, lx: number, surfaceY: number, lz: number): void {
   if (surfaceY + 1 < WORLD_HEIGHT) chunk[lx][surfaceY + 1][lz] = BLOCK_IDS.RAW_WOOD;
+  if (surfaceY + 2 < WORLD_HEIGHT) chunk[lx][surfaceY + 2][lz] = BLOCK_IDS.RAW_WOOD;
+  const branchX = lx + (((lx + lz) & 1) === 0 ? 1 : -1);
+  if (branchX > 0 && branchX < CHUNK_SIZE - 1 && surfaceY + 2 < WORLD_HEIGHT) {
+    chunk[branchX][surfaceY + 2][lz] = BLOCK_IDS.RAW_WOOD;
+  }
 }
 
 function placeDecor(chunk: ChunkData, kind: DecorKind, lx: number, surfaceY: number, lz: number, big: boolean): void {
   switch (kind) {
     case 'bush':
-      placeBush(chunk, lx, surfaceY, lz);
+      placeBush(chunk, lx, surfaceY, lz, big);
       break;
     case 'rock':
       placeRock(chunk, lx, surfaceY, lz, big);
@@ -65,8 +91,8 @@ function placeDecor(chunk: ChunkData, kind: DecorKind, lx: number, surfaceY: num
       placeDeadBush(chunk, lx, surfaceY, lz);
       break;
     case 'flower':
-      // 専用ブロックが無いため茂みで代替
-      placeBush(chunk, lx, surfaceY, lz);
+      // 専用スプラウト形状を使い、茂みとの見分けを付ける
+      if (surfaceY + 1 < WORLD_HEIGHT) chunk[lx][surfaceY + 1][lz] = BLOCK_IDS.WHEAT_SEEDS;
       break;
   }
 }

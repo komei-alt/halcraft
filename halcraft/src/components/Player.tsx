@@ -21,7 +21,14 @@ import {
   ALL_SEATS,
   type VehicleType,
 } from '../stores/useVehicleStore';
-import { checkAABBCollision, isBlockSolid, isInWater, isInLava } from '../utils/collision';
+import {
+  checkAABBCollision,
+  getAABBCollisionTop,
+  isBlockSolid,
+  isInWater,
+  isInLava,
+  STAIRS_STEP_HEIGHT,
+} from '../utils/collision';
 import { BLOCK_IDS } from '../types/blocks';
 import { isTouchDevice } from '../utils/device';
 import { useCoasterStore } from '../stores/useCoasterStore';
@@ -234,6 +241,11 @@ export function Player() {
   // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定
   const checkCollision = useCallback((px: number, py: number, pz: number): boolean =>
     checkAABBCollision(getBlock, px, py, pz, PLAYER_RADIUS, PLAYER_HEIGHT, isBlockSolid),
+  [getBlock]);
+
+  // 下向き衝突時の正確な上面を取得（階段の0.48/0.96段への着地に使用）
+  const getCollisionTop = useCallback((px: number, py: number, pz: number): number | null =>
+    getAABBCollisionTop(getBlock, px, py, pz, PLAYER_RADIUS, PLAYER_HEIGHT, isBlockSolid),
   [getBlock]);
 
   // マウスによる視点回転（デスクトップ用）
@@ -1468,18 +1480,22 @@ export function Player() {
     // --- 軸分離衝突判定 ---
     // Y軸（上下）
     const newY = pos.y + vel.y * dt;
-    if (checkCollision(pos.x, newY, pos.z)) {
+    const downwardCollisionTop = vel.y < 0
+      ? getCollisionTop(pos.x, newY, pos.z)
+      : null;
+    const hasVerticalCollision = downwardCollisionTop !== null
+      || (vel.y >= 0 && checkCollision(pos.x, newY, pos.z));
+    if (hasVerticalCollision) {
       // 落下中に衝突 → 接地
-      if (vel.y < 0) {
+      if (vel.y < 0 && downwardCollisionTop !== null) {
         // 落下ダメージを計算
         const fallDistance = lastGroundY.current - newY;
         if (fallDistance > 0 && wasFalling.current) {
           applyFallDamage(fallDistance);
         }
         onGround.current = true;
-        // 足元のブロック上面にスナップ（微量上げて境界振動を防止）
-        const footBlockY = Math.floor(newY);
-        pos.y = footBlockY + 1.001;
+        // 実際の衝突形状上面へスナップ（微量上げて境界振動を防止）
+        pos.y = downwardCollisionTop + 0.001;
         // 着地後の落下開始位置をリセット
         lastGroundY.current = pos.y;
       }
@@ -1495,7 +1511,21 @@ export function Player() {
     // X軸（左右）
     const newX = pos.x + vel.x * dt;
     if (checkCollision(newX, pos.y, pos.z)) {
-      vel.x = 0;
+      const stepTop = onGround.current ? getCollisionTop(newX, pos.y, pos.z) : null;
+      const stepRise = stepTop === null ? Number.POSITIVE_INFINITY : stepTop - pos.y;
+      const steppedY = stepTop === null ? pos.y : stepTop + 0.001;
+      if (
+        stepRise > 0 &&
+        stepRise <= STAIRS_STEP_HEIGHT &&
+        !checkCollision(newX, steppedY, pos.z)
+      ) {
+        pos.x = newX;
+        pos.y = steppedY;
+        vel.y = 0;
+        lastGroundY.current = steppedY;
+      } else {
+        vel.x = 0;
+      }
     } else {
       pos.x = newX;
     }
@@ -1503,7 +1533,21 @@ export function Player() {
     // Z軸（前後）
     const newZ = pos.z + vel.z * dt;
     if (checkCollision(pos.x, pos.y, newZ)) {
-      vel.z = 0;
+      const stepTop = onGround.current ? getCollisionTop(pos.x, pos.y, newZ) : null;
+      const stepRise = stepTop === null ? Number.POSITIVE_INFINITY : stepTop - pos.y;
+      const steppedY = stepTop === null ? pos.y : stepTop + 0.001;
+      if (
+        stepRise > 0 &&
+        stepRise <= STAIRS_STEP_HEIGHT &&
+        !checkCollision(pos.x, steppedY, newZ)
+      ) {
+        pos.z = newZ;
+        pos.y = steppedY;
+        vel.y = 0;
+        lastGroundY.current = steppedY;
+      } else {
+        vel.z = 0;
+      }
     } else {
       pos.z = newZ;
     }

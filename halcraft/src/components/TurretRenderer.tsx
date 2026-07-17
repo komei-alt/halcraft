@@ -5,6 +5,7 @@
 
 import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useMobStore } from '../stores/useMobStore';
@@ -53,6 +54,179 @@ const BLOCK_IMPACT_COLOR = new THREE.Color(0xccaa66);
 const MOB_HIT_COLOR = new THREE.Color(0xff3333);
 const SPARK_COLOR = new THREE.Color(0xffffff);
 const MUZZLE_FLASH_COLOR = new THREE.Color(0xffaa33);
+
+type Vector3Tuple = [number, number, number];
+
+interface TurretBoxPart {
+  position: Vector3Tuple;
+  size: Vector3Tuple;
+  rotation?: Vector3Tuple;
+}
+
+interface TurretCylinderPart {
+  position: Vector3Tuple;
+  radiusTop: number;
+  radiusBottom: number;
+  height: number;
+  rotation?: Vector3Tuple;
+  radialSegments?: number;
+}
+
+const ZERO_ROTATION: Vector3Tuple = [0, 0, 0];
+
+function transformTurretGeometry(
+  geometry: THREE.BufferGeometry,
+  position: Vector3Tuple,
+  rotation: Vector3Tuple = ZERO_ROTATION,
+): THREE.BufferGeometry {
+  geometry.rotateX(rotation[0]);
+  geometry.rotateY(rotation[1]);
+  geometry.rotateZ(rotation[2]);
+  geometry.translate(position[0], position[1], position[2]);
+  return geometry;
+}
+
+function mergeTurretGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged = mergeGeometries(geometries, false);
+  for (const geometry of geometries) geometry.dispose();
+  merged.computeBoundingSphere();
+  return merged;
+}
+
+function createTurretBoxGeometry(parts: TurretBoxPart[]): THREE.BufferGeometry {
+  return mergeTurretGeometries(parts.map((part) => transformTurretGeometry(
+    new THREE.BoxGeometry(part.size[0], part.size[1], part.size[2]),
+    part.position,
+    part.rotation,
+  )));
+}
+
+function createTurretCylinderGeometry(parts: TurretCylinderPart[]): THREE.BufferGeometry {
+  return mergeTurretGeometries(parts.map((part) => transformTurretGeometry(
+    new THREE.CylinderGeometry(
+      part.radiusTop,
+      part.radiusBottom,
+      part.height,
+      part.radialSegments ?? 10,
+    ),
+    part.position,
+    part.rotation,
+  )));
+}
+
+/** 地面へ荷重を分散する多角形ベースとアウトリガー。 */
+const TURRET_BASE_GEOMETRY = mergeTurretGeometries([
+  createTurretCylinderGeometry([
+    { position: [0, -0.21, 0], radiusTop: 0.48, radiusBottom: 0.55, height: 0.2, radialSegments: 12 },
+    { position: [0, -0.075, 0], radiusTop: 0.35, radiusBottom: 0.42, height: 0.1, radialSegments: 12 },
+  ]),
+  createTurretBoxGeometry([
+    { position: [0.39, -0.25, 0], size: [0.3, 0.08, 0.16] },
+    { position: [-0.39, -0.25, 0], size: [0.3, 0.08, 0.16] },
+    { position: [0, -0.25, 0.39], size: [0.16, 0.08, 0.3] },
+    { position: [0, -0.25, -0.39], size: [0.16, 0.08, 0.3] },
+  ]),
+]);
+
+/** 旋回リング、支柱、斜めブレースを1材質に統合した架台。 */
+const TURRET_PEDESTAL_GEOMETRY = mergeTurretGeometries([
+  createTurretCylinderGeometry([
+    { position: [0, 0.02, 0], radiusTop: 0.13, radiusBottom: 0.17, height: 0.28, radialSegments: 10 },
+    { position: [0, 0.17, 0], radiusTop: 0.25, radiusBottom: 0.25, height: 0.08, radialSegments: 12 },
+  ]),
+  createTurretBoxGeometry([
+    { position: [0.17, 0.025, 0], size: [0.055, 0.28, 0.07], rotation: [0, 0, 0.48] },
+    { position: [-0.17, 0.025, 0], size: [0.055, 0.28, 0.07], rotation: [0, 0, -0.48] },
+    { position: [0, 0.025, 0.17], size: [0.07, 0.28, 0.055], rotation: [0.48, 0, 0] },
+    { position: [0, 0.025, -0.17], size: [0.07, 0.28, 0.055], rotation: [-0.48, 0, 0] },
+  ]),
+]);
+
+const TURRET_ACCENT_GEOMETRY = createTurretBoxGeometry([
+  { position: [0, -0.065, -0.43], size: [0.28, 0.045, 0.035] },
+  { position: [0.25, -0.16, -0.39], size: [0.045, 0.13, 0.035] },
+  { position: [-0.25, -0.16, -0.39], size: [0.045, 0.13, 0.035] },
+]);
+
+/** トラニオン軸と反動受けを含む、可動ヘッドの骨格。 */
+const TURRET_HEAD_MOUNT_GEOMETRY = mergeTurretGeometries([
+  createTurretBoxGeometry([
+    { position: [0, 0, 0.03], size: [0.34, 0.17, 0.3] },
+    { position: [-0.19, 0, 0.2], size: [0.055, 0.22, 0.24], rotation: [0, 0, -0.08] },
+    { position: [0.19, 0, 0.2], size: [0.055, 0.22, 0.24], rotation: [0, 0, 0.08] },
+  ]),
+  createTurretCylinderGeometry([
+    { position: [0, 0.01, 0.17], radiusTop: 0.085, radiusBottom: 0.085, height: 0.45, rotation: [0, 0, Math.PI / 2], radialSegments: 12 },
+  ]),
+]);
+
+/** 前面を絞った装甲板と左右の防盾。 */
+const TURRET_ARMOR_GEOMETRY = createTurretBoxGeometry([
+  { position: [0, 0.115, 0.055], size: [0.3, 0.09, 0.22], rotation: [-0.08, 0, 0] },
+  { position: [-0.155, 0.065, 0.3], size: [0.075, 0.24, 0.35], rotation: [0, -0.09, -0.05] },
+  { position: [0.155, 0.065, 0.3], size: [0.075, 0.24, 0.35], rotation: [0, 0.09, 0.05] },
+  { position: [0, 0.11, 0.39], size: [0.2, 0.075, 0.2], rotation: [-0.05, 0, 0] },
+]);
+
+const TURRET_RECEIVER_GEOMETRY = createTurretBoxGeometry([
+  { position: [0, 0.01, 0.27], size: [0.22, 0.19, 0.42] },
+  { position: [0, 0.02, 0.5], size: [0.19, 0.18, 0.12] },
+  { position: [0, 0.145, 0.24], size: [0.16, 0.06, 0.24], rotation: [-0.05, 0, 0] },
+  { position: [0.11, 0.205, 0.27], size: [0.11, 0.09, 0.17] },
+]);
+
+/** 側面弾薬箱から薬室へつながる段階的な給弾シュート。 */
+const TURRET_AMMO_GEOMETRY = createTurretBoxGeometry([
+  { position: [-0.24, -0.065, 0.12], size: [0.19, 0.21, 0.27] },
+  { position: [-0.185, -0.02, 0.31], size: [0.09, 0.1, 0.12], rotation: [0.14, 0, 0] },
+  { position: [-0.135, 0.005, 0.41], size: [0.075, 0.085, 0.1], rotation: [0.1, 0, 0] },
+]);
+
+const TURRET_SENSOR_GEOMETRY = createTurretCylinderGeometry([
+  { position: [0.11, 0.205, 0.365], radiusTop: 0.04, radiusBottom: 0.04, height: 0.018, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+]);
+
+/** 四連銃身、基部カラー、銃口カラーを1メッシュで回転させる。 */
+const TURRET_BARREL_GEOMETRY = createTurretCylinderGeometry([
+  { position: [0.06, 0, 0.3], radiusTop: 0.021, radiusBottom: 0.024, height: 0.6, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+  { position: [-0.06, 0, 0.3], radiusTop: 0.021, radiusBottom: 0.024, height: 0.6, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+  { position: [0, 0.06, 0.3], radiusTop: 0.021, radiusBottom: 0.024, height: 0.6, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+  { position: [0, -0.06, 0.3], radiusTop: 0.021, radiusBottom: 0.024, height: 0.6, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+  { position: [0, 0, 0.045], radiusTop: 0.11, radiusBottom: 0.11, height: 0.09, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+  { position: [0, 0, 0.57], radiusTop: 0.108, radiusBottom: 0.108, height: 0.08, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+]);
+
+const TURRET_FLASH_GEOMETRY = transformTurretGeometry(
+  new THREE.ConeGeometry(0.16, 0.3, 6, 1, true),
+  [0, 0, 0],
+  [Math.PI / 2, 0, 0],
+);
+
+// 全タレットで共有できる静的マテリアル。発光量を更新するフラッシュだけ個別生成する。
+const TURRET_MATERIALS = {
+  barrel: new THREE.MeshStandardMaterial({ color: GUN_BARREL_COLOR, roughness: 0.42, metalness: 0.72 }),
+  body: new THREE.MeshStandardMaterial({ color: GUN_BODY_COLOR, roughness: 0.48, metalness: 0.42 }),
+  armor: new THREE.MeshStandardMaterial({ color: ARMOR_COLOR, roughness: 0.4, metalness: 0.56 }),
+  mount: new THREE.MeshStandardMaterial({ color: GUN_MOUNT_COLOR, roughness: 0.62, metalness: 0.36 }),
+  base: new THREE.MeshStandardMaterial({ color: BASE_COLOR, roughness: 0.44, metalness: 0.58 }),
+  ammo: new THREE.MeshStandardMaterial({ color: AMMO_COLOR, roughness: 0.56, metalness: 0.3 }),
+  accent: new THREE.MeshStandardMaterial({
+    color: ACCENT_COLOR,
+    roughness: 0.25,
+    metalness: 0.15,
+    emissive: ACCENT_COLOR,
+    emissiveIntensity: 0.7,
+  }),
+  sensor: new THREE.MeshStandardMaterial({
+    color: SENSOR_COLOR,
+    roughness: 0.18,
+    metalness: 0.2,
+    emissive: SENSOR_COLOR,
+    emissiveIntensity: 0.9,
+  }),
+} as const;
+
+const TURRET_EXCLUDED_BLOCKS = new Set([BLOCK_IDS.TURRET]);
 
 // ─── 型定義 ──────────────────────────────────────────────
 interface TurretProjectile {
@@ -123,11 +297,13 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const gunGroupRef = useRef<THREE.Group>(null);
   const muzzleRef = useRef<THREE.Group>(null);
   const flashRef = useRef<THREE.Mesh>(null);
+  const barrelClusterRef = useRef<THREE.Group>(null);
   const lastFireTime = useRef(0);
   const flashTimer = useRef(0);
   const currentYaw = useRef(0);
   const currentPitch = useRef(0);
   const barrelRotation = useRef(0);
+  const barrelSpinVelocity = useRef(0);
   const isMouseDown = useRef(false);
   const muzzleWorld = useRef(new THREE.Vector3());
   const shootDir = useRef(new THREE.Vector3());
@@ -155,41 +331,23 @@ function SingleTurret({ position }: { position: TurretPos }) {
   const projectilesRef = useRef<TurretProjectile[]>([]);
   const impactsRef = useRef<TurretImpact[]>([]);
 
-  // マテリアル
-  const barrelMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: GUN_BARREL_COLOR, roughness: 0.6, metalness: 0.4,
-  }), []);
-  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: GUN_BODY_COLOR, roughness: 0.5, metalness: 0.3,
-  }), []);
-  const armorMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: ARMOR_COLOR, roughness: 0.42, metalness: 0.52,
-  }), []);
-  const mountMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: GUN_MOUNT_COLOR, roughness: 0.7, metalness: 0.2,
-  }), []);
-  const baseMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: BASE_COLOR, roughness: 0.4, metalness: 0.6,
-  }), []);
-  const ammoMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: AMMO_COLOR, roughness: 0.55, metalness: 0.32,
-  }), []);
-  const accentMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: ACCENT_COLOR,
-    roughness: 0.25,
-    metalness: 0.15,
-    emissive: ACCENT_COLOR,
-    emissiveIntensity: 0.7,
-  }), []);
-  const sensorMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: SENSOR_COLOR,
-    roughness: 0.18,
-    metalness: 0.2,
-    emissive: SENSOR_COLOR,
-    emissiveIntensity: 0.9,
-  }), []);
+  // 静的材質は全タレットで共有し、GPUリソースの重複を避ける。
+  const {
+    barrel: barrelMat,
+    body: bodyMat,
+    armor: armorMat,
+    mount: mountMat,
+    base: baseMat,
+    ammo: ammoMat,
+    accent: accentMat,
+    sensor: sensorMat,
+  } = TURRET_MATERIALS;
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
+    color: MUZZLE_FLASH_COLOR,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   }), []);
 
   // インパクト生成
@@ -235,6 +393,20 @@ function SingleTurret({ position }: { position: TurretPos }) {
     const getBlock = useWorldStore.getState().getBlock;
     const turretPos = turretPosVec.current.set(position.x, position.y, position.z);
 
+    // 発砲インパルスで銃身を回し、refへ直接反映してReact再描画を発生させない。
+    barrelRotation.current = (
+      barrelRotation.current + barrelSpinVelocity.current * delta
+    ) % (Math.PI * 2);
+    barrelSpinVelocity.current = THREE.MathUtils.damp(
+      barrelSpinVelocity.current,
+      0,
+      8,
+      delta,
+    );
+    if (barrelClusterRef.current) {
+      barrelClusterRef.current.rotation.z = barrelRotation.current;
+    }
+
     // プレイヤーがタレットの近くにいるか判定（プレイヤー操作モード）
     const camPos = camera.position;
     const distToPlayer = turretPos.distanceTo(camPos);
@@ -254,7 +426,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
         getBlock,
         mobs,
         MOB_HIT_RADIUS,
-        { excludeBlockIds: new Set([BLOCK_IDS.TURRET]) },
+        { excludeBlockIds: TURRET_EXCLUDED_BLOCKS },
       );
       if (aimHit.type !== 'none') {
         targetPoint.current.copy(aimHit.hitPos);
@@ -346,7 +518,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
 
       // マズルフラッシュ + バレル回転
       flashTimer.current = 0.06;
-      barrelRotation.current += Math.PI / 3; // 回転式バレル
+      barrelSpinVelocity.current = Math.min(barrelSpinVelocity.current + 30, 52);
 
       // 発射音
       playMachineGunSound(muzzleWorld.current.distanceTo(camera.position));
@@ -384,7 +556,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
           getBlock,
           mobs,
           MOB_HIT_RADIUS,
-          { excludeBlockIds: new Set([BLOCK_IDS.TURRET]) },
+          { excludeBlockIds: TURRET_EXCLUDED_BLOCKS },
         );
 
         if (hitResult.type === 'block') {
@@ -420,89 +592,61 @@ function SingleTurret({ position }: { position: TurretPos }) {
   return (
     <>
       <group position={[position.x, position.y, position.z]}>
-      {/* === 台座（軽量形状のまま密度を上げる） === */}
-      <mesh material={baseMat} position={[0, -0.2, 0]}>
-        <cylinderGeometry args={[0.42, 0.5, 0.22, 10]} />
-      </mesh>
-      <mesh material={armorMat} position={[0, -0.06, 0]}>
-        <cylinderGeometry args={[0.3, 0.36, 0.1, 10]} />
-      </mesh>
-      <mesh material={mountMat} position={[0, 0.1, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 0.3, 6]} />
-      </mesh>
-      <mesh material={mountMat} position={[0.14, 0.02, 0]} rotation={[0, 0, 0.45]}>
-        <boxGeometry args={[0.05, 0.22, 0.05]} />
-      </mesh>
-      <mesh material={mountMat} position={[-0.14, 0.02, 0]} rotation={[0, 0, -0.45]}>
-        <boxGeometry args={[0.05, 0.22, 0.05]} />
-      </mesh>
-      <mesh material={accentMat} position={[0, 0.03, -0.16]}>
-        <boxGeometry args={[0.16, 0.04, 0.06]} />
-      </mesh>
-      <mesh material={sensorMat} position={[0, 0.34, -0.05]}>
-        <boxGeometry args={[0.08, 0.05, 0.08]} />
-      </mesh>
+        {/* === 安定脚付き台座 === */}
+        <mesh
+          geometry={TURRET_BASE_GEOMETRY}
+          material={baseMat}
+          receiveShadow
+        />
+        <mesh
+          geometry={TURRET_PEDESTAL_GEOMETRY}
+          material={mountMat}
+          receiveShadow
+        />
+        <mesh geometry={TURRET_ACCENT_GEOMETRY} material={accentMat} />
 
-      {/* === 旋回部分 === */}
-      <group ref={pivotRef} position={[0, 0.25, 0]}>
-        <group ref={gunGroupRef}>
-          {/* 旋回台座 */}
-          <mesh material={mountMat} position={[0, 0, 0]}>
-            <boxGeometry args={[0.28, 0.14, 0.26]} />
-          </mesh>
-          <mesh material={armorMat} position={[0, 0.08, 0.02]}>
-            <boxGeometry args={[0.22, 0.08, 0.18]} />
-          </mesh>
-          {/* 銃本体 */}
-          <mesh material={bodyMat} position={[0, 0.0, 0.22]}>
-            <boxGeometry args={[0.18, 0.16, 0.42]} />
-          </mesh>
-          <mesh material={armorMat} position={[0, 0.08, 0.34]}>
-            <boxGeometry args={[0.14, 0.08, 0.22]} />
-          </mesh>
-          <mesh material={mountMat} position={[0.12, -0.02, 0.18]}>
-            <boxGeometry args={[0.05, 0.15, 0.18]} />
-          </mesh>
-          <mesh material={mountMat} position={[-0.12, -0.02, 0.18]}>
-            <boxGeometry args={[0.05, 0.15, 0.18]} />
-          </mesh>
-          {/* 回転式バレル（3本） */}
-          <group position={[0, 0, 0.55]} rotation={[0, 0, barrelRotation.current]}>
-            <mesh material={armorMat} position={[0, 0, 0.08]}>
-              <boxGeometry args={[0.16, 0.16, 0.08]} />
-            </mesh>
-            <mesh material={barrelMat} position={[0.04, 0, 0]}>
-              <boxGeometry args={[0.05, 0.05, 0.5]} />
-            </mesh>
-            <mesh material={barrelMat} position={[-0.04, 0.04, 0]}>
-              <boxGeometry args={[0.05, 0.05, 0.5]} />
-            </mesh>
-            <mesh material={barrelMat} position={[-0.04, -0.04, 0]}>
-              <boxGeometry args={[0.05, 0.05, 0.5]} />
-            </mesh>
-            <mesh material={armorMat} position={[0, 0, 0.28]}>
-              <boxGeometry args={[0.18, 0.18, 0.08]} />
-            </mesh>
+        {/* === 旋回・俯仰する装甲ヘッド === */}
+        <group ref={pivotRef} position={[0, 0.27, 0]}>
+          <group ref={gunGroupRef}>
+            <mesh
+              geometry={TURRET_HEAD_MOUNT_GEOMETRY}
+              material={mountMat}
+              receiveShadow
+            />
+            <mesh
+              geometry={TURRET_ARMOR_GEOMETRY}
+              material={armorMat}
+              castShadow
+              receiveShadow
+            />
+            <mesh
+              geometry={TURRET_RECEIVER_GEOMETRY}
+              material={bodyMat}
+              receiveShadow
+            />
+            <mesh
+              geometry={TURRET_AMMO_GEOMETRY}
+              material={ammoMat}
+            />
+            <mesh geometry={TURRET_SENSOR_GEOMETRY} material={sensorMat} />
+
+            {/* 発射時だけ慣性回転する四連銃身 */}
+            <group ref={barrelClusterRef} position={[0, 0.015, 0.5]}>
+              <mesh
+                geometry={TURRET_BARREL_GEOMETRY}
+                material={barrelMat}
+              />
+            </group>
+
+            <group ref={muzzleRef} position={[0, 0.015, 1.1]} />
+            <mesh
+              ref={flashRef}
+              geometry={TURRET_FLASH_GEOMETRY}
+              position={[0, 0.015, 1.17]}
+              material={flashMat}
+            />
           </group>
-          {/* 銃身先端 */}
-          <mesh material={armorMat} position={[0, 0.0, 0.84]}>
-            <boxGeometry args={[0.14, 0.14, 0.08]} />
-          </mesh>
-          {/* 弾薬ボックス */}
-          <mesh material={ammoMat} position={[0, -0.14, 0.1]}>
-            <boxGeometry args={[0.18, 0.14, 0.22]} />
-          </mesh>
-          <mesh material={sensorMat} position={[0, 0.06, 0.62]}>
-            <boxGeometry args={[0.08, 0.04, 0.08]} />
-          </mesh>
-          {/* マズルフラッシュ */}
-          <group ref={muzzleRef} position={[0, 0, 0.9]} />
-          <mesh ref={flashRef} position={[0, 0, 0.96]} material={flashMat}>
-            <boxGeometry args={[0.25, 0.25, 0.15]} />
-          </mesh>
         </group>
-      </group>
-
       </group>
 
       {/* === 弾丸トレイル === */}

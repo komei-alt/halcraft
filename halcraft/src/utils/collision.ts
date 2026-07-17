@@ -7,6 +7,54 @@ import { BLOCK_IDS, BLOCK_DEFS, type BlockId } from '../types/blocks';
 /** ブロック取得関数の型（useWorldStore.getBlock と同じシグネチャ） */
 export type GetBlockFn = (x: number, y: number, z: number) => BlockId;
 
+interface BlockCollisionBox {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** 階段1段分の高さ。Playerの段差解決と表示モデルで共有する基準値。 */
+export const STAIRS_STEP_HEIGHT = 0.5;
+
+const FULL_BLOCK_COLLISION_BOXES: readonly BlockCollisionBox[] = [{
+  minX: 0,
+  maxX: 1,
+  minY: 0,
+  maxY: 1,
+  minZ: 0,
+  maxZ: 1,
+}];
+
+/**
+ * 表示モデルと同じく、下段は全面、高段は+Z側半分に配置する。
+ * 高さを0.48/0.96に留め、0.5m step-up後の接地判定へ僅かな余裕を残す。
+ */
+const STAIRS_COLLISION_BOXES: readonly BlockCollisionBox[] = [
+  {
+    minX: 0,
+    maxX: 1,
+    minY: 0,
+    maxY: 0.48,
+    minZ: 0,
+    maxZ: 1,
+  },
+  {
+    minX: 0,
+    maxX: 1,
+    minY: 0.48,
+    maxY: 0.96,
+    minZ: 0.5,
+    maxZ: 1,
+  },
+];
+
+function getBlockCollisionBoxes(blockId: BlockId): readonly BlockCollisionBox[] {
+  return blockId === BLOCK_IDS.STAIRS ? STAIRS_COLLISION_BOXES : FULL_BLOCK_COLLISION_BOXES;
+}
+
 /**
  * ブロックが固体（通行不可）かチェック
  * 空気ブロックと noCollision（松明等）は通過可能
@@ -16,6 +64,49 @@ export function isBlockSolid(blockId: BlockId): boolean {
   const def = BLOCK_DEFS[blockId];
   if (def?.noCollision) return false;
   return true;
+}
+
+function findAABBCollisionTop(
+  getBlock: GetBlockFn,
+  px: number,
+  py: number,
+  pz: number,
+  radius: number,
+  height: number,
+  solidCheck: ((blockId: BlockId) => boolean) | undefined,
+  firstMatchOnly: boolean,
+): number | null {
+  const minX = px - radius;
+  const maxX = px + radius;
+  const minY = py;
+  const maxY = py + height;
+  const minZ = pz - radius;
+  const maxZ = pz + radius;
+  const isSolid = solidCheck ?? ((id: BlockId) => id !== BLOCK_IDS.AIR);
+  let highestTop: number | null = null;
+
+  for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
+    for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
+      for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+        const blockId = getBlock(bx, by, bz);
+        if (!isSolid(blockId)) continue;
+
+        for (const box of getBlockCollisionBoxes(blockId)) {
+          const boxMaxY = by + box.maxY;
+          if (
+            maxX > bx + box.minX && minX < bx + box.maxX &&
+            maxY > by + box.minY && minY < boxMaxY &&
+            maxZ > bz + box.minZ && minZ < bz + box.maxZ
+          ) {
+            if (firstMatchOnly) return boxMaxY;
+            highestTop = highestTop === null ? boxMaxY : Math.max(highestTop, boxMaxY);
+          }
+        }
+      }
+    }
+  }
+
+  return highestTop;
 }
 
 /**
@@ -39,32 +130,41 @@ export function checkAABBCollision(
   height: number,
   solidCheck?: (blockId: BlockId) => boolean,
 ): boolean {
-  const minX = px - radius;
-  const maxX = px + radius;
-  const minY = py;
-  const maxY = py + height;
-  const minZ = pz - radius;
-  const maxZ = pz + radius;
+  return findAABBCollisionTop(
+    getBlock,
+    px,
+    py,
+    pz,
+    radius,
+    height,
+    solidCheck,
+    true,
+  ) !== null;
+}
 
-  const isSolid = solidCheck ?? ((id: BlockId) => id !== BLOCK_IDS.AIR);
-
-  for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
-    for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
-      for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
-        if (!isSolid(getBlock(bx, by, bz))) continue;
-
-        // ブロックAABBとの重なり判定
-        if (
-          maxX > bx && minX < bx + 1 &&
-          maxY > by && minY < by + 1 &&
-          maxZ > bz && minZ < bz + 1
-        ) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
+/**
+ * 下向き移動時に重なった衝突形状のうち、最も高い上面Yを返す。
+ * 通常ブロックでは従来どおり整数上面、階段では0.48/0.96段へ着地できる。
+ */
+export function getAABBCollisionTop(
+  getBlock: GetBlockFn,
+  px: number,
+  py: number,
+  pz: number,
+  radius: number,
+  height: number,
+  solidCheck?: (blockId: BlockId) => boolean,
+): number | null {
+  return findAABBCollisionTop(
+    getBlock,
+    px,
+    py,
+    pz,
+    radius,
+    height,
+    solidCheck,
+    false,
+  );
 }
 
 /**

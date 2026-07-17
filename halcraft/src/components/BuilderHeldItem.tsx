@@ -36,6 +36,71 @@ const TOOL_TIER_GLOW: Record<ToolDef['tier'], number> = {
   diamond: 0.54,
 };
 
+function createToolPrism(points: readonly [number, number][], depth: number): THREE.ExtrudeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(points[0][0], points[0][1]);
+  for (let index = 1; index < points.length; index++) {
+    shape.lineTo(points[index][0], points[index][1]);
+  }
+  shape.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    steps: 1,
+    curveSegments: 1,
+    bevelEnabled: true,
+    bevelSegments: 1,
+    bevelSize: 0.008,
+    bevelThickness: 0.006,
+  });
+  geometry.translate(0, 0, -depth / 2);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const SWORD_BLADE_GEOMETRY = createToolPrism([
+  [-0.04, -0.02],
+  [-0.052, 0.42],
+  [0, 0.59],
+  [0.052, 0.42],
+  [0.04, -0.02],
+], 0.04);
+const AXE_HEAD_GEOMETRY = createToolPrism([
+  [-0.045, 0.08],
+  [-0.055, 0.36],
+  [0.06, 0.45],
+  [0.23, 0.39],
+  [0.25, 0.16],
+  [0.14, 0.06],
+  [0.055, 0.12],
+], 0.05);
+const SHOVEL_HEAD_GEOMETRY = createToolPrism([
+  [-0.04, 0.06],
+  [-0.055, 0.14],
+  [-0.13, 0.27],
+  [-0.1, 0.43],
+  [0, 0.53],
+  [0.1, 0.43],
+  [0.13, 0.27],
+  [0.055, 0.14],
+  [0.04, 0.06],
+], 0.05);
+const PICKAXE_HEAD_GEOMETRY = createToolPrism([
+  [-0.36, 0.31],
+  [-0.2, 0.4],
+  [0, 0.37],
+  [0.2, 0.4],
+  [0.36, 0.31],
+  [0.2, 0.265],
+  [0.055, 0.26],
+  [0.05, 0.1],
+  [-0.05, 0.1],
+  [-0.055, 0.26],
+  [-0.2, 0.265],
+], 0.055);
+const TOOL_HANDLE_GEOMETRY = new THREE.CylinderGeometry(0.038, 0.055, 0.58, 6);
+const TOOL_GRIP_GEOMETRY = new THREE.CylinderGeometry(0.055, 0.065, 0.14, 6);
+
 function getTexture(textureName: string): THREE.Texture {
   const cached = textureCache.get(textureName);
   if (cached) return cached;
@@ -137,16 +202,20 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
   if (type === 'sword') {
     return (
       <>
-        <mesh position={[0, 0.25, 0]} renderOrder={34}>
-          <boxGeometry args={[0.055, 0.56, 0.035]} />
+        <mesh geometry={SWORD_BLADE_GEOMETRY} renderOrder={34} dispose={null}>
           <meshStandardMaterial color={toolColor} roughness={0.34} metalness={metalness} depthTest={false} depthWrite={false} />
         </mesh>
         <mesh position={[0, -0.05, 0]} renderOrder={34}>
           <boxGeometry args={[0.24, 0.035, 0.04]} />
           <meshStandardMaterial color="#d4c093" roughness={0.36} metalness={0.22} depthTest={false} depthWrite={false} />
         </mesh>
-        <mesh position={[0, 0.28, 0.003]} renderOrder={35}>
-          <boxGeometry args={[0.024, 0.5, 0.012]} />
+        <mesh
+          geometry={SWORD_BLADE_GEOMETRY}
+          position={[0, 0.01, 0.026]}
+          scale={[0.38, 0.82, 0.28]}
+          renderOrder={35}
+          dispose={null}
+        >
           <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </mesh>
       </>
@@ -156,16 +225,11 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
   if (type === 'axe') {
     return (
       <>
-        <mesh position={[0.05, 0.28, 0]} rotation={[0, 0, -0.2]} renderOrder={34}>
-          <boxGeometry args={[0.2, 0.22, 0.045]} />
+        <mesh geometry={AXE_HEAD_GEOMETRY} renderOrder={34} dispose={null}>
           <meshStandardMaterial color={toolColor} roughness={0.42} metalness={metalness} depthTest={false} depthWrite={false} />
         </mesh>
-        <mesh position={[0.16, 0.2, 0]} rotation={[0, 0, -0.54]} renderOrder={34}>
-          <boxGeometry args={[0.08, 0.2, 0.045]} />
-          <meshStandardMaterial color={toolColor} roughness={0.38} metalness={metalness} depthTest={false} depthWrite={false} />
-        </mesh>
-        <mesh position={[0.08, 0.29, 0.004]} rotation={[0, 0, -0.25]} renderOrder={35}>
-          <boxGeometry args={[0.24, 0.035, 0.012]} />
+        <mesh position={[0.13, 0.3, 0.03]} rotation={[0, 0, -0.18]} renderOrder={35}>
+          <boxGeometry args={[0.2, 0.03, 0.012]} />
           <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </mesh>
       </>
@@ -175,12 +239,11 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
   if (type === 'shovel') {
     return (
       <>
-        <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI / 4]} renderOrder={34}>
-          <boxGeometry args={[0.18, 0.18, 0.045]} />
+        <mesh geometry={SHOVEL_HEAD_GEOMETRY} renderOrder={34} dispose={null}>
           <meshStandardMaterial color={toolColor} roughness={0.44} metalness={metalness} depthTest={false} depthWrite={false} />
         </mesh>
-        <mesh position={[0, 0.31, 0.004]} rotation={[0, 0, Math.PI / 4]} renderOrder={35}>
-          <boxGeometry args={[0.15, 0.026, 0.012]} />
+        <mesh position={[0, 0.35, 0.03]} renderOrder={35}>
+          <boxGeometry args={[0.12, 0.026, 0.012]} />
           <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
         </mesh>
       </>
@@ -189,20 +252,11 @@ function ToolHead({ toolDef }: { toolDef: ToolDef }) {
 
   return (
     <>
-      <mesh position={[0, 0.26, 0]} renderOrder={34}>
-        <boxGeometry args={[0.36, 0.055, 0.05]} />
+      <mesh geometry={PICKAXE_HEAD_GEOMETRY} renderOrder={34} dispose={null}>
         <meshStandardMaterial color={toolColor} roughness={0.42} metalness={metalness} depthTest={false} depthWrite={false} />
       </mesh>
-      <mesh position={[-0.16, 0.18, 0]} rotation={[0, 0, 0.35]} renderOrder={34}>
-        <boxGeometry args={[0.06, 0.18, 0.05]} />
-        <meshStandardMaterial color={toolColor} roughness={0.38} metalness={metalness} depthTest={false} depthWrite={false} />
-      </mesh>
-      <mesh position={[0.16, 0.18, 0]} rotation={[0, 0, -0.35]} renderOrder={34}>
-        <boxGeometry args={[0.06, 0.18, 0.05]} />
-        <meshStandardMaterial color={toolColor} roughness={0.38} metalness={metalness} depthTest={false} depthWrite={false} />
-      </mesh>
-      <mesh position={[0, 0.27, 0.004]} renderOrder={35}>
-        <boxGeometry args={[0.32, 0.026, 0.012]} />
+      <mesh position={[0, 0.33, 0.032]} renderOrder={35}>
+        <boxGeometry args={[0.3, 0.026, 0.012]} />
         <meshBasicMaterial color={accentColor} transparent opacity={glowStrength} depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </mesh>
     </>
@@ -227,9 +281,11 @@ function ToolModel({ toolDef }: { toolDef: ToolDef | null }) {
 
   return (
     <group>
-      <mesh position={[0, -0.18, 0]} renderOrder={34}>
-        <boxGeometry args={[0.06, 0.46, 0.06]} />
+      <mesh geometry={TOOL_HANDLE_GEOMETRY} position={[0, -0.15, 0]} renderOrder={34} dispose={null}>
         <meshStandardMaterial color="#7c5124" roughness={0.82} metalness={0.02} depthTest={false} depthWrite={false} />
+      </mesh>
+      <mesh geometry={TOOL_GRIP_GEOMETRY} position={[0, -0.42, 0]} renderOrder={34} dispose={null}>
+        <meshStandardMaterial color="#4f321c" roughness={0.9} metalness={0.01} depthTest={false} depthWrite={false} />
       </mesh>
       <ToolHead toolDef={toolDef} />
     </group>

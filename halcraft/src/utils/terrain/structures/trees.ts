@@ -68,6 +68,19 @@ function placeOak(chunk: ChunkData, lx: number, surfaceY: number, lz: number, tr
     chunk[lx][ty][lz] = BLOCK_IDS.RAW_WOOD;
   }
 
+  // 太い樹冠を支える短い枝を出し、幹から球が生えただけの輪郭を避ける
+  const branchY = Math.max(surfaceY + 2, trunkTop - 1);
+  const branchDirections = ((lx + lz) & 1) === 0
+    ? [[1, 0], [-1, 0]]
+    : [[0, 1], [0, -1]];
+  for (const [dx, dz] of branchDirections) {
+    const bx = lx + dx;
+    const bz = lz + dz;
+    if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE) {
+      chunk[bx][branchY][bz] = BLOCK_IDS.RAW_WOOD;
+    }
+  }
+
   // 球状の葉
   const leafCenter = trunkTop;
   const leafRadius = 2;
@@ -133,6 +146,11 @@ function placePalm(chunk: ChunkData, lx: number, surfaceY: number, lz: number, t
   if (chunk[lx][leafY][lz] === BLOCK_IDS.AIR) {
     chunk[lx][leafY][lz] = BLOCK_IDS.LEAVES;
   }
+
+  // 葉の下に実のような影色を一点置き、樹冠の上下を読みやすくする
+  if (leafY - 1 > surfaceY && chunk[lx][leafY - 1][lz] === BLOCK_IDS.AIR) {
+    chunk[lx][leafY - 1][lz] = BLOCK_IDS.RAW_WOOD;
+  }
 }
 
 /**
@@ -177,13 +195,30 @@ function placePine(chunk: ChunkData, lx: number, surfaceY: number, lz: number, t
  * サボテンを配置（砂漠バイオーム用）
  * 幹のみ、葉なし
  */
-function placeCactus(chunk: ChunkData, lx: number, surfaceY: number, _lz: number, trunkHeight: number): void {
+function placeCactus(chunk: ChunkData, lx: number, surfaceY: number, lz: number, trunkHeight: number): void {
   const trunkTop = surfaceY + trunkHeight;
   if (trunkTop >= WORLD_HEIGHT) return;
 
   // サボテン柱（LEAVESブロックで代用 — 色的に緑で合う）
   for (let ty = surfaceY + 1; ty <= trunkTop; ty++) {
-    chunk[lx][ty][_lz] = BLOCK_IDS.LEAVES;
+    chunk[lx][ty][lz] = BLOCK_IDS.LEAVES;
+  }
+
+  // 左右非対称の腕を付け、遠景でもサボテンと判別できる輪郭にする
+  if (trunkHeight >= 3) {
+    const primaryDirection = ((lx + lz) & 1) === 0 ? 1 : -1;
+    const armY = surfaceY + Math.max(2, trunkHeight - 1);
+    const armX = lx + primaryDirection;
+    if (armX >= 0 && armX < CHUNK_SIZE) {
+      chunk[armX][armY][lz] = BLOCK_IDS.LEAVES;
+      if (armY + 1 < WORLD_HEIGHT) chunk[armX][armY + 1][lz] = BLOCK_IDS.LEAVES;
+    }
+    if (trunkHeight >= 5) {
+      const secondaryZ = lz - primaryDirection;
+      if (secondaryZ >= 0 && secondaryZ < CHUNK_SIZE) {
+        chunk[lx][armY - 1][secondaryZ] = BLOCK_IDS.LEAVES;
+      }
+    }
   }
 }
 

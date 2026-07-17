@@ -1,7 +1,7 @@
 // ドロップアイテムの描画＆物理演算コンポーネント
-// ブロック破壊時に地面に落ちるアイテムを描画し、プレイヤーが近づくとピックアップする
+// 形状別の共有ジオメトリと素材別の共有マテリアルで、1個ほぼ1ドローに抑える
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useDroppedItemStore, type DroppedItem } from '../stores/useDroppedItemStore';
@@ -10,47 +10,43 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId, type BlockInfo } from '../types/blocks';
 import { playItemPickupSound } from '../utils/sounds';
 
-/** ピックアップ距離 */
-const PICKUP_RADIUS = 2.0;
-/** ピックアップ時の吸い込み速度 */
+const PICKUP_RADIUS = 2;
 const PICKUP_SPEED = 12;
-/** アイテムの重力 */
 const ITEM_GRAVITY = -20;
-/** アイテムのバウンス係数 */
 const BOUNCE_FACTOR = 0.3;
-/** ボブアニメーションの高さ */
 const BOB_HEIGHT = 0.08;
-/** ボブアニメーションの速度 */
 const BOB_SPEED = 2.5;
-/** 回転速度 */
 const ROTATE_SPEED = 1.2;
-/** アイテムの表示サイズ */
 const ITEM_SCALE = 0.3;
-/** アイテムの光輪サイズ */
-const HALO_SCALE = 1;
-/** アイテム吸い込み時の光跡の長さ */
-const PICKUP_TRAIL_LENGTH = 1.45;
-/** 期限切れチェック間隔（フレーム数） */
 const CLEANUP_INTERVAL = 120;
+/** ストア更新を間引き、最大128個のドロップ時にもReact再描画を連打しない */
+const STORE_SYNC_INTERVAL_MS = 90;
 
 type DropRarity = 'common' | 'resource' | 'precious' | 'power' | 'hazard';
+type DropShape = 'block' | 'ingot' | 'gem' | 'stick' | 'seed';
 
 interface DropPresentation {
   rarity: DropRarity;
   scale: number;
-  haloScale: number;
-  glowScale: number;
-  edgeOpacity: number;
   spinBoost: number;
-  secondaryColor: THREE.Color;
 }
 
-/** テクスチャキャッシュ */
+interface DropMotion {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+}
+
 const textureCache = new Map<string, THREE.Texture>();
+const materialCache = new Map<BlockId, THREE.MeshStandardMaterial>();
 const textureLoader = new THREE.TextureLoader();
 
 function getItemTexture(textureName: string): THREE.Texture {
-  if (textureCache.has(textureName)) return textureCache.get(textureName)!;
+  const cached = textureCache.get(textureName);
+  if (cached) return cached;
   const texture = textureLoader.load(`/textures/blocks/${textureName}`);
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
@@ -59,62 +55,68 @@ function getItemTexture(textureName: string): THREE.Texture {
   return texture;
 }
 
-/** 共有ジオメトリ（全ドロップアイテムで再利用） */
-const sharedItemGeometry = new THREE.BoxGeometry(1, 1, 1);
-const sharedItemEdgesGeometry = new THREE.EdgesGeometry(sharedItemGeometry);
-const sharedHaloGeometry = new THREE.RingGeometry(0.78, 1.08, 36);
-const sharedShadowGeometry = new THREE.CircleGeometry(0.72, 32);
-const sharedBillboardGlowGeometry = new THREE.CircleGeometry(1.05, 36);
-const sharedCrownGeometry = new THREE.TorusGeometry(1.26, 0.035, 6, 44);
-const sharedSparkGeometry = new THREE.OctahedronGeometry(0.16, 0);
-const SPARK_POSITIONS: Array<[number, number, number]> = [
-  [0.72, 0.42, 0],
-  [-0.72, 0.32, 0],
-  [0, 0.38, 0.72],
-  [0, 0.28, -0.72],
-];
+function createDropGeometries(): Record<DropShape, THREE.BufferGeometry> {
+  const block = new THREE.BoxGeometry(1, 1, 1);
+
+  // 六角断面の低い塊にして、ブロックとは異なる金属インゴットの輪郭を作る。
+  const ingot = new THREE.CylinderGeometry(0.48, 0.56, 0.3, 6);
+  ingot.scale(1.18, 1, 0.7);
+  ingot.rotateY(Math.PI / 6);
+
+  const gem = new THREE.OctahedronGeometry(0.62, 0);
+  gem.scale(0.78, 1, 0.7);
+  gem.rotateY(Math.PI / 4);
+
+  const stick = new THREE.BoxGeometry(0.18, 1.18, 0.18);
+  stick.rotateZ(-0.58);
+
+  // 小麦の種は薄い涙滴状に見えるよう、低分割球をつぶして使う。
+  const seed = new THREE.SphereGeometry(0.5, 8, 5);
+  seed.scale(0.42, 0.18, 0.76);
+  seed.rotateZ(0.32);
+
+  return { block, ingot, gem, stick, seed };
+}
+
+const DROP_GEOMETRIES = createDropGeometries();
+
+function getDropShape(blockId: BlockId): DropShape {
+  if (blockId === BLOCK_IDS.IRON_INGOT || blockId === BLOCK_IDS.GOLD_INGOT) return 'ingot';
+  if (blockId === BLOCK_IDS.DIAMOND_GEM) return 'gem';
+  if (blockId === BLOCK_IDS.STICK) return 'stick';
+  if (blockId === BLOCK_IDS.WHEAT_SEEDS) return 'seed';
+  return 'block';
+}
 
 function getDropAccentColor(blockId: BlockId, def: BlockInfo | undefined): THREE.Color {
   if (def?.emissiveColor) return def.emissiveColor.clone();
-
-  if (
-    blockId === BLOCK_IDS.DIAMOND_ORE ||
-    blockId === BLOCK_IDS.DIAMOND_GEM ||
-    blockId === BLOCK_IDS.ELECTRIC
-  ) {
+  if (blockId === BLOCK_IDS.DIAMOND_ORE || blockId === BLOCK_IDS.DIAMOND_GEM || blockId === BLOCK_IDS.ELECTRIC) {
     return new THREE.Color(0x65f8ff);
   }
-  if (blockId === BLOCK_IDS.GOLD_ORE || blockId === BLOCK_IDS.GOLD_INGOT) {
-    return new THREE.Color(0xffd66b);
-  }
+  if (blockId === BLOCK_IDS.GOLD_ORE || blockId === BLOCK_IDS.GOLD_INGOT) return new THREE.Color(0xffd66b);
   if (blockId === BLOCK_IDS.IRON || blockId === BLOCK_IDS.IRON_ORE || blockId === BLOCK_IDS.IRON_INGOT) {
     return new THREE.Color(0xc9d6df);
   }
   if (blockId === BLOCK_IDS.WOOD || blockId === BLOCK_IDS.RAW_WOOD || blockId === BLOCK_IDS.STICK) {
     return new THREE.Color(0xd49454);
   }
-  if (blockId === BLOCK_IDS.LEAVES || blockId === BLOCK_IDS.GRASS) {
-    return new THREE.Color(0x8adf69);
-  }
-  if (blockId === BLOCK_IDS.SAND) {
-    return new THREE.Color(0xffd28a);
-  }
-  if (blockId === BLOCK_IDS.SNOW) {
-    return new THREE.Color(0xe9fbff);
-  }
-  if (blockId === BLOCK_IDS.TNT || blockId === BLOCK_IDS.LAVA) {
-    return new THREE.Color(0xff6a3d);
-  }
-
+  if (blockId === BLOCK_IDS.WHEAT_SEEDS) return new THREE.Color(0x91ca4f);
+  if (blockId === BLOCK_IDS.LEAVES || blockId === BLOCK_IDS.GRASS) return new THREE.Color(0x8adf69);
+  if (blockId === BLOCK_IDS.SAND) return new THREE.Color(0xffd28a);
+  if (blockId === BLOCK_IDS.SNOW) return new THREE.Color(0xe9fbff);
+  if (blockId === BLOCK_IDS.TNT || blockId === BLOCK_IDS.LAVA) return new THREE.Color(0xff6a3d);
   return new THREE.Color(0xffffff);
 }
 
 function getDropRarity(blockId: BlockId, def: BlockInfo | undefined): DropRarity {
   if (blockId === BLOCK_IDS.LAVA || blockId === BLOCK_IDS.TNT || blockId === BLOCK_IDS.NETHER_PORTAL) return 'hazard';
   if (def?.emissive || blockId === BLOCK_IDS.GLOWSTONE || blockId === BLOCK_IDS.ENCHANT || blockId === BLOCK_IDS.ELECTRIC) return 'power';
-  if (blockId === BLOCK_IDS.DIAMOND_ORE || blockId === BLOCK_IDS.DIAMOND_GEM || blockId === BLOCK_IDS.GOLD_ORE || blockId === BLOCK_IDS.GOLD_INGOT) {
-    return 'precious';
-  }
+  if (
+    blockId === BLOCK_IDS.DIAMOND_ORE ||
+    blockId === BLOCK_IDS.DIAMOND_GEM ||
+    blockId === BLOCK_IDS.GOLD_ORE ||
+    blockId === BLOCK_IDS.GOLD_INGOT
+  ) return 'precious';
   if (
     blockId === BLOCK_IDS.IRON ||
     blockId === BLOCK_IDS.IRON_ORE ||
@@ -122,394 +124,200 @@ function getDropRarity(blockId: BlockId, def: BlockInfo | undefined): DropRarity
     blockId === BLOCK_IDS.COAL_ORE ||
     blockId === BLOCK_IDS.CHEST ||
     blockId === BLOCK_IDS.FURNACE
-  ) {
-    return 'resource';
-  }
+  ) return 'resource';
   return 'common';
 }
 
-function getDropPresentation(blockId: BlockId, def: BlockInfo | undefined, accent: THREE.Color): DropPresentation {
+function getDropPresentation(blockId: BlockId, def: BlockInfo | undefined): DropPresentation {
   const rarity = getDropRarity(blockId, def);
-  if (rarity === 'hazard') {
-    return {
-      rarity,
-      scale: 1.12,
-      haloScale: 1.28,
-      glowScale: 1.34,
-      edgeOpacity: 0.7,
-      spinBoost: 1.55,
-      secondaryColor: new THREE.Color(0xffd079),
-    };
+  switch (rarity) {
+    case 'hazard':
+      return { rarity, scale: 1.12, spinBoost: 1.55 };
+    case 'power':
+      return { rarity, scale: 1.16, spinBoost: 1.42 };
+    case 'precious':
+      return { rarity, scale: 1.1, spinBoost: 1.32 };
+    case 'resource':
+      return { rarity, scale: 1.04, spinBoost: 1.16 };
+    default:
+      return { rarity, scale: 1, spinBoost: 1 };
   }
-  if (rarity === 'power') {
-    return {
-      rarity,
-      scale: 1.16,
-      haloScale: 1.36,
-      glowScale: 1.46,
-      edgeOpacity: 0.82,
-      spinBoost: 1.42,
-      secondaryColor: new THREE.Color(0xffffff),
-    };
-  }
-  if (rarity === 'precious') {
-    return {
-      rarity,
-      scale: 1.1,
-      haloScale: 1.26,
-      glowScale: 1.32,
-      edgeOpacity: 0.76,
-      spinBoost: 1.32,
-      secondaryColor: new THREE.Color(0xfff2a8),
-    };
-  }
-  if (rarity === 'resource') {
-    return {
-      rarity,
-      scale: 1.04,
-      haloScale: 1.12,
-      glowScale: 1.12,
-      edgeOpacity: 0.6,
-      spinBoost: 1.16,
-      secondaryColor: accent.clone().lerp(new THREE.Color(0xffffff), 0.35),
-    };
-  }
-  return {
-    rarity,
-    scale: 1,
-    haloScale: 1,
-    glowScale: 1,
-    edgeOpacity: 0.5,
-    spinBoost: 1,
-    secondaryColor: accent.clone().lerp(new THREE.Color(0xffffff), 0.18),
-  };
 }
 
-/** 個別のドロップアイテム描画 */
+function getDropMaterial(
+  blockId: BlockId,
+  def: BlockInfo,
+  shape: DropShape,
+  presentation: DropPresentation,
+): THREE.MeshStandardMaterial {
+  const cached = materialCache.get(blockId);
+  if (cached) return cached;
+
+  const textureName = def.faceTextures?.top ?? def.texture;
+  const accent = getDropAccentColor(blockId, def);
+  const material = new THREE.MeshStandardMaterial({
+    map: getItemTexture(textureName),
+    emissive: def.emissiveColor?.clone() ?? accent.clone().multiplyScalar(0.32),
+    emissiveIntensity: def.emissiveColor
+      ? 0.5
+      : presentation.rarity === 'common'
+        ? 0.08
+        : 0.2,
+    metalness: shape === 'ingot' ? 0.72 : shape === 'gem' ? 0.18 : 0,
+    roughness: shape === 'ingot' ? 0.3 : shape === 'gem' ? 0.24 : shape === 'stick' || shape === 'seed' ? 0.82 : 0.54,
+    opacity: def.transparent ? 0.82 : 1,
+    transparent: def.transparent,
+    alphaTest: def.transparent ? 0.06 : 0,
+  });
+  materialCache.set(blockId, material);
+  return material;
+}
+
 function DroppedItemRenderer({ item }: { item: DroppedItem }) {
-  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
-  const haloRef = useRef<THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>>(null);
-  const crownRef = useRef<THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>>(null);
-  const shadowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
-  const glowRef = useRef<THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>>(null);
-  const sparkRef = useRef<THREE.Group>(null);
-  const trailRef = useRef<THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>(null);
   const { camera } = useThree();
-  const getBlock = useWorldStore((s) => s.getBlock);
-  const addItem = useInventoryStore((s) => s.addItem);
-  const removeItem = useDroppedItemStore((s) => s.removeItem);
-  const startPickup = useDroppedItemStore((s) => s.startPickup);
-  const updatePosition = useDroppedItemStore((s) => s.updateItemPosition);
+  const getBlock = useWorldStore((state) => state.getBlock);
+  const addItem = useInventoryStore((state) => state.addItem);
+  const removeItem = useDroppedItemStore((state) => state.removeItem);
+  const startPickup = useDroppedItemStore((state) => state.startPickup);
+  const updatePosition = useDroppedItemStore((state) => state.updateItemPosition);
+  const motionRef = useRef<DropMotion>({
+    x: item.x,
+    y: item.y,
+    z: item.z,
+    vx: item.vx,
+    vy: item.vy,
+    vz: item.vz,
+  });
+  const lastStoreSyncRef = useRef(item.spawnedAt);
+  const directionRef = useRef(new THREE.Vector3());
 
   const def = BLOCK_DEFS[item.blockId];
-  const texture = useMemo(() => {
-    if (!def) return null;
-    const texName = def.faceTextures?.top || def.texture;
-    return getItemTexture(texName);
-  }, [def]);
-
-  // アイテムの色（発光用）
-  const emissiveColor = useMemo(() => {
-    if (def?.emissiveColor) return def.emissiveColor;
-    return null;
-  }, [def]);
-
-  const accentColor = useMemo(() => getDropAccentColor(item.blockId, def), [def, item.blockId]);
+  const shape = getDropShape(item.blockId);
   const presentation = useMemo(
-    () => getDropPresentation(item.blockId, def, accentColor),
-    [accentColor, def, item.blockId],
+    () => getDropPresentation(item.blockId, def),
+    [def, item.blockId],
   );
-  const trailGeometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    return geo;
-  }, []);
-
-  // 再利用用ベクトル
-  const tempVec = useRef(new THREE.Vector3());
+  const material = useMemo(
+    () => def ? getDropMaterial(item.blockId, def, shape, presentation) : null,
+    [def, item.blockId, presentation, shape],
+  );
 
   useFrame((_, delta) => {
-    if (!groupRef.current || !meshRef.current) return;
+    const mesh = meshRef.current;
+    if (!mesh) return;
     const clampedDelta = Math.min(delta, 0.05);
     const now = Date.now();
     const ageSeconds = (now - item.spawnedAt) / 1000;
-
-    let { x, y, z, vx, vy, vz } = item;
+    const motion = motionRef.current;
 
     if (item.beingPickedUp) {
-      // ピックアップ中 → プレイヤーに向かって飛んでいく
-      tempVec.current.set(
-        camera.position.x - x,
-        camera.position.y - y,
-        camera.position.z - z,
+      const direction = directionRef.current.set(
+        camera.position.x - motion.x,
+        camera.position.y - motion.y,
+        camera.position.z - motion.z,
       );
-      const dist = tempVec.current.length();
+      const distance = direction.length();
 
-      if (dist < 0.5) {
-        // ピックアップ完了
+      if (distance < 0.5) {
         addItem(item.blockId);
         playItemPickupSound(presentation.rarity);
         removeItem(item.id);
         return;
       }
 
-      tempVec.current.normalize().multiplyScalar(PICKUP_SPEED * clampedDelta);
-      x += tempVec.current.x;
-      y += tempVec.current.y;
-      z += tempVec.current.z;
-      updatePosition(item.id, x, y, z, 0, 0, 0);
-      groupRef.current.position.set(x, y, z);
+      direction.normalize();
+      motion.x += direction.x * PICKUP_SPEED * clampedDelta;
+      motion.y += direction.y * PICKUP_SPEED * clampedDelta;
+      motion.z += direction.z * PICKUP_SPEED * clampedDelta;
+      motion.vx = 0;
+      motion.vy = 0;
+      motion.vz = 0;
+      mesh.position.set(motion.x, motion.y, motion.z);
+      mesh.scale.setScalar(
+        Math.max(0.1, distance / PICKUP_RADIUS) * ITEM_SCALE * presentation.scale,
+      );
+      mesh.rotation.y += ROTATE_SPEED * 3.6 * presentation.spinBoost * clampedDelta;
+      mesh.rotation.x += ROTATE_SPEED * 1.8 * presentation.spinBoost * clampedDelta;
 
-      // ピックアップ中はスケールが縮む
-      const scale = Math.max(0.1, dist / PICKUP_RADIUS) * ITEM_SCALE * presentation.scale;
-      groupRef.current.scale.setScalar(scale);
-      meshRef.current.rotation.y += ROTATE_SPEED * 3.6 * presentation.spinBoost * clampedDelta;
-      meshRef.current.rotation.x += ROTATE_SPEED * 1.8 * presentation.spinBoost * clampedDelta;
-
-      if (haloRef.current) {
-        haloRef.current.scale.setScalar(HALO_SCALE * presentation.haloScale * (1.22 + Math.sin(ageSeconds * 18) * 0.08));
-        haloRef.current.material.opacity = presentation.rarity === 'common' ? 0.44 : 0.58;
-      }
-      if (crownRef.current) {
-        crownRef.current.rotation.z = ageSeconds * 2.6;
-        crownRef.current.scale.setScalar(presentation.haloScale * (1.2 + Math.sin(ageSeconds * 20) * 0.1));
-        crownRef.current.material.opacity = presentation.rarity === 'common' ? 0 : 0.52;
-      }
-      if (glowRef.current) {
-        glowRef.current.quaternion.copy(camera.quaternion);
-        glowRef.current.scale.setScalar(presentation.glowScale * (1.18 + Math.sin(ageSeconds * 16) * 0.08));
-        glowRef.current.material.opacity = presentation.rarity === 'common' ? 0.28 : 0.42;
-      }
-      if (sparkRef.current) {
-        sparkRef.current.rotation.y = -ageSeconds * 4.2;
-        sparkRef.current.visible = presentation.rarity !== 'common';
-      }
-      if (shadowRef.current) {
-        shadowRef.current.material.opacity = 0.04;
-      }
-      if (trailRef.current) {
-        const trailDir = tempVec.current.lengthSq() > 0.001
-          ? tempVec.current.clone().normalize().multiplyScalar(Math.min(PICKUP_TRAIL_LENGTH, dist))
-          : tempVec.current.set(0, 0.4, 0);
-        const positions = trailRef.current.geometry.getAttribute('position') as THREE.BufferAttribute;
-        positions.setXYZ(0, 0, 0, 0);
-        positions.setXYZ(1, trailDir.x, trailDir.y, trailDir.z);
-        positions.needsUpdate = true;
-        trailRef.current.material.opacity = 0.62;
+      if (now - lastStoreSyncRef.current >= STORE_SYNC_INTERVAL_MS) {
+        updatePosition(item.id, motion.x, motion.y, motion.z, 0, 0, 0);
+        lastStoreSyncRef.current = now;
       }
       return;
     }
 
-    // 物理演算（バウンス中）
-    if (Math.abs(vy) > 0.01 || Math.abs(vx) > 0.01 || Math.abs(vz) > 0.01) {
-      vy += ITEM_GRAVITY * clampedDelta;
-      x += vx * clampedDelta;
-      y += vy * clampedDelta;
-      z += vz * clampedDelta;
+    let moving = Math.abs(motion.vy) > 0.01 || Math.abs(motion.vx) > 0.01 || Math.abs(motion.vz) > 0.01;
+    if (moving) {
+      motion.vy += ITEM_GRAVITY * clampedDelta;
+      motion.x += motion.vx * clampedDelta;
+      motion.y += motion.vy * clampedDelta;
+      motion.z += motion.vz * clampedDelta;
+      motion.vx *= 0.95;
+      motion.vz *= 0.95;
 
-      // 空気抵抗
-      vx *= 0.95;
-      vz *= 0.95;
-
-      // 地面との衝突判定（下のブロックをチェック）
-      const floorY = Math.floor(y);
-      const blockBelow = getBlock(Math.floor(x), floorY, Math.floor(z));
-      if (blockBelow !== BLOCK_IDS.AIR && vy < 0) {
-        y = floorY + 1.1; // ブロックの上に着地
-        vy = -vy * BOUNCE_FACTOR;
-        vx *= 0.7;
-        vz *= 0.7;
-        // ほぼ停止していたら速度をゼロに
-        if (Math.abs(vy) < 0.5) vy = 0;
-        if (Math.abs(vx) < 0.1) vx = 0;
-        if (Math.abs(vz) < 0.1) vz = 0;
+      const floorY = Math.floor(motion.y);
+      const blockBelow = getBlock(Math.floor(motion.x), floorY, Math.floor(motion.z));
+      if (blockBelow !== BLOCK_IDS.AIR && motion.vy < 0) {
+        motion.y = floorY + 1.1;
+        motion.vy = -motion.vy * BOUNCE_FACTOR;
+        motion.vx *= 0.7;
+        motion.vz *= 0.7;
+        if (Math.abs(motion.vy) < 0.5) motion.vy = 0;
+        if (Math.abs(motion.vx) < 0.1) motion.vx = 0;
+        if (Math.abs(motion.vz) < 0.1) motion.vz = 0;
       }
-
-      updatePosition(item.id, x, y, z, vx, vy, vz);
+      moving = Math.abs(motion.vy) > 0.01 || Math.abs(motion.vx) > 0.01 || Math.abs(motion.vz) > 0.01;
     }
 
-    // ボブ＆回転アニメーション（着地後）
+    if (moving && now - lastStoreSyncRef.current >= STORE_SYNC_INTERVAL_MS) {
+      updatePosition(item.id, motion.x, motion.y, motion.z, motion.vx, motion.vy, motion.vz);
+      lastStoreSyncRef.current = now;
+    }
+
     const bobOffset = Math.sin(ageSeconds * BOB_SPEED + item.spawnedAt * 0.001) * BOB_HEIGHT;
-    groupRef.current.position.set(x, y + bobOffset, z);
-    groupRef.current.scale.setScalar(ITEM_SCALE * presentation.scale);
-    meshRef.current.rotation.y += ROTATE_SPEED * presentation.spinBoost * clampedDelta;
-    meshRef.current.rotation.x = Math.sin(ageSeconds * 1.45) * 0.16;
-    meshRef.current.rotation.z = Math.cos(ageSeconds * 1.18) * 0.1;
+    mesh.position.set(motion.x, motion.y + bobOffset, motion.z);
+    mesh.scale.setScalar(ITEM_SCALE * presentation.scale);
+    mesh.rotation.y += ROTATE_SPEED * presentation.spinBoost * clampedDelta;
+    mesh.rotation.x = Math.sin(ageSeconds * 1.45) * 0.16;
+    mesh.rotation.z = Math.cos(ageSeconds * 1.18) * 0.1;
 
-    const pulse = 1 + Math.sin(ageSeconds * 4.8) * 0.065;
-    if (haloRef.current) {
-      haloRef.current.scale.setScalar(HALO_SCALE * presentation.haloScale * pulse);
-      haloRef.current.rotation.z = -ageSeconds * 0.8;
-      haloRef.current.material.opacity = 0.18 + Math.max(0, Math.sin(ageSeconds * 3.2)) * (presentation.rarity === 'common' ? 0.1 : 0.18);
-    }
-    if (crownRef.current) {
-      crownRef.current.rotation.z = ageSeconds * (presentation.rarity === 'hazard' ? 1.25 : 0.9);
-      crownRef.current.scale.setScalar(presentation.haloScale * (0.92 + Math.sin(ageSeconds * 3.8) * 0.04));
-      crownRef.current.material.opacity = presentation.rarity === 'common' ? 0 : 0.22 + Math.max(0, Math.sin(ageSeconds * 2.7)) * 0.16;
-    }
-    if (glowRef.current) {
-      glowRef.current.quaternion.copy(camera.quaternion);
-      glowRef.current.scale.setScalar(presentation.glowScale * (0.95 + Math.sin(ageSeconds * 3.7) * 0.08));
-      glowRef.current.material.opacity = (presentation.rarity === 'common' ? 0.14 : 0.2) + Math.max(0, Math.sin(ageSeconds * 4.1)) * 0.1;
-    }
-    if (sparkRef.current) {
-      sparkRef.current.visible = presentation.rarity !== 'common';
-      sparkRef.current.rotation.y = -ageSeconds * (presentation.rarity === 'hazard' ? 1.65 : 1.05);
-      sparkRef.current.rotation.x = Math.sin(ageSeconds * 1.6) * 0.16;
-    }
-    if (shadowRef.current) {
-      shadowRef.current.position.y = -0.43 - bobOffset;
-      shadowRef.current.scale.set(1.05 + Math.abs(bobOffset) * 1.3, 1.05 + Math.abs(bobOffset) * 1.3, 1);
-      shadowRef.current.material.opacity = 0.16;
-    }
-    if (trailRef.current) {
-      trailRef.current.material.opacity = 0;
-    }
-
-    // ピックアップ判定
     if (now >= item.pickupableAt) {
-      const dx = camera.position.x - x;
-      const dy = camera.position.y - y;
-      const dz = camera.position.z - z;
-      const distSq = dx * dx + dy * dy + dz * dz;
-
-      if (distSq < PICKUP_RADIUS * PICKUP_RADIUS) {
+      const dx = camera.position.x - motion.x;
+      const dy = camera.position.y - motion.y;
+      const dz = camera.position.z - motion.z;
+      if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS * PICKUP_RADIUS) {
+        updatePosition(item.id, motion.x, motion.y, motion.z, 0, 0, 0);
+        lastStoreSyncRef.current = now;
         startPickup(item.id);
       }
     }
   });
 
-  if (!def || !texture) return null;
+  if (!def || !material) return null;
 
   return (
-    <group ref={groupRef} position={[item.x, item.y, item.z]} scale={ITEM_SCALE}>
-      <mesh
-        ref={shadowRef}
-        geometry={sharedShadowGeometry}
-        position={[0, -0.43, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        renderOrder={1}
-      >
-        <meshBasicMaterial
-          color={0x111827}
-          depthWrite={false}
-          opacity={0.16}
-          transparent
-        />
-      </mesh>
-      <mesh
-        ref={haloRef}
-        geometry={sharedHaloGeometry}
-        rotation={[-Math.PI / 2, 0, 0]}
-        renderOrder={2}
-      >
-        <meshBasicMaterial
-          color={accentColor}
-          depthWrite={false}
-          opacity={0.24}
-          transparent
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      <mesh
-        ref={crownRef}
-        geometry={sharedCrownGeometry}
-        rotation={[-Math.PI / 2, 0, 0]}
-        renderOrder={2}
-      >
-        <meshBasicMaterial
-          color={presentation.secondaryColor}
-          depthWrite={false}
-          opacity={presentation.rarity === 'common' ? 0 : 0.28}
-          transparent
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      <lineSegments ref={trailRef} geometry={trailGeometry} renderOrder={4}>
-        <lineBasicMaterial
-          color={accentColor}
-          opacity={0}
-          transparent
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </lineSegments>
-      <mesh ref={glowRef} geometry={sharedBillboardGlowGeometry} renderOrder={2}>
-        <meshBasicMaterial
-          color={accentColor}
-          depthTest={false}
-          depthWrite={false}
-          fog={false}
-          opacity={0.18}
-          transparent
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      <mesh ref={meshRef} geometry={sharedItemGeometry} castShadow receiveShadow>
-        <meshStandardMaterial
-          map={texture}
-          emissive={emissiveColor ?? accentColor}
-          emissiveIntensity={emissiveColor ? 0.52 : presentation.rarity === 'common' ? 0.1 : 0.22}
-          metalness={item.blockId === BLOCK_IDS.IRON || item.blockId === BLOCK_IDS.IRON_INGOT ? 0.18 : 0}
-          opacity={def.transparent ? 0.78 : 1}
-          transparent={def.transparent}
-          roughness={presentation.rarity === 'precious' || presentation.rarity === 'power' ? 0.38 : 0.54}
-        />
-      </mesh>
-      <lineSegments geometry={sharedItemEdgesGeometry} renderOrder={3}>
-        <lineBasicMaterial
-          color={accentColor}
-          opacity={presentation.edgeOpacity}
-          transparent
-          toneMapped={false}
-        />
-      </lineSegments>
-      <group ref={sparkRef} visible={presentation.rarity !== 'common'}>
-        {SPARK_POSITIONS.map(([x, y, z], index) => (
-          <mesh
-            key={`${x}:${z}`}
-            geometry={sharedSparkGeometry}
-            position={[x, y, z]}
-            rotation={[0.35, index * Math.PI * 0.5, 0.2]}
-            renderOrder={4}
-          >
-            <meshBasicMaterial
-              color={index % 2 === 0 ? presentation.secondaryColor : accentColor}
-              depthWrite={false}
-              opacity={0.46}
-              transparent
-              toneMapped={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </mesh>
-        ))}
-      </group>
-    </group>
+    <mesh
+      ref={meshRef}
+      geometry={DROP_GEOMETRIES[shape]}
+      material={material}
+      position={[item.x, item.y, item.z]}
+      scale={ITEM_SCALE * presentation.scale}
+      castShadow
+      receiveShadow
+    />
   );
 }
 
 /** ドロップアイテム全体の管理コンポーネント */
 export function DroppedItems() {
-  const items = useDroppedItemStore((s) => s.items);
-  const cleanupExpired = useDroppedItemStore((s) => s.cleanupExpired);
+  const items = useDroppedItemStore((state) => state.items);
+  const cleanupExpired = useDroppedItemStore((state) => state.cleanupExpired);
   const frameCount = useRef(0);
-
-  // 初回マウント時に既存アイテムをクリア（リロード対応）
-  useEffect(() => {
-    return () => {
-      // アンマウント時にクリーンアップ
-    };
-  }, []);
 
   useFrame(() => {
     frameCount.current++;
-    if (frameCount.current % CLEANUP_INTERVAL === 0) {
-      cleanupExpired();
-    }
+    if (frameCount.current % CLEANUP_INTERVAL === 0) cleanupExpired();
   });
 
   return (

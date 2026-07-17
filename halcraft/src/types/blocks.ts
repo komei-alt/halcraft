@@ -238,6 +238,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     transparent: false,
     unbreakable: false,
     emissive: false,
+    nonStandard: true,
   },
   [BLOCK_IDS.TORCH]: {
     id: BLOCK_IDS.TORCH,
@@ -657,6 +658,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     lightColor: new THREE.Color(0xBB44FF),
     lightIntensity: 2.0,
     lightDistance: 15,
+    nonStandard: true,
     noCollision: true,
   },
 };

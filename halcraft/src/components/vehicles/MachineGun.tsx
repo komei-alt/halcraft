@@ -13,6 +13,7 @@
 
 import { useRef, useMemo, useCallback, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as THREE from 'three';
 import { useVehicleStore, GUN_CONSTANTS } from '../../stores/useVehicleStore';
 import { useMobStore } from '../../stores/useMobStore';
@@ -61,7 +62,7 @@ const GUN_MOUNT_POSITIONS = {
 } as const;
 
 /** マズル（銃口）のローカルオフセット（銃本体原点から） */
-const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0, 0.03, 1.02);
+const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0, 0.035, 1.1);
 
 // ─── 色定義 ──────────────────────────────────────────
 const GUN_BARREL_COLOR = new THREE.Color(0x333333);
@@ -73,6 +74,125 @@ const TRACER_GLOW_COLOR = new THREE.Color(0xffaa22);
 const BLOCK_IMPACT_COLOR = new THREE.Color(0xccaa66);
 const MOB_HIT_COLOR = new THREE.Color(0xff3333);
 const SPARK_COLOR = new THREE.Color(0xffffff);
+
+type Vector3Tuple = [number, number, number];
+
+interface GunBoxPart {
+  position: Vector3Tuple;
+  size: Vector3Tuple;
+  rotation?: Vector3Tuple;
+}
+
+interface GunCylinderPart {
+  position: Vector3Tuple;
+  radiusTop: number;
+  radiusBottom: number;
+  height: number;
+  rotation?: Vector3Tuple;
+  radialSegments?: number;
+}
+
+const ZERO_ROTATION: Vector3Tuple = [0, 0, 0];
+
+function transformGunGeometry(
+  geometry: THREE.BufferGeometry,
+  position: Vector3Tuple,
+  rotation: Vector3Tuple = ZERO_ROTATION,
+): THREE.BufferGeometry {
+  geometry.rotateX(rotation[0]);
+  geometry.rotateY(rotation[1]);
+  geometry.rotateZ(rotation[2]);
+  geometry.translate(position[0], position[1], position[2]);
+  return geometry;
+}
+
+function mergeGunGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged = mergeGeometries(geometries, false);
+  for (const geometry of geometries) geometry.dispose();
+  merged.computeBoundingSphere();
+  return merged;
+}
+
+function createGunBoxGeometry(parts: GunBoxPart[]): THREE.BufferGeometry {
+  return mergeGunGeometries(parts.map((part) => transformGunGeometry(
+    new THREE.BoxGeometry(part.size[0], part.size[1], part.size[2]),
+    part.position,
+    part.rotation,
+  )));
+}
+
+function createGunCylinderGeometry(parts: GunCylinderPart[]): THREE.BufferGeometry {
+  return mergeGunGeometries(parts.map((part) => transformGunGeometry(
+    new THREE.CylinderGeometry(
+      part.radiusTop,
+      part.radiusBottom,
+      part.height,
+      part.radialSegments ?? 10,
+    ),
+    part.position,
+    part.rotation,
+  )));
+}
+
+/** ドア枠へ荷重を逃がす、旋回リング付きの固定架台。 */
+const DOOR_MOUNT_GEOMETRY = mergeGunGeometries([
+  createGunBoxGeometry([
+    { position: [0, -0.015, 0], size: [0.3, 0.075, 0.28] },
+    { position: [-0.13, -0.08, 0.02], size: [0.055, 0.18, 0.13], rotation: [0, 0, -0.3] },
+    { position: [0.13, -0.08, 0.02], size: [0.055, 0.18, 0.13], rotation: [0, 0, 0.3] },
+  ]),
+  createGunCylinderGeometry([
+    { position: [0, 0.045, 0], radiusTop: 0.115, radiusBottom: 0.125, height: 0.08, radialSegments: 12 },
+  ]),
+]);
+
+/** 俯仰軸・トラニオン・反動受けを一体化した可動マウント。 */
+const GUN_TRUNNION_GEOMETRY = mergeGunGeometries([
+  createGunBoxGeometry([
+    { position: [0, 0.02, 0.02], size: [0.22, 0.11, 0.24] },
+    { position: [-0.13, -0.015, 0.09], size: [0.045, 0.19, 0.16], rotation: [0, 0, -0.22] },
+    { position: [0.13, -0.015, 0.09], size: [0.045, 0.19, 0.16], rotation: [0, 0, 0.22] },
+  ]),
+  createGunCylinderGeometry([
+    { position: [0, 0.025, 0.14], radiusTop: 0.075, radiusBottom: 0.075, height: 0.34, rotation: [0, 0, Math.PI / 2], radialSegments: 12 },
+  ]),
+]);
+
+/** レシーバー、給弾箱、フィードシュートを材質単位で結合した銃本体。 */
+const GUN_RECEIVER_GEOMETRY = createGunBoxGeometry([
+  { position: [0, 0.035, 0.25], size: [0.25, 0.18, 0.42] },
+  { position: [0, 0.145, 0.21], size: [0.2, 0.065, 0.27], rotation: [-0.04, 0, 0] },
+  { position: [0, 0.035, 0.035], size: [0.21, 0.2, 0.14] },
+  { position: [-0.175, -0.055, 0.2], size: [0.115, 0.19, 0.25] },
+  { position: [-0.145, -0.07, 0.39], size: [0.07, 0.08, 0.12], rotation: [0.18, 0, 0] },
+  { position: [-0.105, -0.045, 0.49], size: [0.065, 0.07, 0.1], rotation: [0.12, 0, 0] },
+  { position: [0, 0.035, 0.5], size: [0.2, 0.2, 0.13] },
+  { position: [0, 0.035, 0.63], size: [0.175, 0.175, 0.13] },
+  { position: [0.105, -0.055, 0.2], size: [0.035, 0.1, 0.22] },
+  { position: [0, 0.205, 0.22], size: [0.12, 0.08, 0.16] },
+]);
+
+/** 四連銃身と前後の保持カラー。銃身全体を1ドローで回転させる。 */
+const GUN_BARREL_CLUSTER_GEOMETRY = mergeGunGeometries([
+  createGunCylinderGeometry([
+    { position: [0.062, 0, 0.29], radiusTop: 0.019, radiusBottom: 0.021, height: 0.58, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+    { position: [-0.062, 0, 0.29], radiusTop: 0.019, radiusBottom: 0.021, height: 0.58, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+    { position: [0, 0.062, 0.29], radiusTop: 0.019, radiusBottom: 0.021, height: 0.58, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+    { position: [0, -0.062, 0.29], radiusTop: 0.019, radiusBottom: 0.021, height: 0.58, rotation: [Math.PI / 2, 0, 0], radialSegments: 8 },
+    { position: [0, 0, 0.035], radiusTop: 0.105, radiusBottom: 0.105, height: 0.07, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+    { position: [0, 0, 0.55], radiusTop: 0.102, radiusBottom: 0.102, height: 0.075, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+  ]),
+]);
+
+const GUN_SENSOR_GEOMETRY = createGunCylinderGeometry([
+  { position: [0, 0.205, 0.31], radiusTop: 0.04, radiusBottom: 0.04, height: 0.018, rotation: [Math.PI / 2, 0, 0], radialSegments: 12 },
+]);
+
+const MUZZLE_FLASH_GEOMETRY = transformGunGeometry(
+  new THREE.ConeGeometry(0.15, 0.28, 6, 1, true),
+  [0, 0, 0],
+  [Math.PI / 2, 0, 0],
+);
 
 // ─── 型定義 ──────────────────────────────────────────
 /** 飛翔中の弾丸 */
@@ -120,8 +240,8 @@ let nextId = 0;
 // メインコンポーネント
 // ────────────────────────────────────────────────────────
 export function MachineGun() {
-  const helicopter = useVehicleStore((s) => s.helicopter);
-  const mySeat = helicopter.mySeat;
+  const helicopterSpawned = useVehicleStore((s) => s.helicopter.spawned);
+  const mySeat = useVehicleStore((s) => s.helicopter.mySeat);
   const { camera } = useThree();
 
   // 発射クールダウン
@@ -166,8 +286,17 @@ export function MachineGun() {
   const mountMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: GUN_MOUNT_COLOR, roughness: 0.7, metalness: 0.2,
   }), []);
-  const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
+  const sensorMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0x72dcff, emissive: 0x1686aa, emissiveIntensity: 1.15,
+    roughness: 0.2, metalness: 0.15,
+  }), []);
+  const flashLeftMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  }), []);
+  const flashRightMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
+    depthWrite: false, blending: THREE.AdditiveBlending,
   }), []);
 
   // ─── 射撃処理 ─────────────────────────────────────
@@ -431,32 +560,41 @@ export function MachineGun() {
     }
   });
 
+  // モデル座標は180度反転しているため、座席と表示側をここで一度だけ対応付ける。
+  const myGunSide =
+    mySeat === 'gunner_left' ? 'right' :
+    mySeat === 'gunner_right' ? 'left' : null;
+
   return (
     <group>
       {/* === 銃モデルはヘリがスポーンしている場合のみ表示 === */}
-      {helicopter.spawned && (
+      {helicopterSpawned && (
         <>
           {/* === 左機関銃（ドア位置に設置、ガンナー視点追従） === */}
           <DoorMountedGun
             side="left"
+            isMyGun={myGunSide === 'left'}
             flashRef={flashLeftRef}
             gunGroupRef={gunGroupLeftRef}
             barrelSpinRef={barrelSpinLeft}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
-            flashMat={flashMat}
+            sensorMat={sensorMat}
+            flashMat={flashLeftMat}
           />
           {/* === 右機関銃（ドア位置に設置、ガンナー視点追従） === */}
           <DoorMountedGun
             side="right"
+            isMyGun={myGunSide === 'right'}
             flashRef={flashRightRef}
             gunGroupRef={gunGroupRightRef}
             barrelSpinRef={barrelSpinRight}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
-            flashMat={flashMat}
+            sensorMat={sensorMat}
+            flashMat={flashRightMat}
           />
         </>
       )}
@@ -477,24 +615,27 @@ export function MachineGun() {
 // ────────────────────────────────────────────────────────
 function DoorMountedGun({
   side,
+  isMyGun,
   flashRef,
   gunGroupRef,
   barrelSpinRef,
   barrelMat,
   bodyMat,
   mountMat,
+  sensorMat,
   flashMat,
 }: {
   side: 'left' | 'right';
+  isMyGun: boolean;
   flashRef: React.RefObject<THREE.Mesh | null>;
   gunGroupRef: React.RefObject<THREE.Group | null>;
   barrelSpinRef: React.MutableRefObject<number>;
   barrelMat: THREE.MeshStandardMaterial;
   bodyMat: THREE.MeshStandardMaterial;
   mountMat: THREE.MeshStandardMaterial;
+  sensorMat: THREE.MeshStandardMaterial;
   flashMat: THREE.MeshBasicMaterial;
 }) {
-  const helicopter = useVehicleStore((s) => s.helicopter);
   const { camera } = useThree();
   // 銃全体のルートグループ（位置・回転を毎フレーム同期）
   const rootRef = useRef<THREE.Group>(null);
@@ -520,18 +661,7 @@ function DoorMountedGun({
     rootRef.current.rotation.set(heli.pitch, heli.rotationY, heli.roll);
   });
 
-  if (!helicopter.spawned) return null;
-
   const mountPos = GUN_MOUNT_POSITIONS[side];
-
-  // ガンナーが自分のサイドに座っている場合のみ視点追従
-  // 180度回転グループ内でモデルの左右がワールドで反転するため:
-  //   gunner_left （ワールド左側に座る）→ モデル right銃（ワールド左側）にリンク
-  //   gunner_right（ワールド右側に座る）→ モデル left銃（ワールド右側）にリンク
-  const myGunSide =
-    helicopter.mySeat === 'gunner_left' ? 'right' :
-    helicopter.mySeat === 'gunner_right' ? 'left' : null;
-  const isMyGun = myGunSide === side;
 
   return (
     <group ref={rootRef} scale={1.3}>
@@ -540,9 +670,11 @@ function DoorMountedGun({
         {/* 銃マウント位置 */}
         <group position={[mountPos.x, mountPos.y, mountPos.z]}>
           {/* 固定マウントベース（ドアフレーム） */}
-          <mesh material={mountMat}>
-            <boxGeometry args={[0.25, 0.08, 0.25]} />
-          </mesh>
+          <mesh
+            geometry={DOOR_MOUNT_GEOMETRY}
+            material={mountMat}
+            receiveShadow
+          />
           {/* 旋回ピボット（ここで回転する） — gunGroupRef を割り当て */}
           <GunPivot
             pivotRef={pivotRef}
@@ -553,6 +685,7 @@ function DoorMountedGun({
             barrelMat={barrelMat}
             bodyMat={bodyMat}
             mountMat={mountMat}
+            sensorMat={sensorMat}
             flashMat={flashMat}
             camera={camera}
             targetDirRef={targetDirRef}
@@ -578,6 +711,7 @@ function GunPivot({
   barrelMat,
   bodyMat,
   mountMat,
+  sensorMat,
   flashMat,
   camera,
   targetDirRef,
@@ -593,6 +727,7 @@ function GunPivot({
   barrelMat: THREE.MeshStandardMaterial;
   bodyMat: THREE.MeshStandardMaterial;
   mountMat: THREE.MeshStandardMaterial;
+  sensorMat: THREE.MeshStandardMaterial;
   flashMat: THREE.MeshBasicMaterial;
   camera: THREE.Camera;
   targetDirRef: React.MutableRefObject<THREE.Vector3>;
@@ -662,66 +797,31 @@ function GunPivot({
     <group ref={pivotRef}>
       {/* 銃本体のグループ（ワールドマトリクス取得用） */}
       <group ref={gunGroupRef}>
-        {/* 旋回台座（ピボット上部） */}
-        <mesh material={mountMat} position={[0, 0.03, 0]}>
-          <boxGeometry args={[0.22, 0.1, 0.24]} />
-        </mesh>
-        <mesh material={mountMat} position={[0.11, -0.02, 0.04]} rotation={[0, 0, 0.28]}>
-          <boxGeometry args={[0.05, 0.16, 0.12]} />
-        </mesh>
-        <mesh material={mountMat} position={[-0.11, -0.02, 0.04]} rotation={[0, 0, -0.28]}>
-          <boxGeometry args={[0.05, 0.16, 0.12]} />
-        </mesh>
-        {/* 銃本体 */}
-        <mesh position={[0, 0.02, 0.2]} material={bodyMat}>
-          <boxGeometry args={[0.22, 0.16, 0.42]} />
-        </mesh>
-        <mesh position={[0, 0.12, 0.12]} material={bodyMat}>
-          <boxGeometry args={[0.16, 0.08, 0.18]} />
-        </mesh>
-        {/* 弾薬ボックス */}
-        <mesh position={[0, -0.1, 0.12]} material={bodyMat}>
-          <boxGeometry args={[0.16, 0.1, 0.22]} />
-        </mesh>
-        <mesh position={[0.14, -0.04, 0.24]} material={mountMat}>
-          <boxGeometry args={[0.05, 0.12, 0.24]} />
-        </mesh>
-        <mesh position={[-0.14, -0.04, 0.24]} material={mountMat}>
-          <boxGeometry args={[0.05, 0.12, 0.24]} />
-        </mesh>
-        <mesh position={[0, -0.14, 0.36]} material={bodyMat}>
-          <boxGeometry args={[0.07, 0.12, 0.08]} />
-        </mesh>
-        <mesh position={[0, 0.03, 0.52]} material={bodyMat}>
-          <boxGeometry args={[0.19, 0.19, 0.12]} />
-        </mesh>
-        <mesh position={[0, 0.03, 0.67]} material={bodyMat}>
-          <boxGeometry args={[0.17, 0.17, 0.1]} />
-        </mesh>
-        <group ref={barrelClusterRef} position={[0, 0.03, 0.73]}>
-          <mesh position={[0, 0, 0.06]} material={bodyMat}>
-            <boxGeometry args={[0.16, 0.16, 0.1]} />
-          </mesh>
-          <mesh position={[0.06, 0, 0.22]} material={barrelMat}>
-            <boxGeometry args={[0.04, 0.04, 0.56]} />
-          </mesh>
-          <mesh position={[-0.06, 0, 0.22]} material={barrelMat}>
-            <boxGeometry args={[0.04, 0.04, 0.56]} />
-          </mesh>
-          <mesh position={[0, 0.06, 0.22]} material={barrelMat}>
-            <boxGeometry args={[0.04, 0.04, 0.56]} />
-          </mesh>
-          <mesh position={[0, -0.06, 0.22]} material={barrelMat}>
-            <boxGeometry args={[0.04, 0.04, 0.56]} />
-          </mesh>
-          <mesh position={[0, 0, 0.48]} material={barrelMat}>
-            <boxGeometry args={[0.16, 0.16, 0.08]} />
-          </mesh>
+        <mesh
+          geometry={GUN_TRUNNION_GEOMETRY}
+          material={mountMat}
+          receiveShadow
+        />
+        <mesh
+          geometry={GUN_RECEIVER_GEOMETRY}
+          material={bodyMat}
+          castShadow
+          receiveShadow
+        />
+        <mesh geometry={GUN_SENSOR_GEOMETRY} material={sensorMat} />
+        <group ref={barrelClusterRef} position={[0, 0.035, 0.49]}>
+          <mesh
+            geometry={GUN_BARREL_CLUSTER_GEOMETRY}
+            material={barrelMat}
+          />
         </group>
         {/* マズルフラッシュ */}
-        <mesh ref={flashRef} position={[0, 0.03, 1.08]} material={flashMat.clone()}>
-          <boxGeometry args={[0.25, 0.25, 0.15]} />
-        </mesh>
+        <mesh
+          ref={flashRef}
+          geometry={MUZZLE_FLASH_GEOMETRY}
+          position={[0, 0.035, 1.12]}
+          material={flashMat}
+        />
       </group>
     </group>
   );

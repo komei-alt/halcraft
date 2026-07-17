@@ -21,7 +21,15 @@ import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
 import { BedRenderer } from './components/BedRenderer';
 import { TurretRenderer } from './components/TurretRenderer';
-import { CampfireRenderer, CandleRenderer, DoorRenderer, LadderRenderer } from './components/DecorBlocks';
+import {
+  CampfireRenderer,
+  CandleRenderer,
+  DoorRenderer,
+  LadderRenderer,
+  LeverRenderer,
+  WheatSeedsRenderer,
+} from './components/DecorBlocks';
+import { NetherPortalRenderer, StairsRenderer } from './components/SpecialBlockRenderer';
 import { RailRenderer } from './components/RailRenderer';
 import { CoasterCart } from './components/CoasterCart';
 import { LavaRenderer, WaterRenderer } from './components/WaterRenderer';
@@ -178,6 +186,10 @@ function GameCanvas() {
           <LadderRenderer />
           <CampfireRenderer />
           <CandleRenderer />
+          <WheatSeedsRenderer />
+          <LeverRenderer />
+          <StairsRenderer />
+          <NetherPortalRenderer />
           <TurretRenderer />
           <BlockLights />
           <Player />

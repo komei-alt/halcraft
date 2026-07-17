@@ -46,6 +46,11 @@ const SCOPED_FOV = 42;
 const FOV_LERP_RATE = 14;
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
+const MACHINE_GUN_BARREL_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
+  [0.035, 0, 0],
+  [-0.017, 0.03, 0],
+  [-0.017, -0.03, 0],
+];
 
 interface BulletProjectile {
   id: number;
@@ -76,6 +81,7 @@ export function PlayerMachineGun() {
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const weaponRef = useRef<THREE.Group>(null);
   const barrelGroupRef = useRef<THREE.Group>(null);
+  const barrelInstancesRef = useRef<THREE.InstancedMesh>(null);
   const flashCoreRef = useRef<THREE.Mesh>(null);
   const flashGlowRef = useRef<THREE.Mesh>(null);
   const heatBandRef = useRef<THREE.Mesh>(null);
@@ -114,6 +120,19 @@ export function PlayerMachineGun() {
     [stageVisualStyle],
   );
   const tracerColor = stageVisualStyle?.accent ?? '#ffd36a';
+
+  useEffect(() => {
+    const barrels = barrelInstancesRef.current;
+    if (!barrels) return;
+    const dummy = new THREE.Object3D();
+    MACHINE_GUN_BARREL_OFFSETS.forEach(([x, y, z], index) => {
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(Math.PI / 2, 0, 0);
+      dummy.updateMatrix();
+      barrels.setMatrixAt(index, dummy.matrix);
+    });
+    barrels.instanceMatrix.needsUpdate = true;
+  }, []);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -446,16 +465,19 @@ export function PlayerMachineGun() {
         />
         {/* 射撃中に回る銃身で連射感を出す */}
         <group ref={barrelGroupRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.15]}>
-          {[
-            [0.035, 0, 0],
-            [-0.017, 0.03, 0],
-            [-0.017, -0.03, 0],
-          ].map(([x, y, z], index) => (
-            <mesh key={`barrel-${index}`} position={[x, y, z]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.011, 0.012, 0.42, 6]} />
-              <meshStandardMaterial color="#202327" roughness={0.42} metalness={0.72} />
-            </mesh>
-          ))}
+          <instancedMesh ref={barrelInstancesRef} args={[undefined, undefined, MACHINE_GUN_BARREL_OFFSETS.length]}>
+            <cylinderGeometry args={[0.011, 0.012, 0.42, 6]} />
+            <meshStandardMaterial color="#202327" roughness={0.42} metalness={0.72} />
+          </instancedMesh>
+          {/* 穴あき放熱筒と砲口カラー。GLB本体は保持し、追加機構だけ高精細化する */}
+          <mesh position={[0, 0, -0.015]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.064, 0.07, 0.31, 10, 1, true]} />
+            <meshStandardMaterial color="#30363d" roughness={0.4} metalness={0.72} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, 0, -0.21]}>
+            <torusGeometry args={[0.06, 0.009, 7, 16]} />
+            <meshStandardMaterial color="#737b83" roughness={0.34} metalness={0.78} />
+          </mesh>
         </group>
         <mesh ref={heatBandRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.1]}>
           <torusGeometry args={[0.085, 0.006, 8, 24]} />

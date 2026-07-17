@@ -1,353 +1,416 @@
 // ヘリコプターコンポーネント
-// ボクセルスタイルの3Dヘリコプターモデル + ローターアニメーション
-// プレイヤーが近づくと搭乗プロンプトを表示
-// 鮮やかな色と自発光で昼夜問わず視認しやすい
-// ヘッドライト搭載: ノーズ下部に2灯のSpotLight + 発光ハウジング
-// 搭乗時は胴体が半透明ガラス化し、機内から外が見える
-// 搭乗者のアバターをヘリモデル内部に直接描画
+// 静的部品を材質単位で結合し、低い描画負荷で説得力のある機体シルエットを作る
 
-import { useRef, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as THREE from 'three';
-import { useVehicleStore, HELICOPTER_CONSTANTS, SEAT_MODEL_OFFSETS, ALL_SEATS } from '../../stores/useVehicleStore';
+import {
+  ALL_SEATS,
+  HELICOPTER_CONSTANTS,
+  SEAT_MODEL_OFFSETS,
+  useVehicleStore,
+} from '../../stores/useVehicleStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
-import { VoxelAvatar } from '../VoxelAvatar';
 import { isValidSkinId } from '../../types/skins';
+import { VoxelAvatar } from '../VoxelAvatar';
 
+type Vector3Tuple = [number, number, number];
 
-/** ヘリコプターの色定義（鮮やかで目立つ色） */
-const BODY_COLOR = new THREE.Color(0xff3333);       // 鮮やかな赤い胴体
-const BODY_WHITE = new THREE.Color(0xffffff);        // 白い下部
-const TAIL_COLOR = new THREE.Color(0xcc2222);        // 暗い赤のテールブーム
-const ROTOR_COLOR = new THREE.Color(0x444444);       // 灰色のローター
-const WINDOW_COLOR = new THREE.Color(0x66ddff);      // 明るい水色の窓
-const SKID_COLOR = new THREE.Color(0x333333);        // 黒いスキッド
-const STRIPE_COLOR = new THREE.Color(0xffdd00);      // 黄色いストライプ
-const TRIM_COLOR = new THREE.Color(0x282b31);        // フレーム・補強材
-const ENGINE_COLOR = new THREE.Color(0x5e6168);      // エンジンカウル
-const BEACON_COLOR = new THREE.Color(0xff8a3c);      // 警告灯
-const ROTOR_BLUR_COLOR = new THREE.Color(0xe8eef7);  // ローターブラー
+interface BoxPart {
+  position: Vector3Tuple;
+  size: Vector3Tuple;
+  rotation?: Vector3Tuple;
+}
 
-/** ヘッドライトの色定義 */
-const HEADLIGHT_COLOR = new THREE.Color(0xffffcc);       // 暖かい白色光
-const HEADLIGHT_HOUSING_COLOR = new THREE.Color(0xdddddd); // ライトハウジング（シルバー）
-const HEADLIGHT_LENS_COLOR = new THREE.Color(0xffffaa);    // レンズ（暖かい黄白色）
+interface CylinderPart {
+  position: Vector3Tuple;
+  radiusTop: number;
+  radiusBottom: number;
+  height: number;
+  rotation?: Vector3Tuple;
+  radialSegments?: number;
+}
 
-/** ヘッドライト設定 */
+const BODY_COLOR = new THREE.Color(0xff3333);
+const BODY_WHITE = new THREE.Color(0xfffaf0);
+const ROTOR_COLOR = new THREE.Color(0x30343a);
+const WINDOW_COLOR = new THREE.Color(0x65d8f3);
+const SKID_COLOR = new THREE.Color(0x25282e);
+const STRIPE_COLOR = new THREE.Color(0xffd520);
+const TRIM_COLOR = new THREE.Color(0x20242b);
+const ENGINE_COLOR = new THREE.Color(0x555d66);
+const INTERIOR_COLOR = new THREE.Color(0x202833);
+const BEACON_COLOR = new THREE.Color(0xff8536);
+const ROTOR_BLUR_COLOR = new THREE.Color(0xe8eef7);
+const HEADLIGHT_COLOR = new THREE.Color(0xffffcc);
+const HEADLIGHT_LENS_COLOR = new THREE.Color(0xffffaa);
+
 const HEADLIGHT_CONFIG = {
-  /** 搭乗時の光量 */
-  BOARDED_INTENSITY: 5,
-  /** 待機時の光量 */
-  IDLE_INTENSITY: 1.5,
-  /** 搭乗時のレンズ発光強度 */
-  BOARDED_EMISSIVE: 2.0,
-  /** 待機時のレンズ発光強度 */
-  IDLE_EMISSIVE: 0.5,
-  /** 照射距離 */
-  DISTANCE: 25,
-  /** 照射角度（ラジアン） */
-  ANGLE: Math.PI / 5,
-  /** 半影のソフトさ（0=くっきり, 1=ぼんやり） */
-  PENUMBRA: 0.4,
-  /** 光の減衰 */
-  DECAY: 1.5,
+  BOARDED_INTENSITY: 5.2,
+  IDLE_INTENSITY: 1.35,
+  BOARDED_EMISSIVE: 2.1,
+  IDLE_EMISSIVE: 0.55,
+  DISTANCE: 27,
+  ANGLE: Math.PI / 4.8,
+  PENUMBRA: 0.48,
+  DECAY: 1.7,
 } as const;
 
-/** 搭乗時の胴体透過度（0=完全透明, 1=完全不透明） */
-const BOARDED_BODY_OPACITY = 0.15;
-/** 搭乗時の窓透過度 */
-const BOARDED_WINDOW_OPACITY = 0.3;
+const UNIT_EULER: Vector3Tuple = [0, 0, 0];
+
+function transformGeometry(
+  geometry: THREE.BufferGeometry,
+  position: Vector3Tuple,
+  rotation: Vector3Tuple = UNIT_EULER,
+): THREE.BufferGeometry {
+  geometry.rotateX(rotation[0]);
+  geometry.rotateY(rotation[1]);
+  geometry.rotateZ(rotation[2]);
+  geometry.translate(position[0], position[1], position[2]);
+  return geometry;
+}
+
+function mergeAndDispose(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged = mergeGeometries(geometries, false);
+  for (const geometry of geometries) geometry.dispose();
+  merged.computeBoundingSphere();
+  return merged;
+}
+
+function createBoxGeometry(parts: BoxPart[]): THREE.BufferGeometry {
+  return mergeAndDispose(parts.map((part) => transformGeometry(
+    new THREE.BoxGeometry(part.size[0], part.size[1], part.size[2]),
+    part.position,
+    part.rotation,
+  )));
+}
+
+function createCylinderGeometry(parts: CylinderPart[]): THREE.BufferGeometry {
+  return mergeAndDispose(parts.map((part) => transformGeometry(
+    new THREE.CylinderGeometry(
+      part.radiusTop,
+      part.radiusBottom,
+      part.height,
+      part.radialSegments ?? 8,
+    ),
+    part.position,
+    part.rotation,
+  )));
+}
+
+/** 箱の端面を絞り、ボクセル感を残したまま機首・テールに流線を作る。 */
+function createTaperedBoxGeometry(
+  size: Vector3Tuple,
+  position: Vector3Tuple,
+  rearScale: number,
+  frontScale: number,
+): THREE.BufferGeometry {
+  const geometry = new THREE.BoxGeometry(size[0], size[1], size[2], 1, 1, 4);
+  const attribute = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const halfDepth = size[2] * 0.5;
+
+  for (let index = 0; index < attribute.count; index++) {
+    const localZ = attribute.getZ(index);
+    const progress = THREE.MathUtils.clamp((localZ + halfDepth) / size[2], 0, 1);
+    const scale = THREE.MathUtils.lerp(rearScale, frontScale, progress);
+    attribute.setXYZ(
+      index,
+      attribute.getX(index) * scale + position[0],
+      attribute.getY(index) * (0.76 + scale * 0.24) + position[1],
+      localZ + position[2],
+    );
+  }
+
+  attribute.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const SHELL_GEOMETRY = mergeAndDispose([
+  createTaperedBoxGeometry([1.62, 1.16, 1.58], [0, 0.31, 1.02], 1, 0.48),
+  createTaperedBoxGeometry([0.62, 0.56, 2.52], [0, 0.42, -2.23], 0.28, 1),
+  createBoxGeometry([
+    { position: [0, 0.78, -0.28], size: [1.62, 0.28, 1.52] },
+    { position: [0, -0.17, -0.28], size: [1.62, 0.3, 1.52] },
+    { position: [0, 0.3, -1.16], size: [1.5, 1.08, 0.4] },
+    { position: [0, 0.96, 0.1], size: [0.92, 0.18, 1.08] },
+    { position: [0, 1.05, -3.17], size: [0.12, 1.12, 0.62] },
+    { position: [0, 0.68, -3.16], size: [1.22, 0.08, 0.46] },
+    { position: [-0.56, 0.84, -3.18], size: [0.08, 0.38, 0.2] },
+    { position: [0.56, 0.84, -3.18], size: [0.08, 0.38, 0.2] },
+  ]),
+]);
+
+const WHITE_GEOMETRY = createBoxGeometry([
+  { position: [0, -0.24, 0.92], size: [1.24, 0.24, 0.88], rotation: [-0.08, 0, 0] },
+  { position: [0, -0.29, -0.32], size: [1.48, 0.2, 1.38] },
+]);
+
+const STRIPE_GEOMETRY = createBoxGeometry([
+  { position: [0, 0.29, 0.3], size: [1.67, 0.14, 0.38] },
+  { position: [0, 0.47, -2.08], size: [0.64, 0.09, 1.22] },
+]);
+
+const WINDOW_GEOMETRY = createBoxGeometry([
+  { position: [0, 0.63, 1.59], size: [1.08, 0.58, 0.055], rotation: [-0.18, 0, 0] },
+  { position: [-0.805, 0.55, 0.84], size: [0.035, 0.53, 0.7] },
+  { position: [0.805, 0.55, 0.84], size: [0.035, 0.53, 0.7] },
+]);
+
+const TRIM_GEOMETRY = createBoxGeometry([
+  { position: [0, 0.93, 1.36], size: [1.16, 0.08, 0.38], rotation: [-0.1, 0, 0] },
+  { position: [0, 0.62, 1.63], size: [0.075, 0.64, 0.07], rotation: [-0.18, 0, 0] },
+  { position: [-0.55, 0.61, 1.54], size: [0.07, 0.62, 0.08], rotation: [0.18, 0, 0] },
+  { position: [0.55, 0.61, 1.54], size: [0.07, 0.62, 0.08], rotation: [0.18, 0, 0] },
+  { position: [-0.8, 0.32, 0.08], size: [0.07, 0.92, 0.09] },
+  { position: [-0.8, 0.32, -0.77], size: [0.07, 0.92, 0.09] },
+  { position: [0.8, 0.32, 0.08], size: [0.07, 0.92, 0.09] },
+  { position: [0.8, 0.32, -0.77], size: [0.07, 0.92, 0.09] },
+  { position: [-0.84, -0.02, -0.34], size: [0.12, 0.18, 1.18] },
+  { position: [0.84, -0.02, -0.34], size: [0.12, 0.18, 1.18] },
+  { position: [0, -0.34, 1.05], size: [0.4, 0.13, 0.3] },
+  { position: [0, 1.2, 0], size: [0.16, 0.38, 0.16] },
+  { position: [0.18, 1.29, 0.08], size: [0.05, 0.34, 0.05], rotation: [0.35, 0, -0.55] },
+  { position: [-0.18, 1.29, 0.08], size: [0.05, 0.34, 0.05], rotation: [0.35, 0, 0.55] },
+  { position: [0.18, 1.29, -0.08], size: [0.05, 0.34, 0.05], rotation: [-0.35, 0, -0.55] },
+  { position: [-0.18, 1.29, -0.08], size: [0.05, 0.34, 0.05], rotation: [-0.35, 0, 0.55] },
+  { position: [-0.35, -0.15, 1.74], size: [0.29, 0.23, 0.15] },
+  { position: [0.35, -0.15, 1.74], size: [0.29, 0.23, 0.15] },
+]);
+
+const ENGINE_GEOMETRY = mergeAndDispose([
+  createBoxGeometry([
+    { position: [-0.42, 1.08, -0.2], size: [0.34, 0.22, 1.08] },
+    { position: [0.42, 1.08, -0.2], size: [0.34, 0.22, 1.08] },
+    { position: [0, 1.08, 0.48], size: [0.58, 0.15, 0.36] },
+    { position: [-0.57, 1.03, -0.62], size: [0.12, 0.12, 0.42] },
+    { position: [0.57, 1.03, -0.62], size: [0.12, 0.12, 0.42] },
+  ]),
+  createCylinderGeometry([
+    { position: [-0.48, 1.06, -0.82], radiusTop: 0.05, radiusBottom: 0.075, height: 0.46, rotation: [Math.PI / 2, 0, 0] },
+    { position: [0.48, 1.06, -0.82], radiusTop: 0.05, radiusBottom: 0.075, height: 0.46, rotation: [Math.PI / 2, 0, 0] },
+  ]),
+]);
+
+const INTERIOR_GEOMETRY = createBoxGeometry([
+  { position: [0, 0.18, 0.92], size: [0.9, 0.1, 0.44] },
+  { position: [0, 0.42, 1.15], size: [0.88, 0.38, 0.12], rotation: [-0.16, 0, 0] },
+  { position: [0, 0.12, 0.34], size: [0.28, 0.28, 0.62] },
+  { position: [-0.47, 0.08, -0.26], size: [0.42, 0.12, 0.44] },
+  { position: [0.47, 0.08, -0.26], size: [0.42, 0.12, 0.44] },
+  { position: [-0.47, 0.35, -0.48], size: [0.42, 0.52, 0.1], rotation: [-0.12, 0, 0] },
+  { position: [0.47, 0.35, -0.48], size: [0.42, 0.52, 0.1], rotation: [-0.12, 0, 0] },
+]);
+
+const SKID_GEOMETRY = createCylinderGeometry([
+  { position: [-0.62, -0.52, 0], radiusTop: 0.045, radiusBottom: 0.045, height: 2.62, rotation: [Math.PI / 2, 0, 0] },
+  { position: [0.62, -0.52, 0], radiusTop: 0.045, radiusBottom: 0.045, height: 2.62, rotation: [Math.PI / 2, 0, 0] },
+  { position: [-0.62, -0.26, 0.7], radiusTop: 0.035, radiusBottom: 0.035, height: 0.55, rotation: [0, 0, -0.18] },
+  { position: [-0.62, -0.26, -0.7], radiusTop: 0.035, radiusBottom: 0.035, height: 0.55, rotation: [0, 0, -0.18] },
+  { position: [0.62, -0.26, 0.7], radiusTop: 0.035, radiusBottom: 0.035, height: 0.55, rotation: [0, 0, 0.18] },
+  { position: [0.62, -0.26, -0.7], radiusTop: 0.035, radiusBottom: 0.035, height: 0.55, rotation: [0, 0, 0.18] },
+  { position: [0, -0.27, 0.7], radiusTop: 0.03, radiusBottom: 0.03, height: 1.25, rotation: [0, 0, Math.PI / 2] },
+  { position: [0, -0.27, -0.7], radiusTop: 0.03, radiusBottom: 0.03, height: 1.25, rotation: [0, 0, Math.PI / 2] },
+]);
+
+const MAIN_ROTOR_GEOMETRY = createBoxGeometry([
+  { position: [0, 0, 0], size: [5, 0.055, 0.23] },
+  { position: [0, 0, 0], size: [0.23, 0.055, 5] },
+  { position: [0, 0, 0], size: [0.32, 0.14, 0.32] },
+  { position: [0.22, 0.02, 0], size: [0.08, 0.12, 0.08], rotation: [0, 0, 0.7] },
+  { position: [-0.22, 0.02, 0], size: [0.08, 0.12, 0.08], rotation: [0, 0, -0.7] },
+  { position: [0, 0.02, 0.22], size: [0.08, 0.12, 0.08], rotation: [0.7, 0, 0] },
+  { position: [0, 0.02, -0.22], size: [0.08, 0.12, 0.08], rotation: [-0.7, 0, 0] },
+]);
+
+const TAIL_ROTOR_GEOMETRY = createBoxGeometry([
+  { position: [0, 0, 0], size: [0.08, 0.14, 0.16] },
+  { position: [0, 0, 0], size: [0.05, 1.08, 0.14] },
+  { position: [0, 0, 0], size: [0.05, 0.14, 1.08] },
+]);
+
+const HEADLIGHT_LENS_GEOMETRY = createBoxGeometry([
+  { position: [-0.35, -0.15, 1.83], size: [0.22, 0.16, 0.035] },
+  { position: [0.35, -0.15, 1.83], size: [0.22, 0.16, 0.035] },
+]);
+
+const MAIN_ROTOR_BLUR_GEOMETRY = new THREE.CircleGeometry(2.6, 24);
+MAIN_ROTOR_BLUR_GEOMETRY.rotateX(-Math.PI / 2);
+const TAIL_ROTOR_BLUR_GEOMETRY = new THREE.CircleGeometry(0.59, 16);
+TAIL_ROTOR_BLUR_GEOMETRY.rotateY(Math.PI / 2);
+const BEACON_GEOMETRY = new THREE.BoxGeometry(0.12, 0.12, 0.12);
 
 export function Helicopter() {
-  const helicopter = useVehicleStore((s) => s.helicopter);
+  const isVisible = useVehicleStore((state) => state.helicopter.spawned && !state.helicopter.destroyed);
+  const groupRef = useRef<THREE.Group>(null);
+  const shellRef = useRef<THREE.Group>(null);
   const mainRotorRef = useRef<THREE.Group>(null);
   const tailRotorRef = useRef<THREE.Group>(null);
+  const windowRef = useRef<THREE.Mesh>(null);
+  const headlightLensRef = useRef<THREE.Mesh>(null);
   const mainRotorBlurRef = useRef<THREE.Mesh>(null);
   const tailRotorBlurRef = useRef<THREE.Mesh>(null);
   const beaconRef = useRef<THREE.Mesh>(null);
-  const groupRef = useRef<THREE.Group>(null);
+  const spotLightRef = useRef<THREE.SpotLight>(null);
+  const spotLightTargetRef = useRef<THREE.Object3D>(null);
 
-  // ヘッドライトの参照
-  const spotLightLeftRef = useRef<THREE.SpotLight>(null);
-  const spotLightRightRef = useRef<THREE.SpotLight>(null);
-  const spotLightTargetLeftRef = useRef<THREE.Object3D>(null);
-  const spotLightTargetRightRef = useRef<THREE.Object3D>(null);
-  const lensLeftRef = useRef<THREE.Mesh>(null);
-  const lensRightRef = useRef<THREE.Mesh>(null);
-
-  // マテリアルをメモ化（emissive付きで暗所でも目立つ）
-  // 搭乗時に半透明化するため transparent=true
-  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: BODY_COLOR, roughness: 0.5, metalness: 0.1,
-    emissive: BODY_COLOR, emissiveIntensity: 0.15,
-    transparent: true, opacity: 1.0,
-  }), []);
-  const bodyWhiteMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: BODY_WHITE, roughness: 0.4, metalness: 0.0,
-    emissive: BODY_WHITE, emissiveIntensity: 0.1,
-    transparent: true, opacity: 1.0,
-  }), []);
-  const tailMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: TAIL_COLOR, roughness: 0.5, metalness: 0.1,
-    emissive: TAIL_COLOR, emissiveIntensity: 0.1,
-    transparent: true, opacity: 1.0,
-  }), []);
-  const windowMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: WINDOW_COLOR, roughness: 0.1, metalness: 0.5,
-    transparent: true, opacity: 0.8,
-    emissive: WINDOW_COLOR, emissiveIntensity: 0.3,
-    side: THREE.DoubleSide,
-  }), []);
-  const stripeMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: STRIPE_COLOR, roughness: 0.4,
-    emissive: STRIPE_COLOR, emissiveIntensity: 0.2,
-    transparent: true, opacity: 1.0,
-  }), []);
-  const rotorMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: ROTOR_COLOR, roughness: 0.5, metalness: 0.3,
-  }), []);
-  const skidMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: SKID_COLOR, roughness: 0.9,
-  }), []);
-  const trimMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: TRIM_COLOR, roughness: 0.72, metalness: 0.35,
-  }), []);
-  const engineMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: ENGINE_COLOR, roughness: 0.38, metalness: 0.45,
-    emissive: ENGINE_COLOR, emissiveIntensity: 0.08,
-  }), []);
-  // ヘッドライト用マテリアル
-  const housingMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: HEADLIGHT_HOUSING_COLOR, roughness: 0.3, metalness: 0.6,
-  }), []);
-  const lensMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: HEADLIGHT_LENS_COLOR, roughness: 0.1, metalness: 0.2,
-    emissive: HEADLIGHT_LENS_COLOR, emissiveIntensity: HEADLIGHT_CONFIG.IDLE_EMISSIVE,
-    transparent: true, opacity: 0.95,
-  }), []);
-  const lensLeftMat = useMemo(() => lensMat.clone(), [lensMat]);
-  const lensRightMat = useMemo(() => lensMat.clone(), [lensMat]);
-  const beaconMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: BEACON_COLOR,
-    roughness: 0.22,
-    metalness: 0.15,
-    emissive: BEACON_COLOR,
-    emissiveIntensity: 0.7,
-  }), []);
-  const mainRotorBlurMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: ROTOR_BLUR_COLOR,
-    transparent: true,
-    opacity: 0.1,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  }), []);
-  const tailRotorBlurMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: ROTOR_BLUR_COLOR,
-    transparent: true,
-    opacity: 0.08,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+  const materials = useMemo(() => ({
+    body: new THREE.MeshStandardMaterial({
+      color: BODY_COLOR,
+      roughness: 0.46,
+      metalness: 0.16,
+      emissive: BODY_COLOR,
+      emissiveIntensity: 0.08,
+    }),
+    white: new THREE.MeshStandardMaterial({ color: BODY_WHITE, roughness: 0.48, metalness: 0.03 }),
+    stripe: new THREE.MeshStandardMaterial({
+      color: STRIPE_COLOR,
+      roughness: 0.38,
+      emissive: STRIPE_COLOR,
+      emissiveIntensity: 0.14,
+    }),
+    window: new THREE.MeshStandardMaterial({
+      color: WINDOW_COLOR,
+      roughness: 0.12,
+      metalness: 0.22,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+      emissive: WINDOW_COLOR,
+      emissiveIntensity: 0.22,
+      side: THREE.DoubleSide,
+    }),
+    trim: new THREE.MeshStandardMaterial({ color: TRIM_COLOR, roughness: 0.65, metalness: 0.42 }),
+    engine: new THREE.MeshStandardMaterial({ color: ENGINE_COLOR, roughness: 0.34, metalness: 0.58 }),
+    interior: new THREE.MeshStandardMaterial({ color: INTERIOR_COLOR, roughness: 0.76, metalness: 0.16 }),
+    skid: new THREE.MeshStandardMaterial({ color: SKID_COLOR, roughness: 0.62, metalness: 0.52 }),
+    rotor: new THREE.MeshStandardMaterial({ color: ROTOR_COLOR, roughness: 0.48, metalness: 0.42 }),
+    lens: new THREE.MeshStandardMaterial({
+      color: HEADLIGHT_LENS_COLOR,
+      roughness: 0.12,
+      metalness: 0.2,
+      emissive: HEADLIGHT_LENS_COLOR,
+      emissiveIntensity: HEADLIGHT_CONFIG.IDLE_EMISSIVE,
+    }),
+    beacon: new THREE.MeshStandardMaterial({
+      color: BEACON_COLOR,
+      roughness: 0.2,
+      emissive: BEACON_COLOR,
+      emissiveIntensity: 0.7,
+    }),
+    mainBlur: new THREE.MeshBasicMaterial({
+      color: ROTOR_BLUR_COLOR,
+      transparent: true,
+      opacity: 0.09,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+    tailBlur: new THREE.MeshBasicMaterial({
+      color: ROTOR_BLUR_COLOR,
+      transparent: true,
+      opacity: 0.06,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
   }), []);
 
-  useFrame(() => {
-    if (!helicopter.spawned) return;
-    const time = performance.now() / 1000;
+  useEffect(() => {
+    if (spotLightRef.current && spotLightTargetRef.current) {
+      spotLightRef.current.target = spotLightTargetRef.current;
+    }
+  }, [isVisible]);
 
-    // 自分が搭乗中か
+  useFrame((_, delta) => {
+    if (!isVisible || !groupRef.current) return;
+
+    const helicopter = useVehicleStore.getState().helicopter;
+    groupRef.current.position.set(helicopter.x, helicopter.y, helicopter.z);
+    groupRef.current.rotation.set(helicopter.pitch, helicopter.rotationY, helicopter.roll);
+
     const iAmBoarded = helicopter.mySeat !== null;
-    // 誰かが搭乗中か（自分 or 他プレイヤー）
-    const someoneBoarded = Object.values(helicopter.seats).some((id) => id !== null);
+    const someoneBoarded = helicopter.seats.pilot !== null
+      || helicopter.seats.gunner_left !== null
+      || helicopter.seats.gunner_right !== null;
 
-    // --- 胴体の半透明化（自分搭乗時のみ） ---
-    const targetBodyOpacity = iAmBoarded ? BOARDED_BODY_OPACITY : 1.0;
-    const targetWindowOpacity = iAmBoarded ? BOARDED_WINDOW_OPACITY : 0.8;
-    const lerpSpeed = 0.15;
+    // 搭乗中は不透明な外殻を描かず、透明ソートと車内視点の遮蔽を同時に避ける。
+    if (shellRef.current) shellRef.current.visible = !iAmBoarded;
+    const targetWindowOpacity = iAmBoarded ? 0.18 : 0.62;
+    if (windowRef.current) {
+      const material = windowRef.current.material as THREE.MeshStandardMaterial;
+      material.opacity = THREE.MathUtils.damp(material.opacity, targetWindowOpacity, 12, delta);
+    }
 
-    // 胴体マテリアルのopacityをスムーズ補間
-    // eslint-disable-next-line react-hooks/immutability
-    bodyMat.opacity += (targetBodyOpacity - bodyMat.opacity) * lerpSpeed;
-    // eslint-disable-next-line react-hooks/immutability
-    bodyWhiteMat.opacity += (targetBodyOpacity - bodyWhiteMat.opacity) * lerpSpeed;
-    // eslint-disable-next-line react-hooks/immutability
-    tailMat.opacity += (targetBodyOpacity - tailMat.opacity) * lerpSpeed;
-    // eslint-disable-next-line react-hooks/immutability
-    stripeMat.opacity += (targetBodyOpacity - stripeMat.opacity) * lerpSpeed;
-    // eslint-disable-next-line react-hooks/immutability
-    windowMat.opacity += (targetWindowOpacity - windowMat.opacity) * lerpSpeed;
-
-    // 搭乗時は裏面も描画（内側から見るため）
-    const targetSide = iAmBoarded ? THREE.DoubleSide : THREE.FrontSide;
-    bodyMat.side = targetSide;
-    bodyWhiteMat.side = targetSide;
-    tailMat.side = targetSide;
-
-    // メインローターのアニメーション
     if (mainRotorRef.current) {
-      if (someoneBoarded) {
-        // 搭乗中: ストアの rotorAngle を直接反映（サーバー同期 or ローカル入力）
-        mainRotorRef.current.rotation.y = helicopter.rotorAngle;
-      } else {
-        // 待機中: ゆっくりアイドル回転
-        mainRotorRef.current.rotation.y += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.004;
-      }
+      mainRotorRef.current.rotation.y = someoneBoarded
+        ? helicopter.rotorAngle
+        : mainRotorRef.current.rotation.y + HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.24 * delta;
     }
-
-    // テールローターのアニメーション（メインより速く回る）
     if (tailRotorRef.current) {
-      if (someoneBoarded) {
-        tailRotorRef.current.rotation.x = helicopter.rotorAngle * 1.5;
-      } else {
-        tailRotorRef.current.rotation.x += HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.006;
-      }
+      tailRotorRef.current.rotation.x = someoneBoarded
+        ? helicopter.rotorAngle * 1.5
+        : tailRotorRef.current.rotation.x + HELICOPTER_CONSTANTS.ROTOR_SPEED * 0.36 * delta;
     }
 
-    // ヘッドライトの強度を搭乗状態に応じて変更
-    const targetIntensity = someoneBoarded
+    const targetLight = someoneBoarded
       ? HEADLIGHT_CONFIG.BOARDED_INTENSITY
       : HEADLIGHT_CONFIG.IDLE_INTENSITY;
-    const targetEmissive = someoneBoarded
-      ? HEADLIGHT_CONFIG.BOARDED_EMISSIVE
-      : HEADLIGHT_CONFIG.IDLE_EMISSIVE;
-
-    // SpotLight の強度をスムーズに補間
-    if (spotLightLeftRef.current) {
-      spotLightLeftRef.current.intensity += (targetIntensity - spotLightLeftRef.current.intensity) * 0.1;
+    if (spotLightRef.current) {
+      spotLightRef.current.intensity = THREE.MathUtils.damp(
+        spotLightRef.current.intensity,
+        targetLight,
+        10,
+        delta,
+      );
     }
-    if (spotLightRightRef.current) {
-      spotLightRightRef.current.intensity += (targetIntensity - spotLightRightRef.current.intensity) * 0.1;
-    }
-
-    // レンズの発光強度をスムーズに補間
-    if (lensLeftRef.current) {
-      const mat = lensLeftRef.current.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.1;
-    }
-    if (lensRightRef.current) {
-      const mat = lensRightRef.current.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.1;
+    if (headlightLensRef.current) {
+      const material = headlightLensRef.current.material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = THREE.MathUtils.damp(
+        material.emissiveIntensity,
+        someoneBoarded ? HEADLIGHT_CONFIG.BOARDED_EMISSIVE : HEADLIGHT_CONFIG.IDLE_EMISSIVE,
+        10,
+        delta,
+      );
     }
 
-    // SpotLight のターゲットを設定
-    if (spotLightLeftRef.current && spotLightTargetLeftRef.current) {
-      spotLightLeftRef.current.target = spotLightTargetLeftRef.current;
-    }
-    if (spotLightRightRef.current && spotLightTargetRightRef.current) {
-      spotLightRightRef.current.target = spotLightTargetRightRef.current;
-    }
-
-    // ローターブラーは軽い円盤1枚ずつで情報量だけ上げる
     if (mainRotorBlurRef.current) {
-      const mat = mainRotorBlurRef.current.material as THREE.MeshBasicMaterial;
-      const targetOpacity = someoneBoarded ? 0.24 : 0.09;
-      mat.opacity += (targetOpacity - mat.opacity) * 0.12;
-      mainRotorBlurRef.current.visible = mat.opacity > 0.02;
+      const material = mainRotorBlurRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = THREE.MathUtils.damp(material.opacity, someoneBoarded ? 0.23 : 0.08, 10, delta);
     }
     if (tailRotorBlurRef.current) {
-      const mat = tailRotorBlurRef.current.material as THREE.MeshBasicMaterial;
-      const targetOpacity = someoneBoarded ? 0.18 : 0.06;
-      mat.opacity += (targetOpacity - mat.opacity) * 0.12;
-      tailRotorBlurRef.current.visible = mat.opacity > 0.015;
+      const material = tailRotorBlurRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = THREE.MathUtils.damp(material.opacity, someoneBoarded ? 0.17 : 0.05, 10, delta);
     }
 
-    // 上部ビーコンをゆっくり脈動
     if (beaconRef.current) {
-      const mat = beaconRef.current.material as THREE.MeshStandardMaterial;
-      const pulse = 0.8 + Math.sin(time * 6) * 0.2;
-      const targetBeacon = someoneBoarded ? 1.35 : 0.7;
-      mat.emissiveIntensity += ((targetBeacon * pulse) - mat.emissiveIntensity) * 0.12;
+      const material = beaconRef.current.material as THREE.MeshStandardMaterial;
+      const pulse = 0.82 + Math.sin(performance.now() * 0.006) * 0.18;
+      material.emissiveIntensity = (someoneBoarded ? 1.35 : 0.72) * pulse;
     }
   });
 
-  if (!helicopter.spawned || helicopter.destroyed) return null;
+  if (!isVisible) return null;
 
   return (
-    <group
-      ref={groupRef}
-      position={[helicopter.x, helicopter.y, helicopter.z]}
-      rotation={[helicopter.pitch, helicopter.rotationY, helicopter.roll]}
-      scale={1.3}
-    >
-      {/* モデルを180度回転: ノーズが-Z（Three.js前方）を向くように */}
+    <group ref={groupRef} scale={1.3}>
       <group rotation={[0, Math.PI, 0]}>
-      {/* === 胴体（ドア開口部付き — ガンナー席のサイドが開いている） === */}
-      {/* 胴体前部（コックピット周辺 z: 0.2〜1.4） */}
-      <mesh position={[0, 0.3, 0.8]} material={bodyMat}>
-        <boxGeometry args={[1.6, 1.2, 1.2]} />
-      </mesh>
-      {/* 胴体後部（テールブーム接続部 z: -1.0〜-1.4） */}
-      <mesh position={[0, 0.3, -1.2]} material={bodyMat}>
-        <boxGeometry args={[1.6, 1.2, 0.4]} />
-      </mesh>
-      {/* 胴体中央上部（ドア開口部の上 — 屋根として繋ぐ） */}
-      <mesh position={[0, 0.75, -0.3]} material={bodyMat}>
-        <boxGeometry args={[1.6, 0.3, 1.4]} />
-      </mesh>
-      {/* 胴体中央下部（ドア開口部の下 — 床として繋ぐ） */}
-      <mesh position={[0, -0.15, -0.3]} material={bodyMat}>
-        <boxGeometry args={[1.6, 0.3, 1.4]} />
-      </mesh>
+        <group ref={shellRef}>
+          <mesh geometry={SHELL_GEOMETRY} material={materials.body} castShadow receiveShadow />
+          <mesh geometry={WHITE_GEOMETRY} material={materials.white} receiveShadow />
+          <mesh geometry={STRIPE_GEOMETRY} material={materials.stripe} receiveShadow />
+        </group>
 
-      {/* 胴体下部（白） — 前部 */}
-      <mesh position={[0, -0.2, 0.8]} material={bodyWhiteMat}>
-        <boxGeometry args={[1.5, 0.3, 1.1]} />
-      </mesh>
-      {/* 胴体下部（白） — 後部 */}
-      <mesh position={[0, -0.2, -1.2]} material={bodyWhiteMat}>
-        <boxGeometry args={[1.5, 0.3, 0.4]} />
-      </mesh>
+        <mesh ref={windowRef} geometry={WINDOW_GEOMETRY} material={materials.window} />
+        <mesh geometry={TRIM_GEOMETRY} material={materials.trim} castShadow receiveShadow />
+        <mesh geometry={ENGINE_GEOMETRY} material={materials.engine} receiveShadow />
+        <mesh geometry={INTERIOR_GEOMETRY} material={materials.interior} receiveShadow />
+        <mesh geometry={SKID_GEOMETRY} material={materials.skid} receiveShadow />
+        <mesh ref={headlightLensRef} geometry={HEADLIGHT_LENS_GEOMETRY} material={materials.lens} />
 
-      {/* ノーズ（前部を丸みをつけて） */}
-      <mesh position={[0, 0.2, 1.5]} material={bodyMat}>
-        <boxGeometry args={[1.3, 1.0, 0.6]} />
-      </mesh>
-      {/* ノーズ下部フェアリング */}
-      <mesh position={[0, -0.02, 1.45]} material={bodyWhiteMat}>
-        <boxGeometry args={[1.05, 0.24, 0.44]} />
-      </mesh>
-      <mesh position={[-0.56, 0.22, 1.26]} material={trimMat}>
-        <boxGeometry args={[0.18, 0.46, 0.7]} />
-      </mesh>
-      <mesh position={[0.56, 0.22, 1.26]} material={trimMat}>
-        <boxGeometry args={[0.18, 0.46, 0.7]} />
-      </mesh>
-      <mesh position={[0, -0.28, 1.12]} material={trimMat}>
-        <boxGeometry args={[0.42, 0.14, 0.32]} />
-      </mesh>
-      <mesh position={[0, -0.34, 0.98]} material={engineMat}>
-        <boxGeometry args={[0.22, 0.1, 0.2]} />
-      </mesh>
-      {/* コックピット上部の眉 */}
-      <mesh position={[0, 0.92, 1.45]} material={trimMat}>
-        <boxGeometry args={[1.18, 0.08, 0.34]} />
-      </mesh>
-      <mesh position={[0, 0.82, 1.16]} material={trimMat}>
-        <boxGeometry args={[0.98, 0.06, 0.16]} />
-      </mesh>
-
-      {/* 黄色いストライプ（胴体装飾） */}
-      <mesh position={[0, 0.3, 0.3]} material={stripeMat}>
-        <boxGeometry args={[1.62, 0.15, 0.3]} />
-      </mesh>
-      <mesh position={[0, 0.16, 0.15]} material={stripeMat}>
-        <boxGeometry args={[1.4, 0.08, 0.24]} />
-      </mesh>
-
-      {/* === ヘッドライト（ノーズ下部に2灯） === */}
-      {/* 左ヘッドライト */}
-      <group position={[-0.35, -0.15, 1.75]}>
-        {/* ハウジング（ライトの外枠） */}
-        <mesh material={housingMat}>
-          <boxGeometry args={[0.28, 0.22, 0.15]} />
-        </mesh>
-        {/* レンズ（発光面 — 前方に少し出す） */}
-        <mesh ref={lensLeftRef} position={[0, 0, 0.09]} material={lensLeftMat}>
-          <boxGeometry args={[0.22, 0.16, 0.04]} />
-        </mesh>
-        {/* SpotLight */}
         <spotLight
-          ref={spotLightLeftRef}
-          position={[0, 0, 0.1]}
+          ref={spotLightRef}
+          position={[0, -0.14, 1.86]}
           color={HEADLIGHT_COLOR}
           intensity={HEADLIGHT_CONFIG.IDLE_INTENSITY}
           distance={HEADLIGHT_CONFIG.DISTANCE}
@@ -356,353 +419,84 @@ export function Helicopter() {
           decay={HEADLIGHT_CONFIG.DECAY}
           castShadow={false}
         />
-        {/* SpotLight ターゲット（前方8ブロック先・やや下向き） */}
-        <object3D ref={spotLightTargetLeftRef} position={[0, -2, 8]} />
+        <object3D ref={spotLightTargetRef} position={[0, -2.1, 9]} />
+
+        <mesh ref={beaconRef} geometry={BEACON_GEOMETRY} material={materials.beacon} position={[0, 1.17, 0.36]} />
+
+        <group ref={mainRotorRef} position={[0, 1.46, 0]}>
+          <mesh ref={mainRotorBlurRef} geometry={MAIN_ROTOR_BLUR_GEOMETRY} material={materials.mainBlur} />
+          <mesh geometry={MAIN_ROTOR_GEOMETRY} material={materials.rotor} />
+        </group>
+
+        <group ref={tailRotorRef} position={[0.17, 0.92, -3.18]}>
+          <mesh ref={tailRotorBlurRef} geometry={TAIL_ROTOR_BLUR_GEOMETRY} material={materials.tailBlur} />
+          <mesh geometry={TAIL_ROTOR_GEOMETRY} material={materials.rotor} />
+        </group>
+
+        <PassengerAvatars />
       </group>
 
-      {/* 右ヘッドライト */}
-      <group position={[0.35, -0.15, 1.75]}>
-        {/* ハウジング */}
-        <mesh material={housingMat}>
-          <boxGeometry args={[0.28, 0.22, 0.15]} />
-        </mesh>
-        {/* レンズ */}
-        <mesh ref={lensRightRef} position={[0, 0, 0.09]} material={lensRightMat}>
-          <boxGeometry args={[0.22, 0.16, 0.04]} />
-        </mesh>
-        {/* SpotLight */}
-        <spotLight
-          ref={spotLightRightRef}
-          position={[0, 0, 0.1]}
-          color={HEADLIGHT_COLOR}
-          intensity={HEADLIGHT_CONFIG.IDLE_INTENSITY}
-          distance={HEADLIGHT_CONFIG.DISTANCE}
-          angle={HEADLIGHT_CONFIG.ANGLE}
-          penumbra={HEADLIGHT_CONFIG.PENUMBRA}
-          decay={HEADLIGHT_CONFIG.DECAY}
-          castShadow={false}
-        />
-        {/* SpotLight ターゲット */}
-        <object3D ref={spotLightTargetRightRef} position={[0, -2, 8]} />
-      </group>
-
-      {/* === テールブーム === */}
-      <mesh position={[0, 0.4, -2.2]} material={tailMat}>
-        <boxGeometry args={[0.5, 0.5, 2.0]} />
-      </mesh>
-      <mesh position={[0, 0.62, -2.45]} material={engineMat}>
-        <boxGeometry args={[0.18, 0.18, 1.3]} />
-      </mesh>
-      <mesh position={[-0.18, 0.12, -1.62]} rotation={[-0.5, 0, 0.14]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.05, 1.36]} />
-      </mesh>
-      <mesh position={[0.18, 0.12, -1.62]} rotation={[-0.5, 0, -0.14]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.05, 1.36]} />
-      </mesh>
-      <mesh position={[0, 0.12, -2.72]} material={trimMat}>
-        <boxGeometry args={[0.22, 0.14, 0.78]} />
-      </mesh>
-
-      {/* テールフィン（垂直） */}
-      <mesh position={[0, 1.0, -3.0]} material={tailMat}>
-        <boxGeometry args={[0.1, 1.0, 0.6]} />
-      </mesh>
-
-      {/* テールフィン（水平） */}
-      <mesh position={[0, 0.65, -3.0]} material={tailMat}>
-        <boxGeometry args={[1.2, 0.08, 0.4]} />
-      </mesh>
-      <mesh position={[-0.56, 0.82, -3.02]} material={tailMat}>
-        <boxGeometry args={[0.08, 0.34, 0.2]} />
-      </mesh>
-      <mesh position={[0.56, 0.82, -3.02]} material={tailMat}>
-        <boxGeometry args={[0.08, 0.34, 0.2]} />
-      </mesh>
-
-      {/* === コックピット窓（常に表示 — 搭乗時はガラス越しに外が見える） === */}
-      {/* フロントウィンドウ（大きく斜め） */}
-      <mesh position={[0, 0.6, 1.6]} material={windowMat}>
-        <boxGeometry args={[1.2, 0.6, 0.4]} />
-      </mesh>
-      {/* フロントウィンドウ中央フレーム */}
-      <mesh position={[0, 0.58, 1.62]} material={trimMat}>
-        <boxGeometry args={[0.08, 0.62, 0.08]} />
-      </mesh>
-      <mesh position={[-0.54, 0.58, 1.54]} rotation={[0.2, 0, 0]} material={trimMat}>
-        <boxGeometry args={[0.07, 0.62, 0.08]} />
-      </mesh>
-      <mesh position={[0.54, 0.58, 1.54]} rotation={[0.2, 0, 0]} material={trimMat}>
-        <boxGeometry args={[0.07, 0.62, 0.08]} />
-      </mesh>
-      {/* サイドウィンドウ左 */}
-      <mesh position={[-0.81, 0.5, 0.5]} material={windowMat}>
-        <boxGeometry args={[0.02, 0.5, 1.0]} />
-      </mesh>
-      <mesh position={[-0.77, 0.5, 0.5]} material={trimMat}>
-        <boxGeometry args={[0.04, 0.58, 1.08]} />
-      </mesh>
-      {/* サイドウィンドウ右 */}
-      <mesh position={[0.81, 0.5, 0.5]} material={windowMat}>
-        <boxGeometry args={[0.02, 0.5, 1.0]} />
-      </mesh>
-      <mesh position={[0.77, 0.5, 0.5]} material={trimMat}>
-        <boxGeometry args={[0.04, 0.58, 1.08]} />
-      </mesh>
-
-      {/* === ドア開口部フレーム（ガンナー席の左右 — 開放状態） === */}
-      {/* 左ドアフレーム前柱 */}
-      <mesh position={[-0.78, 0.3, 0.1]} material={bodyMat}>
-        <boxGeometry args={[0.06, 0.9, 0.08]} />
-      </mesh>
-      {/* 左ドアフレーム後柱 */}
-      <mesh position={[-0.78, 0.3, -0.75]} material={bodyMat}>
-        <boxGeometry args={[0.06, 0.9, 0.08]} />
-      </mesh>
-      {/* 右ドアフレーム前柱 */}
-      <mesh position={[0.78, 0.3, 0.1]} material={bodyMat}>
-        <boxGeometry args={[0.06, 0.9, 0.08]} />
-      </mesh>
-      {/* 右ドアフレーム後柱 */}
-      <mesh position={[0.78, 0.3, -0.75]} material={bodyMat}>
-        <boxGeometry args={[0.06, 0.9, 0.08]} />
-      </mesh>
-      <mesh position={[-0.84, -0.03, -0.28]} material={trimMat}>
-        <boxGeometry args={[0.12, 0.18, 1.18]} />
-      </mesh>
-      <mesh position={[0.84, -0.03, -0.28]} material={trimMat}>
-        <boxGeometry args={[0.12, 0.18, 1.18]} />
-      </mesh>
-
-      {/* === ルーフ（ローター取り付け部） === */}
-      <mesh position={[0, 0.95, 0]} material={bodyMat}>
-        <boxGeometry args={[0.8, 0.15, 1.0]} />
-      </mesh>
-      <mesh position={[0, 1.07, 0.46]} material={engineMat}>
-        <boxGeometry args={[0.58, 0.14, 0.34]} />
-      </mesh>
-      <mesh position={[0, 1.15, 0.58]} material={trimMat}>
-        <boxGeometry args={[0.34, 0.06, 0.14]} />
-      </mesh>
-      <mesh position={[-0.42, 1.08, -0.2]} material={engineMat}>
-        <boxGeometry args={[0.34, 0.2, 1.1]} />
-      </mesh>
-      <mesh position={[0.42, 1.08, -0.2]} material={engineMat}>
-        <boxGeometry args={[0.34, 0.2, 1.1]} />
-      </mesh>
-      <mesh position={[-0.56, 1.02, -0.62]} material={trimMat}>
-        <boxGeometry args={[0.12, 0.12, 0.44]} />
-      </mesh>
-      <mesh position={[0.56, 1.02, -0.62]} material={trimMat}>
-        <boxGeometry args={[0.12, 0.12, 0.44]} />
-      </mesh>
-      <mesh position={[-0.48, 1.05, -0.75]} rotation={[Math.PI / 2, 0, 0]} material={trimMat}>
-        <cylinderGeometry args={[0.05, 0.07, 0.42, 8]} />
-      </mesh>
-      <mesh position={[0.48, 1.05, -0.75]} rotation={[Math.PI / 2, 0, 0]} material={trimMat}>
-        <cylinderGeometry args={[0.05, 0.07, 0.42, 8]} />
-      </mesh>
-      <mesh ref={beaconRef} position={[0, 1.16, 0.34]} material={beaconMat}>
-        <boxGeometry args={[0.12, 0.12, 0.12]} />
-      </mesh>
-
-      {/* ローターマスト */}
-      <mesh position={[0, 1.2, 0]} material={skidMat}>
-        <boxGeometry args={[0.15, 0.4, 0.15]} />
-      </mesh>
-      <mesh position={[0.18, 1.29, 0.08]} rotation={[0.35, 0, -0.55]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.34, 0.05]} />
-      </mesh>
-      <mesh position={[-0.18, 1.29, 0.08]} rotation={[0.35, 0, 0.55]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.34, 0.05]} />
-      </mesh>
-      <mesh position={[0.18, 1.29, -0.08]} rotation={[-0.35, 0, -0.55]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.34, 0.05]} />
-      </mesh>
-      <mesh position={[-0.18, 1.29, -0.08]} rotation={[-0.35, 0, 0.55]} material={trimMat}>
-        <boxGeometry args={[0.05, 0.34, 0.05]} />
-      </mesh>
-
-      {/* === メインローター（上部で回転） === */}
-      <group ref={mainRotorRef} position={[0, 1.45, 0]}>
-        <mesh ref={mainRotorBlurRef} rotation={[-Math.PI / 2, 0, 0]} material={mainRotorBlurMat}>
-          <circleGeometry args={[2.6, 24]} />
-        </mesh>
-        {/* ローターブレード × 4 */}
-        <mesh material={rotorMat}>
-          <boxGeometry args={[5.0, 0.06, 0.25]} />
-        </mesh>
-        <mesh rotation={[0, Math.PI / 2, 0]} material={rotorMat}>
-          <boxGeometry args={[5.0, 0.06, 0.25]} />
-        </mesh>
-        {/* ローターハブ */}
-        <mesh material={rotorMat}>
-          <boxGeometry args={[0.3, 0.12, 0.3]} />
-        </mesh>
-        <mesh position={[0.22, 0.02, 0]} rotation={[0, 0, 0.7]} material={trimMat}>
-          <boxGeometry args={[0.08, 0.12, 0.08]} />
-        </mesh>
-        <mesh position={[-0.22, 0.02, 0]} rotation={[0, 0, -0.7]} material={trimMat}>
-          <boxGeometry args={[0.08, 0.12, 0.08]} />
-        </mesh>
-        <mesh position={[0, 0.02, 0.22]} rotation={[0.7, 0, 0]} material={trimMat}>
-          <boxGeometry args={[0.08, 0.12, 0.08]} />
-        </mesh>
-        <mesh position={[0, 0.02, -0.22]} rotation={[-0.7, 0, 0]} material={trimMat}>
-          <boxGeometry args={[0.08, 0.12, 0.08]} />
-        </mesh>
-      </group>
-
-      {/* === テールローター === */}
-      <group ref={tailRotorRef} position={[0.15, 0.9, -3.0]}>
-        <mesh ref={tailRotorBlurRef} rotation={[0, Math.PI / 2, 0]} material={tailRotorBlurMat}>
-          <circleGeometry args={[0.58, 16]} />
-        </mesh>
-        <mesh material={trimMat}>
-          <boxGeometry args={[0.08, 0.12, 0.12]} />
-        </mesh>
-        <mesh material={rotorMat}>
-          <boxGeometry args={[0.05, 1.0, 0.15]} />
-        </mesh>
-        <mesh rotation={[Math.PI / 2, 0, 0]} material={rotorMat}>
-          <boxGeometry args={[0.05, 1.0, 0.15]} />
-        </mesh>
-      </group>
-
-
-
-      {/* === スキッド（着陸脚） === */}
-      {/* 左スキッド */}
-      <group position={[-0.6, -0.5, 0]}>
-        {/* 横棒 */}
-        <mesh material={skidMat}>
-          <boxGeometry args={[0.08, 0.08, 2.4]} />
-        </mesh>
-        <mesh position={[0, -0.02, 1.16]} material={trimMat}>
-          <boxGeometry args={[0.12, 0.04, 0.16]} />
-        </mesh>
-        <mesh position={[0, -0.02, -1.16]} material={trimMat}>
-          <boxGeometry args={[0.12, 0.04, 0.16]} />
-        </mesh>
-        {/* 前の支柱 */}
-        <mesh position={[0, 0.25, 0.7]} material={skidMat}>
-          <boxGeometry args={[0.06, 0.5, 0.06]} />
-        </mesh>
-        {/* 後の支柱 */}
-        <mesh position={[0, 0.25, -0.7]} material={skidMat}>
-          <boxGeometry args={[0.06, 0.5, 0.06]} />
-        </mesh>
-        <mesh position={[0.08, 0.17, 0.7]} rotation={[0, 0, -0.45]} material={trimMat}>
-          <boxGeometry args={[0.04, 0.28, 0.04]} />
-        </mesh>
-        <mesh position={[0.08, 0.17, -0.7]} rotation={[0, 0, -0.45]} material={trimMat}>
-          <boxGeometry args={[0.04, 0.28, 0.04]} />
-        </mesh>
-      </group>
-      {/* 右スキッド */}
-      <group position={[0.6, -0.5, 0]}>
-        <mesh material={skidMat}>
-          <boxGeometry args={[0.08, 0.08, 2.4]} />
-        </mesh>
-        <mesh position={[0, -0.02, 1.16]} material={trimMat}>
-          <boxGeometry args={[0.12, 0.04, 0.16]} />
-        </mesh>
-        <mesh position={[0, -0.02, -1.16]} material={trimMat}>
-          <boxGeometry args={[0.12, 0.04, 0.16]} />
-        </mesh>
-        <mesh position={[0, 0.25, 0.7]} material={skidMat}>
-          <boxGeometry args={[0.06, 0.5, 0.06]} />
-        </mesh>
-        <mesh position={[0, 0.25, -0.7]} material={skidMat}>
-          <boxGeometry args={[0.06, 0.5, 0.06]} />
-        </mesh>
-        <mesh position={[-0.08, 0.17, 0.7]} rotation={[0, 0, 0.45]} material={trimMat}>
-          <boxGeometry args={[0.04, 0.28, 0.04]} />
-        </mesh>
-        <mesh position={[-0.08, 0.17, -0.7]} rotation={[0, 0, 0.45]} material={trimMat}>
-          <boxGeometry args={[0.04, 0.28, 0.04]} />
-        </mesh>
-      </group>
-      {/* スキッドをつなぐ補強パイプ */}
-      <mesh position={[0, -0.25, 0.7]} material={trimMat}>
-        <boxGeometry args={[1.26, 0.05, 0.05]} />
-      </mesh>
-      <mesh position={[0, -0.25, -0.7]} material={trimMat}>
-        <boxGeometry args={[1.26, 0.05, 0.05]} />
-      </mesh>
-      <mesh position={[0, -0.38, 0.05]} material={trimMat}>
-        <boxGeometry args={[1.05, 0.05, 0.05]} />
-      </mesh>
-
-      {/* === 搭乗者アバター（180度回転グループ内に配置） === */}
-      <PassengerAvatars />
-      </group>
-
-      {/* === 搭乗プロンプト（回転ラッパーの外側に置く） === */}
-      {(() => {
-        const passengerCount = Object.values(helicopter.seats).filter((id) => id !== null).length;
-        const hasEmptySeat = passengerCount < 3;
-        if (!hasEmptySeat || helicopter.mySeat !== null) return null;
-        return (
-          <Billboard position={[0, 3.5, 0]}>
-            {/* 背景パネル */}
-            <mesh>
-              <planeGeometry args={[4.5, 1.0]} />
-              <meshBasicMaterial color={0x000000} transparent opacity={0.8} side={THREE.DoubleSide} />
-            </mesh>
-            {/* テキスト */}
-            <Text
-              position={[0, 0.12, 0.01]}
-              fontSize={0.35}
-              color="#ffdd00"
-              anchorX="center"
-              anchorY="middle"
-              font={undefined}
-              outlineWidth={0.02}
-              outlineColor="#000000"
-            >
-              🚁 [F] のる
-            </Text>
-            {/* 搭乗者数 */}
-            <Text
-              position={[0, -0.22, 0.01]}
-              fontSize={0.18}
-              color="#ffffff"
-              fillOpacity={0.7}
-              anchorX="center"
-              anchorY="middle"
-              font={undefined}
-            >
-              {`${passengerCount}/3`}
-            </Text>
-          </Billboard>
-        );
-      })()}
+      <BoardingPrompt />
     </group>
   );
 }
 
-/**
- * 搭乗者のアバターをヘリモデル内部に描画
- * 180度回転グループの内側に配置されるため SEAT_MODEL_OFFSETS を使用
- * 自分自身は描画しない（FPS視点のため）
- */
-function PassengerAvatars() {
-  const seats = useVehicleStore((s) => s.helicopter.seats);
+function BoardingPrompt() {
+  const passengerCount = useVehicleStore((state) => {
+    const seats = state.helicopter.seats;
+    return Number(seats.pilot !== null)
+      + Number(seats.gunner_left !== null)
+      + Number(seats.gunner_right !== null);
+  });
+  const mySeat = useVehicleStore((state) => state.helicopter.mySeat);
 
-  const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
-  const myId = useMultiplayerStore((s) => s.myId);
+  if (passengerCount >= 3 || mySeat !== null) return null;
+
+  return (
+    <Billboard position={[0, 3.5, 0]}>
+      <mesh>
+        <planeGeometry args={[4.5, 1]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.8} side={THREE.DoubleSide} />
+      </mesh>
+      <Text
+        position={[0, 0.12, 0.01]}
+        fontSize={0.35}
+        color="#ffdd00"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor="#000000"
+      >
+        🚁 [F] のる
+      </Text>
+      <Text
+        position={[0, -0.22, 0.01]}
+        fontSize={0.18}
+        color="#ffffff"
+        fillOpacity={0.7}
+        anchorX="center"
+        anchorY="middle"
+      >
+        {`${passengerCount}/3`}
+      </Text>
+    </Billboard>
+  );
+}
+
+/** 搭乗者のアバターをヘリモデル内部に描画する。 */
+function PassengerAvatars() {
+  const seats = useVehicleStore((state) => state.helicopter.seats);
+  const remotePlayers = useMultiplayerStore((state) => state.remotePlayers);
+  const myId = useMultiplayerStore((state) => state.myId);
 
   return (
     <>
       {ALL_SEATS.map((seat) => {
         const playerId = seats[seat];
-        // 空席 or 自分自身はスキップ
         if (playerId === null || playerId === '__local__' || playerId === myId) return null;
 
-        // リモートプレイヤーの情報を取得
         const player = remotePlayers.get(playerId);
         if (!player) return null;
-
         const offset = SEAT_MODEL_OFFSETS[seat];
 
         return (

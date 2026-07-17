@@ -20,9 +20,12 @@ export function placeHeliport(chunk: ChunkData, cx: number, cz: number): void {
 
       const relX = worldX - HELIPORT_CENTER.x;
       const relZ = worldZ - HELIPORT_CENTER.z;
+      const absX = Math.abs(relX);
+      const absZ = Math.abs(relZ);
 
-      // ヘリポートの範囲内か
-      if (Math.abs(relX) > halfSize || Math.abs(relZ) > halfSize) continue;
+      // 角を落とした八角形にして、単なる鉄の正方形から着陸施設らしい輪郭へ
+      const inPad = absX <= halfSize && absZ <= halfSize && absX + absZ <= halfSize + 2;
+      if (!inPad) continue;
 
       const surfaceY = getTerrainHeight(worldX, worldZ);
 
@@ -37,7 +40,7 @@ export function placeHeliport(chunk: ChunkData, cx: number, cz: number): void {
         } else if (y === padY) {
           // パッドの表面
           // Hマークを描く
-          const isH = 
+          const isH =
             // H の左縦棒
             (relX === -2 && Math.abs(relZ) <= 2) ||
             // H の右縦棒
@@ -45,8 +48,14 @@ export function placeHeliport(chunk: ChunkData, cx: number, cz: number): void {
             // H の横棒
             (relZ === 0 && Math.abs(relX) <= 2);
           
-          if (isH) {
+          const radialDistance = Math.sqrt(relX * relX + relZ * relZ);
+          const isLandingRing = radialDistance >= 3.45 && radialDistance <= 4.2;
+          const isRim = absX === halfSize || absZ === halfSize || absX + absZ === halfSize + 2;
+
+          if (isH || isLandingRing) {
             chunk[lx][y][lz] = BLOCK_IDS.ELECTRIC; // 光るHマーク
+          } else if (isRim) {
+            chunk[lx][y][lz] = BLOCK_IDS.IRON_CRACKED;
           } else {
             chunk[lx][y][lz] = BLOCK_IDS.IRON;
           }
@@ -63,18 +72,11 @@ export function placeHeliport(chunk: ChunkData, cx: number, cz: number): void {
         }
       }
 
-      // 角に松明を配置
+      // 八角形の頂点と各方位に埋め込み誘導灯を配置
       if (
-        Math.abs(relX) === halfSize && Math.abs(relZ) === halfSize &&
-        padY + 1 < WORLD_HEIGHT
-      ) {
-        chunk[lx][padY + 1][lz] = BLOCK_IDS.TORCH;
-      }
-
-      // 辺の中央にも松明
-      if (
-        ((Math.abs(relX) === halfSize && relZ === 0) ||
-         (relX === 0 && Math.abs(relZ) === halfSize)) &&
+        (((absX === halfSize && absZ === 2) || (absZ === halfSize && absX === 2)) ||
+         (absX === halfSize && relZ === 0) ||
+         (relX === 0 && absZ === halfSize)) &&
         padY + 1 < WORLD_HEIGHT
       ) {
         chunk[lx][padY + 1][lz] = BLOCK_IDS.TORCH;

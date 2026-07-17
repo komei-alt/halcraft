@@ -76,6 +76,8 @@ const TRAIL_LIFETIME = 0.22;
 const TRAIL_SAMPLE_INTERVAL = 0.012;
 const BLADE_BASE_LOCAL = new THREE.Vector3(0, 0.02, 0);
 const BLADE_TIP_LOCAL = new THREE.Vector3(0, BLADE_LENGTH + 0.04, 0);
+const HILT_FIN_ANGLES = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3] as const;
+const TRAIL_VERTEX_COUNT = TRAIL_SEGMENT_COUNT * 6;
 
 // ============================================
 // コンボ定義
@@ -237,8 +239,8 @@ export function Lightsaber() {
   const lightRef = useRef<THREE.PointLight>(null);
   const energyRingRef = useRef<THREE.Mesh>(null);
   const guardGlowRef = useRef<THREE.Mesh>(null);
-  const trailGeometries = useRef<Array<THREE.BufferGeometry<THREE.NormalOrGLBufferAttributes> | null>>([]);
-  const trailMaterials = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
+  const trailGeometryRef = useRef<THREE.BufferGeometry>(null);
+  const trailMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const trailSamples = useRef<BladeTrailSample[]>([]);
   const trailSampleTimer = useRef(0);
   const bladeActivation = useRef(0);
@@ -495,9 +497,7 @@ export function Lightsaber() {
       justComboChain.current = 0;
       bladeActivation.current = 0;
       trailSamples.current = [];
-      for (const material of trailMaterials.current) {
-        if (material) material.opacity = 0;
-      }
+      if (trailMaterialRef.current) trailMaterialRef.current.opacity = 0;
       if (energyRingRef.current) {
         (energyRingRef.current.material as THREE.MeshBasicMaterial).opacity = 0;
       }
@@ -608,27 +608,50 @@ export function Lightsaber() {
       }
     }
 
+    const trailGeometry = trailGeometryRef.current;
+    const trailMaterial = trailMaterialRef.current;
+    const trailPosition = trailGeometry?.getAttribute('position') as THREE.BufferAttribute | undefined;
+    const trailColor = trailGeometry?.getAttribute('color') as THREE.BufferAttribute | undefined;
+    let visibleTrailSegments = 0;
+
     for (let i = 0; i < TRAIL_SEGMENT_COUNT; i++) {
-      const geo = trailGeometries.current[i];
-      const material = trailMaterials.current[i];
       const newer = trailSamples.current[i];
       const older = trailSamples.current[i + 1];
-      if (!geo || !material || !newer || !older) {
-        if (material) material.opacity = 0;
+      const vertexOffset = i * 6;
+      if (!trailPosition || !trailColor || !newer || !older) {
+        if (trailColor) {
+          for (let vertex = 0; vertex < 6; vertex++) {
+            trailColor.setXYZ(vertexOffset + vertex, 0, 0, 0);
+          }
+        }
         continue;
       }
 
-      const attr = geo.getAttribute('position') as THREE.BufferAttribute;
       const points = [older.base, older.tip, newer.tip, older.base, newer.tip, newer.base];
       for (let p = 0; p < points.length; p++) {
-        attr.setXYZ(p, points[p].x, points[p].y, points[p].z);
+        trailPosition.setXYZ(vertexOffset + p, points[p].x, points[p].y, points[p].z);
       }
-      attr.needsUpdate = true;
-      geo.computeBoundingSphere();
 
       const ageFade = 1 - newer.age / TRAIL_LIFETIME;
       const orderFade = 1 - i / TRAIL_SEGMENT_COUNT;
-      material.opacity = Math.max(0, ageFade * orderFade * 0.42);
+      const brightness = Math.max(0, ageFade * orderFade);
+      for (let vertex = 0; vertex < 6; vertex++) {
+        trailColor.setXYZ(
+          vertexOffset + vertex,
+          bladeColorObj.r * brightness,
+          bladeColorObj.g * brightness,
+          bladeColorObj.b * brightness,
+        );
+      }
+      visibleTrailSegments += 1;
+    }
+
+    if (trailPosition && trailColor) {
+      trailPosition.needsUpdate = true;
+      trailColor.needsUpdate = true;
+    }
+    if (trailMaterial) {
+      trailMaterial.opacity = visibleTrailSegments > 0 ? 0.42 : 0;
     }
 
     // PointLight 動的制御
@@ -679,37 +702,34 @@ export function Lightsaber() {
 
   return (
     <group>
-      {Array.from({ length: TRAIL_SEGMENT_COUNT }, (_, index) => (
-        <mesh key={`lightsaber-trail-${index}`} frustumCulled={false}>
-          <bufferGeometry
-            ref={(geo) => {
-              trailGeometries.current[index] = geo;
-            }}
-          >
-            <bufferAttribute
-              attach="attributes-position"
-              args={[new Float32Array(18), 3]}
-            />
-          </bufferGeometry>
-          <meshBasicMaterial
-            ref={(material) => {
-              trailMaterials.current[index] = material;
-            }}
-            color={bladeColorObj}
-            transparent
-            opacity={0}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
+      {/* 10枚の残像を1つの動的ジオメトリへ集約し、品質を保ったまま10 drawを1 drawへ削減 */}
+      <mesh frustumCulled={false}>
+        <bufferGeometry ref={trailGeometryRef}>
+          <bufferAttribute attach="attributes-position" args={[new Float32Array(TRAIL_VERTEX_COUNT * 3), 3]} />
+          <bufferAttribute attach="attributes-color" args={[new Float32Array(TRAIL_VERTEX_COUNT * 3), 3]} />
+        </bufferGeometry>
+        <meshBasicMaterial
+          ref={trailMaterialRef}
+          color="#ffffff"
+          vertexColors
+          transparent
+          opacity={0}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </mesh>
       <group ref={weaponRef} visible={false}>
         {/* ヒルト（柄） */}
         <mesh position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.04, 0.035, 0.4, 8]} />
           <meshStandardMaterial color="#888899" metalness={0.8} roughness={0.3} />
+        </mesh>
+        {/* 黒いグリップスリーブで握り位置を明確化 */}
+        <mesh position={[0, -0.245, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.045, 0.043, 0.19, 10]} />
+          <meshStandardMaterial color="#20242b" metalness={0.35} roughness={0.68} />
         </mesh>
         {/* グリップリング 1 */}
         <mesh position={[0, -0.28, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -725,6 +745,26 @@ export function Lightsaber() {
         <mesh position={[0, -0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.035, 0.01, 6, 12]} />
           <meshStandardMaterial color="#aaaabb" metalness={0.9} roughness={0.15} />
+        </mesh>
+        {/* 三本爪のエミッタ。正面からも横からも固有の輪郭が残る */}
+        {HILT_FIN_ANGLES.map((angle) => (
+          <mesh
+            key={angle}
+            position={[Math.sin(angle) * 0.052, 0.005, Math.cos(angle) * 0.052]}
+            rotation={[0, angle, 0]}
+          >
+            <boxGeometry args={[0.018, 0.115, 0.028]} />
+            <meshStandardMaterial color="#c6c9d2" metalness={0.92} roughness={0.2} />
+          </mesh>
+        ))}
+        {/* 起動スイッチと回路インジケータ */}
+        <mesh position={[0.043, -0.125, 0]}>
+          <boxGeometry args={[0.018, 0.052, 0.045]} />
+          <meshStandardMaterial color="#d95c38" emissive="#8b2614" emissiveIntensity={0.42} metalness={0.35} roughness={0.38} />
+        </mesh>
+        <mesh position={[-0.038, -0.155, 0]}>
+          <boxGeometry args={[0.014, 0.082, 0.028]} />
+          <meshStandardMaterial color="#c79b45" metalness={0.76} roughness={0.32} />
         </mesh>
         <mesh ref={energyRingRef} position={[0, 0.02, 0]}>
           <torusGeometry args={[0.068, 0.006, 8, 30]} />

@@ -9,7 +9,6 @@ import { useWorldStore } from '../stores/useWorldStore';
 
 // === 共有マテリアル（全ベッドで再利用） ===
 const woodFrameMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.85 });
-const woodDarkMat = new THREE.MeshStandardMaterial({ color: 0x6B4F10, roughness: 0.9 });
 const blanketMat = new THREE.MeshStandardMaterial({
   color: 0xCC2222, roughness: 0.7,
   emissive: new THREE.Color(0x220000), emissiveIntensity: 0.15,
@@ -17,18 +16,71 @@ const blanketMat = new THREE.MeshStandardMaterial({
 const blanketFoldMat = new THREE.MeshStandardMaterial({ color: 0xAA1818, roughness: 0.7 });
 const pillowMat = new THREE.MeshStandardMaterial({ color: 0xF0EDE0, roughness: 0.95 });
 const sheetMat = new THREE.MeshStandardMaterial({ color: 0xF5F0E8, roughness: 0.95 });
-const headboardMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.8 });
 
-// === 共有ジオメトリ ===
-const baseGeom = new THREE.BoxGeometry(0.9, 0.12, 0.9);
-const legGeom = new THREE.BoxGeometry(0.1, 0.08, 0.1);
-const headboardGeom = new THREE.BoxGeometry(0.92, 0.38, 0.06);
-const footboardGeom = new THREE.BoxGeometry(0.92, 0.22, 0.06);
-const mattressGeom = new THREE.BoxGeometry(0.82, 0.1, 0.78);
-const blanketGeom = new THREE.BoxGeometry(0.84, 0.08, 0.6);
-const blanketFoldGeom = new THREE.BoxGeometry(0.84, 0.04, 0.06);
-const pillowGeom = new THREE.BoxGeometry(0.6, 0.1, 0.18);
-const pillowBulgeGeom = new THREE.BoxGeometry(0.5, 0.04, 0.14);
+interface BoxPart {
+  position: [number, number, number];
+  size: [number, number, number];
+}
+
+/** 同じ素材の箱パーツを1ジオメトリへ結合し、形状密度と描画負荷を両立する */
+function createBoxAssembly(parts: BoxPart[]): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+
+  for (const part of parts) {
+    const source = new THREE.BoxGeometry(...part.size);
+    source.translate(...part.position);
+    const geometry = source.toNonIndexed();
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    for (let index = 0; index < position.count; index++) {
+      positions.push(position.getX(index), position.getY(index), position.getZ(index));
+      normals.push(normal.getX(index), normal.getY(index), normal.getZ(index));
+    }
+    geometry.dispose();
+    source.dispose();
+  }
+
+  const result = new THREE.BufferGeometry();
+  result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  result.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+  return result;
+}
+
+// === 共有ジオメトリ（素材ごとに結合し、1台5ドローに固定） ===
+const woodFrameGeom = createBoxAssembly([
+  { position: [0, 0.14, 0], size: [0.9, 0.1, 0.88] },
+  { position: [-0.4, 0.09, -0.39], size: [0.12, 0.18, 0.12] },
+  { position: [0.4, 0.09, -0.39], size: [0.12, 0.18, 0.12] },
+  { position: [-0.4, 0.09, 0.39], size: [0.12, 0.18, 0.12] },
+  { position: [0.4, 0.09, 0.39], size: [0.12, 0.18, 0.12] },
+  { position: [-0.43, 0.23, 0], size: [0.08, 0.14, 0.82] },
+  { position: [0.43, 0.23, 0], size: [0.08, 0.14, 0.82] },
+  { position: [-0.4, 0.45, 0.42], size: [0.12, 0.72, 0.12] },
+  { position: [0.4, 0.45, 0.42], size: [0.12, 0.72, 0.12] },
+  { position: [0, 0.67, 0.42], size: [0.7, 0.1, 0.1] },
+  { position: [0, 0.47, 0.42], size: [0.7, 0.08, 0.08] },
+  { position: [-0.4, 0.24, -0.42], size: [0.1, 0.36, 0.1] },
+  { position: [0.4, 0.24, -0.42], size: [0.1, 0.36, 0.1] },
+  { position: [0, 0.36, -0.42], size: [0.7, 0.09, 0.08] },
+]);
+const mattressGeom = createBoxAssembly([
+  { position: [0, 0.28, -0.015], size: [0.8, 0.16, 0.74] },
+]);
+const blanketGeom = createBoxAssembly([
+  { position: [0, 0.39, -0.12], size: [0.82, 0.07, 0.5] },
+  { position: [-0.405, 0.32, -0.12], size: [0.055, 0.2, 0.5] },
+  { position: [0.405, 0.32, -0.12], size: [0.055, 0.2, 0.5] },
+]);
+const blanketFoldGeom = createBoxAssembly([
+  { position: [0, 0.43, 0.1], size: [0.82, 0.035, 0.09] },
+  { position: [0, 0.445, -0.32], size: [0.74, 0.018, 0.035] },
+]);
+const pillowGeom = new THREE.SphereGeometry(0.5, 14, 8);
+pillowGeom.scale(0.62, 0.14, 0.22);
+pillowGeom.translate(0, 0.43, 0.29);
 
 /** ワールド内のすべてのベッドを描画 */
 export function BedRenderer() {
@@ -58,27 +110,11 @@ export function BedRenderer() {
 function BedModel({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      {/* 底板 */}
-      <mesh position={[0, 0.1, 0]} geometry={baseGeom} material={woodFrameMat} />
-      {/* 4本の脚 */}
-      <mesh position={[-0.38, 0.04, -0.38]} geometry={legGeom} material={woodDarkMat} />
-      <mesh position={[0.38, 0.04, -0.38]} geometry={legGeom} material={woodDarkMat} />
-      <mesh position={[-0.38, 0.04, 0.38]} geometry={legGeom} material={woodDarkMat} />
-      <mesh position={[0.38, 0.04, 0.38]} geometry={legGeom} material={woodDarkMat} />
-      {/* ヘッドボード */}
-      <mesh position={[0, 0.32, 0.42]} geometry={headboardGeom} material={headboardMat} />
-      {/* フットボード */}
-      <mesh position={[0, 0.24, -0.42]} geometry={footboardGeom} material={headboardMat} />
-      {/* マットレス */}
-      <mesh position={[0, 0.2, -0.02]} geometry={mattressGeom} material={sheetMat} />
-      {/* 布団 */}
-      <mesh position={[0, 0.28, -0.1]} geometry={blanketGeom} material={blanketMat} />
-      {/* 布団の折り返し */}
-      <mesh position={[0, 0.29, 0.22]} geometry={blanketFoldGeom} material={blanketFoldMat} />
-      {/* 枕 */}
-      <mesh position={[0, 0.3, 0.3]} geometry={pillowGeom} material={pillowMat} />
-      {/* 枕の膨らみ */}
-      <mesh position={[0, 0.34, 0.3]} geometry={pillowBulgeGeom} material={pillowMat} />
+      <mesh geometry={woodFrameGeom} material={woodFrameMat} castShadow receiveShadow />
+      <mesh geometry={mattressGeom} material={sheetMat} castShadow receiveShadow />
+      <mesh geometry={blanketGeom} material={blanketMat} castShadow receiveShadow />
+      <mesh geometry={blanketFoldGeom} material={blanketFoldMat} castShadow />
+      <mesh geometry={pillowGeom} material={pillowMat} castShadow receiveShadow />
     </group>
   );
 }
