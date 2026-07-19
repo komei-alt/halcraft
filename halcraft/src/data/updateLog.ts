@@ -45,6 +45,15 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-19',
+    items: [
+      { type: 'feature', text: '山・谷・砂丘・川・島がいくつもの地形パターンからつながって生まれる、新しいマップエンジンになったよ！' },
+      { type: 'improve', text: '見えているブロックの面だけをまとめて描き、広いマップでも前よりなめらかに動くようになったよ！' },
+      { type: 'improve', text: '空の青と夕焼け、ブロック面の明るさ、遠くの景色がはっきり分かれて、世界がもっと立体的になったよ！' },
+      { type: 'fix', text: '地下の部屋が空に浮かばないように直し、スタートすると家の外からマップを見渡せるようになったよ！' },
+    ],
+  },
+  {
     date: '2026-07-17',
     items: [
       { type: 'improve', text: 'ボス・クモ・みんなのキャラクターに顔や装備、体の形のちがいが増えて、それぞれがぐっとかっこよくなったよ！' },

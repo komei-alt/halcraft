@@ -81,15 +81,15 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
   return {
     bloomIntensity: isTouch ? 0.18 : 0.24,
     bloomThreshold: 0.78,
-    aoIntensity: isTouch ? 0.45 : 0.7,
+    aoIntensity: isTouch ? 0.42 : 0.62,
     aoRadius: isTouch ? 1.8 : 2.4,
     saturation: isTouch ? 0.025 : 0.04,
     contrast: isTouch ? 0.012 : 0.022,
-    bloomLevels: isTouch ? 4 : 5,
+    bloomLevels: 4,
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
-    aoSamples: isTouch ? 5 : 8,
-    denoiseSamples: isTouch ? 2 : 3,
+    aoSamples: isTouch ? 4 : 6,
+    denoiseSamples: 2,
   };
 }
 

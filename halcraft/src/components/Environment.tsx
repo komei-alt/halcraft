@@ -546,8 +546,9 @@ export function Environment() {
     if (skyRef.current) {
       skyRef.current.position.copy(camera.position);
     }
-    _skyTopColor.copy(_skyColor).multiplyScalar(gameState.dimension === 'nether' ? 0.8 : 1.08);
-    _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.14);
+    // ACESトーンマッピング後も青空と暖色の地平線が分離して見える輝度に抑える。
+    _skyTopColor.copy(_skyColor).multiplyScalar(gameState.dimension === 'nether' ? 0.8 : 0.92);
+    _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.02);
     _skySunGlowColor.copy(_sunColor).multiplyScalar(gameState.dimension === 'nether' ? 0.65 : 0.95);
     const nightMix = getNightMix(gameTime, gameState.dimension);
     skyUniforms.uTopColor.value.copy(_skyTopColor);

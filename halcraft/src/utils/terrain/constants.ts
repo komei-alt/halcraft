@@ -1,5 +1,8 @@
 // 地形モジュール共通定数
 
+/** 家の玄関前。開始直後から空・地形・ランドマークが見える安全なスポーン地点。 */
+export const PLAYER_SPAWN = { x: 2, z: 2 } as const;
+
 /** ヘリポートの中心座標（家の近く、開けた場所） */
 export const HELIPORT_CENTER = { x: 15, z: -12 };
 /** ヘリポートのサイズ */

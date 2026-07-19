@@ -3,7 +3,7 @@
 // バイオーム設定に基づいてブロック種を変更
 
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, type BlockId } from '../../types/blocks';
-import { getTerrainHeight } from './heightmap';
+import { getTerrainSample } from './heightmap';
 import { placeTreesInChunk } from './structures/trees';
 import { placeDecorInChunk } from './structures/decor';
 import { placePlayerHouse } from './structures/house';
@@ -15,7 +15,7 @@ import { getCurrentBiome } from './biomeConfig';
 import { carveCaves } from './caves';
 import { placeOres } from './ores';
 import { placeDungeon } from './dungeons';
-import type { ChunkData } from './types';
+import { createEmptyChunk, finalizeChunkBounds, type ChunkData } from './types';
 
 /**
  * チャンク座標 (cx, cz) のチャンクデータを生成する
@@ -24,28 +24,32 @@ import type { ChunkData } from './types';
  * 地形生成後に木を自動配置する
  */
 export function generateChunk(cx: number, cz: number): ChunkData {
-  const chunk: ChunkData = [];
+  const chunk = createEmptyChunk();
   const biome = getCurrentBiome();
 
   // バイオームのブロック種を取得
   const surfaceBlock: BlockId = biome.surfaceBlock;
   const subSurfaceBlock: BlockId = biome.subSurfaceBlock;
-  // 砂漠は水を置かない
-  const fillWater = biome.id !== 'desert';
-
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    chunk[lx] = [];
     const worldX = cx * CHUNK_SIZE + lx;
     const surfaceHeights: number[] = [];
+    const terrainSamples = [];
 
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-      surfaceHeights[lz] = getTerrainHeight(worldX, cz * CHUNK_SIZE + lz);
+      const sample = getTerrainSample(worldX, cz * CHUNK_SIZE + lz);
+      terrainSamples[lz] = sample;
+      surfaceHeights[lz] = sample.height;
     }
 
     for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-      chunk[lx][ly] = [];
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const surfaceY = surfaceHeights[lz];
+        const sample = terrainSamples[lz];
+        const worldZ = cz * CHUNK_SIZE + lz;
+        const oasisWater = biome.id === 'desert'
+          && sample.riverStrength > 0.78
+          && sample.moisture > 0.58;
+        const fillWater = biome.id !== 'desert' || oasisWater;
 
         let blockId: BlockId = BLOCK_IDS.AIR;
 
@@ -54,7 +58,7 @@ export function generateChunk(cx: number, cz: number): ChunkData {
           blockId = BLOCK_IDS.BEDROCK;
         } else if (ly < surfaceY - 6) {
           // 深層は石ブロック
-          blockId = BLOCK_IDS.STONE;
+          blockId = biome.deepBlock;
         } else if (ly < surfaceY - 3) {
           // 石と地表の間は地中ブロック（土など）
           blockId = subSurfaceBlock;
@@ -66,11 +70,12 @@ export function generateChunk(cx: number, cz: number): ChunkData {
           if (fillWater && surfaceY < SEA_LEVEL) {
             // 水面以下の地表は砂に置き換え（水底・ビーチ）
             blockId = BLOCK_IDS.SAND;
-          } else if (biome.peakBlock !== null && surfaceY >= biome.peakHeight) {
+          } else if (biome.peakBlock !== null && (surfaceY >= biome.peakHeight || sample.slopeHint > 0.72)) {
             // 高所（山頂など）は露出ブロックに置き換えて、岩肌・氷壁を見せる
             blockId = biome.peakBlock;
           } else {
-            blockId = surfaceBlock;
+            const shoreline = surfaceY <= SEA_LEVEL + 1;
+            blockId = shoreline && biome.id === 'tropical' ? BLOCK_IDS.SAND : surfaceBlock;
           }
         } else if (fillWater && ly > surfaceY && ly <= SEA_LEVEL) {
           // 地表より上で海面以下は水で埋める
@@ -79,6 +84,11 @@ export function generateChunk(cx: number, cz: number): ChunkData {
         // ly > surfaceY && ly > SEA_LEVEL は AIR
 
         chunk[lx][ly][lz] = blockId;
+
+        // 砂漠のオアシス周辺は、水際だけを砂のまま残して遠景から輪郭を読めるようにする。
+        if (oasisWater && ly === surfaceY && Math.abs(worldX + worldZ) % 7 === 0) {
+          chunk[lx][ly][lz] = BLOCK_IDS.SAND;
+        }
       }
     }
   }
@@ -120,6 +130,8 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // ステージごとの目的地・防衛拠点を最後に重ねて、マップごとの差を見える化する
   placeStageLandmarks(chunk, cx, cz);
+
+  finalizeChunkBounds(chunk);
 
   return chunk;
 }

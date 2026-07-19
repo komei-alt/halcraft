@@ -487,8 +487,8 @@ export const STAGES: StageDefinition[] = [
       featureTags: ['開けた地形', '乗り物向き', '爆発多め', '溶岩トラップ'],
       landmarkName: '砂漠の戦闘ピラミッド',
       dayDurationSeconds: 900,
-      startTime: 0.48,
-      ambientIntensity: 1.25,
+    startTime: 0.43,
+      ambientIntensity: 1.15,
       extraBlocks: {
         [BLOCK_IDS.SAND]: 64,
         [BLOCK_IDS.TNT]: 10,

@@ -29,6 +29,7 @@ import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
 import { resetNoiseForBiome } from '../utils/terrain/noise';
 import { clearHeightCache } from '../utils/terrain/heightmap';
 import { getTerrainHeight } from '../utils/terrain';
+import { PLAYER_SPAWN } from '../utils/terrain/constants';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'stageclear' | 'gameover';
 
@@ -315,7 +316,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         + (runBonus?.shieldMs ?? 0)
         + (masteryPerk?.shieldMs ?? 0)
         + (signaturePerk?.shieldMs ?? 0);
-    const startingCameraY = getTerrainHeight(7, 7) + 2.7;
+    const startingCameraY = getTerrainHeight(PLAYER_SPAWN.x, PLAYER_SPAWN.z) + 2.7;
 
     set({
       phase: 'playing',
@@ -333,7 +334,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const player = usePlayerStore.getState();
     usePlayerStore.setState({
       hp: player.maxHp,
-      worldPosition: { x: 8, y: startingCameraY, z: 8 },
+      worldPosition: { x: PLAYER_SPAWN.x, y: startingCameraY, z: PLAYER_SPAWN.z },
       isDead: false,
       isDamageFlash: false,
       damageDirection: null,

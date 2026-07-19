@@ -18,7 +18,7 @@ const blockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 const MIN_CHUNKS_PER_FRAME = 1;
 
 /** 初期ロード時の即座生成半径（足元付近を確実に表示） */
-const IMMEDIATE_RADIUS = 3;
+const IMMEDIATE_RADIUS = 2;
 
 /** 1フレームで処理する流体更新の上限 */
 const MAX_FLUID_UPDATES_PER_FRAME = 96;
@@ -120,7 +120,7 @@ function buildChunkBlockIndex(chunk: ChunkData, cx: number, cz: number): ChunkBl
   const baseZ = cz * CHUNK_SIZE;
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
+    for (let ly = 0; ly <= Math.min(WORLD_HEIGHT - 1, chunk.maxFilledY); ly++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const blockId = chunk[lx][ly][lz];
         if (!shouldIndexBlock(blockId)) continue;
@@ -221,6 +221,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     // Phase 1: 足元の小範囲を即座に生成（プレイヤーが落ちないようにする）
     for (let cx = -IMMEDIATE_RADIUS; cx <= IMMEDIATE_RADIUS; cx++) {
       for (let cz = -IMMEDIATE_RADIUS; cz <= IMMEDIATE_RADIUS; cz++) {
+        if (cx * cx + cz * cz > (IMMEDIATE_RADIUS + 0.35) ** 2) continue;
         const key = chunkKey(cx, cz);
         const chunk = generateChunk(cx, cz);
         newChunks.set(key, chunk);
@@ -233,9 +234,11 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const queue: Array<{ cx: number; cz: number; dist: number }> = [];
     for (let cx = -renderDistance; cx <= renderDistance; cx++) {
       for (let cz = -renderDistance; cz <= renderDistance; cz++) {
+        const distanceSquared = cx * cx + cz * cz;
+        if (distanceSquared > (renderDistance + 0.35) ** 2) continue;
         // 既に生成済みの即座生成範囲はスキップ
-        if (Math.abs(cx) <= IMMEDIATE_RADIUS && Math.abs(cz) <= IMMEDIATE_RADIUS) continue;
-        const dist = Math.max(Math.abs(cx), Math.abs(cz)); // チェビシェフ距離
+        if (distanceSquared <= (IMMEDIATE_RADIUS + 0.35) ** 2) continue;
+        const dist = Math.sqrt(distanceSquared);
         queue.push({ cx, cz, dist });
       }
     }
@@ -447,6 +450,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
+        if (dx * dx + dz * dz > (radius + 0.35) ** 2) continue;
         const cx = camCx + dx;
         const cz = camCz + dz;
         const key = chunkKey(cx, cz);
@@ -462,8 +466,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       ...chunkGenQueue,
       ...additions,
     ].sort((a, b) => {
-      const da = Math.max(Math.abs(a[0] - camCx), Math.abs(a[1] - camCz));
-      const db = Math.max(Math.abs(b[0] - camCx), Math.abs(b[1] - camCz));
+      const da = Math.hypot(a[0] - camCx, a[1] - camCz);
+      const db = Math.hypot(b[0] - camCx, b[1] - camCz);
       return da - db;
     });
 
@@ -514,6 +518,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
     // チャンクデータを直接変更（パフォーマンスのため）
     chunk[lx][y][lz] = blockId;
+    if (blockId !== BLOCK_IDS.AIR && y > chunk.maxFilledY) {
+      chunk.maxFilledY = y;
+    }
     if (isLiquidBlock(blockId)) {
       fluidLevels.set(blockKey(x, y, z), 0);
     } else {

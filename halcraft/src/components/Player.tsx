@@ -41,6 +41,7 @@ import {
 } from '../utils/touchInput';
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
+import { PLAYER_SPAWN } from '../utils/terrain/constants';
 import { airplaneRealtime } from '../utils/airplaneRealtime';
 import { STAGE_LANDMARK_CENTER } from '../types/stageLandmarks';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
@@ -89,13 +90,12 @@ const AIRPLANE_PITCH_AUTO_TRIM_RATE = 2.8;
 /** 再利用用Y軸ベクトル（GCプレッシャー防止） */
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
-// スポーン座標（プレイヤーの家の中心近く）
-const SPAWN_X = 8;
-const SPAWN_Z = 8;
+// スポーン座標（家の玄関前。開始時からマップの景色が見える）
+const SPAWN_X = PLAYER_SPAWN.x;
+const SPAWN_Z = PLAYER_SPAWN.z;
 const INITIAL_LANDMARK_YAW = Math.atan2(-(STAGE_LANDMARK_CENTER.x - SPAWN_X), -(STAGE_LANDMARK_CENTER.z - SPAWN_Z));
-const INITIAL_LANDMARK_PITCH = -0.32;
-// プレイヤーの家の基準高さ（x=7, z=7 の地形高さ）を取得し、床(y=floorY)の上(空気ブロック)にスポーンさせる
-const getSpawnY = () => getTerrainHeight(7, 7) + 1.1;
+const INITIAL_LANDMARK_PITCH = -0.14;
+const getSpawnY = () => getTerrainHeight(SPAWN_X, SPAWN_Z) + 1.1;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));

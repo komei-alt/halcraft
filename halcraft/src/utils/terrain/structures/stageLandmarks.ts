@@ -252,16 +252,29 @@ function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: Stage
   }
 
   if (stage.biome === 'desert') {
-    for (let h = 1; h <= 3; h++) {
-      const radius = 5 - h;
+    // 遠景から目的地として読める段状ピラミッド。北面には3ブロック幅の入口を残す。
+    for (let h = 1; h <= 6; h++) {
+      const radius = 8 - h;
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
-          if (Math.abs(dx) === radius || Math.abs(dz) === radius) {
-            setWorldBlock(chunk, cx, cz, center.x + dx, baseY + h, center.z + dz, BLOCK_IDS.SAND);
-          }
+          const onTerraceEdge = Math.abs(dx) === radius || Math.abs(dz) === radius;
+          if (!onTerraceEdge) continue;
+          const entrance = dz === -radius && Math.abs(dx) <= 1 && h <= 3;
+          if (entrance) continue;
+          const accentStep = h === 2 && (Math.abs(dx) + Math.abs(dz)) % 5 === 0;
+          setWorldBlock(
+            chunk,
+            cx,
+            cz,
+            center.x + dx,
+            baseY + h,
+            center.z + dz,
+            accentStep ? BLOCK_IDS.IRON_CRACKED : BLOCK_IDS.SAND,
+          );
         }
       }
     }
+    setWorldBlock(chunk, cx, cz, center.x, baseY + 7, center.z, BLOCK_IDS.GLOWSTONE);
     for (const pos of [
       { x: center.x - 4, z: center.z },
       { x: center.x + 4, z: center.z },

@@ -3,6 +3,7 @@
 // チャンク座標ベースの決定的ハッシュで配置を決定
 
 import { BLOCK_IDS, CHUNK_SIZE, type BlockId } from '../../types/blocks';
+import { getTerrainHeight } from './heightmap';
 import type { ChunkData } from './types';
 
 /** ダンジョン部屋の最小サイズ */
@@ -42,7 +43,20 @@ export function placeDungeon(chunk: ChunkData, cx: number, cz: number): void {
   // チャンク内の配置位置
   const startX = Math.floor(chunkHash(cx, cz, 300) * Math.max(1, CHUNK_SIZE - roomW));
   const startZ = Math.floor(chunkHash(cx, cz, 400) * Math.max(1, CHUNK_SIZE - roomD));
-  const roomY = DUNGEON_Y_MIN + Math.floor(chunkHash(cx, cz, 500) * (DUNGEON_Y_MAX - DUNGEON_Y_MIN));
+  const requestedRoomY = DUNGEON_Y_MIN
+    + Math.floor(chunkHash(cx, cz, 500) * (DUNGEON_Y_MAX - DUNGEON_Y_MIN));
+  let lowestSurfaceY = Number.POSITIVE_INFINITY;
+  for (let lx = startX; lx < startX + roomW && lx < CHUNK_SIZE; lx++) {
+    for (let lz = startZ; lz < startZ + roomD && lz < CHUNK_SIZE; lz++) {
+      lowestSurfaceY = Math.min(
+        lowestSurfaceY,
+        getTerrainHeight(cx * CHUNK_SIZE + lx, cz * CHUNK_SIZE + lz),
+      );
+    }
+  }
+  const highestUndergroundY = Math.floor(lowestSurfaceY) - roomH - 2;
+  if (highestUndergroundY < DUNGEON_Y_MIN) return;
+  const roomY = Math.min(requestedRoomY, highestUndergroundY);
 
   // 壁・床・天井の素材
   const wallBlock: BlockId = BLOCK_IDS.STONE;

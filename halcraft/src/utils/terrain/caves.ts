@@ -58,12 +58,9 @@ export function carveCaves(chunk: ChunkData, cx: number, cz: number): void {
     const worldX = baseX + lx;
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const worldZ = baseZ + lz;
-      for (let ly = 1; ly < WORLD_HEIGHT - 1; ly++) {
+      for (let ly = 2; ly < Math.min(SEA_LEVEL, WORLD_HEIGHT - 1); ly++) {
         // 岩盤は削らない
         if (ly <= 1) continue;
-        // 海面以上は洞窟を掘らない（水面が壊れる）
-        if (ly >= SEA_LEVEL) continue;
-
         const block = chunk[lx][ly][lz];
         // 空気、水、液体は既に空洞なのでスキップ
         if (block === BLOCK_IDS.AIR || block === BLOCK_IDS.WATER || block === BLOCK_IDS.LAVA) continue;

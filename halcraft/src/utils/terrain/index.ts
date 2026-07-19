@@ -7,6 +7,7 @@ export { isBlockExposed } from './blockExposure';
 export {
   AIRPLANE_SPAWN,
   HELIPORT_CENTER,
+  PLAYER_SPAWN,
   RUNWAY_CENTER,
   RUNWAY_LENGTH,
   RUNWAY_WIDTH,

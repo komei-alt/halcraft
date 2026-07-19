@@ -1,46 +1,130 @@
-// 地形チャンクレンダリングコンポーネント
-// ブロックデータを InstancedMesh で効率的に描画する
-// カメラ距離ベースのチャンクカリングで描画負荷を大幅削減
-// 段階的チャンク生成で初期ロードの体験を改善
+// ハルクラ・サーフェスメッシュレンダラー v2
+// 露出した面だけをテクスチャアトラスへまとめ、チャンクごとの描画回数と三角形数を削減する。
 
-import { useMemo, useEffect, useRef, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
+import {
+  BLOCK_DEFS,
+  BLOCK_IDS,
+  CHUNK_SIZE,
+  RENDER_DISTANCE,
+  WORLD_HEIGHT,
+  type BlockId,
+  type BlockInfo,
+} from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
-import { isBlockExposed } from '../utils/terrain/blockExposure';
 import { getPerformanceProfile } from '../utils/performance';
+import type { ChunkData } from '../utils/terrain/types';
 
-/** テクスチャキャッシュ（コンポーネント外で管理） */
-const textureCache = new Map<string, THREE.Texture>();
-const textureLoader = new THREE.TextureLoader();
+type FaceTextureRole = 'top' | 'side' | 'bottom';
+type MaterialLayer = 'opaque' | 'cutout' | 'polished' | 'emissive' | 'transparent';
 
-function getBlockTexture(textureName: string): THREE.Texture {
-  if (textureCache.has(textureName)) return textureCache.get(textureName)!;
-
-  const texture = textureLoader.load(`/textures/blocks/${textureName}`);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestMipmapNearestFilter;
-  texture.generateMipmaps = true;
-  texture.anisotropy = 4;
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  textureCache.set(textureName, texture);
-  return texture;
+interface AtlasSlot {
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
 }
 
-/** マテリアルキャッシュ（ブロック定義のテクスチャ名をキーにキャッシュ） */
-const materialCache = new Map<string, THREE.MeshStandardMaterial>();
-const faceMaterialCache = new Map<string, THREE.MeshStandardMaterial[]>();
+interface TextureAtlas {
+  texture: THREE.CanvasTexture;
+  slots: Map<string, AtlasSlot>;
+}
 
-/** 共有boxGeometry（全InstancedMeshで再利用） */
-const sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
-const _blockTintColor = new THREE.Color();
+interface FaceDefinition {
+  offset: readonly [number, number, number];
+  normal: readonly [number, number, number];
+  role: FaceTextureRole;
+  corners: readonly (readonly [number, number, number])[];
+}
 
-function hashUnit(x: number, y: number, z: number, salt: number): number {
-  const value = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + salt * 19.193) * 43758.5453;
-  return value - Math.floor(value);
+interface LayerBuffers {
+  positions: number[];
+  normals: number[];
+  uvs: number[];
+  colors: number[];
+  indices: number[];
+}
+
+interface ChunkMeshSet {
+  geometries: Partial<Record<MaterialLayer, THREE.BufferGeometry>>;
+  faceCount: number;
+}
+
+interface VisibleChunk {
+  cx: number;
+  cz: number;
+  distance: number;
+}
+
+interface ChunkRendererProps extends VisibleChunk {
+  materials: Record<MaterialLayer, THREE.MeshStandardMaterial>;
+  atlas: TextureAtlas;
+  castBlockShadows: boolean;
+}
+
+const FACE_DEFINITIONS: readonly FaceDefinition[] = [
+  {
+    offset: [1, 0, 0], normal: [1, 0, 0], role: 'side',
+    corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
+  },
+  {
+    offset: [-1, 0, 0], normal: [-1, 0, 0], role: 'side',
+    corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]],
+  },
+  {
+    offset: [0, 1, 0], normal: [0, 1, 0], role: 'top',
+    corners: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
+  },
+  {
+    offset: [0, -1, 0], normal: [0, -1, 0], role: 'bottom',
+    corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
+  },
+  {
+    offset: [0, 0, 1], normal: [0, 0, 1], role: 'side',
+    corners: [[1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]],
+  },
+  {
+    offset: [0, 0, -1], normal: [0, 0, -1], role: 'side',
+    corners: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
+  },
+] as const;
+
+const MATERIAL_LAYERS: readonly MaterialLayer[] = [
+  'opaque',
+  'cutout',
+  'polished',
+  'emissive',
+  'transparent',
+] as const;
+
+const renderableBlockDefs = (Object.values(BLOCK_DEFS) as BlockInfo[]).filter((definition) =>
+  definition.id !== BLOCK_IDS.AIR && !definition.isLiquid && !definition.nonStandard,
+);
+
+const atlasTextureNames = Array.from(new Set(renderableBlockDefs.flatMap((definition) => {
+  if (!definition.faceTextures) return [definition.texture];
+  return [
+    definition.faceTextures.top,
+    definition.faceTextures.side,
+    definition.faceTextures.bottom,
+  ];
+}))).sort();
+
+const atlasTextureUrls = atlasTextureNames.map((name) => `/textures/blocks/${name}`);
+const atlasCellSize = 128;
+const atlasPadding = 2;
+const tintColor = new THREE.Color();
+
+function createLayerBuffers(): LayerBuffers {
+  return { positions: [], normals: [], uvs: [], colors: [], indices: [] };
+}
+
+function getTextureForFace(definition: BlockInfo, role: FaceTextureRole): string {
+  if (!definition.faceTextures) return definition.texture;
+  return definition.faceTextures[role];
 }
 
 function isMetallicBlock(blockId: BlockId): boolean {
@@ -57,262 +141,339 @@ function isGemBlock(blockId: BlockId): boolean {
     || blockId === BLOCK_IDS.GOLD_ORE;
 }
 
-function getMaterialProps(blockDef: BlockInfo): THREE.MeshStandardMaterialParameters {
-  const isMetallic = isMetallicBlock(blockDef.id);
-  const isGem = isGemBlock(blockDef.id);
-  const isGlass = blockDef.id === BLOCK_IDS.GLASS || blockDef.id === BLOCK_IDS.NETHER_PORTAL;
-  const props: THREE.MeshStandardMaterialParameters = {
-    transparent: blockDef.transparent,
-    opacity: blockDef.transparent ? (isGlass ? 0.56 : 0.68) : 1,
-    roughness: isMetallic ? 0.34 : isGem ? 0.42 : isGlass ? 0.08 : 0.82,
-    metalness: isMetallic ? 0.56 : isGem ? 0.14 : 0,
-    envMapIntensity: isGlass || isMetallic || isGem ? 0.55 : 0.18,
-    vertexColors: true,
-  };
-  if (blockDef.transparent) {
-    props.depthWrite = false;
-    props.alphaTest = isGlass ? 0.03 : 0.08;
-  }
-  if (blockDef.emissiveColor) {
-    props.emissive = blockDef.emissiveColor;
-    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
-  } else if (blockDef.emissive) {
-    props.emissive = new THREE.Color(0x333333);
-    props.emissiveIntensity = blockDef.emissiveIntensity ?? 0.5;
-  }
-  return props;
+function getMaterialLayer(definition: BlockInfo): MaterialLayer {
+  if (definition.id === BLOCK_IDS.LEAVES) return 'cutout';
+  if (definition.id === BLOCK_IDS.GLASS || definition.transparent) return 'transparent';
+  if (definition.emissive || definition.emissiveColor) return 'emissive';
+  if (isMetallicBlock(definition.id) || isGemBlock(definition.id)) return 'polished';
+  return 'opaque';
 }
 
-/** ブロックの角と面に薄い陰影を足し、平板な見え方を抑える */
-function applyVoxelDepthShader(mat: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
-  if (mat.userData.halcraftVoxelDepthShader === true) return mat;
-
-  mat.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying vec3 vHalcraftBlockLocalPosition;
-varying vec3 vHalcraftBlockLocalNormal;`,
-      )
-      .replace(
-        '#include <beginnormal_vertex>',
-        `#include <beginnormal_vertex>
-vHalcraftBlockLocalNormal = objectNormal;`,
-      )
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-vHalcraftBlockLocalPosition = transformed;`,
-      );
-
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying vec3 vHalcraftBlockLocalPosition;
-varying vec3 vHalcraftBlockLocalNormal;`,
-      )
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-vec3 halcraftAbsPos = clamp(abs(vHalcraftBlockLocalPosition), vec3(0.0), vec3(0.5));
-float halcraftNearX = smoothstep(0.39, 0.5, halcraftAbsPos.x);
-float halcraftNearY = smoothstep(0.39, 0.5, halcraftAbsPos.y);
-float halcraftNearZ = smoothstep(0.39, 0.5, halcraftAbsPos.z);
-float halcraftEdgeShade = smoothstep(1.18, 1.9, halcraftNearX + halcraftNearY + halcraftNearZ);
-float halcraftTopLift = max(vHalcraftBlockLocalNormal.y, 0.0) * 0.045;
-float halcraftBottomShade = max(-vHalcraftBlockLocalNormal.y, 0.0) * 0.095;
-float halcraftSideShade = (1.0 - abs(vHalcraftBlockLocalNormal.y)) * 0.025;
-diffuseColor.rgb *= clamp(1.0 + halcraftTopLift - halcraftBottomShade - halcraftSideShade - halcraftEdgeShade * 0.075, 0.72, 1.12);`,
-      );
-  };
-  mat.customProgramCacheKey = () => 'halcraft-voxel-depth-v1';
-  mat.userData.halcraftVoxelDepthShader = true;
-  return mat;
+function isBlockTransparent(blockId: BlockId): boolean {
+  if (blockId === BLOCK_IDS.AIR) return true;
+  const definition = BLOCK_DEFS[blockId];
+  return !definition || definition.transparent || Boolean(definition.nonStandard) || Boolean(definition.isLiquid);
 }
 
-function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
-  const key = `${blockDef.id}:${blockDef.texture}`;
-  if (materialCache.has(key)) return materialCache.get(key)!;
-  const mat = applyVoxelDepthShader(new THREE.MeshStandardMaterial({
-    map: getBlockTexture(blockDef.texture),
-    ...getMaterialProps(blockDef),
-  }));
-  materialCache.set(key, mat);
-  return mat;
+function shouldRenderFace(blockId: BlockId, neighborId: BlockId): boolean {
+  if (neighborId === BLOCK_IDS.AIR) return true;
+  const selfTransparent = isBlockTransparent(blockId);
+  const neighborTransparent = isBlockTransparent(neighborId);
+  if (!selfTransparent && neighborTransparent) return true;
+  return selfTransparent && neighborTransparent && neighborId !== blockId;
 }
 
-function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
-  if (!blockDef.faceTextures) return null;
-  const key = `${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
-  if (faceMaterialCache.has(key)) return faceMaterialCache.get(key)!;
-
-  const { top, side, bottom } = blockDef.faceTextures;
-  const topTex = getBlockTexture(top);
-  const sideTex = getBlockTexture(side);
-  const bottomTex = getBlockTexture(bottom);
-  const props = getMaterialProps(blockDef);
-
-  const mats = [
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: topTex, ...props })),
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: bottomTex, ...props })),
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
-    applyVoxelDepthShader(new THREE.MeshStandardMaterial({ map: sideTex, ...props })),
-  ];
-  faceMaterialCache.set(key, mats);
-  return mats;
+function hashUnit(x: number, y: number, z: number, salt: number): number {
+  let hash = Math.imul(x | 0, 0x45d9f3b)
+    ^ Math.imul(y | 0, 0x119de1f3)
+    ^ Math.imul(z | 0, 0x3449f5)
+    ^ Math.imul(salt | 0, 0x27d4eb2d);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+  hash ^= hash >>> 16;
+  return (hash >>> 0) / 4294967295;
 }
 
-function getBlockInstanceTint(
-  blockDef: BlockInfo,
-  x: number,
+function getBlockTint(
+  definition: BlockInfo,
+  worldX: number,
   y: number,
-  z: number,
-  target: THREE.Color,
+  worldZ: number,
 ): THREE.Color {
-  const noise = hashUnit(x, y, z, blockDef.id);
-  const smallNoise = (noise - 0.5) * 0.09;
-  const heightLift = THREE.MathUtils.clamp((y - 10) / (WORLD_HEIGHT - 10), 0, 1) * 0.055;
-  const light = 0.96 + smallNoise + heightLift;
+  const noise = hashUnit(worldX, y, worldZ, definition.id);
+  const variation = (noise - 0.5) * 0.085;
+  const heightLift = THREE.MathUtils.clamp((y - 10) / 82, 0, 1) * 0.045;
 
-  switch (blockDef.id) {
+  switch (definition.id) {
     case BLOCK_IDS.GRASS:
     case BLOCK_IDS.LEAVES:
-      target.setRGB(0.92 + smallNoise * 0.5, 1.02 + heightLift, 0.88 + noise * 0.08);
-      break;
+      return tintColor.setRGB(0.93 + variation * 0.45, 1.02 + heightLift, 0.9 + noise * 0.07);
     case BLOCK_IDS.WOOD:
     case BLOCK_IDS.RAW_WOOD:
     case BLOCK_IDS.CHEST:
-      target.setRGB(1.04 + smallNoise, 0.96 + heightLift * 0.4, 0.84 + noise * 0.08);
-      break;
+      return tintColor.setRGB(1.04 + variation, 0.97 + heightLift * 0.35, 0.86 + noise * 0.07);
     case BLOCK_IDS.SAND:
     case BLOCK_IDS.SOUL_SAND:
-      target.setRGB(1.04 + heightLift, 0.98 + smallNoise, 0.84 + noise * 0.08);
-      break;
+      return tintColor.setRGB(1.06 + heightLift, 0.99 + variation, 0.86 + noise * 0.07);
     case BLOCK_IDS.SNOW:
-      target.setRGB(0.93 + smallNoise * 0.4, 0.99 + heightLift, 1.07 + noise * 0.05);
-      break;
+      return tintColor.setRGB(0.95 + variation * 0.35, 1 + heightLift, 1.07 + noise * 0.04);
     case BLOCK_IDS.GLASS:
-      target.setRGB(0.88 + heightLift, 1.04, 1.12 + noise * 0.04);
-      break;
-    case BLOCK_IDS.IRON:
-    case BLOCK_IDS.IRON_CRACKED:
-    case BLOCK_IDS.IRON_MOSSY:
-    case BLOCK_IDS.IRON_INGOT:
-      target.setRGB(0.94 + heightLift, 0.97 + noise * 0.04, 1.03 + smallNoise);
-      break;
+      return tintColor.setRGB(0.9 + heightLift, 1.04, 1.1 + noise * 0.04);
     case BLOCK_IDS.GOLD_INGOT:
     case BLOCK_IDS.GOLD_ORE:
-      target.setRGB(1.12 + heightLift, 1.0 + noise * 0.05, 0.72 + smallNoise);
-      break;
+      return tintColor.setRGB(1.1 + heightLift, 1 + noise * 0.05, 0.75 + variation);
     case BLOCK_IDS.DIAMOND_GEM:
     case BLOCK_IDS.DIAMOND_ORE:
     case BLOCK_IDS.ELECTRIC:
-      target.setRGB(0.86 + heightLift, 1.06 + noise * 0.04, 1.12 + smallNoise);
-      break;
-    case BLOCK_IDS.LAVA:
-    case BLOCK_IDS.GLOWSTONE:
-    case BLOCK_IDS.ENCHANT:
-    case BLOCK_IDS.CORE:
-    case BLOCK_IDS.NETHER_PORTAL:
-    case BLOCK_IDS.SPAWNER:
-      target.setRGB(1.04 + heightLift, 1.02 + noise * 0.04, 1.0 + smallNoise);
-      break;
-    default:
-      if (blockDef.blockCategory === 'stone' || blockDef.blockCategory === 'ore') {
-        target.setRGB(0.94 + heightLift, 0.96 + smallNoise, 1.0 + noise * 0.035);
-      } else if (blockDef.blockCategory === 'dirt') {
-        target.setRGB(1.02 + smallNoise, 0.95 + heightLift * 0.35, 0.86 + noise * 0.04);
-      } else {
-        target.setScalar(light);
-      }
+      return tintColor.setRGB(0.88 + heightLift, 1.06 + noise * 0.04, 1.1 + variation);
+    default: {
+      const light = 0.97 + variation + heightLift;
+      return tintColor.setScalar(light);
+    }
+  }
+}
+
+function createTextureAtlas(textures: THREE.Texture[]): TextureAtlas {
+  const requiredCells = Math.ceil(Math.sqrt(Math.max(1, textures.length)));
+  const atlasSize = THREE.MathUtils.ceilPowerOfTwo(requiredCells * atlasCellSize);
+  const columns = Math.floor(atlasSize / atlasCellSize);
+  const canvas = document.createElement('canvas');
+  canvas.width = atlasSize;
+  canvas.height = atlasSize;
+  const context = canvas.getContext('2d', { alpha: true });
+  if (!context) throw new Error('ブロックテクスチャアトラスを作成できませんでした');
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, atlasSize, atlasSize);
+
+  const slots = new Map<string, AtlasSlot>();
+  for (let index = 0; index < atlasTextureNames.length; index++) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = column * atlasCellSize;
+    const y = row * atlasCellSize;
+    const size = atlasCellSize - atlasPadding * 2;
+    const image = textures[index].image as CanvasImageSource;
+    context.drawImage(image, x + atlasPadding, y + atlasPadding, size, size);
+
+    slots.set(atlasTextureNames[index], {
+      u0: (x + atlasPadding + 0.5) / atlasSize,
+      u1: (x + atlasCellSize - atlasPadding - 0.5) / atlasSize,
+      v0: 1 - (y + atlasCellSize - atlasPadding - 0.5) / atlasSize,
+      v1: 1 - (y + atlasPadding + 0.5) / atlasSize,
+    });
   }
 
-  return target;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  texture.name = 'HalCraft Block Atlas v2';
+  return { texture, slots };
 }
 
-interface ChunkRendererProps {
-  cx: number;
-  cz: number;
-  castBlockShadows: boolean;
+function createWorldMaterials(atlas: TextureAtlas): Record<MaterialLayer, THREE.MeshStandardMaterial> {
+  const common: THREE.MeshStandardMaterialParameters = {
+    map: atlas.texture,
+    vertexColors: true,
+    roughness: 0.84,
+    metalness: 0,
+  };
+  return {
+    opaque: new THREE.MeshStandardMaterial(common),
+    cutout: new THREE.MeshStandardMaterial({
+      ...common,
+      alphaTest: 0.28,
+      side: THREE.DoubleSide,
+    }),
+    polished: new THREE.MeshStandardMaterial({
+      ...common,
+      roughness: 0.34,
+      metalness: 0.38,
+      envMapIntensity: 0.72,
+    }),
+    emissive: new THREE.MeshStandardMaterial({
+      ...common,
+      roughness: 0.48,
+      emissive: new THREE.Color(0x6a4326),
+      emissiveMap: atlas.texture,
+      emissiveIntensity: 0.34,
+    }),
+    transparent: new THREE.MeshStandardMaterial({
+      ...common,
+      transparent: true,
+      opacity: 0.7,
+      roughness: 0.12,
+      metalness: 0.05,
+      envMapIntensity: 0.78,
+      depthWrite: false,
+      alphaTest: 0.025,
+    }),
+  };
 }
 
-/** 1チャンク分のブロックを描画するコンポーネント */
-function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
-  const getChunk = useWorldStore((s) => s.getChunk);
-  const version = useWorldStore((s) => s.chunkVersions.get(`${cx},${cz}`) ?? 0);
+function readWorldBlock(
+  chunks: Map<string, ChunkData>,
+  worldX: number,
+  y: number,
+  worldZ: number,
+): BlockId {
+  if (y < 0 || y >= WORLD_HEIGHT) return BLOCK_IDS.AIR;
+  const cx = Math.floor(worldX / CHUNK_SIZE);
+  const cz = Math.floor(worldZ / CHUNK_SIZE);
+  const lx = ((worldX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const lz = ((worldZ % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  return chunks.get(`${cx},${cz}`)?.[lx]?.[y]?.[lz] ?? BLOCK_IDS.AIR;
+}
 
-  const chunkData = getChunk(cx, cz);
+function appendFace(
+  buffers: LayerBuffers,
+  face: FaceDefinition,
+  slot: AtlasSlot,
+  lx: number,
+  y: number,
+  lz: number,
+  tint: THREE.Color,
+): void {
+  const vertexOffset = buffers.positions.length / 3;
+  const faceLight = face.normal[1] > 0.5
+    ? 1
+    : face.normal[1] < -0.5
+      ? 0.58
+      : face.normal[0] > 0.5
+        ? 0.86
+        : face.normal[0] < -0.5
+          ? 0.72
+          : face.normal[2] > 0.5
+            ? 0.8
+            : 0.68;
+  const faceUvs = [
+    [slot.u0, slot.v0],
+    [slot.u0, slot.v1],
+    [slot.u1, slot.v1],
+    [slot.u1, slot.v0],
+  ] as const;
 
-  // ブロックタイプごとの描画データを計算（Float32Arrayで高速化）
-  const blockGroups = useMemo(() => {
-    if (!chunkData) return new Map<BlockId, Float32Array>();
+  for (let index = 0; index < 4; index++) {
+    const corner = face.corners[index];
+    buffers.positions.push(lx + corner[0], y + corner[1], lz + corner[2]);
+    buffers.normals.push(face.normal[0], face.normal[1], face.normal[2]);
+    buffers.uvs.push(faceUvs[index][0], faceUvs[index][1]);
+    buffers.colors.push(tint.r * faceLight, tint.g * faceLight, tint.b * faceLight);
+  }
 
-    // まずカウントしてからTypedArrayを確保
-    const counts = new Map<BlockId, number>();
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-          const blockId = chunkData[lx][ly][lz];
-          if (blockId === BLOCK_IDS.AIR) continue;
-          const blockDef = BLOCK_DEFS[blockId];
-          if (blockDef?.isLiquid) continue;
-          if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
-          counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
+  buffers.indices.push(
+    vertexOffset,
+    vertexOffset + 1,
+    vertexOffset + 2,
+    vertexOffset,
+    vertexOffset + 2,
+    vertexOffset + 3,
+  );
+}
+
+function buildChunkMeshes(
+  chunk: ChunkData,
+  cx: number,
+  cz: number,
+  atlas: TextureAtlas,
+): ChunkMeshSet {
+  const layerBuffers: Record<MaterialLayer, LayerBuffers> = {
+    opaque: createLayerBuffers(),
+    cutout: createLayerBuffers(),
+    polished: createLayerBuffers(),
+    emissive: createLayerBuffers(),
+    transparent: createLayerBuffers(),
+  };
+  const chunks = useWorldStore.getState().chunks;
+  const baseX = cx * CHUNK_SIZE;
+  const baseZ = cz * CHUNK_SIZE;
+  const maxY = Math.min(WORLD_HEIGHT - 1, chunk.maxFilledY + 1);
+  let faceCount = 0;
+
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let y = 0; y <= maxY; y++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const blockId = chunk[lx][y][lz];
+        if (blockId === BLOCK_IDS.AIR) continue;
+        const definition = BLOCK_DEFS[blockId];
+        if (!definition || definition.isLiquid || definition.nonStandard) continue;
+
+        const layer = getMaterialLayer(definition);
+        const buffers = layerBuffers[layer];
+        const worldX = baseX + lx;
+        const worldZ = baseZ + lz;
+        const tint = getBlockTint(definition, worldX, y, worldZ);
+
+        for (const face of FACE_DEFINITIONS) {
+          const nx = lx + face.offset[0];
+          const ny = y + face.offset[1];
+          const nz = lz + face.offset[2];
+          const neighborId = nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE
+            ? (ny >= 0 && ny < WORLD_HEIGHT ? chunk[nx][ny][nz] : BLOCK_IDS.AIR)
+            : readWorldBlock(chunks, worldX + face.offset[0], ny, worldZ + face.offset[2]);
+          if (!shouldRenderFace(blockId, neighborId)) continue;
+
+          const textureName = getTextureForFace(definition, face.role);
+          const slot = atlas.slots.get(textureName);
+          if (!slot) continue;
+          appendFace(buffers, face, slot, lx, y, lz, tint);
+          faceCount++;
         }
       }
     }
+  }
 
-    const groups = new Map<BlockId, Float32Array>();
-    const offsets = new Map<BlockId, number>();
-    for (const [blockId, count] of counts) {
-      groups.set(blockId, new Float32Array(count * 3));
-      offsets.set(blockId, 0);
-    }
+  const geometries: Partial<Record<MaterialLayer, THREE.BufferGeometry>> = {};
+  for (const layer of MATERIAL_LAYERS) {
+    const buffers = layerBuffers[layer];
+    if (buffers.indices.length === 0) continue;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(buffers.positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(buffers.normals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(buffers.uvs, 2));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(buffers.colors, 3));
+    geometry.setIndex(buffers.indices);
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    geometries[layer] = geometry;
+  }
 
-    const baseX = cx * CHUNK_SIZE;
-    const baseZ = cz * CHUNK_SIZE;
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let ly = 0; ly < WORLD_HEIGHT; ly++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-          const blockId = chunkData[lx][ly][lz];
-          if (blockId === BLOCK_IDS.AIR) continue;
-          const blockDef = BLOCK_DEFS[blockId];
-          if (blockDef?.isLiquid) continue;
-          if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+  return { geometries, faceCount };
+}
 
-          const arr = groups.get(blockId)!;
-          const off = offsets.get(blockId)!;
-          arr[off] = baseX + lx;
-          arr[off + 1] = ly;
-          arr[off + 2] = baseZ + lz;
-          offsets.set(blockId, off + 3);
-        }
-      }
-    }
+function getNeighborMeshSignature(cx: number, cz: number): string {
+  const state = useWorldStore.getState();
+  return [
+    [cx, cz],
+    [cx - 1, cz],
+    [cx + 1, cz],
+    [cx, cz - 1],
+    [cx, cz + 1],
+  ].map(([nx, nz]) => {
+    const key = `${nx},${nz}`;
+    return `${state.chunks.has(key) ? 1 : 0}.${state.chunkVersions.get(key) ?? 0}`;
+  }).join(':');
+}
 
-    return groups;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunkData, cx, cz, version]);
+function ChunkRenderer({
+  cx,
+  cz,
+  distance,
+  materials,
+  atlas,
+  castBlockShadows,
+}: ChunkRendererProps) {
+  const chunkKey = `${cx},${cz}`;
+  const chunk = useWorldStore((state) => state.chunks.get(chunkKey));
+  const meshSignature = useWorldStore(() => getNeighborMeshSignature(cx, cz));
+  const meshSet = useMemo(() => {
+    if (!chunk || meshSignature.length === 0) return null;
+    return buildChunkMeshes(chunk, cx, cz, atlas);
+  }, [atlas, chunk, cx, cz, meshSignature]);
 
-  if (!chunkData) return null;
+  useEffect(() => () => {
+    if (!meshSet) return;
+    Object.values(meshSet.geometries).forEach((geometry) => geometry.dispose());
+  }, [meshSet]);
+
+  if (!meshSet) return null;
+  // 近距離だけ影の描画パスへ入れ、立体感とフレームレートを両立する。
+  const castsShadow = castBlockShadows && distance <= 2.35;
 
   return (
-    <group>
-      {Array.from(blockGroups.entries()).map(([blockId, positionData]) => {
-        const def = BLOCK_DEFS[blockId];
-        if (!def || positionData.length === 0) return null;
+    <group position={[cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE]}>
+      {MATERIAL_LAYERS.map((layer) => {
+        const geometry = meshSet.geometries[layer];
+        if (!geometry) return null;
         return (
-          <BlockTypeInstances
-            key={`${cx}-${cz}-${blockId}-${version}`}
-            blockDef={def}
-            positionData={positionData}
-            castShadow={castBlockShadows}
+          <mesh
+            key={layer}
+            geometry={geometry}
+            material={materials[layer]}
+            castShadow={castsShadow && layer !== 'transparent'}
+            receiveShadow={layer !== 'transparent'}
+            renderOrder={layer === 'transparent' ? 2 : 0}
           />
         );
       })}
@@ -320,126 +481,93 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
   );
 }
 
-/** 1ブロック種のインスタンスをまとめて描画（キャッシュ済みマテリアル使用） */
-function BlockTypeInstances({
-  blockDef,
-  positionData,
-  castShadow,
-}: {
-  blockDef: BlockInfo;
-  positionData: Float32Array;
-  castShadow: boolean;
-}) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummyRef = useRef(new THREE.Object3D());
-  const faceMaterials = getCachedFaceMaterials(blockDef);
-  const material = faceMaterials ?? getCachedMaterial(blockDef);
-  const count = positionData.length / 3;
-
-  useEffect(() => {
-    if (!meshRef.current) return;
-    const dummy = dummyRef.current;
-    for (let i = 0; i < count; i++) {
-      const off = i * 3;
-      dummy.position.set(positionData[off] + 0.5, positionData[off + 1] + 0.5, positionData[off + 2] + 0.5);
-      dummy.updateMatrix();
-      meshRef.current!.setMatrixAt(i, dummy.matrix);
-      meshRef.current!.setColorAt(
-        i,
-        getBlockInstanceTint(blockDef, positionData[off], positionData[off + 1], positionData[off + 2], _blockTintColor),
-      );
-    }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) {
-      meshRef.current.instanceColor.needsUpdate = true;
-    }
-  }, [blockDef, positionData, count]);
-
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[sharedBoxGeometry, undefined, count]}
-      material={material}
-      castShadow={castShadow}
-      receiveShadow
-    />
-  );
-}
-
-/** ワールド全体の描画 */
+/** ワールド全体を、距離順の円形チャンクストリーミングで描画する。 */
 export function World() {
-  const initChunks = useWorldStore((s) => s.initChunks);
-  const processChunkQueue = useWorldStore((s) => s.processChunkQueue);
-  const processFluidSimulation = useWorldStore((s) => s.processFluidSimulation);
-  const ensureChunksAround = useWorldStore((s) => s.ensureChunksAround);
-  const { camera } = useThree();
-  useSettingsStore((s) => s.graphicsPreset);
-  useSettingsStore((s) => s.renderDistance);
-  useSettingsStore((s) => s.shadowQuality);
+  const loadedTextures = useLoader(THREE.TextureLoader, atlasTextureUrls);
+  const atlas = useMemo(() => createTextureAtlas(loadedTextures), [loadedTextures]);
+  const materials = useMemo(() => createWorldMaterials(atlas), [atlas]);
+  const initChunks = useWorldStore((state) => state.initChunks);
+  const processChunkQueue = useWorldStore((state) => state.processChunkQueue);
+  const processFluidSimulation = useWorldStore((state) => state.processFluidSimulation);
+  const ensureChunksAround = useWorldStore((state) => state.ensureChunksAround);
+  const graphicsPreset = useSettingsStore((state) => state.graphicsPreset);
+  const renderDistance = useSettingsStore((state) => state.renderDistance);
+  const shadowQuality = useSettingsStore((state) => state.shadowQuality);
+  const { camera, gl } = useThree();
   const performanceProfile = getPerformanceProfile();
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
   const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
-  const castBlockShadows = performanceProfile.shadowsEnabled && performanceProfile.tier === 'high';
-
-  // カメラ位置からの可視チャンク（毎フレーム更新は重いので500msごと）
-  const [visibleChunks, setVisibleChunks] = useState<[number, number][]>([]);
+  const castBlockShadows = performanceProfile.shadowsEnabled && performanceProfile.tier !== 'low';
+  const [visibleChunks, setVisibleChunks] = useState<VisibleChunk[]>([]);
   const lastUpdateTime = useRef(0);
+  const lastTelemetryTime = useRef(0);
+  const previousVisibleKey = useRef('');
   const initialRenderDistanceRef = useRef(initialRenderDistance);
 
-  // 初回マウント時にチャンクを生成
   useEffect(() => {
     initChunks(initialRenderDistanceRef.current);
   }, [initChunks]);
 
-  // カメラ位置ベースで可視チャンクを更新 + 段階的チャンク生成
-  const prevChunkKey = useRef('');
+  useEffect(() => () => {
+    atlas.texture.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  }, [atlas, materials]);
 
   useFrame(() => {
-    // 段階的チャンク生成キューを毎フレーム処理
     processChunkQueue();
     processFluidSimulation();
 
     const now = performance.now();
-    // 初回（lastUpdateTime === 0）は即座に実行、以降は500ms間隔
-    if (lastUpdateTime.current !== 0 && now - lastUpdateTime.current < 500) return;
-    lastUpdateTime.current = now;
-
-    const camX = Math.floor(camera.position.x / CHUNK_SIZE);
-    const camZ = Math.floor(camera.position.z / CHUNK_SIZE);
-
-    // カメラ周辺の未生成チャンクを動的に生成
-    ensureChunksAround(camX, camZ, visibleDistance);
-
-    // 可視範囲のチャンクを収集
-    const visible: [number, number][] = [];
-    const keyParts: string[] = [];
-    const currentChunks = useWorldStore.getState().chunks;
-    // 全生成済みチャンクを走査せず、現在の描画半径だけを直接引く。
-    // 長距離を移動してチャンクが増えても、ここでの処理量は一定になる。
-    for (let dx = -visibleDistance; dx <= visibleDistance; dx++) {
-      for (let dz = -visibleDistance; dz <= visibleDistance; dz++) {
-        const cx = camX + dx;
-        const cz = camZ + dz;
-        const key = `${cx},${cz}`;
-        if (!currentChunks.has(key)) continue;
-        visible.push([cx, cz]);
-        keyParts.push(key);
-      }
+    if (now - lastTelemetryTime.current >= 1000) {
+      lastTelemetryTime.current = now;
+      gl.domElement.setAttribute('data-world-renderer', 'surface-mesh-v2');
+      gl.domElement.setAttribute('data-visible-chunks', String(visibleChunks.length));
+      gl.domElement.setAttribute('data-render-calls', String(gl.info.render.calls));
+      gl.domElement.setAttribute('data-render-triangles', String(gl.info.render.triangles));
     }
 
-    // 前回と同じ構成ならstateを更新しない（不要な再レンダリング防止）
-    const newKey = keyParts.join(';');
-    if (newKey === prevChunkKey.current) return;
-    prevChunkKey.current = newKey;
+    if (lastUpdateTime.current !== 0 && now - lastUpdateTime.current < 250) return;
+    lastUpdateTime.current = now;
 
-    // 新しい配列をstateにセット（参照共有を防ぐ）
+    const cameraChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const cameraChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+    ensureChunksAround(cameraChunkX, cameraChunkZ, visibleDistance);
+
+    const state = useWorldStore.getState();
+    const visible: VisibleChunk[] = [];
+    const radiusSquared = (visibleDistance + 0.35) ** 2;
+    for (let dx = -visibleDistance; dx <= visibleDistance; dx++) {
+      for (let dz = -visibleDistance; dz <= visibleDistance; dz++) {
+        const distanceSquared = dx * dx + dz * dz;
+        if (distanceSquared > radiusSquared) continue;
+        const cx = cameraChunkX + dx;
+        const cz = cameraChunkZ + dz;
+        if (!state.chunks.has(`${cx},${cz}`)) continue;
+        visible.push({ cx, cz, distance: Math.sqrt(distanceSquared) });
+      }
+    }
+    visible.sort((a, b) => a.distance - b.distance || a.cx - b.cx || a.cz - b.cz);
+    const visibleKey = visible.map(({ cx, cz }) => `${cx},${cz}`).join(';');
+    if (visibleKey === previousVisibleKey.current) return;
+    previousVisibleKey.current = visibleKey;
     setVisibleChunks(visible);
   });
 
+  // 設定変更を描画計算へ確実に反映するためのプリミティブ依存。
+  void graphicsPreset;
+  void renderDistance;
+  void shadowQuality;
+
   return (
-    <group>
-      {visibleChunks.map(([cx, cz]) => (
-        <ChunkRenderer key={`${cx},${cz}`} cx={cx} cz={cz} castBlockShadows={castBlockShadows} />
+    <group name="halcraft-world-surface-mesh-v2">
+      {visibleChunks.map((chunk) => (
+        <ChunkRenderer
+          key={`${chunk.cx},${chunk.cz}`}
+          {...chunk}
+          materials={materials}
+          atlas={atlas}
+          castBlockShadows={castBlockShadows}
+        />
       ))}
     </group>
   );

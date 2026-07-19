@@ -78,7 +78,8 @@ const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
   balanced: {
     tier: 'balanced',
     shadowsEnabled: true,
-    maxDpr: 1.35,
+    // Retina画面で全画面ポストFXを二重に高解像度化しない。SMAAと組み合わせて輪郭を保つ。
+    maxDpr: 1.2,
     cameraFar: 320,
     visibleChunkRadius: 7,
     initialRenderDistance: 8,
@@ -111,11 +112,11 @@ function getMaxDpr(scale: ResolutionScale, tier: PerformanceTier): number {
   if (scale === 'performance') return 1;
   if (scale === 'crisp') {
     if (tier === 'high') return 1.8;
-    if (tier === 'balanced') return 1.5;
+    if (tier === 'balanced') return 1.4;
     return 1.25;
   }
   if (tier === 'high') return 1.45;
-  if (tier === 'balanced') return 1.3;
+  if (tier === 'balanced') return 1.2;
   return 1.15;
 }
 
