@@ -1,8 +1,9 @@
 // 時間表示UI
-// ゲーム内の時刻と昼夜状態を表示
+// ゲーム内の時刻と昼夜状態を表示（シンプル時は時刻のみ）
 
 import { useGameStore } from '../../stores/useGameStore';
-import { isTouchDevice } from '../../utils/device';
+import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useSimpleHud } from '../../utils/hudDensity';
 
 // --- SVG アイコン ---
 const SunIcon = ({ size = 18, color = '#FFE8B0' }: { size?: number; color?: string }) => (
@@ -40,11 +41,15 @@ export function TimeDisplay() {
   const isNight = useGameStore((s) => s.isNight);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const isTouch = isTouchDevice();
+  const inHelicopter = useVehicleStore((s) => s.helicopter.mySeat !== null);
+  const isSimpleHud = useSimpleHud();
   const modeLabel = isBuildMode
     ? creativeFlying ? '🏗️ 建築 / 飛行中' : '🏗️ 建築'
     : '⚔️ 戦争';
   const modeColor = isBuildMode ? '#9bdcff' : '#b9f28f';
+
+  // ミニマップと同じ右上を占有しない
+  if (inHelicopter) return null;
 
   return (
     <div
@@ -56,7 +61,7 @@ export function TimeDisplay() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
-        gap: 4,
+        gap: isSimpleHud ? 0 : 4,
         zIndex: 100,
         pointerEvents: 'none',
       }}
@@ -64,7 +69,7 @@ export function TimeDisplay() {
       {/* 時刻 */}
       <div
         style={{
-          fontSize: isTouch ? 20 : 18,
+          fontSize: isSimpleHud ? 16 : 18,
           fontWeight: 700,
           color: isNight ? '#8888ff' : '#FFE8B0',
           textShadow: isNight
@@ -78,39 +83,43 @@ export function TimeDisplay() {
         }}
       >
         {isNight
-          ? <MoonIcon size={isTouch ? 22 : 18} />
-          : <SunIcon size={isTouch ? 22 : 18} />
+          ? <MoonIcon size={isSimpleHud ? 16 : 18} />
+          : <SunIcon size={isSimpleHud ? 16 : 18} />
         }
         {formatGameTime(gameTime)}
       </div>
 
-      {/* 日数 */}
-      <div
-        style={{
-          fontSize: 11,
-          color: 'rgba(255,255,255,0.5)',
-          textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-          fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-        }}
-      >
-        Day {dayCount}
-      </div>
+      {!isSimpleHud && (
+        <>
+          {/* 日数 */}
+          <div
+            style={{
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.5)',
+              textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            }}
+          >
+            Day {dayCount}
+          </div>
 
-      <div
-        style={{
-          padding: '3px 8px',
-          borderRadius: 4,
-          border: `1px solid ${modeColor}55`,
-          background: 'rgba(0,0,0,0.38)',
-          color: modeColor,
-          fontSize: isTouch ? 11 : 10,
-          fontWeight: 800,
-          textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-          fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
-        }}
-      >
-        {modeLabel}
-      </div>
+          <div
+            style={{
+              padding: '3px 8px',
+              borderRadius: 4,
+              border: `1px solid ${modeColor}55`,
+              background: 'rgba(0,0,0,0.38)',
+              color: modeColor,
+              fontSize: 10,
+              fontWeight: 800,
+              textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+              fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
+            }}
+          >
+            {modeLabel}
+          </div>
+        </>
+      )}
     </div>
   );
 }
