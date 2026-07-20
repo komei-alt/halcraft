@@ -21,6 +21,7 @@ import { onRemoteGunFire } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { spawnDamagePopup } from '../../utils/effectTriggers';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
+import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 import { playMachineGunSound, playBulletImpactSound } from '../../utils/sounds';
 
 // ─── 定数 ──────────────────────────────────────────────
@@ -367,6 +368,9 @@ export function MachineGun() {
         // 共通レイマーチングで衝突判定
         const moveDir = proj.vel.clone().normalize();
         const moveDist = BULLET_SPEED * delta;
+        const fromX = proj.pos.x;
+        const fromY = proj.pos.y;
+        const fromZ = proj.pos.z;
 
         // ローカル弾のみダメージ判定あり、リモート弾は視覚のみ
         const hitResult = rayMarchProjectile(
@@ -403,6 +407,23 @@ export function MachineGun() {
             spawnDamagePopup(GUN_CONSTANTS.DAMAGE, rp.position[0], rp.position[1] + 1.0, rp.position[2], false);
           }
           proj.dead = true;
+        } else if (!proj.isRemote) {
+          // ヘリの機関銃でも他乗り物へダメージ（自分のヘリは除外）
+          const vehicleHit = checkProjectileHitVehicle(
+            proj.pos.x, proj.pos.y, proj.pos.z,
+            'helicopter',
+            fromX, fromY, fromZ,
+          );
+          if (vehicleHit) {
+            useVehicleStore.getState().damageVehicle(vehicleHit.type, GUN_CONSTANTS.DAMAGE);
+            spawnImpact(
+              new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
+              moveDir.clone().negate(),
+              'mob',
+            );
+            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, vehicleHit.hitX, vehicleHit.hitY + 0.5, vehicleHit.hitZ, false);
+            proj.dead = true;
+          }
         }
 
         if (!proj.dead) {

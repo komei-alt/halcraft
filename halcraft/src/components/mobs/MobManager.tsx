@@ -147,26 +147,21 @@ export function MobManager() {
 
     if (gameState.phase !== 'playing' || playerState.isDead) return;
 
-    // マルチプレイ時はサーバーがAI計算するのでスキップ（描画のみ）
-    const isMultiplayer = useMultiplayerStore.getState().connected;
-    if (isMultiplayer) {
-      animTimeRef.current += dt;
-      return;
-    }
-
     animTimeRef.current += dt;
 
-    // HP回復を毎フレーム更新
+    // ローカルプレイヤーの回復・エフェクトはマルチプレイでも更新する
     updateRegen(dt);
-
-    // エフェクトタイマー更新
     useEffectStore.getState().updateEffects(dt);
-
-    // 再生エフェクトによるHP回復
     const regenLevel = useEffectStore.getState().getEffectLevel('regeneration');
     if (regenLevel > 0) {
       const regenHP = getRegenRate(regenLevel) * dt;
       usePlayerStore.getState().heal(regenHP);
+    }
+
+    // マルチプレイ時はサーバーがAI計算するのでスキップ（描画のみ）
+    const isMultiplayer = useMultiplayerStore.getState().connected;
+    if (isMultiplayer) {
+      return;
     }
 
     const isNight = gameState.isNight;

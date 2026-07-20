@@ -503,8 +503,10 @@ function setupSocketListeners(
     if (player) {
       player.targetPosition = data.position;
       player.targetRotation = data.rotation;
-      if (data.equippedItem) {
+      // 装備変更は停止中でもすぐ再描画する（補間ループは移動時しか set しない）
+      if (data.equippedItem && data.equippedItem !== player.equippedItem) {
         player.equippedItem = data.equippedItem;
+        set({ remotePlayers: new Map(players) });
       }
     }
   });

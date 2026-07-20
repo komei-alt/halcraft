@@ -845,6 +845,9 @@ export function RocketLauncher() {
           continue;
         }
 
+        const fromX = projectile.pos.x;
+        const fromY = projectile.pos.y;
+        const fromZ = projectile.pos.z;
         const hitResult = rayMarchProjectile(
           projectile.pos,
           moveDir.current,
@@ -883,12 +886,16 @@ export function RocketLauncher() {
           continue;
         }
 
-        // ロケットの乗り物ヒット判定
+        // ロケットの乗り物ヒット判定（線分スイープ）
         const vehicleHit = checkProjectileHitVehicle(
           projectile.pos.x, projectile.pos.y, projectile.pos.z,
+          undefined,
+          fromX, fromY, fromZ,
         );
         if (vehicleHit) {
-          const hitDistance = projectile.launchPos.distanceTo(projectile.pos);
+          const hitDistance = projectile.launchPos.distanceTo(
+            new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
+          );
           const precision = hitDistance >= ROCKET_DIRECT_HIT_MIN_DISTANCE;
           useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
           useMasteryStore.getState().recordItemHit('rocket_launcher', {
@@ -900,7 +907,7 @@ export function RocketLauncher() {
           useStageConditionStore.getState().recordWeaponHit('rocket_launcher');
           useModeFlowStore.getState().recordCombatStyleHit('rocket_launcher', precision ? 2 : 1, true);
           explosionsToSpawn.push({
-            pos: projectile.pos.clone(),
+            pos: new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
             syncId: projectile.syncId,
             applyGameplay: true,
             notifyRemote: true,

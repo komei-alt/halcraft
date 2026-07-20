@@ -31,6 +31,7 @@ import {
   touchLook,
   mobileActions,
   resetTouchLookDelta,
+  consumeInteract,
 } from '../utils/touchInput';
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
@@ -444,8 +445,11 @@ export function Player() {
       }
     }
 
-    // --- 搭乗/降車の処理（Fキー） ---
-    if (interactPressed.current && (isInputActive || (isInVehicle && isVehicleInputActive))) {
+    // --- 搭乗/降車の処理（Fキー / モバイル乗降ボタン） ---
+    if (isTouch.current && consumeInteract()) {
+      interactPressed.current = true;
+    }
+    if (interactPressed.current && (isInputActive || isTouch.current || (isInVehicle && isVehicleInputActive))) {
       interactPressed.current = false;
 
       // --- コースター搭乗/降車チェック ---
@@ -675,7 +679,7 @@ export function Player() {
         if (isTouch.current) {
           inputForward = -joystickInput.y;
           inputTurn = -joystickInput.x;
-          inputVertical = mobileActions.jump ? 1 : 0;
+          inputVertical = (mobileActions.jump ? 1 : 0) - (mobileActions.descend ? 1 : 0);
         } else {
           inputForward = isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
           inputTurn = isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
@@ -954,7 +958,7 @@ export function Player() {
         ? -joystickInput.x
         : (isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
       const inputPitch = isTouch.current
-        ? (mobileActions.jump ? 1 : 0)
+        ? (mobileActions.jump ? 1 : 0) - (mobileActions.descend ? 1 : 0)
         : (isVehicleInputActive ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0) : 0);
 
       if (inputForward > 0) {
@@ -1277,6 +1281,10 @@ export function Player() {
         moveDir.current.applyEuler(moveEuler.current);
         vel.x = moveDir.current.x * flySpeed;
         vel.z = moveDir.current.z * flySpeed;
+      } else {
+        // 入力解除後に水平速度が残り続けるドリフトを防止
+        vel.x = 0;
+        vel.z = 0;
       }
       vel.y = inputY * CREATIVE_FLY_VERTICAL_SPEED;
 
