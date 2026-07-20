@@ -10,42 +10,61 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { getPerformanceProfile } from '../utils/performance';
 
-/** 水面シェーダーマテリアル（波アニメーション + 半透明） */
+/** 共通の霧付き頂点シェーダー（上面だけ波を乗せる） */
+const LIQUID_VERTEX_SHADER = /* glsl */ `
+  #include <common>
+  #include <fog_pars_vertex>
+
+  uniform float uTime;
+  uniform float uWaveStrength;
+  varying vec3 vWorldPos;
+  varying float vWave;
+  varying float vTopSurface;
+
+  void main() {
+    vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vTopSurface = smoothstep(0.32, 0.5, position.y);
+
+    float wave = 0.0;
+    if (position.y > 0.0 && uWaveStrength > 0.0) {
+      wave = (
+        sin(worldPos.x * 1.5 + uTime * 1.2) * 0.04
+        + sin(worldPos.z * 1.8 + uTime * 0.8) * 0.03
+        + sin((worldPos.x + worldPos.z) * 0.8 + uTime * 1.5) * 0.02
+      ) * uWaveStrength;
+      worldPos.y += wave;
+    }
+    vWave = wave;
+
+    vec4 mvPosition = viewMatrix * worldPos;
+    gl_Position = projectionMatrix * mvPosition;
+
+    #include <fog_vertex>
+  }
+`;
+
+/** 水面シェーダーマテリアル（波アニメーション + 半透明 + シーン霧） */
 function createWaterMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color(0x1a5276) },
-      uOpacity: { value: 0.55 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      varying vec3 vWorldPos;
-      varying float vWave;
-      varying float vTopSurface;
-
-      void main() {
-        vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-        vWorldPos = worldPos.xyz;
-        vTopSurface = smoothstep(0.32, 0.5, position.y);
-
-        // 水面の波（上面の頂点のみ動かす）
-        float wave = 0.0;
-        if (position.y > 0.0) {
-          wave = sin(worldPos.x * 1.5 + uTime * 1.2) * 0.04
-               + sin(worldPos.z * 1.8 + uTime * 0.8) * 0.03
-               + sin((worldPos.x + worldPos.z) * 0.8 + uTime * 1.5) * 0.02;
-          worldPos.y += wave;
-        }
-        vWave = wave;
-
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
+    side: THREE.FrontSide,
+    fog: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uWaveStrength: { value: 1 },
+        uColor: { value: new THREE.Color(0x1a5276) },
+        uOpacity: { value: 0.55 },
+      },
+    ]),
+    vertexShader: LIQUID_VERTEX_SHADER,
     fragmentShader: /* glsl */ `
+      #include <common>
+      #include <fog_pars_fragment>
+
       uniform vec3 uColor;
       uniform float uOpacity;
       uniform float uTime;
@@ -54,18 +73,15 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       varying float vTopSurface;
 
       void main() {
-        // 深さによる色の変化（浅い = 明るい、深い = 暗い）
         float depth = clamp(vWorldPos.y / 10.0, 0.0, 1.0);
         vec3 shallowColor = vec3(0.15, 0.55, 0.75);
         vec3 deepColor = vec3(0.05, 0.2, 0.35);
         vec3 color = mix(deepColor, shallowColor, depth);
         color = mix(color * 0.72, color, 0.72 + vTopSurface * 0.28);
 
-        // 波の頂点でハイライト
         float highlight = smoothstep(0.02, 0.06, vWave) * 0.16 * vTopSurface;
         color += highlight;
 
-        // 時間で微妙にきらめき、浅瀬に細い光筋を重ねる
         float sparkle = sin(vWorldPos.x * 8.0 + uTime * 3.0)
                        * sin(vWorldPos.z * 8.0 + uTime * 2.0) * 0.03;
         float causticA = sin(vWorldPos.x * 5.2 + vWorldPos.z * 1.8 + uTime * 1.25) * 0.5 + 0.5;
@@ -80,6 +96,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         color += vec3(0.78, 1.0, 0.95) * whiteRibbon;
 
         gl_FragColor = vec4(color, uOpacity);
+        #include <fog_fragment>
       }
     `,
   });
@@ -88,39 +105,29 @@ function createWaterMaterial(): THREE.ShaderMaterial {
 /** 溶岩シェーダーマテリアル（発光 + 熱ゆらぎ + 表面の割れ目） */
 function createLavaMaterial(): THREE.ShaderMaterial {
   const material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      uTime: { value: 0 },
-      uOpacity: { value: 0.92 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      varying vec3 vWorldPos;
-      varying float vHeatWave;
-
-      void main() {
-        vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
-        vWorldPos = worldPos.xyz;
-
-        float heatWave = 0.0;
-        if (position.y > 0.0) {
-          heatWave = sin(worldPos.x * 2.2 + uTime * 1.8) * 0.035
-                   + sin(worldPos.z * 2.8 + uTime * 1.35) * 0.025
-                   + sin((worldPos.x - worldPos.z) * 1.1 + uTime * 2.2) * 0.018;
-          worldPos.y += heatWave;
-        }
-        vHeatWave = heatWave;
-
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
+    // 溶岩はほぼ不透明なので深度を書いて、背後の透過ブレンド破綻を防ぐ
+    transparent: false,
+    depthWrite: true,
+    side: THREE.FrontSide,
+    fog: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uWaveStrength: { value: 1 },
+        uOpacity: { value: 1 },
+      },
+    ]),
+    vertexShader: LIQUID_VERTEX_SHADER,
     fragmentShader: /* glsl */ `
+      #include <common>
+      #include <fog_pars_fragment>
+
       uniform float uOpacity;
       uniform float uTime;
       varying vec3 vWorldPos;
-      varying float vHeatWave;
+      varying float vWave;
+      varying float vTopSurface;
 
       void main() {
         float flowA = sin(vWorldPos.x * 3.4 + uTime * 1.8) * 0.5 + 0.5;
@@ -133,15 +140,17 @@ function createLavaMaterial(): THREE.ShaderMaterial {
         vec3 hotCoreColor = vec3(1.0, 0.78, 0.12);
 
         float crackLine = smoothstep(0.64, 0.95, molten);
-        float heatGlow = smoothstep(0.015, 0.055, vHeatWave) * 0.35;
+        float heatGlow = smoothstep(0.015, 0.055, vWave) * 0.35;
         vec3 color = mix(crustColor, lavaColor, 0.45 + molten * 0.45);
         color = mix(color, hotCoreColor, crackLine * 0.58 + heatGlow);
 
         float ember = sin(vWorldPos.x * 11.0 + uTime * 4.0)
                     * sin(vWorldPos.z * 9.0 - uTime * 3.2);
         color += max(ember, 0.0) * vec3(0.18, 0.07, 0.015);
+        color *= 0.92 + vTopSurface * 0.12;
 
         gl_FragColor = vec4(color, uOpacity);
+        #include <fog_fragment>
       }
     `,
   });
@@ -231,6 +240,11 @@ function LiquidRenderer({
     meshRef.current.instanceMatrix.needsUpdate = true;
   }, [liquidPositions, count]);
 
+  // マテリアル破棄
+  useEffect(() => () => {
+    material.dispose();
+  }, [material]);
+
   // 毎フレーム time uniform を更新（Three.js のマテリアル副作用）
   /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
@@ -246,11 +260,11 @@ function LiquidRenderer({
       ));
     }
 
-    if (!liquidAnimation) return;
     const liquidMaterial = meshRef.current?.material;
-    if (liquidMaterial instanceof THREE.ShaderMaterial) {
-      liquidMaterial.uniforms.uTime.value += delta;
-    }
+    if (!(liquidMaterial instanceof THREE.ShaderMaterial)) return;
+    liquidMaterial.uniforms.uWaveStrength.value = liquidAnimation ? 1 : 0;
+    if (!liquidAnimation) return;
+    liquidMaterial.uniforms.uTime.value += delta;
   });
   /* eslint-enable react-hooks/immutability */
 

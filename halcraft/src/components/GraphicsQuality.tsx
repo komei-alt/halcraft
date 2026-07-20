@@ -14,11 +14,11 @@ import {
 } from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
-import { useSettingsStore } from '../stores/useSettingsStore';
+import { useSettingsStore, type GraphicsPreset } from '../stores/useSettingsStore';
 import { useGameStore } from '../stores/useGameStore';
 import type { BiomeId, StageCategory } from '../types/stages';
 import { isTouchDevice } from '../utils/device';
-import { getPerformanceProfile } from '../utils/performance';
+import { getPerformanceProfile, type PerformanceTier } from '../utils/performance';
 
 interface QualityTuning {
   bloomIntensity: number;
@@ -290,12 +290,17 @@ export function CanvasResolutionPipeline() {
   return null;
 }
 
+function isGraphicsPostFxEnabled(graphicsPreset: GraphicsPreset, tier: PerformanceTier): boolean {
+  return graphicsPreset !== 'light' && tier !== 'low';
+}
+
 /** Three.jsレンダラー側の色空間と基本トーンを整える */
 export function RendererColorPipeline() {
   const { gl } = useThree();
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const profile = getPerformanceProfile();
+  const postFxEnabled = isGraphicsPostFxEnabled(graphicsPreset, profile.tier);
   const exposure = profile.tier === 'high' || graphicsPreset === 'quality'
     ? 1.06
     : resolutionScale === 'performance'
@@ -306,17 +311,32 @@ export function RendererColorPipeline() {
   /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    // ポストFXの ToneMapping と二重適用すると色が潰れる／白っぽくなるため切り替える
+    gl.toneMapping = postFxEnabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = exposure;
-  }, [gl, exposure]);
+  }, [gl, exposure, postFxEnabled]);
 
   useFrame(() => {
+    // ポストFX有効時は EffectComposer 側の ToneMapping が露出を担う
+    if (postFxEnabled) {
+      gl.toneMappingExposure = 1;
+      return;
+    }
+
     const gameState = useGameStore.getState();
     const stageBoost = gameState.dimension === 'overworld'
       ? gameState.currentStage?.rules.ambientIntensity ?? 1
       : 1;
     const darkLift = getDarkSceneLift(gameState.gameTime, gameState.dimension);
+    const stageLook = getStageLookTuning(
+      gameState.currentStage?.biome ?? null,
+      gameState.currentStage?.category ?? null,
+      gameState.dimension,
+    );
+    // middleGrey が低いほど明るく見える設定なので、露出へ反映する
+    const stageExposure = THREE.MathUtils.clamp(0.62 / Math.max(0.45, stageLook.middleGrey), 0.9, 1.18);
     const dynamicExposure = exposure
+      * stageExposure
       * (1 + darkLift * 0.24)
       * (1 + Math.max(0, stageBoost - 1) * 0.08);
     gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, dynamicExposure, 0.08);
@@ -391,7 +411,7 @@ export function GraphicsPostFX() {
   const profile = getPerformanceProfile();
   const isTouch = isTouchDevice();
   const isHighQuality = profile.tier === 'high' || graphicsPreset === 'quality' || lightingQuality === 'rich';
-  const enabled = graphicsPreset !== 'light' && profile.tier !== 'low';
+  const enabled = isGraphicsPostFxEnabled(graphicsPreset, profile.tier);
 
   if (!enabled) return null;
 
@@ -405,6 +425,12 @@ export function GraphicsPostFX() {
   );
   const saturation = THREE.MathUtils.clamp(tuning.saturation + stageLook.saturationOffset, -0.08, 0.14);
   const contrast = THREE.MathUtils.clamp(tuning.contrast + stageLook.contrastOffset, 0, 0.075);
+  // ACES モードでは middleGrey が効かないため、明るさ補正を BrightnessContrast に寄せる
+  const brightness = THREE.MathUtils.clamp(
+    (dimension === 'nether' ? -0.006 : 0.002) + (stageLook.middleGrey - 0.62) * -0.04,
+    -0.03,
+    0.03,
+  );
 
   return (
     <EffectComposer
@@ -446,7 +472,7 @@ export function GraphicsPostFX() {
       />
       <BrightnessContrast
         blendFunction={BlendFunction.NORMAL}
-        brightness={dimension === 'nether' ? -0.006 : 0.002}
+        brightness={brightness}
         contrast={contrast}
       />
       <SMAA preset={tuning.smaaPreset} />

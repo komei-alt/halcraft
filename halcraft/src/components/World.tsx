@@ -70,8 +70,10 @@ function getMaterialProps(blockDef: BlockInfo): THREE.MeshStandardMaterialParame
     vertexColors: true,
   };
   if (blockDef.transparent) {
-    props.depthWrite = false;
-    props.alphaTest = isGlass ? 0.03 : 0.08;
+    // InstancedMesh は個体ソートできないため、depthWrite を残して前後関係の破綻を抑える
+    props.depthWrite = true;
+    props.alphaTest = isGlass ? 0.02 : 0.08;
+    props.depthTest = true;
   }
   if (blockDef.emissiveColor) {
     props.emissive = blockDef.emissiveColor;
@@ -133,7 +135,8 @@ diffuseColor.rgb *= clamp(1.0 + halcraftTopLift - halcraftBottomShade - halcraft
 }
 
 function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
-  const key = `${blockDef.id}:${blockDef.texture}`;
+  // v2: 透過ブロックの depthWrite 修正をキャッシュに反映する
+  const key = `v2:${blockDef.id}:${blockDef.texture}`;
   if (materialCache.has(key)) return materialCache.get(key)!;
   const mat = applyVoxelDepthShader(new THREE.MeshStandardMaterial({
     map: getBlockTexture(blockDef.texture),
@@ -145,7 +148,7 @@ function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
 
 function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
   if (!blockDef.faceTextures) return null;
-  const key = `${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
+  const key = `v2:${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
   if (faceMaterialCache.has(key)) return faceMaterialCache.get(key)!;
 
   const { top, side, bottom } = blockDef.faceTextures;

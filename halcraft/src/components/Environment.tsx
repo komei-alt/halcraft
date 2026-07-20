@@ -184,7 +184,8 @@ function ensureSceneBackground(scene: THREE.Scene): THREE.Color {
 }
 
 function ensureLinearFog(scene: THREE.Scene): THREE.Fog {
-  if (!(scene.fog instanceof THREE.Fog) || scene.fog instanceof THREE.FogExp2) {
+  // FogExp2 は Fog を継承しないため、種類が違うときは作り直す
+  if (!(scene.fog instanceof THREE.Fog)) {
     scene.fog = new THREE.Fog(0x87ceeb, cachedFogNear, cachedFogFar);
   }
   return scene.fog;
