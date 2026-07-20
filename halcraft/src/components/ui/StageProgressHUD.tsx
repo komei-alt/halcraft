@@ -46,7 +46,7 @@ import {
 } from '../../types/stageLandmarks';
 import { formatStageModeReward, getStageModeRule } from '../../types/stageModeRules';
 import { getStageSignatureAward, type StageSignatureAward } from '../../types/stageSignatureAwards';
-import { isTouchDevice } from '../../utils/device';
+import { useSimpleHud } from '../../utils/hudDensity';
 import {
   playPerkUnlockSound,
   playStageOpportunitySound,
@@ -60,10 +60,6 @@ function formatElapsed(seconds: number): string {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
-}
-
-function formatCompactSeconds(ms: number): string {
-  return `${Math.max(1, Math.ceil(ms / 1000))}s`;
 }
 
 interface StageGuidance {
@@ -1068,23 +1064,18 @@ export function StageProgressHUD() {
   const lastFocusBonus = useStageBuildScoreStore((s) => s.lastFocusBonus);
   const buildBestByStage = useStageBuildScoreStore((s) => s.bestByStage);
   const modeMeter = useModeFlowStore((s) => s.meter);
-  const modeLastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const modeFlowRank = useModeFlowStore((s) => s.flowRank);
   const modeActivationCount = useModeFlowStore((s) => s.activationCount);
   const modeBestStreak = useModeFlowStore((s) => s.bestStreak);
-  const buildFocusUntil = useModeFlowStore((s) => s.buildFocusUntil);
   const buildFocusChain = useModeFlowStore((s) => s.buildFocusChain);
   const buildFocusChainExpiresAt = useModeFlowStore((s) => s.buildFocusChainExpiresAt);
-  const combatFocusUntil = useModeFlowStore((s) => s.combatFocusUntil);
-  const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
-  const combatFocusLabel = useModeFlowStore((s) => s.combatFocusLabel);
-  const combatFocusChain = useModeFlowStore((s) => s.combatFocusChain);
-  const combatFocusChainExpiresAt = useModeFlowStore((s) => s.combatFocusChainExpiresAt);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const playerPosition = usePlayerStore((s) => s.worldPosition);
   const nextStageEventAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
   const recentStageEvent = useStageEventStore((s) => s.recentEvent);
-  const isCompact = isTouchDevice() || window.innerWidth <= 560;
+  const isSimpleHud = useSimpleHud();
+  const isCompact = isSimpleHud;
+  const showExtended = !isSimpleHud;
   const [eventNow, setEventNow] = useState(() => performance.now());
 
   useEffect(() => {
@@ -1163,7 +1154,7 @@ export function StageProgressHUD() {
     : undefined;
   const enemyProfile = getStageEnemyProfile(stage.id);
   const eventDefinition = getStageEvent(stage.id);
-  const compactStageEvent = isCompact && eventDefinition && nextStageEventAtSeconds !== null
+  const compactStageEvent = showExtended && eventDefinition && nextStageEventAtSeconds !== null
     ? getStageEventHudDisplay(
         eventDefinition,
         stageElapsedSeconds,
@@ -1172,37 +1163,9 @@ export function StageProgressHUD() {
         eventNow,
       )
     : null;
-  const compactNextModeRank = modeRule ? getModeFlowRank(modeActivationCount + 1) || 1 : 1;
-  const compactModeRankLabel = modeRule
-    ? modeFlowRank > 0
-      ? getModeFlowRankLabel(modeRule.category, modeFlowRank)
-      : `次${getModeFlowRankLabel(modeRule.category, compactNextModeRank)}`
-    : '';
-  const compactModeProgressRatio = modeRule
-    ? Math.max(0, Math.min(1, modeMeter / modeRule.threshold))
-    : 0;
-  const compactModeAlmostReady = compactModeProgressRatio >= 0.72;
-  const compactModeMeterText = modeRule
-    ? `${Math.floor(modeMeter)}/${modeRule.threshold}`
-    : '';
-  const compactBuildFocusActive = modeRule?.category === 'build' && buildFocusUntil > eventNow;
-  const compactCombatFocusActive = modeRule?.category === 'war' && combatFocusUntil > eventNow;
-  const compactCombatFocusChain = combatFocusChainExpiresAt > eventNow ? combatFocusChain : 0;
   const activeBuildFocusChain = modeRule?.category === 'build' && buildFocusChainExpiresAt > eventNow
     ? buildFocusChain
     : 0;
-  const compactModeActionLabel = compactBuildFocusActive
-    ? activeBuildFocusChain >= 2
-      ? `高速建築 連置x${activeBuildFocusChain} / ${formatCompactSeconds(buildFocusUntil - eventNow)}`
-      : `高速建築 ${formatCompactSeconds(buildFocusUntil - eventNow)}`
-    : compactCombatFocusActive
-    ? compactCombatFocusChain >= 2
-      ? `${combatFocusLabel ?? '作戦'} 追撃x${compactCombatFocusChain} / ${formatCompactSeconds(combatFocusUntil - eventNow)}`
-      : `${combatFocusLabel ?? '作戦'}集中 Lv.${Math.max(1, combatFocusRank)} / ${formatCompactSeconds(combatFocusUntil - eventNow)}`
-    : modeRule?.actionLabel;
-  const compactModeRewardText = modeRule
-    ? formatStageModeReward(modeRule)
-    : '';
   const signatureAward = getStageSignatureAward({
     stage,
     runBest: stageBestByStage[stage.id],
@@ -1275,7 +1238,7 @@ export function StageProgressHUD() {
           top: isCompact ? 54 : 14,
           left: isCompact ? 14 : 64,
           zIndex: 96,
-          width: isCompact ? 'min(248px, calc(100vw - 28px))' : 310,
+          width: isCompact ? 'min(248px, calc(100vw - 28px))' : 280,
           padding: 0,
           background: 'none',
           border: 'none',
@@ -1331,7 +1294,7 @@ export function StageProgressHUD() {
         </div>
       </div>
 
-      {!isCompact && (
+      {showExtended && (
         <div
           style={{
             marginTop: 7,
@@ -1346,7 +1309,7 @@ export function StageProgressHUD() {
 
       <div
         style={{
-          marginTop: 8,
+          marginTop: isCompact ? 6 : 8,
           paddingLeft: 9,
           borderLeft: `3px solid ${guidance.accent}`,
         }}
@@ -1371,7 +1334,7 @@ export function StageProgressHUD() {
               fontWeight: 900,
             }}
           >
-            次の一手
+            次
           </span>
           <span
             style={{
@@ -1402,22 +1365,25 @@ export function StageProgressHUD() {
             {guidance.progressText}
           </span>
         </div>
-        <div
-          style={{
-            marginTop: 4,
-            color: 'rgba(255,255,255,0.55)',
-            fontSize: isCompact ? 9 : 10,
-            lineHeight: '13px',
-            fontWeight: 750,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {guidance.detail}
-        </div>
+        {showExtended && (
+          <div
+            style={{
+              marginTop: 4,
+              color: 'rgba(255,255,255,0.55)',
+              fontSize: isCompact ? 9 : 10,
+              lineHeight: '13px',
+              fontWeight: 750,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {guidance.detail}
+          </div>
+        )}
       </div>
 
+      {showExtended && (
       <div
         id="stage-landmark-route"
         style={{
@@ -1463,8 +1429,9 @@ export function StageProgressHUD() {
           {landmarkNavigation}
         </span>
       </div>
+      )}
 
-      {routeSteps.length > 0 && (
+      {showExtended && routeSteps.length > 0 && (
         <div
           id="stage-action-route"
           style={{
@@ -1604,7 +1571,7 @@ export function StageProgressHUD() {
         </div>
       )}
 
-      {opportunityCue && (
+      {showExtended && opportunityCue && (
         <div
           id="stage-opportunity-cue"
           style={{
@@ -1708,8 +1675,8 @@ export function StageProgressHUD() {
       {hasProgressBar && (
         <div
           style={{
-            marginTop: 8,
-            height: 5,
+            marginTop: isCompact ? 6 : 8,
+            height: isCompact ? 4 : 5,
             borderRadius: 999,
             background: 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
@@ -1731,6 +1698,7 @@ export function StageProgressHUD() {
         </div>
       )}
 
+      {showExtended && (
       <div
         id="stage-record-target"
         style={{
@@ -1815,8 +1783,9 @@ export function StageProgressHUD() {
           </div>
         )}
       </div>
+      )}
 
-      {buildStyle && (
+      {showExtended && buildStyle && (
         <div
           id="build-combo-hud"
           style={{
@@ -1906,7 +1875,7 @@ export function StageProgressHUD() {
         </div>
       )}
 
-      {compactStageEvent && (
+      {showExtended && compactStageEvent && (
         <div
           id="stage-event-mini-hud"
           style={{
@@ -1990,101 +1959,7 @@ export function StageProgressHUD() {
         </div>
       )}
 
-      {isCompact && modeRule && (
-        <div
-          id="stage-mode-flow-mini"
-          style={{
-            marginTop: 7,
-            paddingTop: 6,
-            borderTop: `1px solid ${modeRule.accent}26`,
-            color: 'rgba(255,255,255,0.74)',
-            fontSize: 9,
-            lineHeight: '12px',
-            fontWeight: 900,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              minWidth: 0,
-            }}
-          >
-            <span
-              style={{
-                minWidth: 0,
-                color: compactModeAlmostReady ? '#fff1a8' : modeRule.accent,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                textShadow: compactModeAlmostReady ? `0 0 7px ${modeRule.accent}` : undefined,
-              }}
-            >
-              {modeRule.icon} {compactModeRankLabel}: {modeRule.shortLabel}
-            </span>
-            <span
-              style={{
-                flex: '0 0 auto',
-                color: compactModeAlmostReady ? '#fff1a8' : 'rgba(255,255,255,0.72)',
-                fontFamily: 'monospace',
-              }}
-            >
-              {compactModeMeterText}
-              {modeLastGainLabel ? ` ${modeLastGainLabel}` : ''}
-            </span>
-          </div>
-          <div
-            style={{
-              marginTop: 4,
-              height: compactModeAlmostReady ? 5 : 4,
-              borderRadius: 999,
-              overflow: 'hidden',
-              background: 'rgba(255,255,255,0.12)',
-              boxShadow: compactModeAlmostReady ? `0 0 8px ${modeRule.glow}` : undefined,
-            }}
-          >
-            <div
-              style={{
-                width: `${Math.round(compactModeProgressRatio * 100)}%`,
-                height: '100%',
-                borderRadius: 999,
-                background: compactModeAlmostReady
-                  ? `linear-gradient(90deg, ${modeRule.accent}, #fff1a8, #ffffff)`
-                  : `linear-gradient(90deg, ${stage.color}, ${modeRule.accent})`,
-                transition: 'width 0.24s ease',
-              }}
-            />
-          </div>
-          <div
-            style={{
-              marginTop: 4,
-              color: compactBuildFocusActive || compactCombatFocusActive
-                ? '#fff1a8'
-                : 'rgba(255,255,255,0.6)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {compactModeActionLabel}
-          </div>
-          <div
-            style={{
-              marginTop: 2,
-              color: 'rgba(255,255,255,0.46)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            次: {compactModeRewardText}
-          </div>
-        </div>
-      )}
-
-      {!isCompact && (
+      {showExtended && (
         <div
           style={{
             marginTop: 8,
