@@ -231,31 +231,23 @@ export function buildTrackSpline(
   }
 
   const points: THREE.Vector3[] = [];
-  const processedIndices = new Set<number>();
-
-  for (const loop of loops) {
-    for (let i = loop.startIdx; i <= loop.endIdx; i++) {
-      processedIndices.add(i);
-    }
-    const arcPoints = generateLoopArcPoints(loop, 16);
-    if (points.length === 0) {
-      for (let i = 0; i < loop.startIdx; i++) {
-        points.push(new THREE.Vector3(path[i].x + 0.5, path[i].y + 0.5, path[i].z + 0.5));
-      }
-    }
-    points.push(...arcPoints);
-  }
 
   if (loops.length === 0) {
     for (const p of path) {
       points.push(new THREE.Vector3(p.x + 0.5, p.y + 0.5, p.z + 0.5));
     }
   } else {
-    const lastLoop = loops[loops.length - 1];
-    for (let i = lastLoop.endIdx + 1; i < path.length; i++) {
-      if (!processedIndices.has(i)) {
+    // 複数ループ間の通常レールも落とさないよう、カーソルで順番に組み立てる
+    let cursor = 0;
+    for (const loop of loops) {
+      for (let i = cursor; i < loop.startIdx; i++) {
         points.push(new THREE.Vector3(path[i].x + 0.5, path[i].y + 0.5, path[i].z + 0.5));
       }
+      points.push(...generateLoopArcPoints(loop, 16));
+      cursor = loop.endIdx + 1;
+    }
+    for (let i = cursor; i < path.length; i++) {
+      points.push(new THREE.Vector3(path[i].x + 0.5, path[i].y + 0.5, path[i].z + 0.5));
     }
   }
 

@@ -69,12 +69,17 @@ export function VehicleCombat() {
   });
 
   /** 乗り物の爆発処理（ブロック破壊 + 周囲ダメージ + 搭乗者即死） */
-  const handleVehicleExplosion = useCallback((type: VehicleType, isRemote: boolean = false) => {
+  const handleVehicleExplosion = useCallback((
+    type: VehicleType,
+    isRemote: boolean = false,
+    posOverride?: [number, number, number],
+  ) => {
     const state = useVehicleStore.getState();
     const vehicle = state[type];
-    const cx = vehicle.x;
-    const cy = vehicle.y + 1;
-    const cz = vehicle.z;
+    // リモート破壊は送信側の位置を優先（補間遅れで爆発位置がズレないようにする）
+    const cx = posOverride ? posOverride[0] : vehicle.x;
+    const cy = posOverride ? posOverride[1] : vehicle.y + 1;
+    const cz = posOverride ? posOverride[2] : vehicle.z;
 
     // 1. 派手な爆発エフェクトを発生
     spawnVehicleExplosion(type, cx, cy, cz);
@@ -198,7 +203,7 @@ export function VehicleCombat() {
       vehicleStore.destroyVehicle(data.type);
       // useFrame 側の新規破壊検知と二重発火しないよう既処理扱いにする
       prevDestroyed.current[data.type] = true;
-      handleVehicleExplosion(data.type, true);
+      handleVehicleExplosion(data.type, true, data.pos);
     });
 
     const unsubRespawn = onRemoteVehicleRespawn((data) => {
