@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { BLOCK_IDS, CHUNK_SIZE, RENDER_DISTANCE, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { isBlockTransparent } from '../utils/terrain/blockExposure';
 import { getPerformanceProfile } from '../utils/performance';
 
 /** 共通の霧付き頂点シェーダー（上面だけ波を乗せる） */
@@ -49,7 +50,8 @@ function createWaterMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    side: THREE.FrontSide,
+    // 水中や水面下から見たときも面が消えないようにする
+    side: THREE.DoubleSide,
     fog: true,
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
@@ -205,14 +207,15 @@ function LiquidRenderer({
         continue;
       }
 
-      // 空気や別ブロックに接する流体だけ描画し、埋もれた流体は省く
+      // 空気・透明ブロック・別流体に接する面だけ描画し、埋もれた流体は省く
+      const above = getBlock(pos.x, pos.y + 1, pos.z);
       const hasExposedFace =
-        getBlock(pos.x, pos.y + 1, pos.z) !== blockId ||
-        getBlock(pos.x, pos.y - 1, pos.z) === BLOCK_IDS.AIR ||
-        getBlock(pos.x + 1, pos.y, pos.z) === BLOCK_IDS.AIR ||
-        getBlock(pos.x - 1, pos.y, pos.z) === BLOCK_IDS.AIR ||
-        getBlock(pos.x, pos.y, pos.z + 1) === BLOCK_IDS.AIR ||
-        getBlock(pos.x, pos.y, pos.z - 1) === BLOCK_IDS.AIR;
+        above !== blockId ||
+        isBlockTransparent(getBlock(pos.x, pos.y - 1, pos.z)) ||
+        isBlockTransparent(getBlock(pos.x + 1, pos.y, pos.z)) ||
+        isBlockTransparent(getBlock(pos.x - 1, pos.y, pos.z)) ||
+        isBlockTransparent(getBlock(pos.x, pos.y, pos.z + 1)) ||
+        isBlockTransparent(getBlock(pos.x, pos.y, pos.z - 1));
       if (hasExposedFace) {
         positions.push(pos.x, pos.y, pos.z);
       }

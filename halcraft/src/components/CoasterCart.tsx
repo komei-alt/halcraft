@@ -195,10 +195,18 @@ export function CoasterCart() {
           metalness={0.3}
         />
       </mesh>
-      {/* カートの影 */}
+      {/* カートの影（レールとの z-fight を避ける） */}
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[0.9, 1.3]} />
-        <meshBasicMaterial color={0x000000} transparent opacity={0.15} />
+        <meshBasicMaterial
+          color={0x000000}
+          transparent
+          opacity={0.15}
+          depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
+        />
       </mesh>
       <pointLight
         ref={lightRef}

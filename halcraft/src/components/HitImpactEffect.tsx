@@ -401,7 +401,7 @@ export function HitImpactEffect() {
         frustumCulled={false}
         renderOrder={5}
       />
-      <points ref={pointsRef} geometry={sparkGeometry} material={sparkMaterial} />
+      <points ref={pointsRef} geometry={sparkGeometry} material={sparkMaterial} frustumCulled={false} />
     </>
   );
 }

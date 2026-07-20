@@ -52,8 +52,11 @@ const textureLoader = new THREE.TextureLoader();
 function getItemTexture(textureName: string): THREE.Texture {
   if (textureCache.has(textureName)) return textureCache.get(textureName)!;
   const texture = textureLoader.load(`/textures/blocks/${textureName}`);
+  // ワールドブロックと同じくミップマップで遠景のチラつきを抑える
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
   texture.colorSpace = THREE.SRGBColorSpace;
   textureCache.set(textureName, texture);
   return texture;
@@ -440,9 +443,8 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
       <mesh ref={glowRef} geometry={sharedBillboardGlowGeometry} renderOrder={2}>
         <meshBasicMaterial
           color={accentColor}
-          depthTest={false}
+          depthTest
           depthWrite={false}
-          fog={false}
           opacity={0.18}
           transparent
           toneMapped={false}

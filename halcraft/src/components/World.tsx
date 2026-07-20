@@ -246,13 +246,29 @@ interface ChunkRendererProps {
 /** 1チャンク分のブロックを描画するコンポーネント */
 function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
   const getChunk = useWorldStore((s) => s.getChunk);
+  const getBlock = useWorldStore((s) => s.getBlock);
   const version = useWorldStore((s) => s.chunkVersions.get(`${cx},${cz}`) ?? 0);
+  // 隣接チャンク更新時も境界面の露出判定をやり直す
+  const neighborVersionKey = useWorldStore((s) => (
+    [
+      s.chunkVersions.get(`${cx - 1},${cz}`) ?? 0,
+      s.chunkVersions.get(`${cx + 1},${cz}`) ?? 0,
+      s.chunkVersions.get(`${cx},${cz - 1}`) ?? 0,
+      s.chunkVersions.get(`${cx},${cz + 1}`) ?? 0,
+    ].join(',')
+  ));
 
   const chunkData = getChunk(cx, cz);
 
   // ブロックタイプごとの描画データを計算（Float32Arrayで高速化）
   const blockGroups = useMemo(() => {
     if (!chunkData) return new Map<BlockId, Float32Array>();
+
+    const exposureLookup = {
+      chunkX: cx,
+      chunkZ: cz,
+      getWorldBlock: getBlock,
+    };
 
     // まずカウントしてからTypedArrayを確保
     const counts = new Map<BlockId, number>();
@@ -264,7 +280,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockDef = BLOCK_DEFS[blockId];
           if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+          if (!isBlockExposed(chunkData, lx, ly, lz, exposureLookup)) continue;
           counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
         }
       }
@@ -287,7 +303,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockDef = BLOCK_DEFS[blockId];
           if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+          if (!isBlockExposed(chunkData, lx, ly, lz, exposureLookup)) continue;
 
           const arr = groups.get(blockId)!;
           const off = offsets.get(blockId)!;
@@ -301,7 +317,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
 
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunkData, cx, cz, version]);
+  }, [chunkData, cx, cz, version, neighborVersionKey, getBlock]);
 
   if (!chunkData) return null;
 

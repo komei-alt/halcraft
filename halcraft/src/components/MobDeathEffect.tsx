@@ -366,7 +366,7 @@ export function MobDeathEffect() {
         frustumCulled={false}
         castShadow
       />
-      <points ref={pointsRef} geometry={dustGeometry} material={dustMaterial} />
+      <points ref={pointsRef} geometry={dustGeometry} material={dustMaterial} frustumCulled={false} />
     </>
   );
 }

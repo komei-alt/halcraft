@@ -96,6 +96,7 @@ export function Helicopter() {
   const windowMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: WINDOW_COLOR, roughness: 0.1, metalness: 0.5,
     transparent: true, opacity: 0.8,
+    depthWrite: false,
     emissive: WINDOW_COLOR, emissiveIntensity: 0.3,
     side: THREE.DoubleSide,
   }), []);
@@ -175,6 +176,28 @@ export function Helicopter() {
     stripeMat.opacity += (targetBodyOpacity - stripeMat.opacity) * lerpSpeed;
     // eslint-disable-next-line react-hooks/immutability
     windowMat.opacity += (targetWindowOpacity - windowMat.opacity) * lerpSpeed;
+
+    // 不透明時は depthWrite を維持し、半透明時だけ奥行き書き込みを止めて機体内部が隠れないようにする
+    const bodyWritesDepth = bodyMat.opacity >= 0.98;
+    const bodyTransparent = !bodyWritesDepth;
+    if (bodyMat.transparent !== bodyTransparent || bodyMat.depthWrite !== bodyWritesDepth) {
+      bodyMat.transparent = bodyTransparent;
+      bodyMat.depthWrite = bodyWritesDepth;
+      bodyMat.needsUpdate = true;
+      bodyWhiteMat.transparent = bodyTransparent;
+      bodyWhiteMat.depthWrite = bodyWritesDepth;
+      bodyWhiteMat.needsUpdate = true;
+      tailMat.transparent = bodyTransparent;
+      tailMat.depthWrite = bodyWritesDepth;
+      tailMat.needsUpdate = true;
+      stripeMat.transparent = bodyTransparent;
+      stripeMat.depthWrite = bodyWritesDepth;
+      stripeMat.needsUpdate = true;
+    }
+    if (windowMat.depthWrite) {
+      windowMat.depthWrite = false;
+      windowMat.needsUpdate = true;
+    }
 
     // 搭乗時は裏面も描画（内側から見るため）
     const targetSide = iAmBoarded ? THREE.DoubleSide : THREE.FrontSide;
