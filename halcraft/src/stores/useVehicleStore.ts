@@ -477,6 +477,69 @@ function resolveSingleSeatForSync(
   };
 }
 
+/** サーバー同期前の楽観的搭乗を維持（ヘリ） */
+function resolveHelicopterSeatForSync(
+  localVehicle: HelicopterState,
+  seats: Record<SeatType, string | null>,
+  playerId: string | null,
+): { mySeat: SeatType | null; seats: Record<SeatType, string | null> } {
+  const serverSeat = getHelicopterSeatForPlayer(seats, playerId);
+  if (serverSeat !== null) return { mySeat: serverSeat, seats };
+
+  const localSeat = localVehicle.mySeat;
+  if (localSeat === null) return { mySeat: null, seats };
+
+  const canKeepLocalSeat =
+    (playerId === null || localVehicle.seats[localSeat] === '__local__')
+    && (playerId === null || seats[localSeat] === null);
+
+  if (!canKeepLocalSeat) return { mySeat: null, seats };
+
+  return {
+    mySeat: localSeat,
+    seats: seats[localSeat] === null ? localVehicle.seats : seats,
+  };
+}
+
+/** サーバー同期前の楽観的搭乗を維持（車） */
+function resolveCarSeatForSync(
+  localVehicle: CarState,
+  seats: Record<CarSeatType, string | null>,
+  playerId: string | null,
+): { mySeat: CarSeatType | null; seats: Record<CarSeatType, string | null> } {
+  const serverSeat = getCarSeatForPlayer(seats, playerId);
+  if (serverSeat !== null) return { mySeat: serverSeat, seats };
+
+  const localSeat = localVehicle.mySeat;
+  if (localSeat === null) return { mySeat: null, seats };
+
+  const canKeepLocalSeat =
+    (playerId === null || localVehicle.seats[localSeat] === '__local__')
+    && (playerId === null || seats[localSeat] === null);
+
+  if (!canKeepLocalSeat) return { mySeat: null, seats };
+
+  return {
+    mySeat: localSeat,
+    seats: seats[localSeat] === null ? localVehicle.seats : seats,
+  };
+}
+
+/** 破壊時にローカルプレイヤーが搭乗していたか（爆発処理で消費） */
+const destroyedWhileBoarded: Record<VehicleType, boolean> = {
+  helicopter: false,
+  tank: false,
+  airplane: false,
+  car: false,
+};
+
+/** 破壊時の搭乗フラグを消費して返す */
+export function consumeDestroyedWhileBoarded(type: VehicleType): boolean {
+  const wasBoarded = destroyedWhileBoarded[type];
+  destroyedWhileBoarded[type] = false;
+  return wasBoarded;
+}
+
 function getCarSeatForPlayer(
   seats: Record<CarSeatType, string | null>,
   playerId: string | null,
@@ -846,13 +909,14 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
       if (vehicles.helicopter) {
         const seats = vehicles.helicopter.seats ?? helicopter.seats;
-        const mySeat = getHelicopterSeatForPlayer(seats, myId);
+        const resolved = resolveHelicopterSeatForSync(helicopter, seats, myId);
+        const mySeat = resolved.mySeat;
         const keepLocalPilotMotion = helicopter.mySeat === 'pilot' && mySeat === 'pilot';
         if (keepLocalPilotMotion) {
           // ローカル操縦中: 座席情報のみ同期、位置はローカル
           helicopter = syncHelicopterLegacy({
             ...helicopter,
-            seats,
+            seats: resolved.seats,
             mySeat,
             spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
           });
@@ -872,7 +936,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
           };
           helicopter = syncHelicopterLegacy({
             ...helicopter,
-            seats,
+            seats: resolved.seats,
             mySeat,
             spawned: vehicles.helicopter.spawned ?? helicopter.spawned,
           });
@@ -952,12 +1016,13 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
       if (vehicles.car) {
         const seats = vehicles.car.seats ?? car.seats;
-        const mySeat = getCarSeatForPlayer(seats, myId);
+        const resolved = resolveCarSeatForSync(car, seats, myId);
+        const mySeat = resolved.mySeat;
         const keepLocalDriverMotion = car.mySeat === 'driver' && mySeat === 'driver';
         if (keepLocalDriverMotion) {
           car = syncCarLegacy({
             ...car,
-            seats,
+            seats: resolved.seats,
             mySeat,
             spawned: vehicles.car.spawned ?? car.spawned,
           });
@@ -976,7 +1041,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
           };
           car = syncCarLegacy({
             ...car,
-            seats,
+            seats: resolved.seats,
             mySeat,
             spawned: vehicles.car.spawned ?? car.spawned,
           });
@@ -1252,6 +1317,9 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   destroyVehicle: (type) => {
     // 搭乗者を全員降ろす（搭乗者は爆発で死亡するが、それは呼び出し側で処理）
     const state = get();
+    // activeVehicle を消す前に搭乗フラグを残し、爆発処理で即死ダメージできるようにする
+    destroyedWhileBoarded[type] = state[type].mySeat !== null || state.activeVehicle === type;
+
     if (type === 'helicopter') {
       set({
         helicopter: {

@@ -12,6 +12,7 @@ import {
   useVehicleStore,
   VEHICLE_HITBOX,
   VEHICLE_EXPLOSION,
+  consumeDestroyedWhileBoarded,
   type VehicleType,
 } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
@@ -119,8 +120,9 @@ export function VehicleCombat() {
       }
     }
 
-    // 4. 搭乗者に即死ダメージ（自分が乗っていた場合）
-    const wasMyVehicle = state.activeVehicle === type;
+    // 4. 搭乗者に即死ダメージ（破壊前に乗っていた場合）
+    // destroyVehicle が activeVehicle を先に消すため、搭乗フラグを別途消費する
+    const wasMyVehicle = consumeDestroyedWhileBoarded(type) || state.activeVehicle === type;
     if (wasMyVehicle) {
       usePlayerStore.getState().takeDamage(VEHICLE_EXPLOSION.RIDER_DAMAGE);
     }
@@ -190,10 +192,12 @@ export function VehicleCombat() {
     const unsubDestroy = onRemoteVehicleDestroy((data) => {
       const vehicleStore = useVehicleStore.getState();
       const vehicle = vehicleStore[data.type];
-      // まだローカルで破壊されていなければ破壊処理を実行
-      if (vehicle.spawned && !vehicle.destroyed) {
-        vehicleStore.destroyVehicle(data.type);
-      }
+      // まだローカルで破壊されていなければ破壊＋爆発を実行
+      // 既に破壊済みのエコーは二重爆発・二重ダメージを避けるため無視する
+      if (!vehicle.spawned || vehicle.destroyed) return;
+      vehicleStore.destroyVehicle(data.type);
+      // useFrame 側の新規破壊検知と二重発火しないよう既処理扱いにする
+      prevDestroyed.current[data.type] = true;
       handleVehicleExplosion(data.type, true);
     });
 
