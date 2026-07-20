@@ -28,7 +28,7 @@ import {
   getStageCombatWeaponLabel,
 } from '../../types/stageCombatStyles';
 import { getStageModeRule } from '../../types/stageModeRules';
-import { isTouchDevice } from '../../utils/device';
+import { useSimpleHud } from '../../utils/hudDensity';
 import {
   playCombatFeedbackSound,
   playCombatTechniqueSound,
@@ -478,7 +478,7 @@ export function CombatFeedbackHUD() {
   const [feedback, setFeedback] = useState<CombatFeedback | null>(null);
   const clearTimerRef = useRef<number | null>(null);
   const lastEventIdRef = useRef<number | null>(null);
-  const isCompact = isTouchDevice() || window.innerWidth <= 560;
+  const isCompact = useSimpleHud();
 
   const clearTimer = useCallback(() => {
     if (clearTimerRef.current === null) return;

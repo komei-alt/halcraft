@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-20',
+    items: [
+      { type: 'improve', text: 'ゲーム中の画面をシンプルにして、体力・目的・次の一手だけが見やすくなったよ！くわしい作戦パネルは設定の「画面の情報量」から出せるよ！' },
+    ],
+  },
+  {
     date: '2026-06-02',
     items: [
       { type: 'fix', text: '画面全体に薄い縦線のようなノイズが出る演出を外して、距離感は3D空間の自然な空気遠近法で出すようにしたよ！' },
