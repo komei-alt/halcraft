@@ -397,6 +397,24 @@ export function Player() {
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
     reportWorldPosition(pos.x, camera.position.y || pos.y, pos.z);
+
+    // 搭乗・建築飛行でもカメラ位置から水中オーバーレイを同期（早期 return で状態が固まるのを防ぐ）
+    {
+      const eyeX = camera.position.x;
+      const eyeY = camera.position.y;
+      const eyeZ = camera.position.z;
+      const inWaterEye = isInWater(getBlock, eyeX, eyeY, eyeZ);
+      const inWaterFeet = isInWater(getBlock, eyeX, eyeY - PLAYER_HEIGHT + 0.3, eyeZ);
+      const swimming = inWaterEye || inWaterFeet;
+      const liquidStore = usePlayerStore.getState();
+      if (liquidStore.isSubmerged !== inWaterEye) {
+        usePlayerStore.setState({ isSubmerged: inWaterEye });
+      }
+      if (liquidStore.isInWater !== swimming) {
+        usePlayerStore.setState({ isInWater: swimming });
+      }
+    }
+
     const isBuildMode = gameState.isBuildMode;
     let creativeFlying = isBuildMode && gameState.creativeFlying;
 

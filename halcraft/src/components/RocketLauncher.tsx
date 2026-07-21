@@ -1407,6 +1407,7 @@ export function RocketLauncher() {
                     metalness={0.04}
                     transparent
                     opacity={Math.min(1, debrisRatio * 1.25)}
+                    depthWrite={false}
                   />
                 </mesh>
               );

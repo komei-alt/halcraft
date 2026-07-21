@@ -114,7 +114,12 @@ function RemotePlayerModel({
   });
 
   return (
-    <group ref={groupRef}>
+    <group
+      ref={groupRef}
+      // 初フレームに原点へ一瞬出ないよう、サーバー位置で初期化する
+      position={[player.position[0], player.position[1], player.position[2]]}
+      rotation={[0, player.rotation[0], 0]}
+    >
       <VoxelAvatar
         skinId={player.skinId && isValidSkinId(player.skinId) ? player.skinId : undefined}
         color={player.color}

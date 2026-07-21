@@ -270,11 +270,12 @@ export function RailRenderer() {
           case 'ew':
             rotMat.makeRotationY(Math.PI / 2);
             break;
+          // 直線レールは ±Z。+rotationX で +Z 端が下がるので、北(+Zの反対)が高い slope-n は +rotationX
           case 'slope-n':
-            rotMat.makeRotationX(-Math.PI / 4);
+            rotMat.makeRotationX(Math.PI / 4);
             break;
           case 'slope-s':
-            rotMat.makeRotationX(Math.PI / 4);
+            rotMat.makeRotationX(-Math.PI / 4);
             break;
           case 'slope-e': {
             const r1 = new THREE.Matrix4().makeRotationY(Math.PI / 2);

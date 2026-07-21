@@ -167,7 +167,12 @@ export function MachineGun() {
     color: GUN_MOUNT_COLOR, roughness: 0.7, metalness: 0.2,
   }), []);
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
+    color: MUZZLE_FLASH_COLOR,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
   }), []);
 
   // ─── 射撃処理 ─────────────────────────────────────
@@ -785,22 +790,43 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
       {/* 弾頭（明るい光る球 — より大きく） */}
       <mesh ref={bulletRef}>
         <sphereGeometry args={[0.15, 6, 6]} />
-        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} />
+        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
       </mesh>
       {/* 弾頭のグロー（外側の光芒） */}
       <mesh ref={glowBulletRef}>
         <sphereGeometry args={[0.35, 6, 6]} />
-        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.45} />
+        <meshBasicMaterial
+          color={TRACER_COLOR}
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
       {/* コアトレイル（明るく太い） */}
       <mesh ref={trailRef} visible={false}>
         <cylinderGeometry args={[0.08, 0.03, 1, 6]} />
-        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.85} />
+        <meshBasicMaterial
+          color={TRACER_COLOR}
+          transparent
+          opacity={0.85}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
       {/* グロートレイル（外側の太い光芒） */}
       <mesh ref={glowTrailRef} visible={false}>
         <cylinderGeometry args={[0.18, 0.06, 1, 6]} />
-        <meshBasicMaterial color={TRACER_GLOW_COLOR} transparent opacity={0.35} />
+        <meshBasicMaterial
+          color={TRACER_GLOW_COLOR}
+          transparent
+          opacity={0.35}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
@@ -872,6 +898,9 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
           color={isBlock ? 0xffddaa : 0xff6633}
           transparent
           opacity={1}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
 
@@ -887,6 +916,8 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
             color={i % 3 === 0 ? SPARK_COLOR : mainColor}
             transparent
             opacity={1}
+            depthWrite={false}
+            toneMapped={false}
           />
         </mesh>
       ))}
@@ -896,11 +927,11 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
         <>
           <mesh position={effect.pos.clone()}>
             <boxGeometry args={[0.15, 0.15, 0.15]} />
-            <meshBasicMaterial color={0x886633} transparent opacity={0.8} />
+            <meshBasicMaterial color={0x886633} transparent opacity={0.8} depthWrite={false} />
           </mesh>
           <mesh position={[effect.pos.x + 0.1, effect.pos.y + 0.05, effect.pos.z - 0.1]}>
             <boxGeometry args={[0.1, 0.1, 0.1]} />
-            <meshBasicMaterial color={0x997744} transparent opacity={0.6} />
+            <meshBasicMaterial color={0x997744} transparent opacity={0.6} depthWrite={false} />
           </mesh>
         </>
       )}
@@ -910,11 +941,11 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
         <group position={effect.pos.clone()}>
           <mesh rotation={[0, 0, Math.PI / 4]}>
             <boxGeometry args={[0.4, 0.06, 0.06]} />
-            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
           </mesh>
           <mesh rotation={[0, 0, -Math.PI / 4]}>
             <boxGeometry args={[0.4, 0.06, 0.06]} />
-            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
           </mesh>
         </group>
       )}

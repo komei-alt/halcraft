@@ -7,6 +7,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleType } from '../../stores/useVehicleStore';
 import { registerVehicleExplosionSpawner } from '../../utils/effectTriggers';
+import { createSizedPointsMaterial } from '../../utils/sizedPointsMaterial';
 
 /** 乗り物タイプごとの爆発色 */
 const EXPLOSION_COLORS: Record<VehicleType, { fire: THREE.Color; metal: THREE.Color; smoke: THREE.Color }> = {
@@ -83,22 +84,17 @@ export function VehicleExplosionEffect() {
     const sizes = new Float32Array(maxParticles);
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('particleSize', new THREE.BufferAttribute(sizes, 1));
     geo.setDrawRange(0, 0);
     return geo;
   }, [maxParticles]);
 
-  const material = useMemo(() => {
-    return new THREE.PointsMaterial({
-      size: 0.4,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.95,
-      sizeAttenuation: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-  }, []);
+  const material = useMemo(() => createSizedPointsMaterial({
+    size: 0.4,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }), []);
 
   const spawnEffect = useCallback((type: VehicleType, x: number, y: number, z: number) => {
     const colors = EXPLOSION_COLORS[type];
@@ -242,7 +238,7 @@ export function VehicleExplosionEffect() {
 
     const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
     const colAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
-    const sizeAttr = geometry.getAttribute('size') as THREE.BufferAttribute;
+    const sizeAttr = geometry.getAttribute('particleSize') as THREE.BufferAttribute;
     const positions = posAttr.array as Float32Array;
     const colors = colAttr.array as Float32Array;
     const sizeArr = sizeAttr.array as Float32Array;
