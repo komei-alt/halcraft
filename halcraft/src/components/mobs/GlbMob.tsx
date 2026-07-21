@@ -165,13 +165,16 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
 
   return (
     <group position={[mob.x, mob.y + bob, mob.z]} rotation={[0, mob.rotation, 0]}>
-      <mesh position={[0, 0.018 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[shadowScale * 1.18, shadowScale, 1]}>
+      <mesh position={[0, 0.03 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[shadowScale * 1.18, shadowScale, 1]}>
         <circleGeometry args={[1, 28]} />
         <meshBasicMaterial
           color={0x111111}
           transparent
           opacity={0.22}
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </mesh>
       {traitAccent && (
@@ -187,6 +190,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
             opacity={traitPulse}
             side={THREE.DoubleSide}
             depthWrite={false}
+            toneMapped={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>
@@ -201,6 +205,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
             opacity={0.22 + angryPulse * 0.18}
             side={THREE.DoubleSide}
             depthWrite={false}
+            toneMapped={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>

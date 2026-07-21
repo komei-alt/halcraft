@@ -2,7 +2,7 @@
 // レール上を走行するボクセルスタイルのカート
 // 搭乗検出・物理更新・カメラ追従を担当
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { coasterRuntime, useCoasterStore } from '../stores/useCoasterStore';
@@ -184,10 +184,22 @@ export function CoasterCart() {
     }
   });
 
+  // 初フレームで原点に一瞬出るのを防ぐ（ストア座標で事前同期）
+  useLayoutEffect(() => {
+    if (!cartSpawned) return;
+    const group = meshRef.current;
+    if (!group) return;
+    const latest = useCoasterStore.getState();
+    group.position.set(latest.cartX, latest.cartY, latest.cartZ);
+    _cartEuler.set(latest.cartPitch, latest.cartYaw, latest.cartRoll, 'YXZ');
+    _cartQuat.setFromEuler(_cartEuler);
+    group.quaternion.copy(_cartQuat);
+  }, [cartSpawned]);
+
   if (!cartSpawned) return null;
 
   return (
-    <group ref={meshRef}>
+    <group ref={meshRef} visible={cartSpawned}>
       <mesh geometry={cartGeo} castShadow receiveShadow>
         <meshStandardMaterial
           vertexColors
@@ -195,10 +207,18 @@ export function CoasterCart() {
           metalness={0.3}
         />
       </mesh>
-      {/* カートの影 */}
+      {/* カートの影（レールとの z-fight を避ける） */}
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[0.9, 1.3]} />
-        <meshBasicMaterial color={0x000000} transparent opacity={0.15} />
+        <meshBasicMaterial
+          color={0x000000}
+          transparent
+          opacity={0.15}
+          depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
+        />
       </mesh>
       <pointLight
         ref={lightRef}

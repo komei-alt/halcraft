@@ -23,6 +23,7 @@ const _moonPosition = new THREE.Vector3();
 const _starfieldRotation = new THREE.Euler();
 const _sunDiscColor = new THREE.Color();
 const _sunDiscLiftColor = new THREE.Color(0xffffff);
+const _sunWorldOffset = new THREE.Vector3();
 
 /** バイオーム色キャッシュ用 */
 const _daySky = new THREE.Color();
@@ -184,7 +185,8 @@ function ensureSceneBackground(scene: THREE.Scene): THREE.Color {
 }
 
 function ensureLinearFog(scene: THREE.Scene): THREE.Fog {
-  if (!(scene.fog instanceof THREE.Fog) || scene.fog instanceof THREE.FogExp2) {
+  // FogExp2 は Fog を継承しないため、種類が違うときは作り直す
+  if (!(scene.fog instanceof THREE.Fog)) {
     scene.fog = new THREE.Fog(0x87ceeb, cachedFogNear, cachedFogFar);
   }
   return scene.fog;
@@ -389,13 +391,14 @@ export function Environment() {
     ambientIntensity *= atmosphereTuning.ambientScale * lightingScale.ambient;
     sunIntensity *= atmosphereTuning.sunScale * lightingScale.sun;
 
-    // 太陽の位置を時間に連動（円弧を描く）
+    // 太陽の位置を時間に連動（円弧を描く）。影カメラがプレイヤー周辺を追従するよう基準も動かす
     const sunAngle = gameTime * Math.PI * 2;
-    _sunPosition.set(
+    _sunWorldOffset.set(
       Math.cos(sunAngle) * 60,
       Math.sin(sunAngle) * 80 + 10,
       30,
     );
+    _sunPosition.copy(camera.position).add(_sunWorldOffset);
 
     // シーンに適用
     sceneBackground.copy(_skyColor);
@@ -407,7 +410,8 @@ export function Environment() {
     _skyTopColor.copy(_skyColor).multiplyScalar(gameState.dimension === 'nether' ? 0.8 : 1.08);
     _skyHorizonColor.copy(_fogColor).multiplyScalar(gameState.dimension === 'nether' ? 1.05 : 1.14);
     _skySunGlowColor.copy(_sunColor).multiplyScalar(gameState.dimension === 'nether' ? 0.65 : 0.95);
-    _skySunDirection.copy(_sunPosition).normalize();
+    // 天体方向はカメラ位置を含めず、相対オフセットだけを使う
+    _skySunDirection.copy(_sunWorldOffset).normalize();
     const nightMix = getNightMix(gameTime, gameState.dimension);
     skyUniforms.uTopColor.value.copy(_skyTopColor);
     skyUniforms.uHorizonColor.value.copy(_skyHorizonColor);
@@ -466,9 +470,11 @@ export function Environment() {
       starMaterialRef.current.opacity = starOpacity;
     }
 
-    // ライト更新
+    // ライト更新（影の範囲をプレイヤー周辺に固定し、遠方で影が切れるのを防ぐ）
     if (sunRef.current) {
       sunRef.current.position.copy(_sunPosition);
+      sunRef.current.target.position.copy(camera.position);
+      sunRef.current.target.updateMatrixWorld();
       sunRef.current.intensity = sunIntensity;
       sunRef.current.color.copy(_sunColor);
     }
@@ -599,10 +605,13 @@ export function Environment() {
         shadow-camera-right={performanceProfile.shadowCameraSize}
         shadow-camera-top={performanceProfile.shadowCameraSize}
         shadow-camera-bottom={-performanceProfile.shadowCameraSize}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.02}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.04}
         color={0xfff5e0}
-      />
+      >
+        {/* target をシーンに載せて、プレイヤー追従の影カメラを安定させる */}
+        <object3D attach="target" />
+      </directionalLight>
 
       {/* 半球ライト（空の色→地面の色の2色で自然な環境光） */}
       <hemisphereLight

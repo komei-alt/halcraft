@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
+import { facingToYaw, inferWallFacing } from '../utils/blockFacing';
 
 function usePlacedBlockPositions(blockId: BlockId) {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
@@ -40,27 +41,29 @@ const coalMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0.22,
   roughness: 1,
 });
-const flameOuterMat = new THREE.MeshStandardMaterial({
+const flameOuterMat = new THREE.MeshBasicMaterial({
   color: 0xff3b18,
-  emissive: new THREE.Color(0xff5522),
-  emissiveIntensity: 2.6,
   transparent: true,
   opacity: 0.92,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
-const flameInnerMat = new THREE.MeshStandardMaterial({
+const flameInnerMat = new THREE.MeshBasicMaterial({
   color: 0xffb21f,
-  emissive: new THREE.Color(0xffd24d),
-  emissiveIntensity: 3.2,
   transparent: true,
-  opacity: 0.8,
+  opacity: 0.85,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 const flameGlowMat = new THREE.MeshBasicMaterial({
   color: 0xff8a55,
   transparent: true,
-  opacity: 0.16,
+  opacity: 0.22,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 
 const candlePlateMat = new THREE.MeshStandardMaterial({ color: 0x2e160d, roughness: 0.9 });
@@ -74,8 +77,10 @@ const wickMat = new THREE.MeshStandardMaterial({ color: 0x2d130e, roughness: 1 }
 const candleGlowMat = new THREE.MeshBasicMaterial({
   color: 0xffc2a0,
   transparent: true,
-  opacity: 0.15,
+  opacity: 0.2,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 
 const doorGeom = new THREE.BoxGeometry(0.92, 0.96, 0.08);
@@ -95,6 +100,7 @@ const wickGeom = new THREE.BoxGeometry(0.02, 0.08, 0.02);
 export function DoorRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.DOOR);
   const openDoors = useFunctionalBlockStore((s) => s.openDoors);
+  const getBlock = useWorldStore((s) => s.getBlock);
 
   if (positions.length === 0) return null;
 
@@ -104,6 +110,7 @@ export function DoorRenderer() {
         <DoorModel
           key={`door-${pos.x}-${pos.y}-${pos.z}`}
           position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
+          yaw={facingToYaw(inferWallFacing(getBlock, pos.x, pos.y, pos.z))}
           open={Boolean(openDoors[`${pos.x},${pos.y},${pos.z}`])}
         />
       ))}
@@ -113,9 +120,11 @@ export function DoorRenderer() {
 
 function DoorModel({
   position,
+  yaw,
   open,
 }: {
   position: [number, number, number];
+  yaw: number;
   open: boolean;
 }) {
   const panelRef = useRef<THREE.Group>(null);
@@ -132,7 +141,7 @@ function DoorModel({
   });
 
   return (
-    <group position={position}>
+    <group position={position} rotation={[0, yaw, 0]}>
       <group ref={panelRef} position={[-0.46, 0, 0.42]}>
         <group position={[0.46, 0, 0]}>
           <mesh position={[0, 0.5, 0]} geometry={doorGeom} material={doorBodyMat} />
@@ -151,13 +160,18 @@ function DoorModel({
 
 export function LadderRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.LADDER);
+  const getBlock = useWorldStore((s) => s.getBlock);
 
   if (positions.length === 0) return null;
 
   return (
     <group>
       {positions.map((pos) => (
-        <group key={`ladder-${pos.x}-${pos.y}-${pos.z}`} position={[pos.x + 0.5, pos.y, pos.z + 0.5]}>
+        <group
+          key={`ladder-${pos.x}-${pos.y}-${pos.z}`}
+          position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
+          rotation={[0, facingToYaw(inferWallFacing(getBlock, pos.x, pos.y, pos.z)), 0]}
+        >
           <mesh position={[-0.32, 0.5, 0.44]} geometry={ladderRailGeom} material={ladderMat} />
           <mesh position={[0.32, 0.5, 0.44]} geometry={ladderRailGeom} material={ladderMat} />
           {[0.18, 0.38, 0.58, 0.78].map((y, index) => (

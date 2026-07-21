@@ -54,6 +54,7 @@ export function NameTag({ name, speaking = false }: NameTagProps) {
     ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
 
     return {

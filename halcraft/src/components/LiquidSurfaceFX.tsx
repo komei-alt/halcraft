@@ -304,6 +304,9 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
 
     ringMesh.instanceMatrix.needsUpdate = true;
     glintMesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    ringMesh.visible = true;
+    glintMesh.visible = true;
   });
 
   if (instances.length === 0) return null;
@@ -320,6 +323,7 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
         args={[ringGeometry, undefined, instances.length]}
         renderOrder={renderOrder}
         frustumCulled={false}
+        visible={false}
       >
         <meshBasicMaterial
           ref={ringMaterialRef}
@@ -327,7 +331,11 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
           transparent
           opacity={config.opacity}
           depthWrite={false}
-          depthTest={false}
+          depthTest
+          // 水面より少し手前に押し出し、地形・壁を突き抜けないようにする
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
           side={THREE.DoubleSide}
           toneMapped={false}
           blending={blending}
@@ -338,6 +346,7 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
         args={[glintGeometry, undefined, instances.length]}
         renderOrder={renderOrder + 1}
         frustumCulled={false}
+        visible={false}
       >
         <meshBasicMaterial
           ref={glintMaterialRef}
@@ -345,7 +354,10 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
           transparent
           opacity={config.opacity * 0.6}
           depthWrite={false}
-          depthTest={false}
+          depthTest
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
           side={THREE.DoubleSide}
           toneMapped={false}
           blending={THREE.AdditiveBlending}

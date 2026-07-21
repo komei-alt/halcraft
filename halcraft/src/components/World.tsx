@@ -3,7 +3,7 @@
 // カメラ距離ベースのチャンクカリングで描画負荷を大幅削減
 // 段階的チャンク生成で初期ロードの体験を改善
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
@@ -70,8 +70,10 @@ function getMaterialProps(blockDef: BlockInfo): THREE.MeshStandardMaterialParame
     vertexColors: true,
   };
   if (blockDef.transparent) {
-    props.depthWrite = false;
-    props.alphaTest = isGlass ? 0.03 : 0.08;
+    // InstancedMesh は個体ソートできないため、depthWrite を残して前後関係の破綻を抑える
+    props.depthWrite = true;
+    props.alphaTest = isGlass ? 0.02 : 0.08;
+    props.depthTest = true;
   }
   if (blockDef.emissiveColor) {
     props.emissive = blockDef.emissiveColor;
@@ -133,7 +135,8 @@ diffuseColor.rgb *= clamp(1.0 + halcraftTopLift - halcraftBottomShade - halcraft
 }
 
 function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
-  const key = `${blockDef.id}:${blockDef.texture}`;
+  // v2: 透過ブロックの depthWrite 修正をキャッシュに反映する
+  const key = `v2:${blockDef.id}:${blockDef.texture}`;
   if (materialCache.has(key)) return materialCache.get(key)!;
   const mat = applyVoxelDepthShader(new THREE.MeshStandardMaterial({
     map: getBlockTexture(blockDef.texture),
@@ -145,7 +148,7 @@ function getCachedMaterial(blockDef: BlockInfo): THREE.MeshStandardMaterial {
 
 function getCachedFaceMaterials(blockDef: BlockInfo): THREE.MeshStandardMaterial[] | null {
   if (!blockDef.faceTextures) return null;
-  const key = `${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
+  const key = `v2:${blockDef.id}:${blockDef.faceTextures.top}_${blockDef.faceTextures.side}_${blockDef.faceTextures.bottom}`;
   if (faceMaterialCache.has(key)) return faceMaterialCache.get(key)!;
 
   const { top, side, bottom } = blockDef.faceTextures;
@@ -243,13 +246,29 @@ interface ChunkRendererProps {
 /** 1チャンク分のブロックを描画するコンポーネント */
 function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
   const getChunk = useWorldStore((s) => s.getChunk);
+  const getBlock = useWorldStore((s) => s.getBlock);
   const version = useWorldStore((s) => s.chunkVersions.get(`${cx},${cz}`) ?? 0);
+  // 隣接チャンク更新時も境界面の露出判定をやり直す
+  const neighborVersionKey = useWorldStore((s) => (
+    [
+      s.chunkVersions.get(`${cx - 1},${cz}`) ?? 0,
+      s.chunkVersions.get(`${cx + 1},${cz}`) ?? 0,
+      s.chunkVersions.get(`${cx},${cz - 1}`) ?? 0,
+      s.chunkVersions.get(`${cx},${cz + 1}`) ?? 0,
+    ].join(',')
+  ));
 
   const chunkData = getChunk(cx, cz);
 
   // ブロックタイプごとの描画データを計算（Float32Arrayで高速化）
   const blockGroups = useMemo(() => {
     if (!chunkData) return new Map<BlockId, Float32Array>();
+
+    const exposureLookup = {
+      chunkX: cx,
+      chunkZ: cz,
+      getWorldBlock: getBlock,
+    };
 
     // まずカウントしてからTypedArrayを確保
     const counts = new Map<BlockId, number>();
@@ -261,7 +280,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockDef = BLOCK_DEFS[blockId];
           if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+          if (!isBlockExposed(chunkData, lx, ly, lz, exposureLookup)) continue;
           counts.set(blockId, (counts.get(blockId) ?? 0) + 1);
         }
       }
@@ -284,7 +303,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
           const blockDef = BLOCK_DEFS[blockId];
           if (blockDef?.isLiquid) continue;
           if (blockDef?.nonStandard) continue;
-          if (!isBlockExposed(chunkData, lx, ly, lz)) continue;
+          if (!isBlockExposed(chunkData, lx, ly, lz, exposureLookup)) continue;
 
           const arr = groups.get(blockId)!;
           const off = offsets.get(blockId)!;
@@ -298,7 +317,7 @@ function ChunkRenderer({ cx, cz, castBlockShadows }: ChunkRendererProps) {
 
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunkData, cx, cz, version]);
+  }, [chunkData, cx, cz, version, neighborVersionKey, getBlock]);
 
   if (!chunkData) return null;
 
@@ -336,7 +355,8 @@ function BlockTypeInstances({
   const material = faceMaterials ?? getCachedMaterial(blockDef);
   const count = positionData.length / 3;
 
-  useEffect(() => {
+  // 初回描画前に行列を入れる（原点に1フレーム固まるのを防ぐ）
+  useLayoutEffect(() => {
     if (!meshRef.current) return;
     const dummy = dummyRef.current;
     for (let i = 0; i < count; i++) {
@@ -353,6 +373,7 @@ function BlockTypeInstances({
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
+    meshRef.current.visible = true;
   }, [blockDef, positionData, count]);
 
   return (
@@ -362,6 +383,7 @@ function BlockTypeInstances({
       material={material}
       castShadow={castShadow}
       receiveShadow
+      visible={false}
     />
   );
 }

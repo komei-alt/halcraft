@@ -624,7 +624,14 @@ function PlayerGunTracer({ start, end, color }: { start: THREE.Vector3; end: THR
   return (
     <mesh position={midpoint} quaternion={quaternion}>
       <cylinderGeometry args={[0.018, 0.01, length, 6]} />
-      <meshBasicMaterial color={color} transparent opacity={0.86} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.86}
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
     </mesh>
   );
 }

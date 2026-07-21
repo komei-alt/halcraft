@@ -405,7 +405,7 @@ export function VoxelAvatar({
   return (
     <group ref={groupRef}>
       {/* 頭 */}
-      <mesh ref={headRef} geometry={headGeom} material={headMat} position={[0, 1.55, 0]} castShadow />
+      <mesh ref={headRef} geometry={headGeom} material={headMat} position={[0, 1.55, 0]} castShadow receiveShadow />
 
       {/* ツノ（赤ウォーデンなど、headAccessory付きスキン） */}
       {skin.hasHeadAccessory && accessoryMat && (
@@ -416,6 +416,7 @@ export function VoxelAvatar({
             position={[-0.15, 1.88, 0]}
             rotation={[0, 0, -0.2]}
             castShadow
+            receiveShadow
           />
           <mesh
             geometry={hornGeom}
@@ -423,12 +424,13 @@ export function VoxelAvatar({
             position={[0.15, 1.88, 0]}
             rotation={[0, 0, 0.2]}
             castShadow
+            receiveShadow
           />
         </>
       )}
 
       {/* 体 */}
-      <mesh ref={bodyRef} geometry={bodyGeom} material={bodyMat} position={[0, 0.9, 0]} castShadow />
+      <mesh ref={bodyRef} geometry={bodyGeom} material={bodyMat} position={[0, 0.9, 0]} castShadow receiveShadow />
 
       {/* 左腕 */}
       <mesh
@@ -437,6 +439,7 @@ export function VoxelAvatar({
         material={armMat}
         position={[-0.42, 0.85, 0]}
         castShadow
+        receiveShadow
       />
 
       {/* 右腕 */}
@@ -446,6 +449,7 @@ export function VoxelAvatar({
         material={armMat}
         position={[0.42, 0.85, 0]}
         castShadow
+        receiveShadow
       />
 
       {/* 左足 */}
@@ -455,6 +459,7 @@ export function VoxelAvatar({
         material={legMat}
         position={[-0.15, 0.3, 0]}
         castShadow
+        receiveShadow
       />
 
       {/* 右足 */}
@@ -464,6 +469,7 @@ export function VoxelAvatar({
         material={legMat}
         position={[0.15, 0.3, 0]}
         castShadow
+        receiveShadow
       />
     </group>
   );

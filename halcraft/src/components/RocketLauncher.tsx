@@ -171,6 +171,7 @@ function createRadialTexture(stops: Array<{ offset: number; color: string }>): T
   ctx.fillRect(0, 0, 128, 128);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -1126,7 +1127,7 @@ export function RocketLauncher() {
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
-            />
+              />
           </mesh>
           <mesh ref={chargeCellRef} position={[0.18, 0.145, -0.33]}>
             <boxGeometry args={[0.22, 0.024, 0.04]} />
@@ -1135,7 +1136,7 @@ export function RocketLauncher() {
               transparent
               opacity={0.75}
               depthWrite={false}
-              toneMapped={false}
+            toneMapped={false}
             />
           </mesh>
           <pointLight
@@ -1163,6 +1164,7 @@ export function RocketLauncher() {
               opacity={clamp01(muzzleFlashTimer.current * 8)}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
+            toneMapped={false}
             />
           </sprite>
 
@@ -1182,6 +1184,7 @@ export function RocketLauncher() {
               opacity={clamp01(backblastTimer.current * 6)}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
+            toneMapped={false}
             />
           </sprite>
         </group>
@@ -1221,6 +1224,7 @@ export function RocketLauncher() {
               opacity={0.88}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
+            toneMapped={false}
             />
           </sprite>
         </group>
@@ -1242,6 +1246,7 @@ export function RocketLauncher() {
                 opacity={0.12 + ratio * 0.24}
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
+              toneMapped={false}
               />
             </sprite>
           );
@@ -1294,6 +1299,7 @@ export function RocketLauncher() {
                 opacity={flashOpacity}
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
+              toneMapped={false}
               />
             </mesh>
 
@@ -1315,6 +1321,7 @@ export function RocketLauncher() {
                 opacity={emberOpacity}
                 depthWrite={false}
                 blending={THREE.AdditiveBlending}
+              toneMapped={false}
               />
             </mesh>
 
@@ -1368,6 +1375,7 @@ export function RocketLauncher() {
                     opacity={fireRatio * 0.82}
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
+                  toneMapped={false}
                   />
                 </sprite>
               );
@@ -1390,6 +1398,7 @@ export function RocketLauncher() {
                     opacity={sparkRatio * 0.9}
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
+                  toneMapped={false}
                   />
                 </sprite>
               );
@@ -1413,6 +1422,7 @@ export function RocketLauncher() {
                     metalness={0.04}
                     transparent
                     opacity={Math.min(1, debrisRatio * 1.25)}
+                    depthWrite={false}
                   />
                 </mesh>
               );

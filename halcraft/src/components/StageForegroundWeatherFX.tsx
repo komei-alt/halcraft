@@ -400,6 +400,8 @@ export function StageForegroundWeatherFX() {
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || !texture || phase !== 'playing') return null;
@@ -410,6 +412,7 @@ export function StageForegroundWeatherFX() {
       args={[sharedPlaneGeometry, undefined, particles.length]}
       frustumCulled={false}
       renderOrder={7}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}

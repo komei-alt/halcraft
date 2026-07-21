@@ -203,6 +203,8 @@ export function StageConditionFX() {
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!condition || !config || phase !== 'playing' || activeUntil <= 0) return null;
@@ -213,6 +215,7 @@ export function StageConditionFX() {
       args={[sharedSphereGeometry, undefined, particles.length]}
       frustumCulled={false}
       renderOrder={4}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}

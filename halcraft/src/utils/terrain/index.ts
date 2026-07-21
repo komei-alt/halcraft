@@ -3,7 +3,7 @@
 
 export { getTerrainHeight } from './heightmap';
 export { generateChunk } from './chunkGenerator';
-export { isBlockExposed } from './blockExposure';
+export { isBlockExposed, isBlockTransparent } from './blockExposure';
 export {
   AIRPLANE_SPAWN,
   HELIPORT_CENTER,

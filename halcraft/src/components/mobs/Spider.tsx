@@ -139,11 +139,17 @@ export function Spider({ mob, animTime }: SpiderProps) {
         <Billboard position={[0, 0.7, 0]}>
           <mesh>
             <planeGeometry args={[0.5, 0.06]} />
-            <meshBasicMaterial color={0x222222} transparent opacity={0.8} side={THREE.DoubleSide} />
+            <meshBasicMaterial
+              color={0x222222}
+              transparent
+              opacity={0.8}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
           </mesh>
           <mesh position={[-(0.5 - 0.5 * hpRatio) / 2, 0, 0.001]}>
             <planeGeometry args={[0.5 * hpRatio, 0.04]} />
-            <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} />
+            <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         </Billboard>
       )}
