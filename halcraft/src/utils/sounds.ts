@@ -241,6 +241,19 @@ export function playFootstep(): void {
   playBiomeFootstepSound();
 }
 
+/**
+ * 着地音。落下距離に応じて足音より重く鳴らす。
+ * fallDistance はブロック単位の目安（1〜12 程度）。
+ */
+export function playLandingSound(
+  biome: BiomeId = 'forest',
+  category: StageCategory | null = null,
+  fallDistance = 1.5,
+): void {
+  const intensity = Math.min(1.55, 0.85 + Math.max(0, fallDistance) * 0.09);
+  playBiomeFootstepSound(biome, category, intensity);
+}
+
 export function playBiomeFootstepSound(
   biome: BiomeId = 'forest',
   category: StageCategory | null = null,

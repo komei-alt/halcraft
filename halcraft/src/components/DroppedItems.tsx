@@ -170,6 +170,8 @@ function getDropMaterial(
     roughness: shape === 'ingot' ? 0.3 : shape === 'gem' ? 0.24 : shape === 'stick' || shape === 'seed' ? 0.82 : 0.54,
     opacity: def.transparent ? 0.82 : 1,
     transparent: def.transparent,
+    // 透過ドロップが背後の光を変に隠さないよう深度書き込みを切る
+    depthWrite: !def.transparent,
     alphaTest: def.transparent ? 0.06 : 0,
   });
   materialCache.set(blockId, material);

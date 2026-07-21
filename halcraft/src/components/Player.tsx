@@ -48,6 +48,7 @@ import { STAGE_LANDMARK_CENTER } from '../types/stageLandmarks';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
 import { useEffectStore } from '../stores/useEffectStore';
 import { getSpeedMultiplier, getJumpBoostMultiplier } from '../types/potions';
+import { playLandingSound } from '../utils/sounds';
 
 // 定数
 const MOVE_SPEED = 4.5;
@@ -389,13 +390,39 @@ export function Player() {
       selectSlot(next);
     };
 
+    // タブ切り替えやフォーカス喪失で keyup が欠けると移動し続けるため、入力を全消しする
+    const clearMovementKeys = () => {
+      keys.current.forward = false;
+      keys.current.backward = false;
+      keys.current.left = false;
+      keys.current.right = false;
+      keys.current.jump = false;
+      keys.current.sprint = false;
+      keys.current.descend = false;
+      keys.current.interact = false;
+      doubleTapSprint.current = false;
+      interactPressed.current = false;
+      lastJumpDown.current = false;
+    };
+
+    const onWindowBlur = () => {
+      clearMovementKeys();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) clearMovementKeys();
+    };
+
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     document.addEventListener('wheel', onWheel);
+    window.addEventListener('blur', onWindowBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('wheel', onWheel);
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [selectSlot, sendHelicopterBoard]);
 
@@ -1518,6 +1545,11 @@ export function Player() {
         const fallDistance = lastGroundY.current - newY;
         if (fallDistance > 0 && wasFalling.current) {
           applyFallDamage(fallDistance);
+        }
+        // 少しでも落下していれば着地音を鳴らして接地の手応えを出す
+        if (fallDistance > 0.45 && wasFalling.current) {
+          const stage = useGameStore.getState().currentStage;
+          playLandingSound(stage?.biome, stage?.category ?? null, fallDistance);
         }
         onGround.current = true;
         // 実際の衝突形状上面へスナップ（微量上げて境界振動を防止）

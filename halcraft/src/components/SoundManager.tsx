@@ -14,14 +14,17 @@ import {
   playHelicopterRotor,
 } from '../utils/sounds';
 import { useVehicleStore } from '../stores/useVehicleStore';
+import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
 import { startBGM } from '../utils/musicManager';
 import { initAmbientSounds, updateAmbientSounds } from '../utils/ambientSounds';
 import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
 
-/** 足音の最小速度（これ以下では鳴らない） */
+/** 足音の最小水平速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
+/** 垂直速度がこれ以上だと空中とみなし足音を止める */
+const FOOTSTEP_MAX_VERTICAL_SPEED = 3.2;
 /** 足音の間隔（秒） */
 const FOOTSTEP_INTERVAL = 0.35;
 /** ゾンビのうめき声の最小間隔（秒） */
@@ -78,14 +81,30 @@ export function SoundManager() {
 
     // --- プレイヤーの水平速度を推定 ---
     const dx = cx - lastCameraPos.current.x;
+    const dy = cy - lastCameraPos.current.y;
     const dz = cz - lastCameraPos.current.z;
     const horizontalSpeed = Math.sqrt(dx * dx + dz * dz) / dt;
+    const verticalSpeed = Math.abs(dy) / dt;
     lastCameraPos.current = { x: cx, y: cy, z: cz };
 
-    // --- 足音 ---
-    if (horizontalSpeed > FOOTSTEP_MIN_SPEED) {
+    // --- 足音（地上歩行のみ。乗り物・飛行・水中では鳴らさない） ---
+    const vehicleState = useVehicleStore.getState();
+    const inVehicle = vehicleState.getActiveVehicle() !== null;
+    const onCoaster = useCoasterStore.getState().isBoarded;
+    const creativeFlying = gameState.creativeFlying;
+    const canPlayFootstep =
+      !playerState.isDead
+      && !playerState.isSubmerged
+      && !inVehicle
+      && !onCoaster
+      && !creativeFlying
+      && verticalSpeed < FOOTSTEP_MAX_VERTICAL_SPEED;
+
+    if (canPlayFootstep && horizontalSpeed > FOOTSTEP_MIN_SPEED) {
       footstepTimer.current += dt;
-      if (footstepTimer.current >= FOOTSTEP_INTERVAL) {
+      // ダッシュ時は少し早めに鳴らしてリズムを足に合わせる
+      const interval = horizontalSpeed > 6.2 ? FOOTSTEP_INTERVAL * 0.78 : FOOTSTEP_INTERVAL;
+      if (footstepTimer.current >= interval) {
         playBiomeFootstepSound(
           gameState.currentStage?.biome,
           gameState.currentStage?.category ?? null,
@@ -139,7 +158,6 @@ export function SoundManager() {
     }
 
     // --- ヘリコプターのローター音 ---
-    const vehicleState = useVehicleStore.getState();
     if (vehicleState.helicopter.spawned) {
       const hx = vehicleState.helicopter.x;
       const hy = vehicleState.helicopter.y;
