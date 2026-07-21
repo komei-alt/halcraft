@@ -1384,6 +1384,8 @@ function BiomeWeatherRibbons({ config, phase }: { config: AtmosphereConfig; phas
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (phase !== 'playing') return null;
@@ -1394,10 +1396,11 @@ function BiomeWeatherRibbons({ config, phase }: { config: AtmosphereConfig; phas
       args={[sharedWeatherGeometry, undefined, ribbons.length]}
       frustumCulled={false}
       renderOrder={3}
+      visible={false}
     >
       <meshBasicMaterial
         color={color}
-        depthTest={false}
+        depthTest
         depthWrite={false}
         opacity={config.weather.opacity}
         transparent
@@ -1499,6 +1502,8 @@ function BiomeSignatureVeil({ config, phase }: { config: AtmosphereConfig; phase
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (phase !== 'playing') return null;
@@ -1509,11 +1514,13 @@ function BiomeSignatureVeil({ config, phase }: { config: AtmosphereConfig; phase
       args={[sharedSignatureGeometry, undefined, veils.length]}
       frustumCulled={false}
       renderOrder={1}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}
         color={primaryColor}
-        depthTest={config.signature.kind === 'aurora'}
+        // オーロラだけ空向けに深度無視。地上ベールは壁抜けを防ぐ
+        depthTest={config.signature.kind !== 'aurora'}
         depthWrite={false}
         opacity={config.signature.opacity}
         transparent
