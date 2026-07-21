@@ -3,6 +3,7 @@
 
 import type { MobData } from '../../stores/useMobStore';
 import type { StageEnemyTuning } from '../../types/stages';
+import { getAABBCollisionTop, type GetBlockFn } from '../collision';
 
 // ─── 共通物理定数 ──────────────────────────────────────
 
@@ -81,13 +82,14 @@ export interface MobAIContext {
   /** 防衛用コアの位置（あれば） */
   corePosition?: { x: number; y: number; z: number } | null;
   /** ブロック取得関数 */
-  getBlock?: (x: number, y: number, z: number) => number;
+  getBlock?: GetBlockFn;
   /** 現在ステージの敵チューニング */
   enemyTuning?: StageEnemyTuning;
 }
 
 /**
  * モブの重力・Y衝突を適用する共通関数
+ * getBlock がある場合は上面スナップで空中浮きを防ぐ
  */
 export function applyMobGravityAndYCollision(
   m: MobData,
@@ -95,8 +97,9 @@ export function applyMobGravityAndYCollision(
   checkCollision: CollisionCheckFn,
   radius: number,
   height: number,
+  getBlock?: GetBlockFn,
 ): { onGround: boolean } {
-  const onGround = m.vy === 0 && checkCollision(m.x, m.y - 0.1, m.z, radius, height);
+  let onGround = m.vy === 0 && checkCollision(m.x, m.y - 0.12, m.z, radius, height);
   if (!onGround) {
     m.vy += MOB_GRAVITY * dt;
     if (m.vy < -30) m.vy = -30;
@@ -104,10 +107,19 @@ export function applyMobGravityAndYCollision(
 
   const newY = m.y + m.vy * dt;
   if (checkCollision(m.x, newY, m.z, radius, height)) {
-    if (m.vy < 0) m.y = Math.floor(newY) + 1.001;
+    if (m.vy <= 0) {
+      if (getBlock) {
+        const top = getAABBCollisionTop(getBlock, m.x, newY, m.z, radius, height);
+        m.y = top !== null ? top + 0.001 : Math.floor(newY) + 1.001;
+      } else {
+        m.y = Math.floor(newY) + 1.001;
+      }
+    }
     m.vy = 0;
+    onGround = true;
   } else {
     m.y = newY;
+    onGround = false;
   }
 
   return { onGround };

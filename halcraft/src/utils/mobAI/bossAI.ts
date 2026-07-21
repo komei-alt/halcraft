@@ -70,7 +70,7 @@ export function updateBossAI(
   }
 
   // 物理更新
-  applyMobGravityAndYCollision(m, dt, checkCollision, BOSS_RADIUS, BOSS_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, BOSS_RADIUS, BOSS_HEIGHT, ctx.getBlock);
 
   // 移動による地形破壊（足元のブロックを強制破壊）
   // XY方向に進もうとしたときに段差があれば壊して進む

@@ -64,7 +64,7 @@ export function updateChickenAI(
   state.wanderTimers.set(m.id, wanderTimer);
 
   // 物理（共通関数使用）
-  applyMobGravityAndYCollision(m, dt, checkCollision, CHICKEN_RADIUS, CHICKEN_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, CHICKEN_RADIUS, CHICKEN_HEIGHT, ctx.getBlock);
 
   // X衝突（壁にぶつかったら方向転換）
   const newXC = m.x + m.vx * dt;

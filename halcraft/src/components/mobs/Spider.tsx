@@ -1,35 +1,11 @@
 // クモモブコンポーネント
 // 低ポリゴンの節足造形を、インスタンス描画で軽量に表現する
 
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
-const SPIDER_BODY_MATERIAL = new THREE.MeshStandardMaterial({
-  color: 0x292528,
-  roughness: 0.78,
-  metalness: 0.05,
-  flatShading: true,
-});
-const SPIDER_HEAD_MATERIAL = new THREE.MeshStandardMaterial({
-  color: 0x373034,
-  roughness: 0.72,
-  metalness: 0.06,
-  flatShading: true,
-});
-const SPIDER_LEG_MATERIAL = new THREE.MeshStandardMaterial({
-  color: 0x473322,
-  roughness: 0.86,
-  flatShading: true,
-});
-const SPIDER_DAMAGED_MATERIAL = new THREE.MeshStandardMaterial({
-  color: 0xff5b50,
-  emissive: 0x661510,
-  emissiveIntensity: 0.45,
-  roughness: 0.64,
-  flatShading: true,
-});
 const SPIDER_EYE_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xff261f,
   emissive: 0xff1208,
@@ -82,9 +58,49 @@ export function Spider({ mob, animTime }: SpiderProps) {
   const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
   const walkCycle = animTime * (isMoving ? 10 : 1.5);
   const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 20) * 0.1 : 0;
-  const bodyMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_BODY_MATERIAL;
-  const headMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_HEAD_MATERIAL;
-  const legMaterial = isDamaged ? SPIDER_DAMAGED_MATERIAL : SPIDER_LEG_MATERIAL;
+
+  // 個体ごとのマテリアル（被ダメ時も参照を固定して InstancedMesh を再マウントしない）
+  const materials = useMemo(() => ({
+    body: new THREE.MeshStandardMaterial({
+      color: 0x292528, roughness: 0.78, metalness: 0.05, flatShading: true,
+    }),
+    head: new THREE.MeshStandardMaterial({
+      color: 0x373034, roughness: 0.72, metalness: 0.06, flatShading: true,
+    }),
+    leg: new THREE.MeshStandardMaterial({
+      color: 0x473322, roughness: 0.86, flatShading: true,
+    }),
+  }), []);
+
+  useEffect(() => () => {
+    materials.body.dispose();
+    materials.head.dispose();
+    materials.leg.dispose();
+  }, [materials]);
+
+  useLayoutEffect(() => {
+    if (isDamaged) {
+      materials.body.color.setHex(0xff5b50);
+      materials.head.color.setHex(0xff5b50);
+      materials.leg.color.setHex(0xff5b50);
+      materials.body.emissive.setHex(0x661510);
+      materials.body.emissiveIntensity = 0.45;
+      materials.head.emissive.setHex(0x661510);
+      materials.head.emissiveIntensity = 0.45;
+      materials.leg.emissive.setHex(0x661510);
+      materials.leg.emissiveIntensity = 0.35;
+    } else {
+      materials.body.color.setHex(0x292528);
+      materials.head.color.setHex(0x373034);
+      materials.leg.color.setHex(0x473322);
+      materials.body.emissive.setHex(0x000000);
+      materials.body.emissiveIntensity = 0;
+      materials.head.emissive.setHex(0x000000);
+      materials.head.emissiveIntensity = 0;
+      materials.leg.emissive.setHex(0x000000);
+      materials.leg.emissiveIntensity = 0;
+    }
+  }, [isDamaged, materials]);
 
   useLayoutEffect(() => {
     const upperLegs = upperLegsRef.current;
@@ -112,10 +128,14 @@ export function Spider({ mob, animTime }: SpiderProps) {
       lowerLegs.setMatrixAt(index, part.matrix);
     });
 
+    upperLegs.count = LEG_DEFS.length;
+    lowerLegs.count = LEG_DEFS.length;
     upperLegs.instanceMatrix.needsUpdate = true;
     lowerLegs.instanceMatrix.needsUpdate = true;
     upperLegs.computeBoundingSphere();
     lowerLegs.computeBoundingSphere();
+    upperLegs.visible = true;
+    lowerLegs.visible = true;
   }, [isMoving, walkCycle]);
 
   useLayoutEffect(() => {
@@ -167,7 +187,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
         {/* 多面体の腹部と頭胸部で、低ポリのまま丸い輪郭を作る */}
         <mesh
           geometry={BODY_GEOMETRY}
-          material={bodyMaterial}
+          material={materials.body}
           position={[0, 0.28, -0.18]}
           scale={[0.66, 0.46, 0.74]}
           castShadow
@@ -176,7 +196,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
         />
         <mesh
           geometry={BODY_GEOMETRY}
-          material={headMaterial}
+          material={materials.head}
           position={[0, 0.28, 0.29]}
           scale={[0.48, 0.38, 0.46]}
           castShadow
@@ -186,17 +206,21 @@ export function Spider({ mob, animTime }: SpiderProps) {
 
         <instancedMesh
           ref={upperLegsRef}
-          args={[LEG_GEOMETRY, legMaterial, LEG_DEFS.length]}
+          args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
           castShadow
           receiveShadow
           dispose={null}
+          visible={false}
+          frustumCulled={false}
         />
         <instancedMesh
           ref={lowerLegsRef}
-          args={[LEG_GEOMETRY, legMaterial, LEG_DEFS.length]}
+          args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
           castShadow
           receiveShadow
           dispose={null}
+          visible={false}
+          frustumCulled={false}
         />
         <instancedMesh
           ref={eyesRef}

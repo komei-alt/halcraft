@@ -349,7 +349,8 @@ export const useMobStore = create<MobState>((set, get) => ({
             ...m,
             hp: newHp,
             vx: knockbackX * kbMultiplier,
-            vy: 2 + Math.random() * 2,
+            // ノックバックの上方向は控えめに（空中浮遊の原因になる）
+            vy: 0.8 + Math.random() * 1.2,
             vz: knockbackZ * kbMultiplier,
             hitTimer: 0.3,
             // 味方がダメージを受けたら怒り状態に（ニワトリは除外）

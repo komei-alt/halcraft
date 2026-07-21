@@ -56,7 +56,7 @@ export function updateSpiderAI(
   }
 
   // 物理
-  applyMobGravityAndYCollision(m, dt, checkCollision, SPIDER_RADIUS, SPIDER_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, SPIDER_RADIUS, SPIDER_HEIGHT, ctx.getBlock);
 
   // X衝突
   const newXS = m.x + m.vx * dt;

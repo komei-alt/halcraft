@@ -176,7 +176,7 @@ export function updateAllyMobAI(
   }
 
   // 物理
-  applyMobGravityAndYCollision(m, dt, checkCollision, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, PROTOTYPE_RADIUS, PROTOTYPE_HEIGHT, ctx.getBlock);
 
   // X軸衝突（2段対応）
   const newXP = m.x + m.vx * dt;

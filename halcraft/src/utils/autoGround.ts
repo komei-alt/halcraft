@@ -24,19 +24,26 @@ export function computeGroundOffset(
   scale: number,
   cacheKey?: string,
 ): number {
-  if (cacheKey) {
-    const cached = groundOffsetCache.get(cacheKey);
+  // 同じパスでも scale が違うとオフセットが変わるため、キーに scale を含める
+  const key = cacheKey ? `${cacheKey}@${scale}` : undefined;
+  if (key) {
+    const cached = groundOffsetCache.get(key);
     if (cached !== undefined) return cached;
   }
 
+  // ワールド行列を最新化してから AABB を測る（未更新だと空中浮き／沈みの原因になる）
+  scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(scene);
+  if (box.isEmpty()) {
+    return 0;
+  }
 
   // box.min.y * scale = スケール適用後のモデル最低点
   // これを 0 に持ち上げるには -min.y * scale が必要
   const offset = -box.min.y * scale;
 
-  if (cacheKey) {
-    groundOffsetCache.set(cacheKey, offset);
+  if (key) {
+    groundOffsetCache.set(key, offset);
   }
 
   return offset;

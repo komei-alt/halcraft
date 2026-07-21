@@ -111,7 +111,7 @@ export function updateZombieAI(
   }
 
   // 物理
-  applyMobGravityAndYCollision(m, dt, checkCollision, MOB_RADIUS, MOB_HEIGHT);
+  applyMobGravityAndYCollision(m, dt, checkCollision, MOB_RADIUS, MOB_HEIGHT, ctx.getBlock);
 
   // X衝突（ノックバック中はジャンプしない）
   const newX = m.x + m.vx * dt;

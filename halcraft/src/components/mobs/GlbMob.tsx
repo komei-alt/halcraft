@@ -116,12 +116,15 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const originalColors = useMemo(() => collectOriginalColors(clonedScene), [clonedScene]);
 
   // 自動接地: GLBバウンディングボックスからY底面を0に揃える
+  // scale はグループに掛けるので、オフセットは「スケール込み」で計算済みの値を使う
   const groundedPosition = useMemo((): [number, number, number] => {
     if (config.disableAutoGround) {
       return config.modelPosition;
     }
     const autoY = computeGroundOffset(scene, config.scale, config.path);
-    return [config.modelPosition[0], autoY, config.modelPosition[2]];
+    // modelPosition.y は微調整用に加算（足が沈むモデル向け）。大きく浮かせないよう上限を掛ける
+    const fineTuneY = Math.min(0.08, Math.max(-0.05, config.modelPosition[1]));
+    return [config.modelPosition[0], autoY + fineTuneY, config.modelPosition[2]];
   }, [scene, config.scale, config.path, config.modelPosition, config.disableAutoGround]);
 
   const isDamaged = mob.hitTimer > 0;

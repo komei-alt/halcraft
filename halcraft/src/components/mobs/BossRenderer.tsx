@@ -70,8 +70,10 @@ function InstancedBossParts({
       partObject.updateMatrix();
       mesh.setMatrixAt(index, partObject.matrix);
     });
+    mesh.count = parts.length;
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
+    mesh.visible = parts.length > 0;
   }, [parts]);
 
   if (parts.length === 0) return null;
@@ -82,6 +84,9 @@ function InstancedBossParts({
       args={[geometry, material, parts.length]}
       castShadow={castShadow}
       receiveShadow
+      // 初フレームの identity 行列フラッシュを防ぐ
+      visible={false}
+      frustumCulled={false}
     />
   );
 }
@@ -223,27 +228,29 @@ const BOSS_SILHOUETTES: Record<StageBossEncounterId, BossSilhouette> = {
 
 export function BossRenderer({ mob, animTime }: BossRendererProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const targetPositionRef = useRef(new THREE.Vector3());
+  const targetPositionRef = useRef(new THREE.Vector3(mob.x, mob.y, mob.z));
   const targetQuaternionRef = useRef(new THREE.Quaternion());
   const encounterId = mob.bossEncounterId ?? 'forest_guardian';
   const silhouette = BOSS_SILHOUETTES[encounterId];
   const accent = mob.traitAccent ?? '#ff6b4a';
   const isDamaged = mob.hitTimer > 0;
 
+  // 被ダメ時に Material を作り直すと InstancedMesh が再マウントされ、
+  // 行列リセットで一瞬「小さな箱」になる。色だけを更新する。
   const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-    color: isDamaged ? '#ffb4aa' : silhouette.bodyColor,
+    color: silhouette.bodyColor,
     emissive: accent,
-    emissiveIntensity: isDamaged ? 0.5 : 0.12,
+    emissiveIntensity: 0.12,
     roughness: 0.78,
     metalness: 0.16,
-  }), [accent, isDamaged, silhouette.bodyColor]);
+  }), [accent, silhouette.bodyColor]);
   const armorMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-    color: isDamaged ? '#ffe0d8' : silhouette.armorColor,
+    color: silhouette.armorColor,
     emissive: accent,
-    emissiveIntensity: isDamaged ? 0.58 : 0.16,
+    emissiveIntensity: 0.16,
     roughness: encounterId === 'snow_colossus' ? 0.34 : 0.58,
     metalness: encounterId === 'desert_warlord' ? 0.46 : 0.24,
-  }), [accent, encounterId, isDamaged, silhouette.armorColor]);
+  }), [accent, encounterId, silhouette.armorColor]);
   const accentMaterial = useMemo(() => new THREE.MeshStandardMaterial({
     color: accent,
     emissive: accent,
@@ -251,6 +258,25 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     roughness: 0.3,
     metalness: 0.18,
   }), [accent]);
+
+  useEffect(() => {
+    bodyMaterial.color.set(isDamaged ? '#ffb4aa' : silhouette.bodyColor);
+    bodyMaterial.emissive.set(accent);
+    bodyMaterial.emissiveIntensity = isDamaged ? 0.5 : 0.12;
+    armorMaterial.color.set(isDamaged ? '#ffe0d8' : silhouette.armorColor);
+    armorMaterial.emissive.set(accent);
+    armorMaterial.emissiveIntensity = isDamaged ? 0.58 : 0.16;
+    accentMaterial.color.set(accent);
+    accentMaterial.emissive.set(accent);
+  }, [
+    accent,
+    accentMaterial,
+    armorMaterial,
+    bodyMaterial,
+    isDamaged,
+    silhouette.armorColor,
+    silhouette.bodyColor,
+  ]);
 
   useEffect(() => () => {
     bodyMaterial.dispose();
