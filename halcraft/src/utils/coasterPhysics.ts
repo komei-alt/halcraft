@@ -196,6 +196,38 @@ export interface CoasterTrackProfile {
   designScore: number;
 }
 
+/**
+ * スプライン上で (x,y,z) に最も近い progress(0-1) を返す。
+ * 搭乗位置を線路の始点ではなく「乗った場所」に合わせるために使う。
+ */
+export function findNearestSplineProgress(
+  spline: THREE.CatmullRomCurve3,
+  x: number,
+  y: number,
+  z: number,
+  samples = 96,
+): number {
+  let bestT = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  const probe = new THREE.Vector3();
+  const sampleCount = Math.max(8, samples);
+
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = i / sampleCount;
+    spline.getPointAt(t, probe);
+    const dx = probe.x - x;
+    const dy = probe.y - y;
+    const dz = probe.z - z;
+    const dist = dx * dx + dy * dy + dz * dz;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestT = t;
+    }
+  }
+
+  return bestT;
+}
+
 export function buildTrackSpline(
   path: Array<{ x: number; y: number; z: number; blockId: BlockId }>,
 ): { spline: THREE.CatmullRomCurve3; loops: LoopSegment[]; isLoop: boolean } | null {

@@ -10,6 +10,7 @@ import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useMultiplayerStore, type RemotePlayer } from '../stores/useMultiplayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
+import { useGameStore } from '../stores/useGameStore';
 import { VoxelAvatar } from './VoxelAvatar';
 import { RemotePlayerWeapon } from './RemotePlayerWeapon';
 import { isValidSkinId } from '../types/skins';
@@ -25,6 +26,8 @@ export function RemotePlayers() {
 
   // 毎フレーム補間を実行（リモートプレイヤー + 乗り物）
   useFrame((_, delta) => {
+    // ポーズ中は補間を止め、フリーズ感を保つ
+    if (useGameStore.getState().phase !== 'playing') return;
     interpolateRemotePlayers(delta);
     interpolateVehicles(delta);
   });

@@ -471,15 +471,67 @@ export function Player() {
     const pos = position.current;
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
-    reportWorldPosition(pos.x, camera.position.y || pos.y, pos.z);
+
+    // --- 乗り物ストアの状態を取得（本体座標報告より先に） ---
+    const vehicleState = useVehicleStore.getState();
+    const heli = vehicleState.helicopter;
+    const isInVehicle = vehicleState.isInVehicle();
+    const activeVehicle = vehicleState.getActiveVehicle();
+    const coasterSnapshot = useCoasterStore.getState();
+
+    // worldPosition はカメラではなく機体/本体を報告（拾得・高度UIのズレ防止）
+    {
+      let bodyX = pos.x;
+      let bodyY = pos.y;
+      let bodyZ = pos.z;
+      if (coasterSnapshot.isBoarded) {
+        bodyX = coasterSnapshot.cartX;
+        bodyY = coasterSnapshot.cartY;
+        bodyZ = coasterSnapshot.cartZ;
+      } else if (activeVehicle === 'helicopter') {
+        bodyX = heli.x;
+        bodyY = heli.y;
+        bodyZ = heli.z;
+      } else if (activeVehicle === 'tank') {
+        bodyX = vehicleState.tank.x;
+        bodyY = vehicleState.tank.y;
+        bodyZ = vehicleState.tank.z;
+      } else if (activeVehicle === 'airplane') {
+        bodyX = vehicleState.airplane.x;
+        bodyY = vehicleState.airplane.y;
+        bodyZ = vehicleState.airplane.z;
+      } else if (activeVehicle === 'car') {
+        bodyX = vehicleState.car.x;
+        bodyY = vehicleState.car.y;
+        bodyZ = vehicleState.car.z;
+      }
+      reportWorldPosition(bodyX, bodyY, bodyZ);
+    }
 
     // 搭乗・建築飛行でもカメラ位置から水中オーバーレイを同期（早期 return で状態が固まるのを防ぐ）
     {
       const eyeX = camera.position.x;
       const eyeY = camera.position.y;
       const eyeZ = camera.position.z;
-      const inWaterEye = isInWater(getBlock, eyeX, eyeY, eyeZ);
-      const inWaterFeet = isInWater(getBlock, eyeX, eyeY - PLAYER_HEIGHT + 0.3, eyeZ);
+      // 乗り物搭乗中は機体本体で水没判定（カメラ遠景で水面オーバーレイが誤点灯しないように）
+      const bodyForWater = coasterSnapshot.isBoarded
+        ? { x: coasterSnapshot.cartX, y: coasterSnapshot.cartY + 1.2, z: coasterSnapshot.cartZ }
+        : activeVehicle === 'helicopter'
+          ? { x: heli.x, y: heli.y, z: heli.z }
+          : activeVehicle === 'tank'
+            ? { x: vehicleState.tank.x, y: vehicleState.tank.y, z: vehicleState.tank.z }
+            : activeVehicle === 'airplane'
+              ? { x: vehicleState.airplane.x, y: vehicleState.airplane.y, z: vehicleState.airplane.z }
+              : activeVehicle === 'car'
+                ? { x: vehicleState.car.x, y: vehicleState.car.y, z: vehicleState.car.z }
+                : { x: eyeX, y: eyeY, z: eyeZ };
+      const inWaterEye = isInWater(getBlock, bodyForWater.x, bodyForWater.y, bodyForWater.z);
+      const inWaterFeet = isInWater(
+        getBlock,
+        bodyForWater.x,
+        bodyForWater.y - (activeVehicle || coasterSnapshot.isBoarded ? 0.8 : PLAYER_HEIGHT - 0.3),
+        bodyForWater.z,
+      );
       const swimming = inWaterEye || inWaterFeet;
       const liquidStore = usePlayerStore.getState();
       if (liquidStore.isSubmerged !== inWaterEye) {
@@ -509,12 +561,6 @@ export function Player() {
 
     // --- 入力のアクティブ判定 ---
     const isInputActive = isTouch.current ? true : isDesktopGameplayInputActive();
-
-    // --- 乗り物ストアの状態を取得 ---
-    const vehicleState = useVehicleStore.getState();
-    const heli = vehicleState.helicopter;
-    const isInVehicle = vehicleState.isInVehicle();
-    const activeVehicle = vehicleState.getActiveVehicle();
     const isVehicleInputActive = isTouch.current
       ? true
       : isVehicleKeyboardInputActive(activeVehicle, isInputActive);
@@ -842,21 +888,26 @@ export function Player() {
         apX += flyForward.current.x * apSpeed * dt;
         apZ += flyForward.current.z * apSpeed * dt;
 
-        // 地面衝突チェック
-        const heliBottomY = apY - 0.5;
-        const groundCheck = checkCollision(apX, heliBottomY, apZ);
-        if (groundCheck && inputVertical <= 0) {
-          let safeY = apY;
-          for (let checkY = Math.floor(heliBottomY); checkY < Math.floor(heliBottomY) + 5; checkY++) {
-            if (!checkCollision(apX, checkY + 1, apZ)) {
-              safeY = checkY + 1 + 0.5;
-              break;
-            }
-          }
-          apY = Math.max(apY, safeY);
+        // 地面・建物上面への着陸（heightmap ではなく実ブロック面）
+        const HELI_BODY_HALF = 0.55;
+        const surfaceY = findSurfaceY(
+          getBlock,
+          apX,
+          apZ,
+          apY + 2,
+          56,
+          getTerrainHeight(apX, apZ),
+        );
+        const heliGroundY = surfaceY + HELI_BODY_HALF;
+        if (inputVertical <= 0 && apY <= heliGroundY + 0.2) {
+          apY = Math.max(apY, heliGroundY);
         }
-
-        if (apY < 1) apY = 1;
+        // 壁や障害物への食い込み防止
+        const heliBottomY = apY - HELI_BODY_HALF;
+        if (checkCollision(apX, heliBottomY, apZ) && inputVertical <= 0) {
+          apY = Math.max(apY, heliGroundY);
+        }
+        if (apY < heliGroundY) apY = heliGroundY;
 
         // ローターアニメーション
         const rotorSpeedFactor = Math.abs(apSpeed) / MAX_SPEED;
@@ -1454,11 +1505,8 @@ export function Player() {
       }
 
       if (pos.y < -20) {
-        const respawnY = getSpawnY();
-        pos.set(SPAWN_X, respawnY, SPAWN_Z);
-        vel.set(0, 0, 0);
-        lastGroundY.current = respawnY;
-        smoothCameraY.current = respawnY + PLAYER_HEIGHT - 0.1;
+        // クリエイティブ飛行中の奈落も通常リスポーンと同じく状態を整える
+        respawn();
       }
 
       return;
@@ -1777,13 +1825,8 @@ export function Player() {
       lastSendTime.current = now;
     }
 
-    // --- 落下リスポーン ---
+    // --- 落下リスポーン（spawnToken 経由で位置もリセット） ---
     if (pos.y < -20) {
-      const respawnY = getSpawnY();
-      pos.set(SPAWN_X, respawnY, SPAWN_Z);
-      vel.set(0, 0, 0);
-      lastGroundY.current = respawnY;
-      smoothCameraY.current = respawnY + PLAYER_HEIGHT - 0.1;
       respawn();
     }
   });

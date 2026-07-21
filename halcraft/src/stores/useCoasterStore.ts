@@ -9,6 +9,7 @@ import {
   analyzeTrackProfile,
   buildTrackPath,
   buildTrackSpline,
+  findNearestSplineProgress,
   isRailBlock,
   updateCoasterPhysics,
   type CoasterTrackProfile,
@@ -123,9 +124,16 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
     coasterRuntime.chainRatchetTimer = 0;
     coasterRuntime.profile = profile;
 
-    const startPoint = result.spline.getPointAt(0);
+    // 乗ったレール位置に最も近い progress から開始（始点テレポートを防ぐ）
+    const boardProgress = findNearestSplineProgress(
+      result.spline,
+      railX + 0.5,
+      railY + 0.5,
+      railZ + 0.5,
+    );
+    const startPoint = result.spline.getPointAt(boardProgress);
     coasterRuntime.position.copy(startPoint);
-    result.spline.getTangentAt(0, coasterRuntime.tangent);
+    result.spline.getTangentAt(boardProgress, coasterRuntime.tangent);
 
     set({
       cartSpawned: true,
@@ -136,7 +144,7 @@ export const useCoasterStore = create<CoasterState>((set, get) => ({
       cartYaw: Math.atan2(coasterRuntime.tangent.x, coasterRuntime.tangent.z),
       cartRoll: 0,
       speed: 0,
-      progress: 0,
+      progress: boardProgress,
       isBoarded: false,
       braking: false,
       onChainLift: false,
