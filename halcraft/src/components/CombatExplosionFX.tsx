@@ -1,6 +1,6 @@
 // 戦闘用の高品質爆発エフェクト
 // ロケット・戦車砲・爆弾・TNT などから共通利用する
-// 火球・衝撃波・火花・煙・破片・残火・ライトを多層で描画する
+// 火球・衝撃波・火花・煙・破片・砂ぼこり・ライトを多層で描画する
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -9,7 +9,10 @@ import { registerCombatExplosionSpawner, type CombatExplosionOptions } from '../
 import { createSizedPointsMaterial } from '../utils/sizedPointsMaterial';
 import { usePlayerStore } from '../stores/usePlayerStore';
 
-type ParticleKind = 'spark' | 'ember' | 'smoke' | 'fire';
+/** 加算ブレンド向け（火花・火・残火） */
+type AdditiveKind = 'spark' | 'ember' | 'fire';
+/** 通常ブレンド向け（煙・砂ぼこり・破片の煙） */
+type SoftKind = 'smoke' | 'dust' | 'debrisSmoke';
 
 interface ExplosionParticle {
   x: number;
@@ -21,7 +24,7 @@ interface ExplosionParticle {
   life: number;
   maxLife: number;
   size: number;
-  kind: ParticleKind;
+  kind: AdditiveKind | SoftKind;
   color: THREE.Color;
 }
 
@@ -42,6 +45,10 @@ interface DebrisPiece {
   avy: number;
   avz: number;
   color: THREE.Color;
+  /** 煙をまとって飛ぶ破片 */
+  smoky: boolean;
+  /** 次の煙トレイル放出までの残り時間 */
+  smokeTimer: number;
 }
 
 interface ShockRing {
@@ -82,10 +89,16 @@ interface CombatExplosion {
 }
 
 const MAX_EXPLOSIONS = 8;
-const MAX_PARTICLES = MAX_EXPLOSIONS * 140;
-const MAX_DEBRIS = MAX_EXPLOSIONS * 28;
+const MAX_ADDITIVE_PARTICLES = MAX_EXPLOSIONS * 120;
+const MAX_SOFT_PARTICLES = MAX_EXPLOSIONS * 180;
+const MAX_DEBRIS = MAX_EXPLOSIONS * 36;
 const MAX_RINGS = MAX_EXPLOSIONS * 4;
 const MAX_CORES = MAX_EXPLOSIONS * 3;
+
+/** 破片から煙を放出する間隔（秒） */
+const DEBRIS_SMOKE_INTERVAL = 0.028;
+/** 1破片あたりの最大煙トレイル数（概算・生成時の上限感） */
+const DEBRIS_SMOKE_PER_TICK = 1;
 
 const ringGeometry = new THREE.RingGeometry(0.92, 1.08, 48);
 const coreGeometry = new THREE.SphereGeometry(1, 18, 14);
@@ -122,6 +135,7 @@ function resolvePreset(options?: CombatExplosionOptions): {
   soft: THREE.Color;
   smoke: THREE.Color;
   debris: THREE.Color;
+  dust: THREE.Color;
 } {
   const style = options?.style ?? 'rocket';
   const accent = new THREE.Color(options?.accent ?? (
@@ -133,13 +147,19 @@ function resolvePreset(options?: CombatExplosionOptions): {
   const soft = accent.clone().lerp(new THREE.Color('#ffffff'), style === 'precision' ? 0.45 : 0.28);
   const smoke = new THREE.Color(style === 'tnt' ? '#5a4e45' : '#4a433d');
   const debris = new THREE.Color(style === 'bomb' ? '#4a3a2e' : '#6b4a32');
+  // 砂ぼこり: 砂漠寄り〜土っぽいベージュ
+  const dust = new THREE.Color(
+    style === 'tnt' ? '#c4a574'
+      : style === 'bomb' ? '#b8956a'
+        : '#d2b48c',
+  );
 
   if (style === 'bomb') {
     return {
       scale: 1.45,
       intensity: 1.35,
       radius: 11,
-      life: 1.9,
+      life: 4.2,
       light: 18,
       lightDist: 34,
       shake: 0.95,
@@ -147,6 +167,7 @@ function resolvePreset(options?: CombatExplosionOptions): {
       soft,
       smoke,
       debris,
+      dust,
     };
   }
   if (style === 'tnt') {
@@ -154,7 +175,7 @@ function resolvePreset(options?: CombatExplosionOptions): {
       scale: 0.85,
       intensity: 0.95,
       radius: 5.5,
-      life: 1.35,
+      life: 3.4,
       light: 10,
       lightDist: 18,
       shake: 0.72,
@@ -162,6 +183,7 @@ function resolvePreset(options?: CombatExplosionOptions): {
       soft,
       smoke,
       debris,
+      dust,
     };
   }
   if (style === 'precision') {
@@ -169,7 +191,7 @@ function resolvePreset(options?: CombatExplosionOptions): {
       scale: 1.15,
       intensity: 1.25,
       radius: 8.4,
-      life: 1.7,
+      life: 3.8,
       light: 16,
       lightDist: 28,
       shake: 0.82,
@@ -177,13 +199,14 @@ function resolvePreset(options?: CombatExplosionOptions): {
       soft,
       smoke,
       debris,
+      dust,
     };
   }
   return {
     scale: 1,
     intensity: 1,
     radius: 7.5,
-    life: 1.55,
+    life: 3.6,
     light: 13,
     lightDist: 24,
     shake: 0.7,
@@ -191,7 +214,15 @@ function resolvePreset(options?: CombatExplosionOptions): {
     soft,
     smoke,
     debris,
+    dust,
   };
+}
+
+function pushSoftParticle(
+  particles: ExplosionParticle[],
+  p: ExplosionParticle,
+): void {
+  particles.push(p);
 }
 
 function createExplosion(x: number, y: number, z: number, options?: CombatExplosionOptions): CombatExplosion {
@@ -200,9 +231,13 @@ function createExplosion(x: number, y: number, z: number, options?: CombatExplos
   const intensity = preset.intensity * (options?.intensity ?? 1);
   const sparkCount = Math.round((42 + intensity * 18) * scale);
   const emberCount = Math.round((18 + intensity * 10) * scale);
-  const smokeCount = Math.round((22 + intensity * 12) * scale);
+  const smokeCount = Math.round((18 + intensity * 10) * scale);
   const fireCount = Math.round((12 + intensity * 6) * scale);
-  const debrisCount = Math.round((16 + intensity * 10) * scale);
+  // 放射状に飛び散る煙つき破片
+  const debrisCount = Math.round((22 + intensity * 12) * scale);
+  // 砂ぼこり（長時間残留）
+  const dustCount = Math.round((48 + intensity * 28) * scale);
+  const dustRingCount = Math.round((20 + intensity * 10) * scale);
   const particles: ExplosionParticle[] = [];
   const debris: DebrisPiece[] = [];
   const rings: ShockRing[] = [];
@@ -271,7 +306,7 @@ function createExplosion(x: number, y: number, z: number, options?: CombatExplos
     const theta = Math.random() * Math.PI * 2;
     const speed = (1.2 + Math.random() * 4.0) * scale;
     const life = 1.05 + Math.random() * 1.15;
-    particles.push({
+    pushSoftParticle(particles, {
       x: x + (Math.random() - 0.5) * 1.2 * scale,
       y: y + Math.random() * 0.45 * scale,
       z: z + (Math.random() - 0.5) * 1.2 * scale,
@@ -286,28 +321,104 @@ function createExplosion(x: number, y: number, z: number, options?: CombatExplos
     });
   }
 
-  for (let i = 0; i < debrisCount; i++) {
+  // ── 砂ぼこり: 放射状に広がりながらゆっくり舞い上がり、長時間残る ──
+  for (let i = 0; i < dustCount; i++) {
     const theta = Math.random() * Math.PI * 2;
-    const speed = (3.2 + Math.random() * 9.5) * scale;
-    const life = 0.9 + Math.random() * 0.85;
-    debris.push({
-      x: x + (Math.random() - 0.5) * 0.85 * scale,
-      y: y + (Math.random() - 0.2) * 0.55 * scale,
-      z: z + (Math.random() - 0.5) * 0.85 * scale,
-      vx: Math.cos(theta) * speed,
-      vy: 3.4 + Math.random() * 6.5,
-      vz: Math.sin(theta) * speed,
+    // 水平方向に強く飛ばす（地面の砂が巻き上がる感じ）
+    const radialSpeed = (1.8 + Math.random() * 5.5) * scale * intensity;
+    const upward = (0.6 + Math.random() * 2.4) * scale;
+    // 長寿命: 2.5〜5.5秒
+    const life = 2.5 + Math.random() * 3.0;
+    const dustColor = preset.dust.clone().lerp(
+      new THREE.Color(Math.random() < 0.4 ? '#e8d4a8' : '#8a7355'),
+      Math.random() * 0.45,
+    );
+    pushSoftParticle(particles, {
+      x: x + (Math.random() - 0.5) * 1.4 * scale,
+      y: y + Math.random() * 0.35 * scale,
+      z: z + (Math.random() - 0.5) * 1.4 * scale,
+      vx: Math.cos(theta) * radialSpeed,
+      vy: upward,
+      vz: Math.sin(theta) * radialSpeed,
       life,
       maxLife: life,
-      size: (0.07 + Math.random() * 0.18) * scale,
+      size: (0.55 + Math.random() * 1.35) * scale,
+      kind: 'dust',
+      color: dustColor,
+    });
+  }
+
+  // 地面を這う砂のリング（低め・外向き）
+  for (let i = 0; i < dustRingCount; i++) {
+    const theta = (i / dustRingCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+    const radialSpeed = (3.5 + Math.random() * 4.5) * scale * intensity;
+    const life = 2.2 + Math.random() * 2.4;
+    pushSoftParticle(particles, {
+      x: x + Math.cos(theta) * 0.3 * scale,
+      y: y + 0.05 + Math.random() * 0.2,
+      z: z + Math.sin(theta) * 0.3 * scale,
+      vx: Math.cos(theta) * radialSpeed,
+      vy: 0.35 + Math.random() * 1.1,
+      vz: Math.sin(theta) * radialSpeed,
+      life,
+      maxLife: life,
+      size: (0.7 + Math.random() * 1.1) * scale,
+      kind: 'dust',
+      color: preset.dust.clone().lerp(new THREE.Color('#a89070'), Math.random() * 0.35),
+    });
+  }
+
+  // ── 煙をまとった破片: 放射状に飛ばし、飛行中に煙を吐く ──
+  for (let i = 0; i < debrisCount; i++) {
+    // ほぼ水平〜やや上向きの放射状
+    const theta = (i / Math.max(1, debrisCount)) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+    const elev = 0.15 + Math.random() * 0.55; // 上向き成分
+    const cosE = Math.cos(elev);
+    const sinE = Math.sin(elev);
+    const speed = (4.5 + Math.random() * 11) * scale * intensity;
+    const life = 1.1 + Math.random() * 1.0;
+    const smoky = Math.random() < 0.85; // 大半が煙つき
+
+    debris.push({
+      x: x + Math.cos(theta) * 0.25 * scale,
+      y: y + 0.15 + Math.random() * 0.4 * scale,
+      z: z + Math.sin(theta) * 0.25 * scale,
+      vx: Math.cos(theta) * cosE * speed,
+      vy: sinE * speed + 2.2 + Math.random() * 4.5,
+      vz: Math.sin(theta) * cosE * speed,
+      life,
+      maxLife: life,
+      size: (0.08 + Math.random() * 0.2) * scale,
       rx: Math.random() * Math.PI,
       ry: Math.random() * Math.PI,
       rz: Math.random() * Math.PI,
-      avx: (Math.random() - 0.5) * 14,
-      avy: (Math.random() - 0.5) * 14,
-      avz: (Math.random() - 0.5) * 14,
+      avx: (Math.random() - 0.5) * 16,
+      avy: (Math.random() - 0.5) * 16,
+      avz: (Math.random() - 0.5) * 16,
       color: preset.debris.clone().lerp(new THREE.Color('#2c241f'), Math.random() * 0.4),
+      smoky,
+      smokeTimer: Math.random() * DEBRIS_SMOKE_INTERVAL,
     });
+
+    // 発射直後の煙のかたまり（破片の「まとわり」）
+    if (smoky) {
+      for (let s = 0; s < 2; s++) {
+        const puffLife = 0.55 + Math.random() * 0.55;
+        pushSoftParticle(particles, {
+          x: x + Math.cos(theta) * 0.2 * scale,
+          y: y + 0.2 * scale,
+          z: z + Math.sin(theta) * 0.2 * scale,
+          vx: Math.cos(theta) * cosE * speed * 0.35 + (Math.random() - 0.5) * 0.8,
+          vy: sinE * speed * 0.2 + 0.8 + Math.random() * 1.2,
+          vz: Math.sin(theta) * cosE * speed * 0.35 + (Math.random() - 0.5) * 0.8,
+          life: puffLife,
+          maxLife: puffLife,
+          size: (0.28 + Math.random() * 0.4) * scale,
+          kind: 'debrisSmoke',
+          color: preset.smoke.clone().lerp(preset.dust, 0.35 + Math.random() * 0.25),
+        });
+      }
+    }
   }
 
   rings.push(
@@ -403,26 +514,30 @@ function softWhite(color: THREE.Color): THREE.Color {
   return color.clone().lerp(new THREE.Color('#ffffff'), 0.55);
 }
 
-function applyCameraShake(x: number, y: number, z: number, strength: number): void {
-  const camera = usePlayerStore.getState();
-  // カメラ位置は Player 側で管理されるため、distance は cameraShake 量として距離減衰させる
-  // Player コンポーネントが cameraShake を読む
-  const playerPos = camera;
-  void playerPos;
-  // 距離は呼び出し側で渡さない場合があるので、簡易に強度だけ適用
-  // 実際の距離減衰は spawn 側で行う
+function applyCameraShake(_x: number, _y: number, _z: number, strength: number): void {
   usePlayerStore.setState((state) => ({
     cameraShake: Math.min(1, Math.max(state.cameraShake, strength)),
   }));
-  void x;
-  void y;
-  void z;
+}
+
+function isAdditiveKind(kind: ExplosionParticle['kind']): kind is AdditiveKind {
+  return kind === 'spark' || kind === 'ember' || kind === 'fire';
+}
+
+function createParticleGeometry(maxCount: number): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(maxCount * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(maxCount * 3), 3));
+  geo.setAttribute('particleSize', new THREE.BufferAttribute(new Float32Array(maxCount), 1));
+  geo.setDrawRange(0, 0);
+  return geo;
 }
 
 export function CombatExplosionFX() {
   const { camera } = useThree();
   const explosionsRef = useRef<CombatExplosion[]>([]);
-  const pointsRef = useRef<THREE.Points>(null);
+  const additivePointsRef = useRef<THREE.Points>(null);
+  const softPointsRef = useRef<THREE.Points>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const ringMeshRef = useRef<THREE.InstancedMesh>(null);
   const coreMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -430,33 +545,47 @@ export function CombatExplosionFX() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
 
-  const particleTexture = useMemo(() => createRadialTexture([
+  const glowTexture = useMemo(() => createRadialTexture([
     { offset: 0, color: 'rgba(255,255,255,1)' },
     { offset: 0.25, color: 'rgba(255,230,160,0.95)' },
     { offset: 0.55, color: 'rgba(255,120,40,0.45)' },
     { offset: 1, color: 'rgba(0,0,0,0)' },
   ]), []);
 
-  const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES * 3), 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES * 3), 3));
-    geo.setAttribute('particleSize', new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES), 1));
-    geo.setDrawRange(0, 0);
-    return geo;
-  }, []);
+  const softTexture = useMemo(() => createRadialTexture([
+    { offset: 0, color: 'rgba(255,255,255,0.85)' },
+    { offset: 0.35, color: 'rgba(255,255,255,0.45)' },
+    { offset: 0.7, color: 'rgba(255,255,255,0.12)' },
+    { offset: 1, color: 'rgba(0,0,0,0)' },
+  ]), []);
 
-  const material = useMemo(() => {
+  const additiveGeometry = useMemo(() => createParticleGeometry(MAX_ADDITIVE_PARTICLES), []);
+  const softGeometry = useMemo(() => createParticleGeometry(MAX_SOFT_PARTICLES), []);
+
+  const additiveMaterial = useMemo(() => {
     const mat = createSizedPointsMaterial({
       size: 0.35,
       opacity: 0.98,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     });
-    mat.map = particleTexture;
+    mat.map = glowTexture;
     mat.alphaTest = 0.02;
     return mat;
-  }, [particleTexture]);
+  }, [glowTexture]);
+
+  const softMaterial = useMemo(() => {
+    const mat = createSizedPointsMaterial({
+      size: 0.5,
+      opacity: 0.72,
+      blending: THREE.NormalBlending,
+      toneMapped: true,
+      depthWrite: false,
+    });
+    mat.map = softTexture;
+    mat.alphaTest = 0.04;
+    return mat;
+  }, [softTexture]);
 
   const debrisMaterial = useMemo(() => new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -490,13 +619,19 @@ export function CombatExplosionFX() {
   }), []);
 
   useEffect(() => () => {
-    particleTexture.dispose();
-    material.dispose();
+    glowTexture.dispose();
+    softTexture.dispose();
+    additiveMaterial.dispose();
+    softMaterial.dispose();
     debrisMaterial.dispose();
     ringMaterial.dispose();
     coreMaterial.dispose();
-    geometry.dispose();
-  }, [particleTexture, material, debrisMaterial, ringMaterial, coreMaterial, geometry]);
+    additiveGeometry.dispose();
+    softGeometry.dispose();
+  }, [
+    glowTexture, softTexture, additiveMaterial, softMaterial,
+    debrisMaterial, ringMaterial, coreMaterial, additiveGeometry, softGeometry,
+  ]);
 
   useLayoutEffect(() => {
     for (const mesh of [debrisMeshRef.current, ringMeshRef.current, coreMeshRef.current]) {
@@ -530,7 +665,8 @@ export function CombatExplosionFX() {
     const dt = Math.min(delta, 0.05);
 
     if (list.length === 0) {
-      geometry.setDrawRange(0, 0);
+      additiveGeometry.setDrawRange(0, 0);
+      softGeometry.setDrawRange(0, 0);
       if (debrisMeshRef.current) {
         debrisMeshRef.current.count = 0;
         debrisMeshRef.current.visible = false;
@@ -551,10 +687,12 @@ export function CombatExplosionFX() {
       const ex = list[i];
       ex.life -= dt;
       let alive = ex.life > 0;
-      for (const p of ex.particles) {
-        if (p.life > 0) {
-          alive = true;
-          break;
+      if (!alive) {
+        for (const p of ex.particles) {
+          if (p.life > 0) {
+            alive = true;
+            break;
+          }
         }
       }
       if (!alive) {
@@ -568,14 +706,22 @@ export function CombatExplosionFX() {
       if (!alive) list.splice(i, 1);
     }
 
-    const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
-    const colAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
-    const sizeAttr = geometry.getAttribute('particleSize') as THREE.BufferAttribute;
-    const positions = posAttr.array as Float32Array;
-    const colors = colAttr.array as Float32Array;
-    const sizes = sizeAttr.array as Float32Array;
+    const addPos = additiveGeometry.getAttribute('position') as THREE.BufferAttribute;
+    const addCol = additiveGeometry.getAttribute('color') as THREE.BufferAttribute;
+    const addSize = additiveGeometry.getAttribute('particleSize') as THREE.BufferAttribute;
+    const addPositions = addPos.array as Float32Array;
+    const addColors = addCol.array as Float32Array;
+    const addSizes = addSize.array as Float32Array;
 
-    let pIdx = 0;
+    const softPos = softGeometry.getAttribute('position') as THREE.BufferAttribute;
+    const softCol = softGeometry.getAttribute('color') as THREE.BufferAttribute;
+    const softSize = softGeometry.getAttribute('particleSize') as THREE.BufferAttribute;
+    const softPositions = softPos.array as Float32Array;
+    const softColors = softCol.array as Float32Array;
+    const softSizes = softSize.array as Float32Array;
+
+    let aIdx = 0;
+    let sIdx = 0;
     let dIdx = 0;
     let rIdx = 0;
     let cIdx = 0;
@@ -587,7 +733,8 @@ export function CombatExplosionFX() {
 
     for (const ex of list) {
       const lifeRatio = Math.max(0, ex.life / ex.maxLife);
-      const lightPulse = lifeRatio * ex.lightIntensity;
+      // ライトは爆発前半だけ強く（砂ぼこり期間は暗く）
+      const lightPulse = Math.min(1, lifeRatio * (ex.maxLife / 1.2)) * ex.lightIntensity;
       if (lightPulse > maxLight) {
         maxLight = lightPulse;
         lightX = ex.cx;
@@ -596,8 +743,62 @@ export function CombatExplosionFX() {
         lightDist = ex.lightDistance;
       }
 
+      // 破片更新 → 煙トレイルを粒子として放出
+      for (const d of ex.debris) {
+        if (d.life <= 0) continue;
+        d.life -= dt;
+        d.vy -= 18 * dt;
+        d.vx *= 0.975;
+        d.vz *= 0.975;
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.z += d.vz * dt;
+        d.rx += d.avx * dt;
+        d.ry += d.avy * dt;
+        d.rz += d.avz * dt;
+
+        if (d.smoky && d.life > 0) {
+          d.smokeTimer -= dt;
+          while (d.smokeTimer <= 0) {
+            d.smokeTimer += DEBRIS_SMOKE_INTERVAL;
+            for (let n = 0; n < DEBRIS_SMOKE_PER_TICK; n++) {
+              // 爆発の粒子数が膨らみすぎないようソフト上限
+              if (ex.particles.length > MAX_SOFT_PARTICLES) break;
+              const puffLife = 0.45 + Math.random() * 0.65;
+              ex.particles.push({
+                x: d.x + (Math.random() - 0.5) * d.size * 1.5,
+                y: d.y + (Math.random() - 0.5) * d.size,
+                z: d.z + (Math.random() - 0.5) * d.size * 1.5,
+                // 破片速度の一部を引きずりつつ、わずかに遅れ・広がり
+                vx: d.vx * 0.22 + (Math.random() - 0.5) * 0.9,
+                vy: d.vy * 0.12 + 0.4 + Math.random() * 0.9,
+                vz: d.vz * 0.22 + (Math.random() - 0.5) * 0.9,
+                life: puffLife,
+                maxLife: puffLife,
+                size: d.size * (2.2 + Math.random() * 2.8),
+                kind: 'debrisSmoke',
+                color: new THREE.Color().copy(d.color).lerp(new THREE.Color('#6a5c50'), 0.55)
+                  .lerp(new THREE.Color('#3a322c'), Math.random() * 0.3),
+              });
+            }
+          }
+        }
+
+        if (d.life <= 0 || dIdx >= MAX_DEBRIS || !debrisMeshRef.current) continue;
+        const alpha = Math.max(0, d.life / d.maxLife);
+        dummy.position.set(d.x, d.y, d.z);
+        dummy.rotation.set(d.rx, d.ry, d.rz);
+        dummy.scale.set(d.size, d.size * (0.55 + (dIdx % 3) * 0.2), d.size * 0.85);
+        dummy.updateMatrix();
+        debrisMeshRef.current.setMatrixAt(dIdx, dummy.matrix);
+        tempColor.copy(d.color).multiplyScalar(0.55 + alpha * 0.55);
+        debrisMeshRef.current.setColorAt(dIdx, tempColor);
+        dIdx++;
+      }
+
+      // パーティクル更新
       for (const p of ex.particles) {
-        if (p.life <= 0 || pIdx >= MAX_PARTICLES) continue;
+        if (p.life <= 0) continue;
         p.life -= dt;
 
         if (p.kind === 'spark') {
@@ -614,7 +815,20 @@ export function CombatExplosionFX() {
           p.vy -= 3.8 * dt;
           p.vx *= 0.92;
           p.vz *= 0.92;
+        } else if (p.kind === 'dust') {
+          // 砂ぼこり: 水平に減速しながらゆっくり上昇、長く漂う
+          p.vx *= 0.978;
+          p.vz *= 0.978;
+          p.vy = p.vy * 0.99 + 0.55 * dt;
+          // わずかな風ゆらぎ
+          p.vx += Math.sin(p.life * 3.1 + p.x) * 0.35 * dt;
+          p.vz += Math.cos(p.life * 2.7 + p.z) * 0.35 * dt;
+        } else if (p.kind === 'debrisSmoke') {
+          p.vx *= 0.96;
+          p.vz *= 0.96;
+          p.vy += 0.65 * dt;
         } else {
+          // smoke
           p.vy += 0.85 * dt;
           p.vx *= 0.985;
           p.vz *= 0.985;
@@ -625,58 +839,65 @@ export function CombatExplosionFX() {
         p.z += p.vz * dt;
 
         const alpha = Math.max(0, p.life / p.maxLife);
-        const fadeIn = p.kind === 'smoke' ? Math.min(1, (p.maxLife - p.life) * 2.8) : 1;
-        const i3 = pIdx * 3;
-        positions[i3] = p.x;
-        positions[i3 + 1] = p.y;
-        positions[i3 + 2] = p.z;
 
-        if (p.kind === 'spark') {
-          colors[i3] = p.color.r * (0.7 + alpha * 0.9);
-          colors[i3 + 1] = p.color.g * alpha;
-          colors[i3 + 2] = p.color.b * alpha * alpha * 0.55;
-          sizes[pIdx] = p.size * (0.45 + alpha * 1.4) * 48;
-        } else if (p.kind === 'ember') {
-          colors[i3] = p.color.r * alpha * 1.2;
-          colors[i3 + 1] = p.color.g * alpha * 0.55;
-          colors[i3 + 2] = p.color.b * alpha * 0.2;
-          sizes[pIdx] = p.size * (0.6 + alpha * 0.9) * 42;
-        } else if (p.kind === 'fire') {
-          colors[i3] = p.color.r * alpha * 1.15;
-          colors[i3 + 1] = p.color.g * alpha * 0.85;
-          colors[i3 + 2] = p.color.b * alpha * 0.35;
-          sizes[pIdx] = p.size * (0.85 + (1 - alpha) * 1.4) * 58;
+        if (isAdditiveKind(p.kind)) {
+          if (aIdx >= MAX_ADDITIVE_PARTICLES) continue;
+          const i3 = aIdx * 3;
+          addPositions[i3] = p.x;
+          addPositions[i3 + 1] = p.y;
+          addPositions[i3 + 2] = p.z;
+
+          if (p.kind === 'spark') {
+            addColors[i3] = p.color.r * (0.7 + alpha * 0.9);
+            addColors[i3 + 1] = p.color.g * alpha;
+            addColors[i3 + 2] = p.color.b * alpha * alpha * 0.55;
+            addSizes[aIdx] = p.size * (0.45 + alpha * 1.4) * 48;
+          } else if (p.kind === 'ember') {
+            addColors[i3] = p.color.r * alpha * 1.2;
+            addColors[i3 + 1] = p.color.g * alpha * 0.55;
+            addColors[i3 + 2] = p.color.b * alpha * 0.2;
+            addSizes[aIdx] = p.size * (0.6 + alpha * 0.9) * 42;
+          } else {
+            addColors[i3] = p.color.r * alpha * 1.15;
+            addColors[i3 + 1] = p.color.g * alpha * 0.85;
+            addColors[i3 + 2] = p.color.b * alpha * 0.35;
+            addSizes[aIdx] = p.size * (0.85 + (1 - alpha) * 1.4) * 58;
+          }
+          aIdx++;
         } else {
-          colors[i3] = p.color.r * alpha * fadeIn * 0.75;
-          colors[i3 + 1] = p.color.g * alpha * fadeIn * 0.72;
-          colors[i3 + 2] = p.color.b * alpha * fadeIn * 0.68;
-          sizes[pIdx] = p.size * (0.9 + (1 - alpha) * 1.8) * 52;
+          if (sIdx >= MAX_SOFT_PARTICLES) continue;
+          const i3 = sIdx * 3;
+          softPositions[i3] = p.x;
+          softPositions[i3 + 1] = p.y;
+          softPositions[i3 + 2] = p.z;
+
+          if (p.kind === 'dust') {
+            // 出現直後はやや濃く、後半は薄く長く漂う
+            const fadeIn = Math.min(1, (p.maxLife - p.life) * 1.8);
+            const lateFade = alpha < 0.35 ? alpha / 0.35 : 1;
+            const visibility = fadeIn * lateFade * 0.55;
+            softColors[i3] = p.color.r * visibility;
+            softColors[i3 + 1] = p.color.g * visibility;
+            softColors[i3 + 2] = p.color.b * visibility;
+            // 時間とともに膨らむ
+            softSizes[sIdx] = p.size * (0.85 + (1 - alpha) * 2.4) * 58;
+          } else if (p.kind === 'debrisSmoke') {
+            const fadeIn = Math.min(1, (p.maxLife - p.life) * 4);
+            const visibility = fadeIn * alpha * 0.62;
+            softColors[i3] = p.color.r * visibility;
+            softColors[i3 + 1] = p.color.g * visibility;
+            softColors[i3 + 2] = p.color.b * visibility;
+            softSizes[sIdx] = p.size * (0.7 + (1 - alpha) * 1.6) * 50;
+          } else {
+            const fadeIn = Math.min(1, (p.maxLife - p.life) * 2.8);
+            const visibility = fadeIn * alpha * 0.58;
+            softColors[i3] = p.color.r * visibility;
+            softColors[i3 + 1] = p.color.g * visibility;
+            softColors[i3 + 2] = p.color.b * visibility;
+            softSizes[sIdx] = p.size * (0.9 + (1 - alpha) * 1.8) * 52;
+          }
+          sIdx++;
         }
-        pIdx++;
-      }
-
-      for (const d of ex.debris) {
-        if (d.life <= 0 || dIdx >= MAX_DEBRIS || !debrisMeshRef.current) continue;
-        d.life -= dt;
-        d.vy -= 18 * dt;
-        d.vx *= 0.975;
-        d.vz *= 0.975;
-        d.x += d.vx * dt;
-        d.y += d.vy * dt;
-        d.z += d.vz * dt;
-        d.rx += d.avx * dt;
-        d.ry += d.avy * dt;
-        d.rz += d.avz * dt;
-
-        const alpha = Math.max(0, d.life / d.maxLife);
-        dummy.position.set(d.x, d.y, d.z);
-        dummy.rotation.set(d.rx, d.ry, d.rz);
-        dummy.scale.set(d.size, d.size * (0.55 + (dIdx % 3) * 0.2), d.size * 0.85);
-        dummy.updateMatrix();
-        debrisMeshRef.current.setMatrixAt(dIdx, dummy.matrix);
-        tempColor.copy(d.color).multiplyScalar(0.55 + alpha * 0.55);
-        debrisMeshRef.current.setColorAt(dIdx, tempColor);
-        dIdx++;
       }
 
       for (const ring of ex.rings) {
@@ -712,10 +933,15 @@ export function CombatExplosionFX() {
       }
     }
 
-    geometry.setDrawRange(0, pIdx);
-    posAttr.needsUpdate = true;
-    colAttr.needsUpdate = true;
-    sizeAttr.needsUpdate = true;
+    additiveGeometry.setDrawRange(0, aIdx);
+    addPos.needsUpdate = true;
+    addCol.needsUpdate = true;
+    addSize.needsUpdate = true;
+
+    softGeometry.setDrawRange(0, sIdx);
+    softPos.needsUpdate = true;
+    softCol.needsUpdate = true;
+    softSize.needsUpdate = true;
 
     if (debrisMeshRef.current) {
       debrisMeshRef.current.count = dIdx;
@@ -745,7 +971,22 @@ export function CombatExplosionFX() {
 
   return (
     <group>
-      <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} renderOrder={8} />
+      {/* 砂ぼこり・煙・破片煙（通常ブレンドで自然に） */}
+      <points
+        ref={softPointsRef}
+        geometry={softGeometry}
+        material={softMaterial}
+        frustumCulled={false}
+        renderOrder={3}
+      />
+      {/* 火花・火・残火（加算） */}
+      <points
+        ref={additivePointsRef}
+        geometry={additiveGeometry}
+        material={additiveMaterial}
+        frustumCulled={false}
+        renderOrder={8}
+      />
       <instancedMesh
         ref={coreMeshRef}
         args={[coreGeometry, coreMaterial, MAX_CORES]}
