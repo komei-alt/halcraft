@@ -66,6 +66,77 @@ const GUN_MOUNT_POSITIONS = {
 
 /** マズル（銃口）のローカルオフセット（銃本体原点から） */
 const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0, 0.035, 1.1);
+/** 銃身の前方（銃グループローカル。銃身・マズルは +Z 方向） */
+const BARREL_FORWARD_LOCAL = new THREE.Vector3(0, 0, 1);
+/** 銃の水平旋回制限（ラジアン） */
+const GUN_MAX_YAW = Math.PI * 0.7;
+/** 銃の上下制限（ラジアン） */
+const GUN_MAX_PITCH = Math.PI * 0.35;
+/** 散布（銃口方向との同期を優先し、基本は0） */
+const GUN_SPREAD = 0;
+
+/** ワーク用（毎フレーム再利用） */
+const _worldAimDir = new THREE.Vector3();
+const _localAimDir = new THREE.Vector3();
+const _invParentWorld = new THREE.Matrix4();
+const _barrelWorldDir = new THREE.Vector3();
+
+/**
+ * カメラ前方をピボット親のローカルへ変換し、ヨー/ピッチを求める
+ * ヘリの pitch/roll 込みで「銃の向き = 視点方向」になる
+ */
+function computeGunAimFromCamera(
+  pivotParent: THREE.Object3D,
+  camera: THREE.Camera,
+): { yaw: number; pitch: number } {
+  pivotParent.updateWorldMatrix(true, false);
+  _worldAimDir.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  _invParentWorld.copy(pivotParent.matrixWorld).invert();
+  _localAimDir.copy(_worldAimDir).transformDirection(_invParentWorld).normalize();
+
+  const yaw = Math.atan2(_localAimDir.x, _localAimDir.z);
+  const horizontal = Math.hypot(_localAimDir.x, _localAimDir.z);
+  const pitch = -Math.atan2(_localAimDir.y, Math.max(1e-6, horizontal));
+
+  return {
+    yaw: THREE.MathUtils.clamp(yaw, -GUN_MAX_YAW, GUN_MAX_YAW),
+    pitch: THREE.MathUtils.clamp(pitch, -GUN_MAX_PITCH, GUN_MAX_PITCH),
+  };
+}
+
+/** 銃ピボットをカメラ照準に即時合わせる（発射時のズレ防止） */
+function snapGunPivotToCamera(
+  pivot: THREE.Group,
+  camera: THREE.Camera,
+  yawRef: { current: number },
+  pitchRef: { current: number },
+): void {
+  const parent = pivot.parent;
+  if (!parent) return;
+  const aim = computeGunAimFromCamera(parent, camera);
+  yawRef.current = aim.yaw;
+  pitchRef.current = aim.pitch;
+  pivot.rotation.set(aim.pitch, aim.yaw, 0);
+  pivot.updateMatrixWorld(true);
+}
+
+/**
+ * 銃グループのワールド行列からマズル位置と銃身方向を取得
+ * 弾道はこの方向と完全一致させる
+ */
+function getMuzzleWorldPose(gunGroup: THREE.Object3D): {
+  position: THREE.Vector3;
+  direction: THREE.Vector3;
+} {
+  gunGroup.updateWorldMatrix(true, false);
+  const position = MUZZLE_LOCAL_OFFSET.clone().applyMatrix4(gunGroup.matrixWorld);
+  const direction = _barrelWorldDir
+    .copy(BARREL_FORWARD_LOCAL)
+    .transformDirection(gunGroup.matrixWorld)
+    .normalize()
+    .clone();
+  return { position, direction };
+}
 
 // ─── 色定義 ──────────────────────────────────────────
 const GUN_BARREL_COLOR = new THREE.Color(0x333333);
@@ -264,6 +335,13 @@ export function MachineGun() {
   // 銃モデルのグループ参照（ワールド座標取得用）
   const gunGroupLeftRef = useRef<THREE.Group>(null);
   const gunGroupRightRef = useRef<THREE.Group>(null);
+  // 旋回ピボット（発射直前に照準をスナップする）
+  const pivotLeftRef = useRef<THREE.Group>(null);
+  const pivotRightRef = useRef<THREE.Group>(null);
+  const yawLeftRef = useRef(0);
+  const pitchLeftRef = useRef(0);
+  const yawRightRef = useRef(0);
+  const pitchRightRef = useRef(0);
 
   // 弾丸（プロジェクタイル）とエフェクト
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
@@ -271,8 +349,6 @@ export function MachineGun() {
 
   // 射撃方向のワーク用ベクトル
   const shootDir = useRef(new THREE.Vector3());
-  // マズルのワールド座標計算用
-  const muzzleWorldPos = useRef(new THREE.Vector3());
 
   const boostBarrelSpin = useCallback((side: 'left' | 'right', amount: number = 90) => {
     const velocityRef = side === 'left' ? barrelSpinVelocityLeft : barrelSpinVelocityRight;
@@ -308,30 +384,35 @@ export function MachineGun() {
     if (now - lastFireTime.current < GUN_CONSTANTS.FIRE_COOLDOWN) return;
     lastFireTime.current = now;
 
-    // 照準方向 = カメラの前方
-    shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-
-    // 弾の初期位置 = 銃口（マズル）のワールド座標
     const gunGroup = side === 'left' ? gunGroupLeftRef.current : gunGroupRightRef.current;
-    let startPos: THREE.Vector3;
+    const pivot = side === 'left' ? pivotLeftRef.current : pivotRightRef.current;
+    const yawRef = side === 'left' ? yawLeftRef : yawRightRef;
+    const pitchRef = side === 'left' ? pitchLeftRef : pitchRightRef;
 
-    if (gunGroup) {
-      // 銃グループのワールドマトリクスからマズル位置を算出
-      gunGroup.updateWorldMatrix(true, false);
-      muzzleWorldPos.current.copy(MUZZLE_LOCAL_OFFSET);
-      muzzleWorldPos.current.applyMatrix4(gunGroup.matrixWorld);
-      startPos = muzzleWorldPos.current.clone();
-    } else {
-      // フォールバック: カメラ位置
-      startPos = camera.position.clone();
+    // 発射直前に銃をカメラ照準へ即時スナップ → 銃身方向と弾道を一致させる
+    if (pivot) {
+      snapGunPivotToCamera(pivot, camera, yawRef, pitchRef);
     }
 
-    // わずかなランダム散布（リアリティ向上）
-    const spread = 0.015;
-    shootDir.current.x += (Math.random() - 0.5) * spread;
-    shootDir.current.y += (Math.random() - 0.5) * spread;
-    shootDir.current.z += (Math.random() - 0.5) * spread;
-    shootDir.current.normalize();
+    let startPos: THREE.Vector3;
+    if (gunGroup) {
+      const pose = getMuzzleWorldPose(gunGroup);
+      startPos = pose.position;
+      // 弾道 = 銃身のワールド前方（カメラ前方ではない）
+      shootDir.current.copy(pose.direction);
+    } else {
+      // フォールバック: カメラ前方
+      startPos = camera.position.clone();
+      shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    }
+
+    // ごく小さい散布（見た目の同期を崩さない範囲）
+    if (GUN_SPREAD > 0) {
+      shootDir.current.x += (Math.random() - 0.5) * GUN_SPREAD;
+      shootDir.current.y += (Math.random() - 0.5) * GUN_SPREAD;
+      shootDir.current.z += (Math.random() - 0.5) * GUN_SPREAD;
+      shootDir.current.normalize();
+    }
 
     // 弾丸を生成
     const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
@@ -602,6 +683,9 @@ export function MachineGun() {
             isMyGun={myGunSide === 'left'}
             flashRef={flashLeftRef}
             gunGroupRef={gunGroupLeftRef}
+            pivotRef={pivotLeftRef}
+            yawRef={yawLeftRef}
+            pitchRef={pitchLeftRef}
             barrelSpinRef={barrelSpinLeft}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
@@ -615,6 +699,9 @@ export function MachineGun() {
             isMyGun={myGunSide === 'right'}
             flashRef={flashRightRef}
             gunGroupRef={gunGroupRightRef}
+            pivotRef={pivotRightRef}
+            yawRef={yawRightRef}
+            pitchRef={pitchRightRef}
             barrelSpinRef={barrelSpinRight}
             barrelMat={barrelMat}
             bodyMat={bodyMat}
@@ -644,6 +731,9 @@ function DoorMountedGun({
   isMyGun,
   flashRef,
   gunGroupRef,
+  pivotRef,
+  yawRef,
+  pitchRef,
   barrelSpinRef,
   barrelMat,
   bodyMat,
@@ -655,6 +745,9 @@ function DoorMountedGun({
   isMyGun: boolean;
   flashRef: React.RefObject<THREE.Mesh | null>;
   gunGroupRef: React.RefObject<THREE.Group | null>;
+  pivotRef: React.RefObject<THREE.Group | null>;
+  yawRef: React.MutableRefObject<number>;
+  pitchRef: React.MutableRefObject<number>;
   barrelSpinRef: React.MutableRefObject<number>;
   barrelMat: THREE.MeshStandardMaterial;
   bodyMat: THREE.MeshStandardMaterial;
@@ -665,16 +758,9 @@ function DoorMountedGun({
   const { camera } = useThree();
   // 銃全体のルートグループ（位置・回転を毎フレーム同期）
   const rootRef = useRef<THREE.Group>(null);
-  // 銃の回転部分（ピボット）の参照
-  const pivotRef = useRef<THREE.Group>(null);
-
-  // 回転計算用のワークベクトル
-  const targetDirRef = useRef(new THREE.Vector3());
-  const localDirRef = useRef(new THREE.Vector3());
-  const currentYawRef = useRef(0);
-  const currentPitchRef = useRef(0);
 
   // 毎フレーム、ヘリの最新位置に銃の位置を同期（stale prop 回避）
+  // priority 高め: 銃の姿勢更新を射撃より先に行う
   useFrame(() => {
     if (!rootRef.current) return;
     const heli = useVehicleStore.getState().helicopter;
@@ -685,7 +771,7 @@ function DoorMountedGun({
     rootRef.current.visible = true;
     rootRef.current.position.set(heli.x, heli.y, heli.z);
     rootRef.current.rotation.set(heli.pitch, heli.rotationY, heli.roll);
-  });
+  }, 1);
 
   const mountPos = GUN_MOUNT_POSITIONS[side];
 
@@ -714,10 +800,8 @@ function DoorMountedGun({
             sensorMat={sensorMat}
             flashMat={flashMat}
             camera={camera}
-            targetDirRef={targetDirRef}
-            localDirRef={localDirRef}
-            currentYawRef={currentYawRef}
-            currentPitchRef={currentPitchRef}
+            currentYawRef={yawRef}
+            currentPitchRef={pitchRef}
           />
         </group>
       </group>
@@ -740,8 +824,6 @@ function GunPivot({
   sensorMat,
   flashMat,
   camera,
-  targetDirRef,
-  localDirRef,
   currentYawRef,
   currentPitchRef,
 }: {
@@ -756,13 +838,12 @@ function GunPivot({
   sensorMat: THREE.MeshStandardMaterial;
   flashMat: THREE.MeshBasicMaterial;
   camera: THREE.Camera;
-  targetDirRef: React.MutableRefObject<THREE.Vector3>;
-  localDirRef: React.MutableRefObject<THREE.Vector3>;
   currentYawRef: React.MutableRefObject<number>;
   currentPitchRef: React.MutableRefObject<number>;
 }) {
   const barrelClusterRef = useRef<THREE.Group>(null);
 
+  // priority 1: 射撃処理より先に銃口をカメラへ合わせる
   useFrame((_, delta) => {
     if (!pivotRef.current) return;
 
@@ -770,54 +851,27 @@ function GunPivot({
       barrelClusterRef.current.rotation.z = barrelSpinRef.current;
     }
 
-    // 毎フレーム最新のヘリ状態を取得（prop 経由だと stale になる可能性あり）
-    const heli = useVehicleStore.getState().helicopter;
-
     if (isMyGun) {
-      // カメラの前方向をワールド座標で取得
-      targetDirRef.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      const parent = pivotRef.current.parent;
+      if (!parent) return;
 
-      // ヘリの回転の逆を適用してローカル座標系に変換
-      // ヘリは rotationY で回転 + モデル内部で180度回転なので
-      // ローカルZ正 = ノーズ方向。カメラの向きをヘリローカルに戻す
-      const heliYaw = heli.rotationY + Math.PI; // モデルの180度回転を含む
-      const cosY = Math.cos(-heliYaw);
-      const sinY = Math.sin(-heliYaw);
+      // ヘリの pitch/roll/180°回転込みで、ピボット親ローカルにカメラ前方を写像
+      const aim = computeGunAimFromCamera(parent, camera);
 
-      localDirRef.current.set(
-        cosY * targetDirRef.current.x - sinY * targetDirRef.current.z,
-        targetDirRef.current.y,
-        sinY * targetDirRef.current.x + cosY * targetDirRef.current.z,
-      );
-
-      // ローカルYaw（水平角）とPitch（仰角）を算出
-      const targetYaw = Math.atan2(localDirRef.current.x, localDirRef.current.z);
-      const horizontalDist = Math.sqrt(
-        localDirRef.current.x * localDirRef.current.x +
-        localDirRef.current.z * localDirRef.current.z,
-      );
-      const targetPitch = -Math.atan2(localDirRef.current.y, horizontalDist);
-
-      // 制限: 左銃は右方向、右銃は左方向にあまり回らないように
-      const maxYaw = Math.PI * 0.7; // ±126度
-      const clampedYaw = Math.max(-maxYaw, Math.min(maxYaw, targetYaw));
-      const maxPitch = Math.PI * 0.35; // ±63度
-      const clampedPitch = Math.max(-maxPitch, Math.min(maxPitch, targetPitch));
-
-      // スムーズ補間
-      const lerpSpeed = 12 * delta;
-      currentYawRef.current += (clampedYaw - currentYawRef.current) * Math.min(1, lerpSpeed);
-      currentPitchRef.current += (clampedPitch - currentPitchRef.current) * Math.min(1, lerpSpeed);
+      // ほぼ即時追従（わずかな補間でカクつきを抑える）
+      const lerpT = 1 - Math.exp(-28 * delta);
+      currentYawRef.current += (aim.yaw - currentYawRef.current) * lerpT;
+      currentPitchRef.current += (aim.pitch - currentPitchRef.current) * lerpT;
 
       pivotRef.current.rotation.set(currentPitchRef.current, currentYawRef.current, 0);
     } else {
-      // 自分のガンでない場合は正面向き
-      const lerpSpeed = 5 * delta;
-      currentYawRef.current *= (1 - Math.min(1, lerpSpeed));
-      currentPitchRef.current *= (1 - Math.min(1, lerpSpeed));
+      // 自分のガンでない場合は正面向きへ戻す
+      const lerpT = 1 - Math.exp(-5 * delta);
+      currentYawRef.current *= (1 - lerpT);
+      currentPitchRef.current *= (1 - lerpT);
       pivotRef.current.rotation.set(currentPitchRef.current, currentYawRef.current, 0);
     }
-  });
+  }, 1);
 
   return (
     <group ref={pivotRef}>
