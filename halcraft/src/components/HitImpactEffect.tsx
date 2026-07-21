@@ -155,9 +155,12 @@ export function HitImpactEffect() {
   }), []);
 
   useLayoutEffect(() => {
-    if (slashMeshRef.current) slashMeshRef.current.count = 0;
-    if (ringMeshRef.current) ringMeshRef.current.count = 0;
-    if (coreMeshRef.current) coreMeshRef.current.count = 0;
+    // 初フレームの原点フラッシュを防ぐ（count=0 でも identity 行列が1回描画されることがある）
+    for (const mesh of [slashMeshRef.current, ringMeshRef.current, coreMeshRef.current]) {
+      if (!mesh) continue;
+      mesh.count = 0;
+      mesh.visible = false;
+    }
   }, []);
 
   const spawnImpact = useCallback((
@@ -367,16 +370,19 @@ export function HitImpactEffect() {
 
     if (slashMeshRef.current) {
       slashMeshRef.current.count = slashIndex;
+      slashMeshRef.current.visible = slashIndex > 0;
       slashMeshRef.current.instanceMatrix.needsUpdate = true;
       if (slashMeshRef.current.instanceColor) slashMeshRef.current.instanceColor.needsUpdate = true;
     }
     if (ringMeshRef.current) {
       ringMeshRef.current.count = ringIndex;
+      ringMeshRef.current.visible = ringIndex > 0;
       ringMeshRef.current.instanceMatrix.needsUpdate = true;
       if (ringMeshRef.current.instanceColor) ringMeshRef.current.instanceColor.needsUpdate = true;
     }
     if (coreMeshRef.current) {
       coreMeshRef.current.count = coreIndex;
+      coreMeshRef.current.visible = coreIndex > 0;
       coreMeshRef.current.instanceMatrix.needsUpdate = true;
       if (coreMeshRef.current.instanceColor) coreMeshRef.current.instanceColor.needsUpdate = true;
     }

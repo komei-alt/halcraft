@@ -98,15 +98,14 @@ export function PauseScreen({ onOpenSettings }: PauseScreenProps) {
   const leave = useMultiplayerStore((s) => s.leave);
   const isTouch = isTouchDevice();
 
-  // ESCキーでポーズ切り替え
+  // ESCキーでポーズ切り替え（クラフト等のUIが先に閉じた場合は defaultPrevented で抑制）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        const currentPhase = useGameStore.getState().phase;
-        if (currentPhase === 'playing' || currentPhase === 'paused') {
-          togglePause();
-        }
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      const currentPhase = useGameStore.getState().phase;
+      if (currentPhase === 'playing' || currentPhase === 'paused') {
+        togglePause();
       }
     };
     window.addEventListener('keydown', handleKeyDown);

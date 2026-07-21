@@ -24,6 +24,8 @@ import type { StageWorldPosition } from '../types/stageLandmarks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 import { playItemSwitchSound, playRocketReadySound, playStageCombatCueSound, playToolBreakSound } from '../utils/sounds';
 import { useMasteryStore } from './useMasteryStore';
+import { getTerrainHeight } from '../utils/terrain/heightmap';
+import { PLAYER_SPAWN } from '../utils/terrain/constants';
 
 /** localStorage のキー（スキン保存用） */
 const SKIN_STORAGE_KEY = 'halcraft-skin-id';
@@ -140,6 +142,12 @@ interface PlayerState {
 
   /** 水に触れているか（足または目が水中） */
   isInWater: boolean;
+
+  /**
+   * スポーン地点へ戻す要求カウンタ。
+   * Player が監視し、リスポーン／再スタート時にカメラ位置をリセットする。
+   */
+  spawnToken: number;
 
   /** 息ゲージ（秒） */
   airSupply: number;
@@ -266,6 +274,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   damageDirection: null,
   isSubmerged: false,
   isInWater: false,
+  spawnToken: 0,
   airSupply: 15,
   hunger: 20,
   hungerExhaustion: 0,
@@ -525,7 +534,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   respawn: () => {
     const isBuild = useGameStore.getState().isBuildMode;
-    set({
+    const spawnY = getTerrainHeight(PLAYER_SPAWN.x, PLAYER_SPAWN.z) + 1.1;
+    set((state) => ({
       hp: 20,
       isDead: false,
       isDamageFlash: false,
@@ -546,7 +556,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       airSupply: 15,
       isSubmerged: false,
       isInWater: false,
-    });
+      // Player がこのカウンタ変化を見てスポーン地点へテレポートする
+      spawnToken: state.spawnToken + 1,
+      worldPosition: { x: PLAYER_SPAWN.x, y: spawnY, z: PLAYER_SPAWN.z },
+    }));
     // サーバーへ復活通知
     const socket = getSocket();
     socket?.emit('player:respawned');

@@ -53,9 +53,18 @@ export function isDesktopGameplayInputActive(): boolean {
   const canvas = getGameCanvas();
   if (!canvas) return false;
 
-  if (document.pointerLockElement === canvas || document.activeElement === canvas) {
+  // Pointer Lock 中のみ歩行入力を許可（クラフト/設定UI中に歩き続けない）
+  if (document.pointerLockElement === canvas) {
     return true;
   }
 
-  return desktopGameplayActivated && document.hasFocus() && !isEditableElement(document.activeElement);
+  // Pointer Lock 非対応環境のみ、キャンバスフォーカスでフォールバック
+  const pointerLockSupported = typeof canvas.requestPointerLock === 'function';
+  if (!pointerLockSupported) {
+    return desktopGameplayActivated
+      && document.hasFocus()
+      && !isEditableElement(document.activeElement);
+  }
+
+  return false;
 }

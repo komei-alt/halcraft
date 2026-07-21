@@ -29,7 +29,20 @@ import { setCurrentTerrainStage } from '../utils/terrain/stageConfig';
 import { resetNoiseForBiome } from '../utils/terrain/noise';
 import { clearHeightCache } from '../utils/terrain/heightmap';
 import { getTerrainHeight } from '../utils/terrain';
-import { PLAYER_SPAWN } from '../utils/terrain/constants';
+import {
+  AIRPLANE_SPAWN,
+  CAR_SPAWN,
+  HELIPORT_CENTER,
+  PLAYER_SPAWN,
+  TANK_SPAWN,
+} from '../utils/terrain/constants';
+import {
+  AIRPLANE_CONSTANTS,
+  CAR_CONSTANTS,
+  TANK_CONSTANTS,
+  useVehicleStore,
+} from './useVehicleStore';
+import { useCoasterStore } from './useCoasterStore';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'stageclear' | 'gameover';
 
@@ -365,7 +378,24 @@ export const useGameStore = create<GameState>((set, get) => ({
       isInWater: false,
       // 建築カテゴリは無敵（クリエイティブ的）
       invincibleUntil: openingInvincibleUntil,
+      // Player のカメラ/物理位置をスポーンへ戻す
+      spawnToken: player.spawnToken + 1,
     });
+
+    // 乗り物・コースターの搭乗状態をリセットし、パッドへ戻す
+    const vehicles = useVehicleStore.getState();
+    if (vehicles.getActiveVehicle() !== null) {
+      vehicles.dismountVehicle();
+    }
+    useCoasterStore.getState().dismount();
+    const heliY = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z) + 2.0;
+    vehicles.spawnHelicopter(HELIPORT_CENTER.x, heliY, HELIPORT_CENTER.z);
+    const tankY = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z) + TANK_CONSTANTS.BODY_HEIGHT;
+    vehicles.spawnTank(TANK_SPAWN.x, tankY, TANK_SPAWN.z);
+    const planeY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
+    vehicles.spawnAirplane(AIRPLANE_SPAWN.x, planeY, AIRPLANE_SPAWN.z);
+    const carY = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z) + CAR_CONSTANTS.BODY_HEIGHT;
+    vehicles.spawnCar(CAR_SPAWN.x, carY, CAR_SPAWN.z);
 
     if (openingRocketReady) {
       usePlayerStore.getState().grantRocketReady({ pulseMs: 1800, shake: 0.18 });

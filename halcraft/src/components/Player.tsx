@@ -145,6 +145,13 @@ export function Player() {
   const lastGroundY = useRef(initialY);
   const wasFalling = useRef(false);
 
+  // スポーン復帰（リスポーン / ステージ再スタート）
+  const spawnToken = usePlayerStore((s) => s.spawnToken);
+  const handledSpawnToken = useRef(spawnToken);
+  // ネザーポータルの連打テレポート防止
+  const lastPortalTravelAt = useRef(0);
+  const PORTAL_COOLDOWN_MS = 2500;
+
   // キー入力状態
   const keys = useRef({
     forward: false,
@@ -425,6 +432,33 @@ export function Player() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [selectSlot, sendHelicopterBoard]);
+
+  // スポーン復帰要求を反映（死亡中でもリスポーン直後に位置を戻す）
+  useEffect(() => {
+    if (handledSpawnToken.current === spawnToken) return;
+    handledSpawnToken.current = spawnToken;
+
+    const spawnY = getSpawnY();
+    position.current.set(SPAWN_X, spawnY, SPAWN_Z);
+    velocity.current.set(0, 0, 0);
+    onGround.current = false;
+    wasFalling.current = false;
+    lastGroundY.current = spawnY;
+    smoothCameraY.current = spawnY + PLAYER_HEIGHT - 0.1;
+    euler.current.set(INITIAL_LANDMARK_PITCH, INITIAL_LANDMARK_YAW, 0, 'YXZ');
+    helicopterCameraActive.current = false;
+    camera.position.set(SPAWN_X, smoothCameraY.current, SPAWN_Z);
+    camera.quaternion.setFromEuler(euler.current);
+
+    // 乗り物に乗ったまま死んだ場合は降車
+    const vehicles = useVehicleStore.getState();
+    if (vehicles.getActiveVehicle() !== null) {
+      vehicles.dismountVehicle();
+    }
+    if (useCoasterStore.getState().isBoarded) {
+      useCoasterStore.getState().dismount();
+    }
+  }, [camera, spawnToken]);
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {
@@ -1436,14 +1470,18 @@ export function Player() {
       }
     }
 
-    // --- ネザーポータル判定 ---
+    // --- ネザーポータル判定（クールダウンで毎フレーム往復を防ぐ） ---
     const feetBlock = getBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
     if (feetBlock === BLOCK_IDS.NETHER_PORTAL) {
-      const gameState = useGameStore.getState();
-      if (gameState.dimension === 'overworld') {
-        gameState.travelToNether();
-      } else {
-        gameState.travelToOverworld();
+      const nowMs = performance.now();
+      if (nowMs - lastPortalTravelAt.current >= PORTAL_COOLDOWN_MS) {
+        lastPortalTravelAt.current = nowMs;
+        const portalGameState = useGameStore.getState();
+        if (portalGameState.dimension === 'overworld') {
+          portalGameState.travelToNether();
+        } else {
+          portalGameState.travelToOverworld();
+        }
       }
     }
 

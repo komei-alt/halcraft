@@ -159,6 +159,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
       }
       if (e.code === 'Escape' && isOpen) {
         e.preventDefault();
+        e.stopPropagation();
         setIsOpen(false);
         const canvas = document.querySelector('canvas');
         if (canvas) canvas.requestPointerLock();

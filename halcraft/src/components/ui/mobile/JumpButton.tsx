@@ -46,8 +46,28 @@ export function JumpButton() {
     }
     return () => {
       mobileActions.descend = false;
+      // unmount 時に jump が残ると連打ジャンプになるため必ず解除
+      mobileActions.jump = false;
     };
   }, [showDescend]);
+
+  // 画面スリープやタブ切り替えで touchend が欠ける対策
+  useEffect(() => {
+    const clearHeld = () => {
+      mobileActions.jump = false;
+      mobileActions.descend = false;
+    };
+    const onVisibility = () => {
+      if (document.hidden) clearHeld();
+    };
+    window.addEventListener('blur', clearHeld);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', clearHeld);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearHeld();
+    };
+  }, []);
 
   return (
     <>
