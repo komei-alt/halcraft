@@ -115,12 +115,14 @@ export function HealthBar() {
       style={{
         position: 'fixed',
         bottom: 76,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        // ホットバー中央から左側にハートを並べ、空腹ゲージと重ねない
+        right: 'calc(50% + 10px)',
         display: 'flex',
+        justifyContent: 'flex-end',
         gap: 1,
         zIndex: 100,
         filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+        pointerEvents: 'none',
       }}
     >
       {Array.from({ length: totalHearts }).map((_, i) => {

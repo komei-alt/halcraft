@@ -16,6 +16,7 @@ import {
   type VehicleType,
 } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { onRemoteVehicleDestroy, onRemoteVehicleRespawn } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
@@ -221,6 +222,9 @@ export function VehicleCombat() {
   }, [handleVehicleExplosion]);
 
   useFrame((_, delta) => {
+    // ポーズ中は衝突・リスポーン進行を止める（見た目の爆発は状態更新だけ残す）
+    if (useGameStore.getState().phase !== 'playing') return;
+
     const vehicleStore = useVehicleStore.getState();
     const dt = Math.min(delta, 0.05);
 

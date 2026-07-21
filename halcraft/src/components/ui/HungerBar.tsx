@@ -20,9 +20,11 @@ export function HungerBar() {
       style={{
         position: 'fixed',
         bottom: 76,
-        left: 'calc(50% + 2px)',
+        // ホットバー中央から右側に肉アイコンを並べる
+        left: 'calc(50% + 10px)',
         display: 'flex',
         flexDirection: 'row-reverse',
+        justifyContent: 'flex-end',
         gap: 1,
         zIndex: 100,
         pointerEvents: 'none',

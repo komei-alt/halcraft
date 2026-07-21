@@ -2,6 +2,7 @@
 // 水中に沈んでいるときのみ表示、Minecraft風の泡アイコンバー
 
 import { usePlayerStore } from '../../stores/usePlayerStore';
+import { useGameStore } from '../../stores/useGameStore';
 
 /** 最大息（秒） */
 const MAX_AIR = 15;
@@ -11,9 +12,10 @@ const BUBBLE_COUNT = 10;
 export function AirSupplyBar() {
   const airSupply = usePlayerStore((s) => s.airSupply);
   const isSubmerged = usePlayerStore((s) => s.isSubmerged);
+  const phase = useGameStore((s) => s.phase);
 
-  // 水中でない時は非表示
-  if (!isSubmerged) return null;
+  // 水中でない時／プレイ外は非表示
+  if (!isSubmerged || phase !== 'playing') return null;
 
   const ratio = airSupply / MAX_AIR;
   const filledBubbles = Math.ceil(ratio * BUBBLE_COUNT);
@@ -22,7 +24,8 @@ export function AirSupplyBar() {
     <div
       style={{
         position: 'fixed',
-        bottom: 80,
+        // 体力・空腹の上に置き、重ならないようにする
+        bottom: 100,
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',

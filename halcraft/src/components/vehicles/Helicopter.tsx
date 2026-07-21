@@ -333,10 +333,12 @@ export function Helicopter() {
     const someoneBoarded = helicopter.seats.pilot !== null
       || helicopter.seats.gunner_left !== null
       || helicopter.seats.gunner_right !== null;
+    // パイロットは3人称カメラなので機体を見せる。銃手席だけ外殻を隠し車内を見やすくする。
+    const hideShellForCabin =
+      helicopter.mySeat === 'gunner_left' || helicopter.mySeat === 'gunner_right';
 
-    // 搭乗中は不透明な外殻を描かず、透明ソートと車内視点の遮蔽を同時に避ける。
-    if (shellRef.current) shellRef.current.visible = !iAmBoarded;
-    const targetWindowOpacity = iAmBoarded ? 0.18 : 0.62;
+    if (shellRef.current) shellRef.current.visible = !hideShellForCabin;
+    const targetWindowOpacity = hideShellForCabin ? 0.18 : iAmBoarded ? 0.42 : 0.62;
     if (windowRef.current) {
       const material = windowRef.current.material as THREE.MeshStandardMaterial;
       material.opacity = THREE.MathUtils.damp(material.opacity, targetWindowOpacity, 12, delta);

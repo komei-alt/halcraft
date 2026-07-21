@@ -43,6 +43,8 @@ import {
   useVehicleStore,
 } from './useVehicleStore';
 import { useCoasterStore } from './useCoasterStore';
+import { stopBGM } from '../utils/musicManager';
+import { stopAmbientSounds } from '../utils/ambientSounds';
 
 type GamePhase = 'menu' | 'playing' | 'paused' | 'stageclear' | 'gameover';
 
@@ -442,7 +444,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   gameOver: () => set({ phase: 'gameover' }),
-  returnToMenu: () => set({ phase: 'menu', creativeFlying: false }),
+  returnToMenu: () => {
+    // タイトルに戻る直前にBGM/環境音を止める（Canvas unmount より前に実行）
+    stopBGM();
+    stopAmbientSounds();
+    set({ phase: 'menu', creativeFlying: false });
+  },
 
   setMultiplayer: (value) => set({ isMultiplayer: value }),
 

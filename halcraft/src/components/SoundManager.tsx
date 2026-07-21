@@ -2,7 +2,7 @@
 // 毎フレームでゲーム状態を監視し、適切なタイミングでサウンドを再生する
 // R3F の useFrame で動作
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useMobStore } from '../stores/useMobStore';
@@ -16,8 +16,13 @@ import {
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
-import { setBGMPresence, startBGM } from '../utils/musicManager';
-import { initAmbientSounds, setAmbientPresence, updateAmbientSounds } from '../utils/ambientSounds';
+import { setBGMPresence, startBGM, stopBGM } from '../utils/musicManager';
+import {
+  initAmbientSounds,
+  setAmbientPresence,
+  stopAmbientSounds,
+  updateAmbientSounds,
+} from '../utils/ambientSounds';
 import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
 import { stopLightsaberHumLoop } from '../utils/lightsaberSounds';
@@ -48,6 +53,13 @@ export function SoundManager() {
   const initialized = useRef(false);
   const bgmStarted = useRef(false);
   const lastAudioPresence = useRef(1);
+
+  // Canvas が外れた（タイトルへ戻る等）ときに音源を確実に止める
+  useEffect(() => () => {
+    stopLightsaberHumLoop();
+    stopBGM();
+    stopAmbientSounds();
+  }, []);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.1);

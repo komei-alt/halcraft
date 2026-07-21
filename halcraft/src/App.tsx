@@ -4,7 +4,7 @@
 
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Suspense, useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
@@ -296,18 +296,39 @@ export default function App() {
   // スキン変更UI の開閉状態
   const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // プレイ中に UI を開いたとき自動ポーズしたかどうか
+  const autoPausedForOverlay = useRef(false);
+  const togglePause = useGameStore((s) => s.togglePause);
+
+  const pauseForOverlay = useCallback(() => {
+    if (useGameStore.getState().phase === 'playing') {
+      togglePause();
+      autoPausedForOverlay.current = true;
+    }
+  }, [togglePause]);
+
+  const resumeIfAutoPaused = useCallback(() => {
+    if (autoPausedForOverlay.current && useGameStore.getState().phase === 'paused') {
+      togglePause();
+    }
+    autoPausedForOverlay.current = false;
+  }, [togglePause]);
 
   const toggleSkinSelector = useCallback(() => {
     setSkinSelectorOpen((prev) => {
       const next = !prev;
       if (next) {
         document.exitPointerLock?.();
+        pauseForOverlay();
       } else {
-        document.querySelector('canvas')?.requestPointerLock?.();
+        resumeIfAutoPaused();
+        if (!isTouch) {
+          document.querySelector('canvas')?.requestPointerLock?.();
+        }
       }
       return next;
     });
-  }, []);
+  }, [isTouch, pauseForOverlay, resumeIfAutoPaused]);
 
   // Tab キーでスキンセレクターを開閉
   useEffect(() => {
@@ -324,20 +345,25 @@ export default function App() {
 
   const handleCloseSkinSelector = useCallback(() => {
     setSkinSelectorOpen(false);
-    activateDesktopGameplayInput();
-  }, []);
+    resumeIfAutoPaused();
+    if (!isTouch) {
+      activateDesktopGameplayInput();
+    }
+  }, [isTouch, resumeIfAutoPaused]);
 
   const handleOpenSettings = useCallback(() => {
     document.exitPointerLock?.();
+    pauseForOverlay();
     setSettingsOpen(true);
-  }, []);
+  }, [pauseForOverlay]);
 
   const handleCloseSettings = useCallback(() => {
     setSettingsOpen(false);
-    if (phase === 'playing' && !isTouch) {
+    resumeIfAutoPaused();
+    if (useGameStore.getState().phase === 'playing' && !isTouch) {
       window.setTimeout(() => activateDesktopGameplayInput(), 80);
     }
-  }, [phase, isTouch]);
+  }, [isTouch, resumeIfAutoPaused]);
 
   return (
     <>
