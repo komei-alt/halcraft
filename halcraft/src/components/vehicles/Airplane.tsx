@@ -1,5 +1,6 @@
 // 飛行機コンポーネント
 // GLB機体 + ライト + 搭乗プロンプト
+// グループ原点 = 地面上面。モデル底面は autoGround で Y=0 に揃える。
 
 import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -11,11 +12,12 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isValidSkinId } from '../../types/skins';
 import { VoxelAvatar } from '../VoxelAvatar';
 import { cloneSceneWithMaterials } from './modelUtils';
+import { computeGroundOffset } from '../../utils/autoGround';
 import {
   AIRPLANE_AVATAR_POSITION,
   AIRPLANE_AVATAR_SCALE,
-  AIRPLANE_MODEL_POSITION,
   AIRPLANE_MODEL_SCALE,
+  AIRPLANE_MODEL_XZ_OFFSET,
   AIRPLANE_MODEL_YAW,
 } from './vehicleModelConfig';
 
@@ -28,6 +30,16 @@ export function Airplane() {
   const gltf = useGLTF(AIRPLANE_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const promptRef = useRef<THREE.Group>(null);
+
+  // 自動接地: モデル底面をグループ原点 Y=0（=地面）に揃える
+  const modelPos: [number, number, number] = useMemo(
+    () => [
+      AIRPLANE_MODEL_XZ_OFFSET[0],
+      computeGroundOffset(gltf.scene, AIRPLANE_MODEL_SCALE, AIRPLANE_MODEL_PATH),
+      AIRPLANE_MODEL_XZ_OFFSET[1],
+    ],
+    [gltf.scene],
+  );
 
   useFrame(() => {
     if (promptRef.current) {
@@ -50,7 +62,7 @@ export function Airplane() {
       <primitive
         object={model}
         scale={AIRPLANE_MODEL_SCALE}
-        position={AIRPLANE_MODEL_POSITION}
+        position={modelPos}
         rotation={[0, AIRPLANE_MODEL_YAW, 0]}
       />
       <AirplanePassengerAvatar />
@@ -59,7 +71,7 @@ export function Airplane() {
         <pointLight position={[0, 1.8, -4.2]} color="#fff4c8" intensity={1.4} distance={26} />
       )}
 
-      <Billboard ref={promptRef} position={[0, 5.4, 0]}>
+      <Billboard ref={promptRef} position={[0, 4.2, 0]}>
         <Text
           fontSize={0.38}
           color="#fff0a6"
@@ -76,6 +88,7 @@ export function Airplane() {
 }
 
 function AirplanePassengerAvatar() {
+  const mySeat = useVehicleStore((s) => s.airplane.mySeat);
   const pilotId = useVehicleStore((s) => s.airplane.seats.pilot);
   const remotePlayers = useMultiplayerStore((s) => s.remotePlayers);
   const myId = useMultiplayerStore((s) => s.myId);
@@ -84,6 +97,9 @@ function AirplanePassengerAvatar() {
   if (pilotId === null) return null;
 
   const isLocalPilot = pilotId === '__local__' || pilotId === myId;
+  // ローカル操縦者は三人称カメラなので、車内アバターを重ねない
+  if (mySeat === 'pilot' && isLocalPilot) return null;
+
   const remotePilot = isLocalPilot ? null : remotePlayers.get(pilotId);
   if (!isLocalPilot && !remotePilot) return null;
 
@@ -103,6 +119,7 @@ function AirplanePassengerAvatar() {
         skinId={skinId}
         color={remotePilot?.color}
         isMoving={false}
+        pose="seated"
         isDead={remotePilot?.isDead ?? false}
         deathTime={remotePilot?.deathTime ?? 0}
       />

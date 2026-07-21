@@ -507,6 +507,7 @@ function PassengerAvatars() {
               skinId={player.skinId && isValidSkinId(player.skinId) ? player.skinId : undefined}
               color={player.color}
               isMoving={false}
+              pose="seated"
               isDead={player.isDead}
               deathTime={player.deathTime}
             />

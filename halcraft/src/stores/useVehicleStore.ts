@@ -26,17 +26,18 @@ export const CAR_SEAT_PRIORITY: CarSeatType[] = ['driver', 'front_passenger', 'r
  * - modelOffset: ヘリモデル内部座標系でのオフセット（アバター3D配置に使用）
  *   180°回転グループの内側で使う座標（Z正=ノーズ方向）
  */
+/** ワールド座標での座席カメラオフセット（ヘリグループ原点基準、scale=1.3 適用後の見た目に合わせる） */
 export const SEAT_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
-  pilot:        { x:  0.0, y: 0.7, z:  0.9 },
-  gunner_left:  { x: -1.0, y: 0.5, z: -0.2 },
-  gunner_right: { x:  1.0, y: 0.5, z: -0.2 },
+  pilot:        { x:  0.0, y: 0.55, z:  1.05 },
+  gunner_left:  { x: -1.15, y: 0.35, z: -0.15 },
+  gunner_right: { x:  1.15, y: 0.35, z: -0.15 },
 };
 
 /** ヘリモデル内部座標系でのアバター配置オフセット（180°回転グループ内） */
 export const SEAT_MODEL_OFFSETS: Record<SeatType, { x: number; y: number; z: number }> = {
-  pilot:        { x:  0.0, y: -0.15, z:  0.7 },
-  gunner_left:  { x: -0.75, y: -0.25, z: -0.5 },
-  gunner_right: { x:  0.75, y: -0.25, z: -0.5 },
+  pilot:        { x:  0.0, y: 0.05, z:  0.85 },
+  gunner_left:  { x: -0.85, y: -0.05, z: -0.35 },
+  gunner_right: { x:  0.85, y: -0.05, z: -0.35 },
 };
 
 /** 座席の表示名 */
@@ -225,8 +226,12 @@ export const TANK_CONSTANTS = {
   BOARD_DISTANCE: 5,
   CAMERA_HEIGHT: 2.9,
   CAMERA_BACK: 1.7,
-  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
-  BODY_HEIGHT: 1.0,
+  /**
+   * グループ原点 = 地面上面 (findSurfaceY / getTerrainHeight)。
+   * モデル底面は autoGround でローカル Y=0 に揃えるため、ここは 0 にする。
+   * （以前の 1.0 だと autoGround と二重になり空中に浮いた）
+   */
+  BODY_HEIGHT: 0,
   CANNON_COOLDOWN: 0.9,
 } as const;
 
@@ -244,8 +249,11 @@ export const AIRPLANE_CONSTANTS = {
   CAMERA_BACK: 12.5,
   CAMERA_LOOK_HEIGHT: 2.2,
   CAMERA_LOOK_AHEAD: 16,
-  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
-  BODY_HEIGHT: 1.0,
+  /**
+   * グループ原点 = 地面上面。モデルは autoGround で底面を Y=0 に揃える。
+   * 空中時は y がそのまま飛行高度になる。
+   */
+  BODY_HEIGHT: 0,
   GRAVITY: 7.5,
   LIFT: 0.42,
   PROPELLER_SPEED: 36,
@@ -259,8 +267,10 @@ export const CAR_CONSTANTS = {
   DECELERATION: 8,
   TURN_SPEED: 1.55,
   BOARD_DISTANCE: 5,
-  /** グループ原点高さ = getTerrainHeight() + BODY_HEIGHT。モデルの接地はautoGroundが処理 */
-  BODY_HEIGHT: 1.0,
+  /**
+   * グループ原点 = 地面上面。モデル底面は autoGround でローカル Y=0 に揃える。
+   */
+  BODY_HEIGHT: 0,
   CAMERA_HEIGHT: 2.75,
   CAMERA_BACK: 5.8,
 } as const;

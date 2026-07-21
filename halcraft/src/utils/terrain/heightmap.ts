@@ -90,7 +90,7 @@ function calculateRawSample(worldX: number, worldZ: number): TerrainSample {
 
   // 低周波の領域ワープで、ノイズの等高線らしい単調さを消す。
   const warpFrequency = Math.max(0.0012, frequency * 0.42);
-  const warpStrength = 18 + biome.heightVariation * 1.35;
+  const warpStrength = 20 + biome.heightVariation * 1.45;
   const warpedX = worldX + fbmChannel('warpX', worldX * warpFrequency, worldZ * warpFrequency, 3, 2.03, 0.52) * warpStrength;
   const warpedZ = worldZ + fbmChannel('warpZ', worldX * warpFrequency, worldZ * warpFrequency, 3, 2.07, 0.5) * warpStrength;
 
@@ -100,6 +100,23 @@ function calculateRawSample(worldX: number, worldZ: number): TerrainSample {
   const ridgeNoise = fbmChannel('ridge', warpedX * frequency * 1.28, warpedZ * frequency * 1.28, 4, 2.02, 0.53);
   const ridge = Math.pow(1 - Math.abs(ridgeNoise), 1.72);
   const detail = fbmChannel('detail', warpedX * biome.detailFrequency, warpedZ * biome.detailFrequency, 3, 2.14, 0.44);
+  // 中域の丘・谷のうねりを足して、遠い景色の立体感を出す
+  const midland = fbmChannel(
+    'detail',
+    warpedX * frequency * 0.55 + 17.3,
+    warpedZ * frequency * 0.55 - 9.1,
+    3,
+    2.05,
+    0.48,
+  );
+  const micro = fbmChannel(
+    'detail',
+    warpedX * biome.detailFrequency * 2.4 - 4.2,
+    warpedZ * biome.detailFrequency * 2.4 + 11.7,
+    2,
+    2.2,
+    0.4,
+  );
   const riverNoise = Math.abs(getNoiseField('river')(warpedX * frequency * 0.72, warpedZ * frequency * 0.72));
   const riverStrength = 1 - smoothstep(0.025, 0.115, riverNoise);
   const moistureNoise = getNoiseField('vegetation')(worldX * 0.006 + 41.7, worldZ * 0.006 - 18.3);
@@ -114,28 +131,34 @@ function calculateRawSample(worldX: number, worldZ: number): TerrainSample {
     worldX,
     worldZ,
   );
+  shaped += midland * 0.16 + micro * 0.05;
 
   // 川筋は森林・雪原では浅い谷、南国ではラグーン、砂漠ではまれなオアシスになる。
   const riverGate = getNoiseField('river')(worldX * 0.0021 - 90, worldZ * 0.0021 + 120);
   const riverDepth = biome.id === 'tropical'
-    ? riverStrength * 0.72
+    ? riverStrength * 0.78
     : biome.id === 'desert' && riverGate > 0.2
-      ? riverStrength * 0.62
-      : riverStrength * 0.22;
+      ? riverStrength * 0.68
+      : riverStrength * 0.26;
   shaped -= riverDepth;
+
+  // 稜線のそばに小ピークを足し、シルエットを豊かにする
+  const peakBoost = Math.max(0, ridge - 0.62) * (0.22 - erosion * 0.08);
+  shaped += peakBoost;
 
   const continuousHeight = biome.baseHeight
     + shaped * biome.heightVariation
-    + detail * biome.detailVariation;
+    + detail * biome.detailVariation
+    + micro * biome.detailVariation * 0.35;
 
   // 段差を完全な等間隔にせず、緩斜面と読みやすい段丘を混ぜる。
-  const terraceMix = smoothstep(0.46, 0.84, ridge) * (1 - erosion * 0.44);
+  const terraceMix = smoothstep(0.42, 0.82, ridge) * (1 - erosion * 0.4);
   const terraceHeight = Math.round(continuousHeight / 2) * 2;
-  const terraced = continuousHeight * (1 - terraceMix * 0.34) + terraceHeight * terraceMix * 0.34;
+  const terraced = continuousHeight * (1 - terraceMix * 0.3) + terraceHeight * terraceMix * 0.3;
 
   return {
     height: Math.max(1, Math.min(WORLD_HEIGHT - 12, Math.round(terraced))),
-    slopeHint: Math.max(0, Math.min(1, ridge * (1 - erosion * 0.42))),
+    slopeHint: Math.max(0, Math.min(1, ridge * (1 - erosion * 0.38) + Math.abs(midland) * 0.12)),
     moisture,
     riverStrength,
     terrace: terraceMix,

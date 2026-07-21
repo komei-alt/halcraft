@@ -685,39 +685,41 @@ export function Player() {
           // --- 既存の乗り物搭乗ロジック ---
           const candidates: Array<{ type: VehicleType; dist: number }> = [];
 
+          // 搭乗判定は水平距離を主に見る（高さのズレで乗れなくなるのを防ぐ）
+          const boardDist = (
+            vx: number, vy: number, vz: number, maxDist: number,
+          ): number | null => {
+            const ddx = pos.x - vx;
+            const ddz = pos.z - vz;
+            const horizontal = Math.sqrt(ddx * ddx + ddz * ddz);
+            if (horizontal > maxDist) return null;
+            const ddy = (pos.y + 0.9) - vy;
+            // 垂直に大きく離れている場合のみ除外（建物の上/下など）
+            if (Math.abs(ddy) > maxDist + 2.5) return null;
+            return horizontal + Math.abs(ddy) * 0.25;
+          };
+
           if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
-            const ddx = pos.x - heli.x;
-            const ddy = (pos.y + PLAYER_HEIGHT / 2) - heli.y;
-            const ddz = pos.z - heli.z;
-            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            if (dist < HELICOPTER_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'helicopter', dist });
+            const dist = boardDist(heli.x, heli.y, heli.z, HELICOPTER_CONSTANTS.BOARD_DISTANCE);
+            if (dist !== null) candidates.push({ type: 'helicopter', dist });
           }
 
           const tank = vehicleState.tank;
           if (tank.spawned && tank.seats.pilot === null) {
-            const ddx = pos.x - tank.x;
-            const ddy = (pos.y + PLAYER_HEIGHT / 2) - tank.y;
-            const ddz = pos.z - tank.z;
-            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            if (dist < TANK_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'tank', dist });
+            const dist = boardDist(tank.x, tank.y, tank.z, TANK_CONSTANTS.BOARD_DISTANCE);
+            if (dist !== null) candidates.push({ type: 'tank', dist });
           }
 
           const airplane = vehicleState.airplane;
           if (airplane.spawned && airplane.seats.pilot === null) {
-            const ddx = pos.x - airplane.x;
-            const ddy = (pos.y + PLAYER_HEIGHT / 2) - airplane.y;
-            const ddz = pos.z - airplane.z;
-            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            if (dist < AIRPLANE_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'airplane', dist });
+            const dist = boardDist(airplane.x, airplane.y, airplane.z, AIRPLANE_CONSTANTS.BOARD_DISTANCE);
+            if (dist !== null) candidates.push({ type: 'airplane', dist });
           }
 
           const car = vehicleState.car;
           if (car.spawned && vehicleState.findAvailableCarSeat() !== null) {
-            const ddx = pos.x - car.x;
-            const ddy = (pos.y + PLAYER_HEIGHT / 2) - car.y;
-            const ddz = pos.z - car.z;
-            const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            if (dist < CAR_CONSTANTS.BOARD_DISTANCE) candidates.push({ type: 'car', dist });
+            const dist = boardDist(car.x, car.y, car.z, CAR_CONSTANTS.BOARD_DISTANCE);
+            if (dist !== null) candidates.push({ type: 'car', dist });
           }
 
           candidates.sort((a, b) => a.dist - b.dist);
@@ -1418,10 +1420,11 @@ export function Player() {
         }
       } else {
         const passengerCar = useVehicleStore.getState().car;
+        // グループ原点=地面基準（CAR_AVATAR_POSITIONS と揃える）
         const seatOffsets = {
-          front_passenger: { x: 0.42, y: 1.05, z: -0.58 },
-          rear_left: { x: -0.42, y: 1.05, z: 0.36 },
-          rear_right: { x: 0.42, y: 1.05, z: 0.36 },
+          front_passenger: { x: 0.42, y: 1.55, z: -0.45 },
+          rear_left: { x: -0.42, y: 1.55, z: 0.42 },
+          rear_right: { x: 0.42, y: 1.55, z: 0.42 },
         } as const;
         const seatOff = seatOffsets[latestCar.mySeat];
         carSeatOffset.current.set(seatOff.x, seatOff.y, seatOff.z).applyAxisAngle(Y_AXIS, passengerCar.rotationY);

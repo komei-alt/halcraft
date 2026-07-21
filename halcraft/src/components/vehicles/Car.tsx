@@ -25,11 +25,12 @@ const CAR_MODEL_XZ_OFFSET: [number, number] = [0, 1.92];  // XZのオフセッ�
 const CAR_MODEL_YAW = Math.PI;
 const CAR_AVATAR_SCALE = 0.46;
 
+// グループ原点=地面基準の座席位置（autoGround 後の車体に合わせる）
 const CAR_AVATAR_POSITIONS: Record<CarSeatType, [number, number, number]> = {
-  driver: [-0.42, 0.68, -0.58],
-  front_passenger: [0.42, 0.68, -0.58],
-  rear_left: [-0.42, 0.68, 0.36],
-  rear_right: [0.42, 0.68, 0.36],
+  driver: [-0.42, 0.95, -0.45],
+  front_passenger: [0.42, 0.95, -0.45],
+  rear_left: [-0.42, 0.95, 0.42],
+  rear_right: [0.42, 0.95, 0.42],
 };
 
 export function Car() {
@@ -111,8 +112,11 @@ function CarPassengerAvatar({ seat }: { seat: CarSeatType }) {
   if (seatPlayerId === null) return null;
 
   const isLocalPlayer = seatPlayerId === '__local__' || seatPlayerId === myId;
-  const remotePlayer = isLocalPlayer ? null : remotePlayers.get(seatPlayerId);
-  if (!isLocalPlayer && !remotePlayer) return null;
+  // ローカル搭乗者はカメラ視点なので車内アバターを重ねない
+  if (isLocalPlayer) return null;
+
+  const remotePlayer = remotePlayers.get(seatPlayerId);
+  if (!remotePlayer) return null;
 
   const skinId = isLocalPlayer
     ? localSkinId

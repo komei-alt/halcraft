@@ -166,6 +166,7 @@ function TankPassengerAvatar() {
         skinId={skinId}
         color={remotePilot?.color}
         isMoving={false}
+        pose="seated"
         isDead={remotePilot?.isDead ?? false}
         deathTime={remotePilot?.deathTime ?? 0}
       />
