@@ -2,7 +2,7 @@
 // 流体専用シェーダーで、波・揺らぎ・発光をブロック描画から分離する
 // InstancedMesh を使用して大量の流体ブロックを効率的に描画
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, CHUNK_SIZE, RENDER_DISTANCE, type BlockId } from '../types/blocks';
@@ -47,7 +47,7 @@ const LIQUID_VERTEX_SHADER = /* glsl */ `
 
 /** 水面シェーダーマテリアル（波アニメーション + 半透明 + シーン霧） */
 function createWaterMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     // 水中や水面下から見たときも面が消えないようにする
@@ -102,6 +102,9 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       }
     `,
   });
+  // 溶岩と同様、ポストFXのトーンマップで色が潰れないようにする
+  material.toneMapped = false;
+  return material;
 }
 
 /** 溶岩シェーダーマテリアル（発光 + 熱ゆらぎ + 表面の割れ目） */
@@ -226,8 +229,8 @@ function LiquidRenderer({
 
   const count = liquidPositions.length / 3;
 
-  // インスタンス行列を更新
-  useEffect(() => {
+  // 初回描画前に行列を入れる（原点に1フレーム固まるのを防ぐ）
+  useLayoutEffect(() => {
     if (!meshRef.current || count === 0) return;
     const dummy = dummyRef.current;
     for (let i = 0; i < count; i++) {
@@ -241,6 +244,7 @@ function LiquidRenderer({
       meshRef.current!.setMatrixAt(i, dummy.matrix);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
+    meshRef.current.visible = true;
   }, [liquidPositions, count]);
 
   // マテリアル破棄
@@ -279,6 +283,7 @@ function LiquidRenderer({
       args={[liquidGeometry, material, count]}
       renderOrder={renderOrder}
       frustumCulled={false}
+      visible={false}
     />
   );
 }

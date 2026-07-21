@@ -304,6 +304,9 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
 
     ringMesh.instanceMatrix.needsUpdate = true;
     glintMesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    ringMesh.visible = true;
+    glintMesh.visible = true;
   });
 
   if (instances.length === 0) return null;
@@ -320,6 +323,7 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
         args={[ringGeometry, undefined, instances.length]}
         renderOrder={renderOrder}
         frustumCulled={false}
+        visible={false}
       >
         <meshBasicMaterial
           ref={ringMaterialRef}
@@ -342,6 +346,7 @@ function LiquidSurfaceLayer({ config }: { config: LiquidSurfaceConfig }) {
         args={[glintGeometry, undefined, instances.length]}
         renderOrder={renderOrder + 1}
         frustumCulled={false}
+        visible={false}
       >
         <meshBasicMaterial
           ref={glintMaterialRef}

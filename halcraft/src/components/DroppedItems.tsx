@@ -459,6 +459,7 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
           metalness={item.blockId === BLOCK_IDS.IRON || item.blockId === BLOCK_IDS.IRON_INGOT ? 0.18 : 0}
           opacity={def.transparent ? 0.78 : 1}
           transparent={def.transparent}
+          depthWrite={!def.transparent}
           roughness={presentation.rarity === 'precious' || presentation.rarity === 'power' ? 0.38 : 0.54}
         />
       </mesh>

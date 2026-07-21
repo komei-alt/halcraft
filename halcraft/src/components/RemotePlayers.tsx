@@ -117,6 +117,8 @@ function RemotePlayerModel({
     <group
       ref={groupRef}
       // 初フレームに原点へ一瞬出ないよう、サーバー位置で初期化する
+      // 搭乗判定は useFrame で行うため、初フレームは非表示にしてゴーストを防ぐ
+      visible={false}
       position={[player.position[0], player.position[1], player.position[2]]}
       rotation={[0, player.rotation[0], 0]}
     >

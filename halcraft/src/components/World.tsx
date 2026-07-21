@@ -3,7 +3,7 @@
 // カメラ距離ベースのチャンクカリングで描画負荷を大幅削減
 // 段階的チャンク生成で初期ロードの体験を改善
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_IDS, BLOCK_DEFS, CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE, type BlockId, type BlockInfo } from '../types/blocks';
@@ -355,7 +355,8 @@ function BlockTypeInstances({
   const material = faceMaterials ?? getCachedMaterial(blockDef);
   const count = positionData.length / 3;
 
-  useEffect(() => {
+  // 初回描画前に行列を入れる（原点に1フレーム固まるのを防ぐ）
+  useLayoutEffect(() => {
     if (!meshRef.current) return;
     const dummy = dummyRef.current;
     for (let i = 0; i < count; i++) {
@@ -372,6 +373,7 @@ function BlockTypeInstances({
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
+    meshRef.current.visible = true;
   }, [blockDef, positionData, count]);
 
   return (
@@ -381,6 +383,7 @@ function BlockTypeInstances({
       material={material}
       castShadow={castShadow}
       receiveShadow
+      visible={false}
     />
   );
 }

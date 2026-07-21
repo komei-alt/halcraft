@@ -1,7 +1,7 @@
 // 乗り物の走行・飛行に、風圧・砂ぼこり・尾流の手ざわりを足す共通エフェクト
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   type AirplaneState,
@@ -475,6 +475,12 @@ export function VehicleMotionTrailFX() {
       airMaterialRef.current.opacity = 0.46;
     }
   });
+
+  useLayoutEffect(() => {
+    if (shadowMeshRef.current) shadowMeshRef.current.count = 0;
+    if (groundMeshRef.current) groundMeshRef.current.count = 0;
+    if (airMeshRef.current) airMeshRef.current.count = 0;
+  }, []);
 
   if (phase !== 'playing') return null;
 
