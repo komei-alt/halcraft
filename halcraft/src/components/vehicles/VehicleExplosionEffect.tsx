@@ -58,14 +58,14 @@ interface ExplosionEffectInternal {
   fireballLife: number;
 }
 
-const FIRE_PARTICLES = 40;
-const METAL_PARTICLES = 25;
-const SMOKE_PARTICLES = 30;
+const FIRE_PARTICLES = 56;
+const METAL_PARTICLES = 34;
+const SMOKE_PARTICLES = 40;
 const TOTAL_PARTICLES = FIRE_PARTICLES + METAL_PARTICLES + SMOKE_PARTICLES;
-const PARTICLE_GRAVITY = -10;
-const MAX_EFFECTS = 4;
-const FIREBALL_DURATION = 0.8;
-const SHOCKWAVE_DURATION = 0.6;
+const PARTICLE_GRAVITY = -11;
+const MAX_EFFECTS = 5;
+const FIREBALL_DURATION = 1.0;
+const SHOCKWAVE_DURATION = 0.75;
 
 let effectIdCounter = 0;
 
@@ -316,58 +316,100 @@ export function VehicleExplosionEffect() {
     <group>
       <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
 
-      {/* 衝撃波リング + 火球 */}
-      {fireballs.map((fb) => (
-        <group key={fb.id}>
-          {/* 衝撃波リング */}
-          {fb.shockwaveProgress < 1 && (
-            <mesh
-              position={[fb.cx, fb.cy, fb.cz]}
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <ringGeometry
-                args={[
-                  Math.max(0.1, fb.shockwaveProgress * 12),
-                  fb.shockwaveProgress * 12 + 0.8,
-                  32,
-                ]}
-              />
-              <meshBasicMaterial
-                color="#ffaa33"
-                transparent
-                opacity={Math.max(0, (1 - fb.shockwaveProgress) * 0.4)}
-                side={THREE.DoubleSide}
-                depthWrite={false}
-                toneMapped={false}
-                blending={THREE.AdditiveBlending}
-              />
-            </mesh>
-          )}
+      {/* 衝撃波リング + 火球（多層） */}
+      {fireballs.map((fb) => {
+        const progress = fb.shockwaveProgress;
+        const fireRatio = Math.max(0, fb.fireballLife / FIREBALL_DURATION);
+        return (
+          <group key={fb.id}>
+            {progress < 1.15 && (
+              <>
+                <mesh position={[fb.cx, fb.cy, fb.cz]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[Math.max(0.12, progress * 14), progress * 14 + 1.1, 48]} />
+                  <meshBasicMaterial
+                    color="#ffaa33"
+                    transparent
+                    opacity={Math.max(0, (1 - progress) * 0.55)}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+                <mesh position={[fb.cx, fb.cy, fb.cz]} rotation={[0, Math.PI / 2, 0]}>
+                  <ringGeometry args={[Math.max(0.1, progress * 9), progress * 9 + 0.7, 40]} />
+                  <meshBasicMaterial
+                    color="#ffd080"
+                    transparent
+                    opacity={Math.max(0, (1 - progress) * 0.32)}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+                <mesh position={[fb.cx, fb.cy, fb.cz]} rotation={[0.7, 0.4, 0.2]}>
+                  <ringGeometry args={[Math.max(0.08, progress * 7), progress * 7 + 0.55, 36]} />
+                  <meshBasicMaterial
+                    color="#ff6622"
+                    transparent
+                    opacity={Math.max(0, (1 - progress) * 0.28)}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+              </>
+            )}
 
-          {/* 中心の火球 */}
-          {fb.fireballLife > 0 && (
-            <>
-              <mesh position={[fb.cx, fb.cy, fb.cz]}>
-                <sphereGeometry args={[2.5 * (1 - fb.fireballLife / FIREBALL_DURATION * 0.3), 16, 12]} />
-                <meshBasicMaterial
-                  color="#ff6600"
-                  transparent
-                  opacity={Math.max(0, fb.fireballLife / FIREBALL_DURATION * 0.6)}
-                  depthWrite={false}
-                  toneMapped={false}
-                  blending={THREE.AdditiveBlending}
+            {fb.fireballLife > 0 && (
+              <>
+                <mesh position={[fb.cx, fb.cy, fb.cz]}>
+                  <sphereGeometry args={[1.2 * (1.1 - fireRatio * 0.25), 16, 12]} />
+                  <meshBasicMaterial
+                    color="#fff2c0"
+                    transparent
+                    opacity={fireRatio * 0.75}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+                <mesh position={[fb.cx, fb.cy, fb.cz]}>
+                  <sphereGeometry args={[2.8 * (1.05 - fireRatio * 0.28), 16, 12]} />
+                  <meshBasicMaterial
+                    color="#ff6600"
+                    transparent
+                    opacity={fireRatio * 0.55}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+                <mesh position={[fb.cx, fb.cy, fb.cz]}>
+                  <sphereGeometry args={[4.2 * (1 - fireRatio * 0.2), 16, 12]} />
+                  <meshBasicMaterial
+                    color="#ff3300"
+                    transparent
+                    opacity={fireRatio * 0.22}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </mesh>
+                <pointLight
+                  position={[fb.cx, fb.cy + 1, fb.cz]}
+                  color="#ff5500"
+                  intensity={fireRatio * 14}
+                  distance={32}
+                  decay={2}
                 />
-              </mesh>
-              <pointLight
-                position={[fb.cx, fb.cy + 1, fb.cz]}
-                color="#ff5500"
-                intensity={Math.max(0, fb.fireballLife / FIREBALL_DURATION * 8)}
-                distance={25}
-              />
-            </>
-          )}
-        </group>
-      ))}
+              </>
+            )}
+          </group>
+        );
+      })}
     </group>
   );
 }

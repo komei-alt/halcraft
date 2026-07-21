@@ -21,7 +21,7 @@ import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { onRemoteVehicleDestroy, onRemoteVehicleRespawn } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { useWorldStore } from '../../stores/useWorldStore';
-import { spawnVehicleExplosion, spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
+import { spawnVehicleExplosion, spawnBlockBreakEffect, spawnCombatExplosion, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import { playVehicleExplosionSound } from '../../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 
@@ -82,11 +82,24 @@ export function VehicleCombat() {
     const cy = posOverride ? posOverride[1] : vehicle.y + 1;
     const cz = posOverride ? posOverride[2] : vehicle.z;
 
-    // 1. 派手な爆発エフェクトを発生
+    // 1. 派手な爆発エフェクトを発生（乗り物専用 + 共通戦闘爆発）
     spawnVehicleExplosion(type, cx, cy, cz);
+    spawnCombatExplosion(cx, cy, cz, {
+      style: type === 'airplane' ? 'bomb' : 'rocket',
+      intensity: 1.45,
+      scale: 1.25,
+      accent: type === 'airplane' ? '#ffaa00' : type === 'tank' ? '#ff6600' : '#ff4400',
+    });
 
-    // 2. 爆発音
-    playVehicleExplosionSound(camera.position.distanceTo(new THREE.Vector3(cx, cy, cz)));
+    // 2. 爆発音 + カメラシェイク
+    const explosionDist = camera.position.distanceTo(new THREE.Vector3(cx, cy, cz));
+    playVehicleExplosionSound(explosionDist);
+    const shake = Math.max(0, 1 - explosionDist / 40) * 1.0;
+    if (shake > 0.05) {
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, shake)),
+      }));
+    }
 
     // 3. ブロック破壊
     const world = useWorldStore.getState();

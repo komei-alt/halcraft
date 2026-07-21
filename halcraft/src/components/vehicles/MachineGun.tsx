@@ -33,15 +33,15 @@ const BULLET_SPEED = 120;
 /** 弾の最大生存時間（秒） */
 const BULLET_MAX_AGE = 1.0;
 /** トレイル（残光）の長さ（ブロック） */
-const TRAIL_LENGTH = 4.0;
+const TRAIL_LENGTH = 5.5;
 /** 弾のヒット半径（モブ当たり判定） */
 const MOB_HIT_RADIUS = 1.2;
 /** インパクトパーティクルの数 */
-const IMPACT_PARTICLE_COUNT = 8;
+const IMPACT_PARTICLE_COUNT = 14;
 /** インパクトパーティクルの表示時間（秒） */
-const IMPACT_LIFETIME = 0.5;
+const IMPACT_LIFETIME = 0.62;
 /** ヒットフラッシュの表示時間（秒） */
-const HIT_FLASH_LIFETIME = 0.15;
+const HIT_FLASH_LIFETIME = 0.2;
 /** 重力（弾道にわずかな落下を加える） */
 const BULLET_GRAVITY = 3.0;
 /** プレイヤーヒット半径 */
@@ -491,7 +491,7 @@ export function MachineGun() {
 
         // 前フレームの位置を記録（トレイル用、最大6点を保持）
         proj.prevPositions.push(proj.pos.clone());
-        if (proj.prevPositions.length > 6) proj.prevPositions.shift();
+        if (proj.prevPositions.length > 10) proj.prevPositions.shift();
 
         // 重力を適用
         proj.vel.y -= BULLET_GRAVITY * delta;
@@ -907,30 +907,30 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
 
   return (
     <group ref={groupRef}>
-      {/* 弾頭（明るい光る球 — より大きく） */}
+      {/* 弾頭コア */}
       <mesh ref={bulletRef} position={projectile.pos}>
-        <sphereGeometry args={[0.15, 6, 6]} />
-        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
+        <sphereGeometry args={[0.12, 8, 8]} />
+        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.98} depthWrite={false} toneMapped={false} blending={THREE.AdditiveBlending} />
       </mesh>
-      {/* 弾頭のグロー（外側の光芒） */}
+      {/* 弾頭の外側グロー */}
       <mesh ref={glowBulletRef} position={projectile.pos}>
-        <sphereGeometry args={[0.35, 6, 6]} />
+        <sphereGeometry args={[0.42, 8, 8]} />
         <meshBasicMaterial
           color={TRACER_COLOR}
           transparent
-          opacity={0.45}
+          opacity={0.52}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
-      {/* コアトレイル（明るく太い） */}
+      {/* コアトレイル（白芯） */}
       <mesh ref={trailRef} visible={false}>
-        <cylinderGeometry args={[0.08, 0.03, 1, 6]} />
+        <cylinderGeometry args={[0.07, 0.02, 1, 8]} />
         <meshBasicMaterial
-          color={TRACER_COLOR}
+          color="#fff8d0"
           transparent
-          opacity={0.85}
+          opacity={0.95}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
@@ -938,11 +938,11 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
       </mesh>
       {/* グロートレイル（外側の太い光芒） */}
       <mesh ref={glowTrailRef} visible={false}>
-        <cylinderGeometry args={[0.18, 0.06, 1, 6]} />
+        <cylinderGeometry args={[0.22, 0.05, 1, 8]} />
         <meshBasicMaterial
           color={TRACER_GLOW_COLOR}
           transparent
-          opacity={0.35}
+          opacity={0.42}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}

@@ -52,14 +52,14 @@ interface HitImpact {
   cores: HitCore[];
 }
 
-const MAX_IMPACTS = 12;
-const SPARKS_PER_HIT = 14;
-const CRITICAL_SPARK_BONUS = 8;
-const SLASHES_PER_HIT = 2;
-const CRITICAL_SLASH_BONUS = 1;
-const RINGS_PER_HIT = 1;
-const CORES_PER_HIT = 1;
-const PARTICLE_GRAVITY = -8;
+const MAX_IMPACTS = 16;
+const SPARKS_PER_HIT = 20;
+const CRITICAL_SPARK_BONUS = 12;
+const SLASHES_PER_HIT = 3;
+const CRITICAL_SLASH_BONUS = 2;
+const RINGS_PER_HIT = 2;
+const CORES_PER_HIT = 2;
+const PARTICLE_GRAVITY = -9.5;
 const UP = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const slashGeometry = new THREE.PlaneGeometry(1, 1);
@@ -111,10 +111,10 @@ export function HitImpactEffect() {
   }, [maxSparks]);
 
   const sparkMaterial = useMemo(() => new THREE.PointsMaterial({
-    size: 0.095,
+    size: 0.12,
     vertexColors: true,
     transparent: true,
-    opacity: 0.95,
+    opacity: 0.98,
     sizeAttenuation: true,
     depthWrite: false,
     toneMapped: false,
@@ -186,18 +186,18 @@ export function HitImpactEffect() {
     const sparkCount = SPARKS_PER_HIT + (isCritical ? CRITICAL_SPARK_BONUS : 0);
     for (let i = 0; i < sparkCount; i++) {
       const spread = (Math.random() - 0.5) * 2;
-      const lift = Math.random() * 0.8;
-      const burst = 2.2 + Math.random() * (isCritical ? 4.9 : 2.9);
-      const side = tangent.clone().multiplyScalar(spread * burst * 0.4);
-      const up = bitangent.clone().multiplyScalar((lift - 0.1) * burst * 0.5);
-      const recoil = hitDir.clone().multiplyScalar(-burst * (0.34 + Math.random() * 0.36));
+      const lift = Math.random() * 0.9;
+      const burst = 2.8 + Math.random() * (isCritical ? 6.2 : 3.6);
+      const side = tangent.clone().multiplyScalar(spread * burst * 0.42);
+      const up = bitangent.clone().multiplyScalar((lift - 0.1) * burst * 0.55);
+      const recoil = hitDir.clone().multiplyScalar(-burst * (0.38 + Math.random() * 0.4));
       const vel = side.add(up).add(recoil);
-      const life = isCritical ? 0.42 + Math.random() * 0.18 : 0.28 + Math.random() * 0.14;
+      const life = isCritical ? 0.48 + Math.random() * 0.22 : 0.32 + Math.random() * 0.16;
 
       sparks.push({
-        x: x + (Math.random() - 0.5) * 0.12,
-        y: y + (Math.random() - 0.5) * 0.12,
-        z: z + (Math.random() - 0.5) * 0.12,
+        x: x + (Math.random() - 0.5) * 0.14,
+        y: y + (Math.random() - 0.5) * 0.14,
+        z: z + (Math.random() - 0.5) * 0.14,
         vx: vel.x,
         vy: vel.y,
         vz: vel.z,
@@ -209,21 +209,21 @@ export function HitImpactEffect() {
 
     const slashCount = SLASHES_PER_HIT + (isCritical ? CRITICAL_SLASH_BONUS : 0);
     for (let i = 0; i < slashCount; i++) {
-      const angle = ((i / slashCount) * Math.PI * 1.1) - Math.PI * 0.5 + (Math.random() - 0.5) * 0.38;
+      const angle = ((i / slashCount) * Math.PI * 1.2) - Math.PI * 0.55 + (Math.random() - 0.5) * 0.42;
       const slashQuat = baseQuaternion.clone();
       slashQuat.multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, angle));
-      const offset = tangent.clone().multiplyScalar((Math.random() - 0.5) * 0.18)
-        .add(bitangent.clone().multiplyScalar((Math.random() - 0.5) * 0.16))
+      const offset = tangent.clone().multiplyScalar((Math.random() - 0.5) * 0.2)
+        .add(bitangent.clone().multiplyScalar((Math.random() - 0.5) * 0.18))
         .add(hitDir.clone().multiplyScalar(-0.03));
-      const life = isCritical ? 0.2 + Math.random() * 0.07 : 0.15 + Math.random() * 0.05;
+      const life = isCritical ? 0.24 + Math.random() * 0.08 : 0.17 + Math.random() * 0.06;
 
       slashes.push({
         position: center.clone().add(offset),
         quaternion: slashQuat,
         life,
         totalLife: life,
-        width: isCritical ? 0.042 + Math.random() * 0.028 : 0.03 + Math.random() * 0.018,
-        length: isCritical ? 0.88 + Math.random() * 0.32 : 0.62 + Math.random() * 0.22,
+        width: isCritical ? 0.05 + Math.random() * 0.032 : 0.034 + Math.random() * 0.02,
+        length: isCritical ? 1.05 + Math.random() * 0.38 : 0.72 + Math.random() * 0.28,
         color: createSparkColor(isCritical),
       });
     }
@@ -234,20 +234,42 @@ export function HitImpactEffect() {
       position: center.clone().add(hitDir.clone().multiplyScalar(-0.06)),
       quaternion: baseQuaternion,
       elapsed: 0,
-      life: isCritical ? 0.24 : 0.2,
-      startRadius: isCritical ? 0.13 : 0.1,
-      endRadius: isCritical ? 0.76 : 0.54,
+      life: isCritical ? 0.28 : 0.22,
+      startRadius: isCritical ? 0.14 : 0.11,
+      endRadius: isCritical ? 0.95 : 0.66,
       color: ringColor,
+    });
+    // 2枚目のリングで厚みと余韻を出す
+    const ring2Quat = baseQuaternion.clone().multiply(
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.35),
+    );
+    rings.push({
+      position: center.clone().add(hitDir.clone().multiplyScalar(-0.04)),
+      quaternion: ring2Quat,
+      elapsed: 0.02,
+      life: isCritical ? 0.22 : 0.17,
+      startRadius: isCritical ? 0.1 : 0.08,
+      endRadius: isCritical ? 0.62 : 0.42,
+      color: ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35),
     });
 
     cores.push({
       position: center.clone().add(hitDir.clone().multiplyScalar(-0.035)),
       quaternion: baseQuaternion,
-      life: isCritical ? 0.18 : 0.14,
-      totalLife: isCritical ? 0.18 : 0.14,
-      startSize: isCritical ? 0.42 : 0.32,
-      endSize: isCritical ? 0.74 : 0.52,
-      color: ringColor.clone().lerp(new THREE.Color(0xffffff), isCritical ? 0.28 : 0.42),
+      life: isCritical ? 0.2 : 0.15,
+      totalLife: isCritical ? 0.2 : 0.15,
+      startSize: isCritical ? 0.48 : 0.36,
+      endSize: isCritical ? 0.9 : 0.62,
+      color: ringColor.clone().lerp(new THREE.Color(0xffffff), isCritical ? 0.32 : 0.48),
+    });
+    cores.push({
+      position: center.clone().add(hitDir.clone().multiplyScalar(-0.02)),
+      quaternion: baseQuaternion,
+      life: isCritical ? 0.12 : 0.09,
+      totalLife: isCritical ? 0.12 : 0.09,
+      startSize: isCritical ? 0.22 : 0.16,
+      endSize: isCritical ? 0.48 : 0.32,
+      color: new THREE.Color(0xffffff),
     });
 
     const impacts = impactsRef.current;

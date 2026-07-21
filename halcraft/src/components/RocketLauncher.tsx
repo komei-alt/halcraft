@@ -18,7 +18,7 @@ import { isTouchDevice } from '../utils/device';
 import { consumeFireRocket } from '../utils/touchInput';
 import { getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../utils/projectilePhysics';
-import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnCombatExplosion, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import { playRocketDirectHitSound, playRocketExplosionSound, playRocketLaunchSound } from '../utils/sounds';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../types/blocks';
 import { getStageCombatStyleForItem } from '../types/stageCombatStyles';
@@ -39,16 +39,17 @@ const PLAYER_HIT_HEIGHT = 1.7;
 const EXPLOSION_RADIUS = 7.5;
 const EXPLOSION_DAMAGE = 22;
 const EXPLOSION_MIN_DAMAGE = 3;
-const EXPLOSION_LIFETIME = 1.45;
+const EXPLOSION_LIFETIME = 1.15;
 const EXPLOSION_BLOCK_RADIUS = 2.8;
 const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
 const EXPLOSION_SURFACE_OFFSET = 0.36;
 const ROCKET_DIRECT_HIT_MIN_DISTANCE = 18;
 const ROCKET_DIRECT_HIT_BONUS_DAMAGE = 10;
-const SPARK_COUNT = 36;
-const SMOKE_COUNT = 24;
-const FIREBALL_COUNT = 10;
-const DEBRIS_COUNT = 22;
+const SPARK_COUNT = 20;
+const SMOKE_COUNT = 12;
+const FIREBALL_COUNT = 6;
+const DEBRIS_COUNT = 10;
+const MAX_TRAIL_POINTS = 16;
 
 /** 照準補正 */
 const ROCKET_AIM_DISTANCE = 80;
@@ -59,9 +60,9 @@ const ROCKET_COLLISION_ARM_DISTANCE = 2.4;
 const ROCKET_SELF_DAMAGE_SAFE_DISTANCE = 4.2;
 
 /** 残煙・トレイル */
-const TRAIL_INTERVAL = 0.03;
-const TRAIL_PUFF_LIFETIME = 0.85;
-const MAX_TRAIL_PUFFS = 80;
+const TRAIL_INTERVAL = 0.018;
+const TRAIL_PUFF_LIFETIME = 1.05;
+const MAX_TRAIL_PUFFS = 120;
 
 /** 武器のローカル配置 */
 const SHOULDER_OFFSET = new THREE.Vector3(0.32, -0.16, -0.42);
@@ -307,23 +308,23 @@ function getVisibleExplosionPosition(hitPos: THREE.Vector3, normal: THREE.Vector
   return hitPos.clone().addScaledVector(normal.clone().normalize(), EXPLOSION_SURFACE_OFFSET);
 }
 
-function createTrailPuff(pos: THREE.Vector3, vel: THREE.Vector3): TrailPuff {
-  const life = TRAIL_PUFF_LIFETIME * (0.8 + Math.random() * 0.35);
+function createTrailPuff(pos: THREE.Vector3, vel: THREE.Vector3, hot = false): TrailPuff {
+  const life = TRAIL_PUFF_LIFETIME * (hot ? 0.45 + Math.random() * 0.25 : 0.8 + Math.random() * 0.4);
   return {
     id: nextTrailId++,
     pos: pos.clone().add(new THREE.Vector3(
-      (Math.random() - 0.5) * 0.08,
-      (Math.random() - 0.5) * 0.08,
-      (Math.random() - 0.5) * 0.08,
+      (Math.random() - 0.5) * (hot ? 0.04 : 0.1),
+      (Math.random() - 0.5) * (hot ? 0.04 : 0.1),
+      (Math.random() - 0.5) * (hot ? 0.04 : 0.1),
     )),
-    vel: vel.clone().multiplyScalar(-0.025).add(new THREE.Vector3(
-      (Math.random() - 0.5) * 0.4,
-      0.35 + Math.random() * 0.45,
-      (Math.random() - 0.5) * 0.4,
+    vel: vel.clone().multiplyScalar(hot ? -0.04 : -0.03).add(new THREE.Vector3(
+      (Math.random() - 0.5) * (hot ? 0.55 : 0.45),
+      (hot ? 0.15 : 0.4) + Math.random() * (hot ? 0.35 : 0.55),
+      (Math.random() - 0.5) * (hot ? 0.55 : 0.45),
     )),
     life,
     maxLife: life,
-    size: 0.34 + Math.random() * 0.28,
+    size: hot ? 0.18 + Math.random() * 0.16 : 0.38 + Math.random() * 0.36,
   };
 }
 
@@ -574,15 +575,22 @@ export function RocketLauncher() {
       useStageChallengeStore.getState().recordDetonation();
       useStageConditionStore.getState().recordDetonation();
     }
+    // 共有の高品質爆発FX（衝撃波・破片・煙・カメラシェイク込み）
+    spawnCombatExplosion(pos.x, pos.y, pos.z, {
+      style: directHit?.precision ? 'precision' : 'rocket',
+      accent: rocketAccent,
+      intensity: directHit?.precision ? 1.25 : directHit ? 1.1 : 1,
+    });
+    // 近距離向けの補助フラッシュ（共有FXと重ねて芯の明るさを足す）
     setExplosions((prev) => {
       const next = [...prev, createExplosion(pos, Boolean(directHit?.precision))];
-      return next.slice(-6);
+      return next.slice(-4);
     });
     playRocketExplosionSound(pos.distanceTo(camera.position));
     if (directHit) {
       playRocketDirectHitSound(pos.distanceTo(camera.position), directHit.precision);
     }
-  }, [applyExplosionDamage, camera, destroyExplosionBlocks]);
+  }, [applyExplosionDamage, camera, destroyExplosionBlocks, rocketAccent]);
 
   const fireLauncher = useCallback(() => {
     if (!fireRocket()) return;
@@ -653,8 +661,8 @@ export function RocketLauncher() {
 
     syncProjectiles([...projectilesRef.current.slice(-4), projectile]);
     recoil.current = 1;
-    muzzleFlashTimer.current = 0.11;
-    backblastTimer.current = 0.15;
+    muzzleFlashTimer.current = 0.16;
+    backblastTimer.current = 0.22;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('rocket_launcher');
     multi.sendRocketFire(
@@ -819,7 +827,10 @@ export function RocketLauncher() {
         projectile.trailTimer += dt;
         while (projectile.trailTimer >= TRAIL_INTERVAL) {
           projectile.trailTimer -= TRAIL_INTERVAL;
-          trailSpawns.push(createTrailPuff(projectile.pos, projectile.vel));
+          trailSpawns.push(createTrailPuff(projectile.pos, projectile.vel, false));
+          if (Math.random() < 0.55) {
+            trailSpawns.push(createTrailPuff(projectile.pos, projectile.vel, true));
+          }
         }
 
         projectile.vel.y -= ROCKET_GRAVITY * dt;
@@ -831,7 +842,7 @@ export function RocketLauncher() {
           projectile.pos.addScaledVector(moveDir.current, moveDist);
           projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
           projectile.trailPoints.push(projectile.pos.clone());
-          if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+          if (projectile.trailPoints.length > MAX_TRAIL_POINTS) projectile.trailPoints.shift();
           alive.push(projectile);
           continue;
         }
@@ -841,7 +852,7 @@ export function RocketLauncher() {
           projectile.pos.addScaledVector(moveDir.current, moveDist);
           projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
           projectile.trailPoints.push(projectile.pos.clone());
-          if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+          if (projectile.trailPoints.length > MAX_TRAIL_POINTS) projectile.trailPoints.shift();
           alive.push(projectile);
           continue;
         }
@@ -924,7 +935,7 @@ export function RocketLauncher() {
 
         projectile.orientation.setFromUnitVectors(MODEL_FORWARD, moveDir.current);
         projectile.trailPoints.push(projectile.pos.clone());
-        if (projectile.trailPoints.length > 7) projectile.trailPoints.shift();
+        if (projectile.trailPoints.length > MAX_TRAIL_POINTS) projectile.trailPoints.shift();
         alive.push(projectile);
       }
 
@@ -1220,16 +1231,16 @@ export function RocketLauncher() {
           quaternion={projectile.orientation}
         >
           <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.04, 0.055, 0.34, 12]} />
-            <meshStandardMaterial color="#8b8f93" roughness={0.42} metalness={0.68} emissive="#2a1a08" emissiveIntensity={0.2} />
+            <cylinderGeometry args={[0.045, 0.06, 0.38, 12]} />
+            <meshStandardMaterial color="#8b8f93" roughness={0.42} metalness={0.68} emissive="#2a1a08" emissiveIntensity={0.28} />
           </mesh>
-          <mesh position={[0, 0, -0.2]} rotation={[-Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[0.055, 0.15, 12]} />
-            <meshStandardMaterial color="#c67b34" roughness={0.34} metalness={0.55} emissive="#79310f" emissiveIntensity={0.28} />
+          <mesh position={[0, 0, -0.22]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.06, 0.17, 12]} />
+            <meshStandardMaterial color="#c67b34" roughness={0.34} metalness={0.55} emissive="#79310f" emissiveIntensity={0.42} />
           </mesh>
-          <mesh position={[0, 0, 0.17]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.03, 0.045, 0.06, 10]} />
-            <meshStandardMaterial color="#2f2f2f" roughness={0.6} metalness={0.4} />
+          <mesh position={[0, 0, 0.19]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.032, 0.05, 0.07, 10]} />
+            <meshStandardMaterial color="#2f2f2f" roughness={0.6} metalness={0.4} emissive={rocketTailColor} emissiveIntensity={0.55} />
           </mesh>
           <mesh position={[0.055, 0, 0.08]} rotation={[0, 0, Math.PI / 2]}>
             <boxGeometry args={[0.02, 0.1, 0.08]} />
@@ -1239,46 +1250,90 @@ export function RocketLauncher() {
             <boxGeometry args={[0.02, 0.1, 0.08]} />
             <meshStandardMaterial color="#5a5a5a" roughness={0.58} metalness={0.42} />
           </mesh>
-          <sprite position={[0, 0, 0.22]} scale={[0.26, 0.26, 1]}>
+          {/* エンジン噴射コア */}
+          <sprite position={[0, 0, 0.28]} scale={[0.34, 0.34, 1]}>
+            <spriteMaterial
+              map={glowTexture}
+              color={rocketAccentSoft}
+              transparent
+              opacity={0.95}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </sprite>
+          {/* エンジン噴射の外側ハロー */}
+          <sprite position={[0, 0, 0.38]} scale={[0.55, 0.42, 1]}>
             <spriteMaterial
               map={glowTexture}
               color={rocketTailColor}
               transparent
-              opacity={0.88}
+              opacity={0.72}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
-            toneMapped={false}
+              toneMapped={false}
             />
           </sprite>
+          {/* 長い噴射フレア */}
+          <sprite position={[0, 0, 0.55]} scale={[0.28, 0.72, 1]}>
+            <spriteMaterial
+              map={glowTexture}
+              color={rocketTailColor}
+              transparent
+              opacity={0.48}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </sprite>
+          <pointLight position={[0, 0, 0.2]} color={rocketTailColor} intensity={3.6} distance={8} decay={2} />
         </group>
       ))}
 
       {projectiles.map((projectile) => (
         projectile.trailPoints.map((point, index) => {
           const ratio = (index + 1) / projectile.trailPoints.length;
+          const coreScale = 0.1 + ratio * 0.28;
+          const glowScale = 0.18 + ratio * 0.42;
           return (
-            <sprite
-              key={`${projectile.id}_trail_${index}`}
-              position={[point.x, point.y, point.z]}
-              scale={[0.12 + ratio * 0.22, 0.12 + ratio * 0.22, 1]}
-            >
-              <spriteMaterial
-                map={glowTexture}
-                color={rocketAccent}
-                transparent
-                opacity={0.12 + ratio * 0.24}
-                depthWrite={false}
-                blending={THREE.AdditiveBlending}
-              toneMapped={false}
-              />
-            </sprite>
+            <group key={`${projectile.id}_trail_${index}`}>
+              <sprite
+                position={[point.x, point.y, point.z]}
+                scale={[coreScale, coreScale, 1]}
+              >
+                <spriteMaterial
+                  map={glowTexture}
+                  color={rocketAccentSoft}
+                  transparent
+                  opacity={0.18 + ratio * 0.55}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </sprite>
+              <sprite
+                position={[point.x, point.y, point.z]}
+                scale={[glowScale, glowScale, 1]}
+              >
+                <spriteMaterial
+                  map={glowTexture}
+                  color={rocketAccent}
+                  transparent
+                  opacity={0.08 + ratio * 0.28}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </sprite>
+            </group>
           );
         })
       ))}
 
       {trailPuffs.map((puff) => {
         const ratio = puff.life / puff.maxLife;
-        const scale = puff.size * (1.2 + (1 - ratio) * 1.8);
+        const isHot = puff.size < 0.32;
+        const scale = puff.size * (isHot ? 1.1 + (1 - ratio) * 1.2 : 1.25 + (1 - ratio) * 2.1);
         return (
           <sprite
             key={puff.id}
@@ -1286,11 +1341,13 @@ export function RocketLauncher() {
             scale={[scale, scale, 1]}
           >
             <spriteMaterial
-              map={smokeTexture}
-              color="#b9aea6"
+              map={isHot ? glowTexture : smokeTexture}
+              color={isHot ? rocketTailColor : '#a89c93'}
               transparent
-              opacity={ratio * 0.36}
+              opacity={isHot ? ratio * 0.62 : ratio * 0.42}
               depthWrite={false}
+              blending={isHot ? THREE.AdditiveBlending : THREE.NormalBlending}
+              toneMapped={false}
             />
           </sprite>
         );

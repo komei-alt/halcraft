@@ -24,7 +24,7 @@ import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 import { airplaneRealtime } from '../../utils/airplaneRealtime';
-import { spawnBlockBreakEffect, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
+import { spawnBlockBreakEffect, spawnCombatExplosion, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
 import {
   playBombFallingSound,
   playBulletImpactSound,
@@ -520,9 +520,10 @@ export function VehicleWeapons() {
     destroyExplosionBlocks(pos);
     applyRocketExplosionDamage(pos);
     spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
+    spawnCombatExplosion(pos.x, pos.y, pos.z, { style: 'rocket', intensity: 1.15, accent: '#ff9a40' });
     playRocketExplosionSound(pos.distanceTo(camera.position));
     useMultiplayerStore.getState().sendRocketExplode(rocket.syncId, [pos.x, pos.y, pos.z]);
-    setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.45 }]);
+    setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.35 }]);
   }, [applyRocketExplosionDamage, camera, destroyExplosionBlocks]);
 
   /** 爆弾の爆発処理 */
@@ -530,9 +531,10 @@ export function VehicleWeapons() {
     destroyBombBlocks(pos);
     applyBombExplosionDamage(pos);
     spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
+    spawnCombatExplosion(pos.x, pos.y, pos.z, { style: 'bomb', intensity: 1.3, accent: '#ff6a18' });
     playRocketExplosionSound(pos.distanceTo(camera.position));
     useMultiplayerStore.getState().sendRocketExplode(bomb.syncId, [pos.x, pos.y, pos.z]);
-    setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.65 }]);
+    setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.4 }]);
 
     // 乗り物への爆弾ダメージ判定
     const activeType = useVehicleStore.getState().getActiveVehicle();
@@ -873,11 +875,18 @@ export function VehicleWeapons() {
   return (
     <group>
       {bullets.map((bullet) => (
-        <Tracer key={bullet.id} start={bullet.prev} end={bullet.pos} color={bullet.type === 'tank' ? '#fff36a' : '#8ff6ff'} radius={0.025} />
+        <Tracer
+          key={bullet.id}
+          start={bullet.prev}
+          end={bullet.pos}
+          color={bullet.type === 'tank' ? '#fff36a' : '#8ff6ff'}
+          radius={0.028}
+          glowRadius={0.055}
+        />
       ))}
       {rockets.map((rocket) => (
         <group key={rocket.id}>
-          <Tracer start={rocket.prev} end={rocket.pos} color="#ff9a40" radius={0.08} />
+          <Tracer start={rocket.prev} end={rocket.pos} color="#ff9a40" radius={0.09} glowRadius={0.18} />
           <VehicleRocketModel
             x={rocket.pos.x}
             y={rocket.pos.y}
@@ -886,7 +895,7 @@ export function VehicleWeapons() {
             previousY={rocket.prev.y}
             previousZ={rocket.prev.z}
           />
-          <pointLight position={rocket.pos} color="#ff9a40" intensity={2.4} distance={10} />
+          <pointLight position={rocket.pos} color="#ff9a40" intensity={4.2} distance={14} />
         </group>
       ))}
       {bombs.map((bomb) => (
@@ -899,23 +908,30 @@ export function VehicleWeapons() {
             previousY={bomb.prev.y}
             previousZ={bomb.prev.z}
           />
-          {/* 落下の軌跡（太く） */}
-          <Tracer start={bomb.prev} end={bomb.pos} color="#666666" radius={0.07} />
+          {/* 落下の軌跡（コア＋グロー） */}
+          <Tracer start={bomb.prev} end={bomb.pos} color="#ff8844" radius={0.08} glowRadius={0.16} />
         </group>
       ))}
-      {explosions.map((explosion) => (
-        <mesh key={explosion.id} position={explosion.pos}>
-          <sphereGeometry args={[Math.max(EXPLOSION_RADIUS, BOMB_EXPLOSION_RADIUS) * (1 - explosion.life / 0.65), 18, 12]} />
-          <meshBasicMaterial
-            color="#ff7b22"
-            transparent
-            opacity={Math.max(0, explosion.life / 0.65) * 0.35}
-            depthWrite={false}
-            toneMapped={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-      ))}
+      {/* 補助フラッシュ（本体は CombatExplosionFX） */}
+      {explosions.map((explosion) => {
+        const t = Math.max(0, explosion.life / 0.4);
+        return (
+          <group key={explosion.id} position={explosion.pos}>
+            <mesh scale={[1 + (1 - t) * 4.5, 1 + (1 - t) * 4.5, 1 + (1 - t) * 4.5]}>
+              <sphereGeometry args={[0.55, 16, 12]} />
+              <meshBasicMaterial
+                color="#ffd29a"
+                transparent
+                opacity={t * 0.55}
+                depthWrite={false}
+                toneMapped={false}
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            <pointLight color="#ff7b22" intensity={t * 10} distance={22} decay={2} />
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -943,16 +959,39 @@ function VehicleRocketModel({ x, y, z, previousX, previousY, previousZ }: Projec
   return (
     <group position={[x, y, z]} quaternion={quaternion}>
       <mesh>
-        <cylinderGeometry args={[0.1, 0.13, 0.4, 10]} />
-        <meshStandardMaterial color="#697079" roughness={0.38} metalness={0.68} />
+        <cylinderGeometry args={[0.1, 0.13, 0.42, 10]} />
+        <meshStandardMaterial color="#697079" roughness={0.38} metalness={0.68} emissive="#3a1a08" emissiveIntensity={0.22} />
       </mesh>
       <mesh position={[0, 0.28, 0]}>
         <coneGeometry args={[0.1, 0.18, 10]} />
-        <meshStandardMaterial color="#c57933" emissive="#542006" emissiveIntensity={0.24} roughness={0.36} metalness={0.5} />
+        <meshStandardMaterial color="#c57933" emissive="#542006" emissiveIntensity={0.42} roughness={0.36} metalness={0.5} />
       </mesh>
       <mesh position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.12, 0.018, 6, 12]} />
         <meshStandardMaterial color="#30343a" roughness={0.5} metalness={0.6} />
+      </mesh>
+      {/* 尾焰 */}
+      <mesh position={[0, -0.38, 0]}>
+        <coneGeometry args={[0.09, 0.32, 8]} />
+        <meshBasicMaterial
+          color="#ffb04a"
+          transparent
+          opacity={0.85}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh position={[0, -0.52, 0]}>
+        <coneGeometry args={[0.14, 0.28, 8]} />
+        <meshBasicMaterial
+          color="#ff6a18"
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
@@ -1000,31 +1039,62 @@ function Tracer({
   end,
   color,
   radius,
+  glowRadius,
 }: {
   start: THREE.Vector3;
   end: THREE.Vector3;
   color: string;
   radius: number;
+  glowRadius?: number;
 }) {
   const delta = end.clone().sub(start);
-  const length = Math.max(0.01, delta.length());
+  const length = Math.max(0.08, delta.length() * 1.35);
   const midpoint = start.clone().addScaledVector(delta, 0.5);
+  const dir = delta.lengthSq() > 0.000001 ? delta.normalize() : new THREE.Vector3(0, 1, 0);
   const quaternion = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
-    delta.normalize(),
+    dir,
   );
+  const outer = glowRadius ?? radius * 2.1;
 
   return (
-    <mesh position={midpoint} quaternion={quaternion}>
-      <cylinderGeometry args={[radius, radius, length, 8]} />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={0.9}
-        depthWrite={false}
-        toneMapped={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </mesh>
+    <group position={midpoint} quaternion={quaternion}>
+      {/* 外側のグロートレイル */}
+      <mesh>
+        <cylinderGeometry args={[outer, outer * 0.55, length, 8]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.28}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 明るいコア */}
+      <mesh>
+        <cylinderGeometry args={[radius, radius * 0.45, length, 8]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.92}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 色付き中間層 */}
+      <mesh>
+        <cylinderGeometry args={[radius * 1.35, radius * 0.7, length, 8]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.78}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+    </group>
   );
 }

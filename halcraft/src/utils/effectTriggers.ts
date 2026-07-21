@@ -101,3 +101,33 @@ export function spawnVehicleExplosion(type: VehicleType, x: number, y: number, z
 export function registerVehicleExplosionSpawner(fn: typeof _spawnVehicleExplosionFn): void {
   _spawnVehicleExplosionFn = fn;
 }
+
+// ========== CombatExplosionFX（ロケット・砲弾・爆弾・TNT共通） ==========
+export type CombatExplosionStyle = 'rocket' | 'bomb' | 'tnt' | 'precision';
+
+export interface CombatExplosionOptions {
+  style?: CombatExplosionStyle;
+  scale?: number;
+  intensity?: number;
+  accent?: string;
+}
+
+let _spawnCombatExplosionFn: (
+  x: number,
+  y: number,
+  z: number,
+  options?: CombatExplosionOptions,
+) => void = () => {};
+
+export function spawnCombatExplosion(
+  x: number,
+  y: number,
+  z: number,
+  options?: CombatExplosionOptions,
+): void {
+  _spawnCombatExplosionFn(x, y, z, options);
+}
+
+export function registerCombatExplosionSpawner(fn: typeof _spawnCombatExplosionFn): void {
+  _spawnCombatExplosionFn = fn;
+}

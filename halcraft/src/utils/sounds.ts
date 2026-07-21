@@ -712,45 +712,63 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
 
 export function playRocketLaunchSound(distance: number): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('rocketLaunch', 120)) return;
+  if (!ctx || !canPlay('rocketLaunch', 100)) return;
 
-  const maxDist = 50;
+  const maxDist = 55;
   if (distance > maxDist) return;
-  const volume = Math.max(0, 0.55 * (1 - distance / maxDist));
+  const volume = Math.max(0, 0.68 * (1 - distance / maxDist));
 
   const now = ctx.currentTime;
 
+  // 低音の発射衝撃
   const thump = ctx.createOscillator();
   thump.type = 'triangle';
-  thump.frequency.setValueAtTime(96, now);
-  thump.frequency.exponentialRampToValueAtTime(36, now + 0.28);
+  thump.frequency.setValueAtTime(110, now);
+  thump.frequency.exponentialRampToValueAtTime(32, now + 0.34);
 
   const thumpGain = ctx.createGain();
-  thumpGain.gain.setValueAtTime(volume * 0.6, now);
-  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+  thumpGain.gain.setValueAtTime(volume * 0.72, now);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
 
   thump.connect(thumpGain);
   thumpGain.connect(getSfxDestination());
   thump.start(now);
-  thump.stop(now + 0.32);
+  thump.stop(now + 0.38);
 
+  // 推進ヒス
   const hiss = ctx.createBufferSource();
   hiss.buffer = getNoiseBuffer(ctx);
 
   const hissFilter = ctx.createBiquadFilter();
   hissFilter.type = 'bandpass';
-  hissFilter.frequency.setValueAtTime(900, now);
-  hissFilter.Q.setValueAtTime(0.8, now);
+  hissFilter.frequency.setValueAtTime(1100, now);
+  hissFilter.frequency.exponentialRampToValueAtTime(520, now + 0.28);
+  hissFilter.Q.setValueAtTime(0.9, now);
 
   const hissGain = ctx.createGain();
-  hissGain.gain.setValueAtTime(volume * 0.42, now);
-  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+  hissGain.gain.setValueAtTime(volume * 0.52, now);
+  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
 
   hiss.connect(hissFilter);
   hissFilter.connect(hissGain);
   hissGain.connect(getSfxDestination());
   hiss.start(now);
-  hiss.stop(now + 0.24);
+  hiss.stop(now + 0.32);
+
+  // 高域の「シュッ」
+  const whoosh = ctx.createBufferSource();
+  whoosh.buffer = getNoiseBuffer(ctx);
+  const whooshFilter = ctx.createBiquadFilter();
+  whooshFilter.type = 'highpass';
+  whooshFilter.frequency.setValueAtTime(2400, now);
+  const whooshGain = ctx.createGain();
+  whooshGain.gain.setValueAtTime(volume * 0.28, now);
+  whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  whoosh.connect(whooshFilter);
+  whooshFilter.connect(whooshGain);
+  whooshGain.connect(getSfxDestination());
+  whoosh.start(now);
+  whoosh.stop(now + 0.18);
 }
 
 // ============================================
@@ -759,68 +777,100 @@ export function playRocketLaunchSound(distance: number): void {
 
 export function playRocketExplosionSound(distance: number): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('rocketExplosion', 80)) return;
+  if (!ctx || !canPlay('rocketExplosion', 70)) return;
 
-  const maxDist = 70;
+  const maxDist = 80;
   if (distance > maxDist) return;
-  const volume = Math.max(0, 0.75 * (1 - distance / maxDist));
+  const volume = Math.max(0, 0.92 * (1 - distance / maxDist));
 
   const now = ctx.currentTime;
 
+  // 1. 腹に響く低音ブーム
   const boom = ctx.createOscillator();
   boom.type = 'sawtooth';
-  boom.frequency.setValueAtTime(72, now);
-  boom.frequency.exponentialRampToValueAtTime(26, now + 0.5);
+  boom.frequency.setValueAtTime(78, now);
+  boom.frequency.exponentialRampToValueAtTime(22, now + 0.72);
 
   const boomFilter = ctx.createBiquadFilter();
   boomFilter.type = 'lowpass';
-  boomFilter.frequency.setValueAtTime(180, now);
-  boomFilter.frequency.exponentialRampToValueAtTime(70, now + 0.45);
+  boomFilter.frequency.setValueAtTime(210, now);
+  boomFilter.frequency.exponentialRampToValueAtTime(55, now + 0.65);
 
   const boomGain = ctx.createGain();
-  boomGain.gain.setValueAtTime(volume * 0.75, now);
-  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+  boomGain.gain.setValueAtTime(volume * 0.88, now);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
 
   boom.connect(boomFilter);
   boomFilter.connect(boomGain);
   boomGain.connect(getSfxDestination());
   boom.start(now);
-  boom.stop(now + 0.55);
+  boom.stop(now + 0.78);
 
+  // 2. サブバズ（より低い層）
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(48, now);
+  sub.frequency.exponentialRampToValueAtTime(18, now + 0.55);
+  const subGain = ctx.createGain();
+  subGain.gain.setValueAtTime(volume * 0.55, now);
+  subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+  sub.connect(subGain);
+  subGain.connect(getSfxDestination());
+  sub.start(now);
+  sub.stop(now + 0.6);
+
+  // 3. 初期クラック
   const crack = ctx.createBufferSource();
   crack.buffer = getNoiseBuffer(ctx);
 
   const crackFilter = ctx.createBiquadFilter();
   crackFilter.type = 'highpass';
-  crackFilter.frequency.setValueAtTime(900, now);
+  crackFilter.frequency.setValueAtTime(1100, now);
 
   const crackGain = ctx.createGain();
-  crackGain.gain.setValueAtTime(volume * 0.45, now);
-  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  crackGain.gain.setValueAtTime(volume * 0.62, now);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
   crack.connect(crackFilter);
   crackFilter.connect(crackGain);
   crackGain.connect(getSfxDestination());
   crack.start(now);
-  crack.stop(now + 0.22);
+  crack.stop(now + 0.2);
 
+  // 4. 中域の破裂
+  const mid = ctx.createBufferSource();
+  mid.buffer = getNoiseBuffer(ctx);
+  const midFilter = ctx.createBiquadFilter();
+  midFilter.type = 'bandpass';
+  midFilter.frequency.setValueAtTime(480, now);
+  midFilter.Q.setValueAtTime(0.7, now);
+  const midGain = ctx.createGain();
+  midGain.gain.setValueAtTime(volume * 0.38, now + 0.02);
+  midGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+  mid.connect(midFilter);
+  midFilter.connect(midGain);
+  midGain.connect(getSfxDestination());
+  mid.start(now);
+  mid.stop(now + 0.4);
+
+  // 5. 残響テール
   const tail = ctx.createBufferSource();
   tail.buffer = getNoiseBuffer(ctx);
 
   const tailFilter = ctx.createBiquadFilter();
   tailFilter.type = 'bandpass';
-  tailFilter.frequency.setValueAtTime(140, now);
-  tailFilter.Q.setValueAtTime(0.6, now);
+  tailFilter.frequency.setValueAtTime(150, now);
+  tailFilter.Q.setValueAtTime(0.55, now);
 
   const tailGain = ctx.createGain();
-  tailGain.gain.setValueAtTime(volume * 0.25, now + 0.05);
-  tailGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+  tailGain.gain.setValueAtTime(volume * 0.32, now + 0.06);
+  tailGain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
 
   tail.connect(tailFilter);
   tailFilter.connect(tailGain);
   tailGain.connect(getSfxDestination());
   tail.start(now);
-  tail.stop(now + 0.65);
+  tail.stop(now + 0.95);
 }
 
 /** ロケット直撃の命中アクセント — 爆発音の後に「狙って当てた」手応えを足す */

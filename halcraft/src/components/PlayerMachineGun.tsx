@@ -251,7 +251,7 @@ export function PlayerMachineGun() {
 
     recoilKick.current = scopedShot ? 0.45 : 1;
     heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.08 : 0.12));
-    flashTimer.current = combatFocus.active ? 0.09 : scopedShot ? 0.08 : 0.065;
+    flashTimer.current = combatFocus.active ? 0.11 : scopedShot ? 0.1 : 0.08;
     playMachineGunSound(startPos.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
@@ -339,21 +339,22 @@ export function PlayerMachineGun() {
       flashCoreRef.current.visible = flashOpacity > 0.02;
       material.color.copy(muzzleCoreColor);
       material.opacity = flashOpacity;
-      flashCoreRef.current.scale.setScalar(0.85 + flashTimer.current * 8.5);
+      flashCoreRef.current.scale.setScalar(0.95 + flashTimer.current * 10.5);
     }
     if (flashGlowRef.current) {
       const material = flashGlowRef.current.material as THREE.MeshBasicMaterial;
       flashGlowRef.current.visible = flashOpacity > 0.02;
       material.color.copy(muzzleGlowColor);
-      material.opacity = flashOpacity * 0.72;
-      flashGlowRef.current.scale.setScalar(0.75 + flashTimer.current * 9);
+      material.opacity = flashOpacity * 0.82;
+      flashGlowRef.current.scale.setScalar(0.9 + flashTimer.current * 11);
     }
     if (flashLightRef.current) {
       flashLightRef.current.color.copy(muzzleGlowColor);
       const combatFocusVisual = getCombatFocusModifier('machine_gun');
       flashLightRef.current.intensity = flashTimer.current > 0
-        ? (stageVisualStyle ? 4.6 : 3.5) * (combatFocusVisual.active ? 1.25 : 1)
+        ? (stageVisualStyle ? 6.2 : 4.8) * (combatFocusVisual.active ? 1.3 : 1)
         : 0;
+      flashLightRef.current.distance = 7;
     }
 
     if (firingInput) fire();
@@ -632,33 +633,77 @@ export function PlayerMachineGun() {
       )}
 
       {bullets.map((bullet) => (
-        <PlayerGunTracer key={bullet.id} start={bullet.prev} end={bullet.pos} color={tracerColor} />
+        <PlayerGunTracer
+          key={bullet.id}
+          start={bullet.prev}
+          end={bullet.pos}
+          color={tracerColor}
+          scoped={bullet.scoped}
+        />
       ))}
     </group>
   );
 }
 
-function PlayerGunTracer({ start, end, color }: { start: THREE.Vector3; end: THREE.Vector3; color: string }) {
+function PlayerGunTracer({
+  start,
+  end,
+  color,
+  scoped,
+}: {
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  color: string;
+  scoped: boolean;
+}) {
   const delta = end.clone().sub(start);
-  const length = Math.max(0.01, delta.length());
+  const length = Math.max(0.12, delta.length() * (scoped ? 1.55 : 1.35));
   const midpoint = start.clone().addScaledVector(delta, 0.5);
+  const dir = delta.lengthSq() > 0.000001 ? delta.normalize() : new THREE.Vector3(0, 1, 0);
   const quaternion = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
-    delta.normalize(),
+    dir,
   );
+  const coreR = scoped ? 0.016 : 0.014;
+  const midR = scoped ? 0.028 : 0.022;
+  const glowR = scoped ? 0.055 : 0.042;
 
   return (
-    <mesh position={midpoint} quaternion={quaternion}>
-      <cylinderGeometry args={[0.018, 0.01, length, 6]} />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={0.86}
-        depthWrite={false}
-        toneMapped={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </mesh>
+    <group position={midpoint} quaternion={quaternion}>
+      <mesh>
+        <cylinderGeometry args={[glowR, glowR * 0.45, length, 8]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={scoped ? 0.34 : 0.24}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh>
+        <cylinderGeometry args={[midR, midR * 0.5, length, 8]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.82}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh>
+        <cylinderGeometry args={[coreR, coreR * 0.4, length, 6]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+    </group>
   );
 }
 

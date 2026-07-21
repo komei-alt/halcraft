@@ -6,7 +6,7 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useMobStore } from '../stores/useMobStore';
 import { BLOCK_IDS, BLOCK_DEFS } from '../types/blocks';
-import { spawnBlockBreakEffect } from './effectTriggers';
+import { spawnBlockBreakEffect, spawnCombatExplosion } from './effectTriggers';
 import { playTntExplosionSound } from './sounds';
 
 /** TNT爆発の半径 */
@@ -62,6 +62,13 @@ export function triggerTntExplosion(
     }
   }
 
+  // 視覚的な爆発FX（衝撃波・火花・煙・破片）
+  spawnCombatExplosion(x + 0.5, y + 0.5, z + 0.5, {
+    style: 'tnt',
+    intensity: 1 + Math.min(1.2, chainTnts.length * 0.15),
+    accent: '#ff8a2a',
+  });
+
   // プレイヤーへのダメージ（距離減衰）
   if (playerPos) {
     const [px, py, pz] = playerPos;
@@ -70,10 +77,12 @@ export function triggerTntExplosion(
     // 爆発音（プレイヤー距離に基づく音量）
     playTntExplosionSound(playerDist);
 
-    // カメラシェイク（距離に応じて減衰）
+    // カメラシェイク（距離に応じて減衰）— CombatExplosionFX 側と合算
     const shakeFactor = Math.max(0, 1 - playerDist / (EXPLOSION_RADIUS * 2));
     if (shakeFactor > 0) {
-      usePlayerStore.setState({ cameraShake: Math.min(1, shakeFactor * 0.8) });
+      usePlayerStore.setState((state) => ({
+        cameraShake: Math.min(1, Math.max(state.cameraShake, shakeFactor * 0.88)),
+      }));
     }
 
     if (playerDist < EXPLOSION_RADIUS * 1.5) {
