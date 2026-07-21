@@ -788,12 +788,12 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
   return (
     <group ref={groupRef}>
       {/* 弾頭（明るい光る球 — より大きく） */}
-      <mesh ref={bulletRef}>
+      <mesh ref={bulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.15, 6, 6]} />
         <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
       </mesh>
       {/* 弾頭のグロー（外側の光芒） */}
-      <mesh ref={glowBulletRef}>
+      <mesh ref={glowBulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.35, 6, 6]} />
         <meshBasicMaterial
           color={TRACER_COLOR}

@@ -218,6 +218,7 @@ export function BlockUseEffect() {
     opacity: 0.96,
     depthTest: true,
     depthWrite: false,
+    toneMapped: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,

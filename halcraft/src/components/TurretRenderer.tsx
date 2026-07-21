@@ -547,7 +547,7 @@ function TurretTrail({ projectile }: { projectile: TurretProjectile }) {
 
   return (
     <group>
-      <mesh ref={bulletRef}>
+      <mesh ref={bulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.1, 6, 6]} />
         <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
       </mesh>

@@ -117,6 +117,7 @@ export function HitImpactEffect() {
     opacity: 0.95,
     sizeAttenuation: true,
     depthWrite: false,
+    toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
 

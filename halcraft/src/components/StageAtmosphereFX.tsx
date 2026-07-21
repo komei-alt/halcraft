@@ -1566,6 +1566,8 @@ export function StageAtmosphereFX() {
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || phase !== 'playing') return null;
@@ -1582,6 +1584,7 @@ export function StageAtmosphereFX() {
         args={[sharedSphereGeometry, undefined, particles.length]}
         frustumCulled={false}
         renderOrder={2}
+        visible={false}
       >
         <meshBasicMaterial
           color={config.color}

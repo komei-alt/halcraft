@@ -259,6 +259,8 @@ export function StageSurfaceDetailFX() {
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || phase !== 'playing') return null;
@@ -269,6 +271,7 @@ export function StageSurfaceDetailFX() {
       args={[sharedSurfaceGeometry, undefined, details.length]}
       frustumCulled={false}
       renderOrder={config.kind === 'glint' ? 5 : 0}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}
@@ -276,7 +279,7 @@ export function StageSurfaceDetailFX() {
         transparent
         opacity={config.opacity}
         depthWrite={false}
-        depthTest={config.kind !== 'glint'}
+        depthTest
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.kind === 'sandPebble' ? THREE.NormalBlending : THREE.AdditiveBlending}

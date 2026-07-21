@@ -122,6 +122,7 @@ export function StageEventFX() {
       args={[sharedSphereGeometry, undefined, particles.length]}
       frustumCulled={false}
       renderOrder={5}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}

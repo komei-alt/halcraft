@@ -135,6 +135,7 @@ export function MobDeathEffect() {
     opacity: 0.9,
     sizeAttenuation: true,
     depthWrite: false,
+    toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
 
