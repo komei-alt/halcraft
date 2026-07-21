@@ -3,11 +3,12 @@
 // Eキー（デスクトップ）またはボタン（モバイル）で開閉
 // クリック/タップでインベントリに追加
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
+import { clearAllMobileActions } from '../../utils/touchInput';
 import {
   BLOCK_DEFS,
   type BlockId,
@@ -129,28 +130,61 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
   const [hoveredItemId, setHoveredItemId] = useState<BlockId | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [addedBlockId, setAddedBlockId] = useState<BlockId | null>(null);
+  // クラフトを開いたときに自動ポーズしたか（敵が動いたままにしない）
+  const autoPausedForCraft = useRef(false);
+
+  const pauseForCraft = useCallback(() => {
+    if (useGameStore.getState().phase === 'playing') {
+      useGameStore.getState().togglePause();
+      autoPausedForCraft.current = true;
+    }
+    clearAllMobileActions();
+  }, []);
+
+  const resumeAfterCraft = useCallback(() => {
+    if (autoPausedForCraft.current && useGameStore.getState().phase === 'paused') {
+      useGameStore.getState().togglePause();
+    }
+    autoPausedForCraft.current = false;
+  }, []);
+
+  const closeCraft = useCallback(() => {
+    setIsOpen(false);
+    resumeAfterCraft();
+    onClose?.();
+    if (!isTouch) {
+      const canvas = document.querySelector('canvas');
+      if (canvas) canvas.requestPointerLock();
+    }
+  }, [isTouch, onClose, resumeAfterCraft]);
 
   // 外部からの開閉同期（モバイル用）— 外部 prop を内部 state に同期する正当なパターン
   useEffect(() => {
     if (externalOpen !== undefined) {
       setIsOpen(externalOpen);
-      if (externalOpen && !isTouch) {
-        document.exitPointerLock();
+      if (externalOpen) {
+        if (!isTouch) document.exitPointerLock();
+        pauseForCraft();
+      } else {
+        resumeAfterCraft();
       }
     }
-  }, [externalOpen, isTouch]);
+  }, [externalOpen, isTouch, pauseForCraft, resumeAfterCraft]);
 
   // Eキーでクラフト画面の開閉（デスクトップのみ）
+  // ポーズ中でも開いているクラフトは E で閉じられる
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (isTouch) return; // モバイルではEキーは不要
-      if (e.code === 'KeyE' && phase === 'playing') {
+      if (e.code === 'KeyE' && (phase === 'playing' || isOpen)) {
         e.preventDefault();
         setIsOpen((prev) => {
           const next = !prev;
           if (next) {
             document.exitPointerLock();
+            pauseForCraft();
           } else {
+            resumeAfterCraft();
             const canvas = document.querySelector('canvas');
             if (canvas) canvas.requestPointerLock();
           }
@@ -160,12 +194,10 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
       if (e.code === 'Escape' && isOpen) {
         e.preventDefault();
         e.stopPropagation();
-        setIsOpen(false);
-        const canvas = document.querySelector('canvas');
-        if (canvas) canvas.requestPointerLock();
+        closeCraft();
       }
     },
-    [phase, isOpen, isTouch],
+    [phase, isOpen, isTouch, pauseForCraft, resumeAfterCraft, closeCraft],
   );
 
   useEffect(() => {
@@ -266,12 +298,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          setIsOpen(false);
-          onClose?.();
-          if (!isTouch) {
-            const canvas = document.querySelector('canvas');
-            if (canvas) canvas.requestPointerLock();
-          }
+          closeCraft();
         }
       }}
     >
@@ -769,8 +796,7 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
         {isTouch ? (
           <div
             onClick={() => {
-              setIsOpen(false);
-              onClose?.();
+              closeCraft();
             }}
             style={{
               padding: '10px 24px',

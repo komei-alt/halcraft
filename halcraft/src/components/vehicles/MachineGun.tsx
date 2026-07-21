@@ -24,6 +24,8 @@ import { spawnDamagePopup } from '../../utils/effectTriggers';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 import { playMachineGunSound, playBulletImpactSound } from '../../utils/sounds';
+import { mobileActions } from '../../utils/touchInput';
+import { useGameStore } from '../../stores/useGameStore';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 弾速（ブロック/秒） */
@@ -570,10 +572,12 @@ export function MachineGun() {
       return filtered;
     });
 
-    // ガンナー席の射撃（左クリック長押し対応）
+    // ガンナー席の射撃（デスクトップ左クリック / モバイル機銃ボタン）
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
     const hasPointerLock = !!document.pointerLockElement;
-    if (isGunner && isMouseDown.current && hasPointerLock) {
+    const desktopFiring = isMouseDown.current && hasPointerLock;
+    const mobileFiring = mobileActions.vehicleGun;
+    if (isGunner && (desktopFiring || mobileFiring) && useGameStore.getState().phase === 'playing') {
       // 180度回転グループ内でモデルの左右が反転するため、
       // gunner_left（ワールド左）→ モデル right銃（ワールド左）
       // gunner_right（ワールド右）→ モデル left銃（ワールド右）

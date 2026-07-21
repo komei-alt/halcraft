@@ -1239,8 +1239,16 @@ export function Player() {
 
         if (planeY <= nextGroundY + 0.15) {
           planeY = nextGroundY;
-          airborne = planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.8 && pitchDemand > 0.07;
-          planePitch = airborne ? Math.max(planePitch, 0.08) : 0;
+          // 接地後は明確な離陸入力があるときだけ再離陸（軽い上向きで跳ねない）
+          const canRetakeoff =
+            planeSpeed > AIRPLANE_CONSTANTS.TAKEOFF_SPEED * 0.92
+            && pitchDemand > 0.22;
+          airborne = canRetakeoff;
+          if (!airborne) {
+            // 接地中は機首を水平に戻し、バウンスを抑える
+            planePitch = smoothValue(planePitch, 0, 12, dt);
+            if (Math.abs(planePitch) < 0.02) planePitch = 0;
+          }
         }
       } else {
         planeY = nextGroundY;

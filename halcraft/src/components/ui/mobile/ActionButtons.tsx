@@ -373,44 +373,56 @@ function VehicleActions({
   onBomb,
   onInteract,
 }: VehicleActionsProps) {
+  const heliSeat = useVehicleStore((s) => s.helicopter.mySeat);
+  const isHeliGunner = activeVehicle === 'helicopter'
+    && (heliSeat === 'gunner_left' || heliSeat === 'gunner_right');
   const tactic = getVehicleTactic(stageId, activeVehicle);
   const vehicleProgress = findChallengeProgress(stageId, 'vehicle_hits', challengeStats, completedChallengeIds);
   const secondaryTone = activeVehicle === 'tank' ? TONES.rocket : TONES.bomb;
-  const hasCombatControls = activeVehicle === 'tank' || activeVehicle === 'airplane';
+  // 戦車・飛行機は常に戦闘UI。ヘリは銃手席のみドア銃ボタンを出す
+  const hasPrimaryGun = activeVehicle === 'tank' || activeVehicle === 'airplane' || isHeliGunner;
+  const hasSecondaryWeapon = activeVehicle === 'tank' || activeVehicle === 'airplane';
+  const dismountLevel = hasSecondaryWeapon ? 2 : hasPrimaryGun ? 1 : 0;
 
   return (
     <>
-      {hasCombatControls && (
-        <>
-          <ActionButton
-            ariaLabel={activeVehicle === 'tank' ? '戦車ガトリング' : '飛行機機銃'}
-            badge={tactic.badge}
-            bottom={PRIMARY_ATTACK_BOTTOM}
-            icon="🔫"
-            meterRatio={tactic.meterRatio}
-            onTouchCancel={onGunEnd}
-            onTouchEnd={onGunEnd}
-            onTouchStart={onGunStart}
-            placement="left-attack"
-            pulse={tactic.pulse}
-            tone={TONES.machineGun}
-          />
-          <ActionButton
-            ariaLabel={activeVehicle === 'tank' ? '戦車主砲' : '飛行機爆弾'}
-            badge={vehicleProgress ?? (activeVehicle === 'tank' ? '主砲' : '空爆')}
-            bottom={getBottom(1)}
-            icon={activeVehicle === 'tank' ? '💥' : '💣'}
-            meterRatio={tactic.meterRatio}
-            onTouchStart={activeVehicle === 'tank' ? onRocket : onBomb}
-            pulse={tactic.pulse}
-            tone={secondaryTone}
-          />
-        </>
+      {hasPrimaryGun && (
+        <ActionButton
+          ariaLabel={
+            activeVehicle === 'tank'
+              ? '戦車ガトリング'
+              : activeVehicle === 'airplane'
+                ? '飛行機機銃'
+                : 'ヘリ機銃'
+          }
+          badge={tactic.badge}
+          bottom={PRIMARY_ATTACK_BOTTOM}
+          icon="🔫"
+          meterRatio={tactic.meterRatio}
+          onTouchCancel={onGunEnd}
+          onTouchEnd={onGunEnd}
+          onTouchStart={onGunStart}
+          placement="left-attack"
+          pulse={tactic.pulse}
+          tone={TONES.machineGun}
+        />
+      )}
+      {hasSecondaryWeapon && (
+        <ActionButton
+          ariaLabel={activeVehicle === 'tank' ? '戦車主砲' : '飛行機爆弾'}
+          badge={vehicleProgress ?? (activeVehicle === 'tank' ? '主砲' : '空爆')}
+          bottom={getBottom(1)}
+          icon={activeVehicle === 'tank' ? '💥' : '💣'}
+          meterRatio={tactic.meterRatio}
+          onTouchStart={activeVehicle === 'tank' ? onRocket : onBomb}
+          pulse={tactic.pulse}
+          tone={secondaryTone}
+        />
       )}
       <ActionButton
         ariaLabel="乗り物から降りる"
         badge="降りる"
-        bottom={getBottom(hasCombatControls ? 2 : 0)}
+        bottom={getBottom(dismountLevel)}
         icon="🚪"
         onTouchStart={onInteract}
         tone={TONES.interact}

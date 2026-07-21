@@ -3,7 +3,7 @@
 // ヘリの位置を中心に、プレイヤー・モブ・地形をシンプルに表示
 // 方位マーカー（N/S/E/W）付き
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
@@ -13,11 +13,14 @@ import {
   getStageLandmarkBriefing,
   STAGE_LANDMARK_WORLD_CENTER,
 } from '../../types/stageLandmarks';
+import { isTouchDevice } from '../../utils/device';
 
 /** ミニマップの設定 */
 const MAP_CONFIG = {
-  /** マップのサイズ（px） */
+  /** マップのサイズ（px）デスクトップ */
   SIZE: 180,
+  /** マップのサイズ（px）モバイル — HUDと重ならないよう小さめ */
+  SIZE_TOUCH: 118,
   /** 表示範囲（ブロック数、半径） */
   RANGE: 50,
   /** 更新間隔（ms） */
@@ -36,6 +39,8 @@ export function MinimapHUD() {
   const stageId = useGameStore((s) => s.currentStageId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastUpdateRef = useRef(0);
+  const isTouch = useMemo(() => isTouchDevice(), []);
+  const mapSize = isTouch ? MAP_CONFIG.SIZE_TOUCH : MAP_CONFIG.SIZE;
 
   // 搭乗中でなければ非表示
   const isInHelicopter = helicopter.mySeat !== null;
@@ -57,7 +62,7 @@ export function MinimapHUD() {
 
       const heli = useVehicleStore.getState().helicopter;
       const stage = useGameStore.getState().currentStage;
-      const size = MAP_CONFIG.SIZE;
+      const size = mapSize;
       const range = MAP_CONFIG.RANGE;
       const scale = size / (range * 2);
       const centerX = heli.x;
@@ -236,7 +241,7 @@ export function MinimapHUD() {
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [isInHelicopter, stageId]);
+  }, [isInHelicopter, stageId, mapSize]);
 
   if (!isInHelicopter) return null;
 
@@ -244,22 +249,24 @@ export function MinimapHUD() {
     <div
       style={{
         position: 'fixed',
-        top: '16px',
-        right: '16px',
-        width: MAP_CONFIG.SIZE,
-        height: MAP_CONFIG.SIZE,
+        // モバイルは時刻HUDの下にずらし、右上の情報と重ならないようにする
+        top: isTouch ? 'max(52px, calc(12px + env(safe-area-inset-top)))' : '16px',
+        right: isTouch ? '10px' : '16px',
+        width: mapSize,
+        height: mapSize,
         borderRadius: '50%',
         overflow: 'hidden',
         pointerEvents: 'none',
         zIndex: 95,
         border: '2px solid rgba(255, 255, 255, 0.2)',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+        opacity: isTouch ? 0.92 : 1,
       }}
     >
       <canvas
         ref={canvasRef}
-        width={MAP_CONFIG.SIZE}
-        height={MAP_CONFIG.SIZE}
+        width={mapSize}
+        height={mapSize}
         style={{ width: '100%', height: '100%' }}
       />
       {/* 座標表示 */}
