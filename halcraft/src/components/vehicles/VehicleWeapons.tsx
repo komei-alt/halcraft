@@ -899,7 +899,14 @@ export function VehicleWeapons() {
       {explosions.map((explosion) => (
         <mesh key={explosion.id} position={explosion.pos}>
           <sphereGeometry args={[Math.max(EXPLOSION_RADIUS, BOMB_EXPLOSION_RADIUS) * (1 - explosion.life / 0.65), 18, 12]} />
-          <meshBasicMaterial color="#ff7b22" transparent opacity={Math.max(0, explosion.life / 0.65) * 0.35} />
+          <meshBasicMaterial
+            color="#ff7b22"
+            transparent
+            opacity={Math.max(0, explosion.life / 0.65) * 0.35}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
         </mesh>
       ))}
     </group>
@@ -928,7 +935,14 @@ function Tracer({
   return (
     <mesh position={midpoint} quaternion={quaternion}>
       <cylinderGeometry args={[radius, radius, length, 8]} />
-      <meshBasicMaterial color={color} transparent opacity={0.9} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.9}
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
     </mesh>
   );
 }

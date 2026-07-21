@@ -187,6 +187,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
             opacity={traitPulse}
             side={THREE.DoubleSide}
             depthWrite={false}
+            toneMapped={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>
@@ -201,6 +202,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
             opacity={0.22 + angryPulse * 0.18}
             side={THREE.DoubleSide}
             depthWrite={false}
+            toneMapped={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>

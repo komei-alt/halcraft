@@ -63,3 +63,44 @@ export function facingToYaw(facing: CardinalFacing): number {
       return -Math.PI / 2;
   }
 }
+
+/** 松明の設置姿勢（床置き or 壁付け） */
+export interface TorchMount {
+  ox: number;
+  oy: number;
+  oz: number;
+  rotX: number;
+  rotY: number;
+}
+
+/**
+ * 松明の支持面を推定する。
+ * 横に固体があれば壁付け（少し寄せて傾け）、なければ床置き。
+ */
+export function inferTorchMount(
+  getBlock: (x: number, y: number, z: number) => BlockId,
+  x: number,
+  y: number,
+  z: number,
+): TorchMount {
+  const walls: Array<TorchMount & { dx: number; dz: number }> = [
+    { dx: 0, dz: 1, ox: 0, oy: 0.12, oz: 0.34, rotX: 0.62, rotY: 0 },
+    { dx: 0, dz: -1, ox: 0, oy: 0.12, oz: -0.34, rotX: 0.62, rotY: Math.PI },
+    { dx: 1, dz: 0, ox: 0.34, oy: 0.12, oz: 0, rotX: 0.62, rotY: -Math.PI / 2 },
+    { dx: -1, dz: 0, ox: -0.34, oy: 0.12, oz: 0, rotX: 0.62, rotY: Math.PI / 2 },
+  ];
+
+  for (const wall of walls) {
+    if (isSupportBlock(getBlock(x + wall.dx, y, z + wall.dz))) {
+      return {
+        ox: wall.ox,
+        oy: wall.oy,
+        oz: wall.oz,
+        rotX: wall.rotX,
+        rotY: wall.rotY,
+      };
+    }
+  }
+
+  return { ox: 0, oy: 0, oz: 0, rotX: 0, rotY: 0 };
+}

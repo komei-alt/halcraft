@@ -41,27 +41,29 @@ const coalMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0.22,
   roughness: 1,
 });
-const flameOuterMat = new THREE.MeshStandardMaterial({
+const flameOuterMat = new THREE.MeshBasicMaterial({
   color: 0xff3b18,
-  emissive: new THREE.Color(0xff5522),
-  emissiveIntensity: 2.6,
   transparent: true,
   opacity: 0.92,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
-const flameInnerMat = new THREE.MeshStandardMaterial({
+const flameInnerMat = new THREE.MeshBasicMaterial({
   color: 0xffb21f,
-  emissive: new THREE.Color(0xffd24d),
-  emissiveIntensity: 3.2,
   transparent: true,
-  opacity: 0.8,
+  opacity: 0.85,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 const flameGlowMat = new THREE.MeshBasicMaterial({
   color: 0xff8a55,
   transparent: true,
-  opacity: 0.16,
+  opacity: 0.22,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 
 const candlePlateMat = new THREE.MeshStandardMaterial({ color: 0x2e160d, roughness: 0.9 });
@@ -75,8 +77,10 @@ const wickMat = new THREE.MeshStandardMaterial({ color: 0x2d130e, roughness: 1 }
 const candleGlowMat = new THREE.MeshBasicMaterial({
   color: 0xffc2a0,
   transparent: true,
-  opacity: 0.15,
+  opacity: 0.2,
   depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 
 const doorGeom = new THREE.BoxGeometry(0.92, 0.96, 0.08);

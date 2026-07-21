@@ -9,6 +9,10 @@ interface BossRendererProps {
   animTime: number;
 }
 
+const _bossPos = new THREE.Vector3();
+const _bossQuat = new THREE.Quaternion();
+const _bossYAxis = new THREE.Vector3(0, 1, 0);
+
 export function BossRenderer({ mob, animTime }: BossRendererProps) {
   const group = useRef<THREE.Group>(null);
 
@@ -20,11 +24,12 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     if (!group.current) return;
 
     // 位置を補間してスムーズな移動
-    group.current.position.lerp(new THREE.Vector3(mob.x, mob.y, mob.z), 0.3);
+    _bossPos.set(mob.x, mob.y, mob.z);
+    group.current.position.lerp(_bossPos, 0.3);
 
     // 向きを補間
-    const targetQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), mob.rotation);
-    group.current.quaternion.slerp(targetQuaternion, 0.3);
+    _bossQuat.setFromAxisAngle(_bossYAxis, mob.rotation);
+    group.current.quaternion.slerp(_bossQuat, 0.3);
 
     // 歩行時のボビング（巨体なのでゆっくり）
     const speed = Math.sqrt(mob.vx * mob.vx + mob.vz * mob.vz);
@@ -46,7 +51,12 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
   const auraOpacity = 0.18 + Math.sin(animTime * 3.2) * 0.05;
 
   return (
-    <group ref={group} scale={[bossScale, bossScale, bossScale]}>
+    <group
+      ref={group}
+      position={[mob.x, mob.y, mob.z]}
+      rotation={[0, mob.rotation, 0]}
+      scale={[bossScale, bossScale, bossScale]}
+    >
       {/* マップ別ボスの威圧感を足元の色で見分ける */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.62, 0]}>
         <ringGeometry args={[0.82, 1.2, 52]} />
@@ -56,6 +66,8 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
           opacity={auraOpacity}
           side={THREE.DoubleSide}
           depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
 

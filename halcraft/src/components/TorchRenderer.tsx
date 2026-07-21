@@ -5,8 +5,9 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_IDS } from '../types/blocks';
+import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { inferTorchMount, type TorchMount } from '../utils/blockFacing';
 
 // 共有マテリアル（全松明で再利用）
 const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
@@ -14,17 +15,32 @@ const holderMaterial = new THREE.MeshStandardMaterial({
   color: 0x444444, roughness: 0.7,
   emissive: new THREE.Color(0x331100), emissiveIntensity: 0.3,
 });
-const flameMaterial = new THREE.MeshStandardMaterial({
-  color: 0xff6600, emissive: new THREE.Color(0xff4400), emissiveIntensity: 2.0,
-  transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false,
+const flameMaterial = new THREE.MeshBasicMaterial({
+  color: 0xff6600,
+  transparent: true,
+  opacity: 0.92,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
-const innerFlameMaterial = new THREE.MeshStandardMaterial({
-  color: 0xffaa00, emissive: new THREE.Color(0xffcc22), emissiveIntensity: 3.0,
-  transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false,
+const innerFlameMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffcc55,
+  transparent: true,
+  opacity: 0.85,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 const glowMaterial = new THREE.MeshBasicMaterial({
-  color: 0xff8844, transparent: true, opacity: 0.15,
-  side: THREE.DoubleSide, depthWrite: false,
+  color: 0xff8844,
+  transparent: true,
+  opacity: 0.22,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  toneMapped: false,
+  blending: THREE.AdditiveBlending,
 });
 
 // 共有ジオメトリ
@@ -45,13 +61,31 @@ const ANIM_SKIP_FRAMES = 2;
 const _matrix = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
+const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _scl = new THREE.Vector3(1, 1, 1);
 const _unitScale = new THREE.Vector3(1, 1, 1);
+const _mountCache = new Map<string, TorchMount>();
+
+function getTorchMount(
+  getBlock: (x: number, y: number, z: number) => BlockId,
+  x: number,
+  y: number,
+  z: number,
+): TorchMount {
+  const key = `${x},${y},${z}`;
+  let mount = _mountCache.get(key);
+  if (!mount) {
+    mount = inferTorchMount(getBlock, x, y, z);
+    _mountCache.set(key, mount);
+  }
+  return mount;
+}
 
 /** ワールド内のすべての松明を InstancedMesh で一括描画 */
 export function TorchRenderer() {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
+  const getBlock = useWorldStore((s) => s.getBlock);
 
   // InstancedMesh の ref
   const stickRef = useRef<THREE.InstancedMesh>(null);
@@ -84,11 +118,13 @@ export function TorchRenderer() {
     }
     timeOffsetsRef.current = offsets;
     staticInitRef.current = false;
+    _mountCache.clear();
   }, [count]);
 
   // 静的パーツ（棒・受け）と遠距離松明の炎デフォルト位置を一度だけ設定
   useEffect(() => {
     staticInitRef.current = false;
+    _mountCache.clear();
   }, [torchPositions]);
 
   useFrame(({ camera, clock }) => {
@@ -106,25 +142,29 @@ export function TorchRenderer() {
       staticInitRef.current = true;
       for (let i = 0; i < count; i++) {
         const pos = torchPositions[i];
-        const bx = pos.x + 0.5;
-        const bz = pos.z + 0.5;
+        const mount = getTorchMount(getBlock, pos.x, pos.y, pos.z);
+        const bx = pos.x + 0.5 + mount.ox;
+        const by = pos.y + mount.oy;
+        const bz = pos.z + 0.5 + mount.oz;
+        _euler.set(mount.rotX, mount.rotY, 0, 'YXZ');
+        _quat.setFromEuler(_euler);
 
         // 棒
-        _pos.set(bx, pos.y + 0.3, bz);
+        _pos.set(bx, by + 0.3, bz);
         _matrix.compose(_pos, _quat, _unitScale);
         stick.setMatrixAt(i, _matrix);
 
         // 受け
-        _pos.set(bx, pos.y + 0.58, bz);
+        _pos.set(bx, by + 0.58, bz);
         _matrix.compose(_pos, _quat, _unitScale);
         holder.setMatrixAt(i, _matrix);
 
         // 炎のデフォルト位置（遠距離用）
-        _pos.set(bx, pos.y + 0.75, bz);
+        _pos.set(bx, by + 0.75, bz);
         _matrix.compose(_pos, _quat, _unitScale);
         flame.setMatrixAt(i, _matrix);
 
-        _pos.set(bx, pos.y + 0.72, bz);
+        _pos.set(bx, by + 0.72, bz);
         _matrix.compose(_pos, _quat, _unitScale);
         innerFlame.setMatrixAt(i, _matrix);
         glow.setMatrixAt(i, _matrix);
@@ -150,12 +190,16 @@ export function TorchRenderer() {
 
     for (let i = 0; i < count; i++) {
       const pos = torchPositions[i];
-      const bx = pos.x + 0.5;
-      const bz = pos.z + 0.5;
+      const mount = getTorchMount(getBlock, pos.x, pos.y, pos.z);
+      const bx = pos.x + 0.5 + mount.ox;
+      const by = pos.y + mount.oy;
+      const bz = pos.z + 0.5 + mount.oz;
+      _euler.set(mount.rotX, mount.rotY, 0, 'YXZ');
+      _quat.setFromEuler(_euler);
 
       // カメラからの距離
       const dx = bx - camX;
-      const dy = pos.y - camY;
+      const dy = by - camY;
       const dz = bz - camZ;
       const distSq = dx * dx + dy * dy + dz * dz;
 
@@ -173,7 +217,7 @@ export function TorchRenderer() {
         const flameScale = 1 + Math.sin(ti * 10) * 0.15;
         _pos.set(
           bx + Math.sin(ti * 6) * 0.02,
-          pos.y + 0.75,
+          by + 0.75,
           bz + Math.cos(ti * 8) * 0.02,
         );
         _scl.set(flameScale, flameScale * 1.1, flameScale);
@@ -183,7 +227,7 @@ export function TorchRenderer() {
         const innerScale = 0.8 + Math.sin(ti * 12 + 1) * 0.2;
         _pos.set(
           bx + Math.sin(ti * 7 + 1) * 0.03,
-          pos.y + 0.72,
+          by + 0.72,
           bz + Math.cos(ti * 9 + 2) * 0.03,
         );
         _scl.set(innerScale, innerScale * 1.2, innerScale);
@@ -191,19 +235,19 @@ export function TorchRenderer() {
         innerFlame.setMatrixAt(i, _matrix);
 
         const glowScale = 1 + Math.sin(ti * 7) * 0.1;
-        _pos.set(bx, pos.y + 0.72, bz);
+        _pos.set(bx, by + 0.72, bz);
         _scl.set(glowScale, glowScale, glowScale);
         _matrix.compose(_pos, _quat, _scl);
         glow.setMatrixAt(i, _matrix);
       } else {
         // 中距離: 簡易アニメーション（スケールのみ、位置固定）
         const flameScale = 1 + Math.sin(ti * 8) * 0.1;
-        _pos.set(bx, pos.y + 0.75, bz);
+        _pos.set(bx, by + 0.75, bz);
         _scl.set(flameScale, flameScale, flameScale);
         _matrix.compose(_pos, _quat, _scl);
         flame.setMatrixAt(i, _matrix);
 
-        _pos.set(bx, pos.y + 0.72, bz);
+        _pos.set(bx, by + 0.72, bz);
         _matrix.compose(_pos, _quat, _scl);
         innerFlame.setMatrixAt(i, _matrix);
         glow.setMatrixAt(i, _matrix);

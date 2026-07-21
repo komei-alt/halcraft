@@ -45,6 +45,16 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-21',
+    items: [
+      { type: 'fix', text: '松明が壁につく向きを直して、炎の光も壁の向こうに透けにくくしたよ！' },
+      { type: 'fix', text: 'キャンプファイアやキャンドルの炎が白飛びせず、きれいなオレンジに見えるようにしたよ！' },
+      { type: 'fix', text: '乗り物の弾あとや爆発の光が変な影を残さないようにしたよ！' },
+      { type: 'fix', text: 'ブースターなどの特殊レールだけ光るようにして、普通のレールまで点滅しないようにしたよ！' },
+      { type: 'fix', text: 'ボスやコースターが一瞬原点に出るチラつきを直したよ！' },
+    ],
+  },
+  {
     date: '2026-07-20',
     items: [
       { type: 'fix', text: '色が白っぽくなったり暗くつぶれたりする二重トーンマップを直して、昼も夜も自然な明るさで見えるようにしたよ！' },

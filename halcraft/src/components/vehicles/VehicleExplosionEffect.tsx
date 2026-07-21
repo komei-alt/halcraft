@@ -314,7 +314,7 @@ export function VehicleExplosionEffect() {
 
   return (
     <group>
-      <points ref={pointsRef} geometry={geometry} material={material} />
+      <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
 
       {/* 衝撃波リング + 火球 */}
       {fireballs.map((fb) => (
@@ -338,6 +338,7 @@ export function VehicleExplosionEffect() {
                 opacity={Math.max(0, (1 - fb.shockwaveProgress) * 0.4)}
                 side={THREE.DoubleSide}
                 depthWrite={false}
+                toneMapped={false}
                 blending={THREE.AdditiveBlending}
               />
             </mesh>
@@ -353,6 +354,7 @@ export function VehicleExplosionEffect() {
                   transparent
                   opacity={Math.max(0, fb.fireballLife / FIREBALL_DURATION * 0.6)}
                   depthWrite={false}
+                  toneMapped={false}
                   blending={THREE.AdditiveBlending}
                 />
               </mesh>
