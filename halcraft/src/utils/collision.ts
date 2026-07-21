@@ -168,6 +168,48 @@ export function getAABBCollisionTop(
 }
 
 /**
+ * (x, z) 直下で fromY 付近から下へ探し、最も近い固体上面のYを返す。
+ * プレイヤーが建てた床・橋など heightmap に無い面にも乗る。
+ * 見つからない場合は fallbackY。
+ */
+export function findSurfaceY(
+  getBlock: GetBlockFn,
+  x: number,
+  z: number,
+  fromY: number,
+  maxDrop = 48,
+  fallbackY = 0,
+): number {
+  const bx = Math.floor(x);
+  const bz = Math.floor(z);
+  let y = Math.floor(fromY);
+
+  // 固体の中にいる場合は上へ少し逃がす
+  for (let climb = 0; climb < 12 && isBlockSolid(getBlock(bx, y, bz)); climb++) {
+    y += 1;
+  }
+
+  for (let drop = 0; drop < maxDrop; drop++) {
+    const below = y - 1;
+    if (below < 0) {
+      return 0;
+    }
+    const blockId = getBlock(bx, below, bz);
+    if (isBlockSolid(blockId)) {
+      const boxes = getBlockCollisionBoxes(blockId);
+      let top = below;
+      for (const box of boxes) {
+        top = Math.max(top, below + box.maxY);
+      }
+      return top;
+    }
+    y = below;
+  }
+
+  return fallbackY;
+}
+
+/**
  * 指定位置が水の中かチェック
  * プレイヤーの目線高さで判定する
  */

@@ -23,6 +23,7 @@ import {
 } from '../stores/useVehicleStore';
 import {
   checkAABBCollision,
+  findSurfaceY,
   getAABBCollisionTop,
   isBlockSolid,
   isInWater,
@@ -549,7 +550,8 @@ export function Player() {
         // コースターから降車
         coasterState.dismount();
         coasterState.despawnCart();
-        const groundY = getTerrainHeight(Math.floor(pos.x), Math.floor(pos.z)) + 1.001;
+        const heightmapFallback = getTerrainHeight(pos.x, pos.z);
+        const groundY = findSurfaceY(getBlock, pos.x, pos.z, pos.y + 2, 48, heightmapFallback) + 0.001;
         pos.y = groundY;
         vel.set(0, 0, 0);
         onGround.current = true;
@@ -567,7 +569,15 @@ export function Player() {
         const sinR = Math.sin(vehicle.rotationY + Math.PI / 2);
         const dismountX = vehicle.x + sinR * dismountOffset;
         const dismountZ = vehicle.z + cosR * dismountOffset;
-        const groundY = getTerrainHeight(Math.floor(dismountX), Math.floor(dismountZ)) + 1.001;
+        const heightmapFallback = getTerrainHeight(dismountX, dismountZ);
+        const groundY = findSurfaceY(
+          getBlock,
+          dismountX,
+          dismountZ,
+          vehicle.y + 3,
+          56,
+          heightmapFallback,
+        ) + 0.001;
 
         if (activeVehicle === 'helicopter') {
           vehicleState.dismountHelicopter();
@@ -965,7 +975,15 @@ export function Player() {
       tankX += flyForward.current.x * tankSpeed * dt;
       tankZ += flyForward.current.z * tankSpeed * dt;
 
-      const tankY = getTerrainHeight(Math.floor(tankX), Math.floor(tankZ)) + TANK_CONSTANTS.BODY_HEIGHT;
+      const tankSurface = findSurfaceY(
+        getBlock,
+        tankX,
+        tankZ,
+        latestTank.y + 2,
+        48,
+        getTerrainHeight(tankX, tankZ),
+      );
+      const tankY = tankSurface + TANK_CONSTANTS.BODY_HEIGHT;
       const turretYaw = ((euler.current.y - tankRotY + Math.PI) % (Math.PI * 2)) - Math.PI;
       const nextGunSpin = latestTank.gunSpin + Math.abs(tankSpeed) * dt;
       const tankRoll = -inputTurn * 0.05;
@@ -1102,7 +1120,15 @@ export function Player() {
         }
       }
 
-      const groundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
+      const planeSurface = findSurfaceY(
+        getBlock,
+        planeX,
+        planeZ,
+        planeY + 2,
+        64,
+        getTerrainHeight(planeX, planeZ),
+      );
+      const groundY = planeSurface + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (!airborne && planeSpeed >= AIRPLANE_CONSTANTS.TAKEOFF_SPEED && pitchDemand > 0.07) {
         airborne = true;
         planeY = Math.max(planeY, groundY + 0.5);
@@ -1127,7 +1153,15 @@ export function Player() {
       planeX += flyForward.current.x * planeSpeed * dt;
       planeZ += flyForward.current.z * planeSpeed * dt;
 
-      const nextGroundY = getTerrainHeight(Math.floor(planeX), Math.floor(planeZ)) + AIRPLANE_CONSTANTS.BODY_HEIGHT;
+      const nextPlaneSurface = findSurfaceY(
+        getBlock,
+        planeX,
+        planeZ,
+        planeY + 2,
+        64,
+        getTerrainHeight(planeX, planeZ),
+      );
+      const nextGroundY = nextPlaneSurface + AIRPLANE_CONSTANTS.BODY_HEIGHT;
       if (airborne) {
         // 速度による操縦性（0=失速, 1=十分な速度）
         const controllableSpeedRange = Math.max(0.001, AIRPLANE_CONSTANTS.TAKEOFF_SPEED - AIRPLANE_CONSTANTS.STALL_SPEED);
@@ -1272,7 +1306,15 @@ export function Player() {
         carX += flyForward.current.x * carSpeed * dt;
         carZ += flyForward.current.z * carSpeed * dt;
 
-        const carY = getTerrainHeight(Math.floor(carX), Math.floor(carZ)) + CAR_CONSTANTS.BODY_HEIGHT;
+        const carSurface = findSurfaceY(
+          getBlock,
+          carX,
+          carZ,
+          latestCar.y + 2,
+          48,
+          getTerrainHeight(carX, carZ),
+        );
+        const carY = carSurface + CAR_CONSTANTS.BODY_HEIGHT;
         const carRoll = -inputTurn * Math.min(0.08, Math.abs(carSpeed) / CAR_CONSTANTS.MAX_SPEED * 0.08);
         const nextWheelSpin = latestCar.wheelSpin + carSpeed * dt * 2.4;
 

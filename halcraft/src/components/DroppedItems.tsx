@@ -6,8 +6,10 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useDroppedItemStore, type DroppedItem } from '../stores/useDroppedItemStore';
 import { useInventoryStore } from '../stores/useInventoryStore';
+import { usePlayerStore } from '../stores/usePlayerStore';
 import { useWorldStore } from '../stores/useWorldStore';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId, type BlockInfo } from '../types/blocks';
+import { isBlockSolid } from '../utils/collision';
 import { playItemPickupSound } from '../utils/sounds';
 
 const PICKUP_RADIUS = 2;
@@ -263,7 +265,8 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
 
       const floorY = Math.floor(motion.y);
       const blockBelow = getBlock(Math.floor(motion.x), floorY, Math.floor(motion.z));
-      if (blockBelow !== BLOCK_IDS.AIR && motion.vy < 0) {
+      // 水・松明など非固体の上に乗らない（固体ブロックのみ接地）
+      if (isBlockSolid(blockBelow) && motion.vy < 0) {
         motion.y = floorY + 1.1;
         motion.vy = -motion.vy * BOUNCE_FACTOR;
         motion.vx *= 0.7;
@@ -288,9 +291,14 @@ function DroppedItemRenderer({ item }: { item: DroppedItem }) {
     mesh.rotation.z = Math.cos(ageSeconds * 1.18) * 0.1;
 
     if (now >= item.pickupableAt) {
-      const dx = camera.position.x - motion.x;
-      const dy = camera.position.y - motion.y;
-      const dz = camera.position.z - motion.z;
+      // カメラではなくプレイヤー本体位置で拾う（乗り物視点のズレを防ぐ）
+      const body = usePlayerStore.getState().worldPosition;
+      const px = body?.x ?? camera.position.x;
+      const py = body?.y ?? camera.position.y;
+      const pz = body?.z ?? camera.position.z;
+      const dx = px - motion.x;
+      const dy = py - motion.y;
+      const dz = pz - motion.z;
       if (dx * dx + dy * dy + dz * dz < PICKUP_RADIUS * PICKUP_RADIUS) {
         updatePosition(item.id, motion.x, motion.y, motion.z, 0, 0, 0);
         lastStoreSyncRef.current = now;
