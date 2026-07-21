@@ -47,6 +47,7 @@ import { getNextMasteryPerkSummary } from '../../types/masteryPerks';
 import type { StageDefinition } from '../../types/stages';
 import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
+import { useSimpleHud } from '../../utils/hudDensity';
 import { playBlockUseFeedbackSound } from '../../utils/sounds';
 
 interface HotbarStageHint {
@@ -440,7 +441,7 @@ export function Hotbar() {
   const previousSelectionKeyRef = useRef<string | null>(null);
 
   const isTouch = isTouchDevice();
-  const isCompactHud = isTouch || window.innerWidth <= 560;
+  const isCompactHud = useSimpleHud();
   const selectedHotbarItem = hotbarSlots[selectedSlot];
   const selectedIsBlock = isBlockHotbarItem(selectedHotbarItem);
   const selectedBlock = getHotbarItemBlockId(

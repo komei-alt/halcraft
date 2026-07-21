@@ -23,7 +23,7 @@ import {
 import { getStageChallenges } from '../../types/stageChallenges';
 import { formatStageMasteryPerkLabel, getStageMasteryPerkForProgress } from '../../types/stageMastery';
 import { formatStageRunBonusLabel, getStageRunBonusForProgress } from '../../types/stageRunBonuses';
-import { isTouchDevice } from '../../utils/device';
+import { useSimpleHud } from '../../utils/hudDensity';
 import { playPerkUnlockSound, playStageRewardSound } from '../../utils/sounds';
 
 interface CelebrationToast {
@@ -99,7 +99,7 @@ export function ProgressCelebration() {
   const pendingRunBonusKeyRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const lastTechniqueRecordIdRef = useRef<number | null>(null);
-  const isCompact = isTouchDevice() || window.innerWidth <= 560;
+  const isCompact = useSimpleHud();
 
   const removeToast = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));

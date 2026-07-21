@@ -12,6 +12,7 @@ import {
   useVehicleStore,
   VEHICLE_HITBOX,
   VEHICLE_EXPLOSION,
+  consumeDestroyedWhileBoarded,
   type VehicleType,
 } from '../../stores/useVehicleStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
@@ -68,12 +69,17 @@ export function VehicleCombat() {
   });
 
   /** 乗り物の爆発処理（ブロック破壊 + 周囲ダメージ + 搭乗者即死） */
-  const handleVehicleExplosion = useCallback((type: VehicleType, isRemote: boolean = false) => {
+  const handleVehicleExplosion = useCallback((
+    type: VehicleType,
+    isRemote: boolean = false,
+    posOverride?: [number, number, number],
+  ) => {
     const state = useVehicleStore.getState();
     const vehicle = state[type];
-    const cx = vehicle.x;
-    const cy = vehicle.y + 1;
-    const cz = vehicle.z;
+    // リモート破壊は送信側の位置を優先（補間遅れで爆発位置がズレないようにする）
+    const cx = posOverride ? posOverride[0] : vehicle.x;
+    const cy = posOverride ? posOverride[1] : vehicle.y + 1;
+    const cz = posOverride ? posOverride[2] : vehicle.z;
 
     // 1. 派手な爆発エフェクトを発生
     spawnVehicleExplosion(type, cx, cy, cz);
@@ -119,8 +125,9 @@ export function VehicleCombat() {
       }
     }
 
-    // 4. 搭乗者に即死ダメージ（自分が乗っていた場合）
-    const wasMyVehicle = state.activeVehicle === type;
+    // 4. 搭乗者に即死ダメージ（破壊前に乗っていた場合）
+    // destroyVehicle が activeVehicle を先に消すため、搭乗フラグを別途消費する
+    const wasMyVehicle = consumeDestroyedWhileBoarded(type) || state.activeVehicle === type;
     if (wasMyVehicle) {
       usePlayerStore.getState().takeDamage(VEHICLE_EXPLOSION.RIDER_DAMAGE);
     }
@@ -190,11 +197,13 @@ export function VehicleCombat() {
     const unsubDestroy = onRemoteVehicleDestroy((data) => {
       const vehicleStore = useVehicleStore.getState();
       const vehicle = vehicleStore[data.type];
-      // まだローカルで破壊されていなければ破壊処理を実行
-      if (vehicle.spawned && !vehicle.destroyed) {
-        vehicleStore.destroyVehicle(data.type);
-      }
-      handleVehicleExplosion(data.type, true);
+      // まだローカルで破壊されていなければ破壊＋爆発を実行
+      // 既に破壊済みのエコーは二重爆発・二重ダメージを避けるため無視する
+      if (!vehicle.spawned || vehicle.destroyed) return;
+      vehicleStore.destroyVehicle(data.type);
+      // useFrame 側の新規破壊検知と二重発火しないよう既処理扱いにする
+      prevDestroyed.current[data.type] = true;
+      handleVehicleExplosion(data.type, true, data.pos);
     });
 
     const unsubRespawn = onRemoteVehicleRespawn((data) => {

@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useGameStore } from '../../../stores/useGameStore';
+import { useVehicleStore } from '../../../stores/useVehicleStore';
 import { mobileActions } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 64;
@@ -11,7 +12,11 @@ const BUTTON_GAP = 12;
 export function JumpButton() {
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const showDescend = isBuildMode && creativeFlying;
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const showDescend =
+    (isBuildMode && creativeFlying)
+    || activeVehicle === 'helicopter'
+    || activeVehicle === 'airplane';
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();

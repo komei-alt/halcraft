@@ -6,6 +6,7 @@ import {
   useSettingsStore,
   type AtmosphereQuality,
   type GraphicsPreset,
+  type HudDensity,
   type LightingQuality,
   type ResolutionScale,
   type ShadowQuality,
@@ -100,6 +101,11 @@ const resolutionOptions: Array<SegmentOption<ResolutionScale>> = [
   { value: 'performance', label: '軽い', icon: 'S' },
   { value: 'balanced', label: '標準', icon: 'M' },
   { value: 'crisp', label: 'くっきり', icon: 'H' },
+];
+
+const hudDensityOptions: Array<SegmentOption<HudDensity>> = [
+  { value: 'simple', label: 'シンプル', icon: 'S' },
+  { value: 'detailed', label: '詳細', icon: 'D' },
 ];
 
 const tierLabels: Record<PerformanceTier, string> = {
@@ -266,6 +272,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const shadowQuality = useSettingsStore((s) => s.shadowQuality);
   const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const waterAnimation = useSettingsStore((s) => s.waterAnimation);
+  const hudDensity = useSettingsStore((s) => s.hudDensity);
   const showControlsGuide = useSettingsStore((s) => s.showControlsGuide);
   const applyGraphicsPreset = useSettingsStore((s) => s.applyGraphicsPreset);
   const setGraphicsPreset = useSettingsStore((s) => s.setGraphicsPreset);
@@ -275,6 +282,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setShadowQuality = useSettingsStore((s) => s.setShadowQuality);
   const setResolutionScale = useSettingsStore((s) => s.setResolutionScale);
   const setWaterAnimation = useSettingsStore((s) => s.setWaterAnimation);
+  const setHudDensity = useSettingsStore((s) => s.setHudDensity);
   const setShowControlsGuide = useSettingsStore((s) => s.setShowControlsGuide);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
   const isTouch = isTouchDevice();
@@ -554,6 +562,25 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               onChange={setShowControlsGuide}
             />
           </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <div style={labelStyle}>
+            <span>画面の情報量</span>
+            <span style={valueStyle}>
+              {hudDensityOptions.find((o) => o.value === hudDensity)?.label}
+            </span>
+          </div>
+          <div style={{
+            color: 'rgba(255, 255, 255, 0.42)',
+            fontSize: 11,
+            fontWeight: 700,
+            lineHeight: '15px',
+            marginTop: -2,
+          }}>
+            シンプルは目的と体力だけ。詳細は作戦パネルも全部出すよ
+          </div>
+          <Segment value={hudDensity} options={hudDensityOptions} onChange={setHudDensity} />
         </div>
 
         <div style={{

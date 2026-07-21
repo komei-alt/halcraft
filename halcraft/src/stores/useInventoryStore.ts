@@ -83,8 +83,10 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
           newItems[blockId] = remaining;
         }
       });
-      // 完成品を追加
-      newItems[recipe.result] = (newItems[recipe.result] ?? 0) + recipe.resultCount;
+      // 完成品を追加（ツール・防具・ポーションは別途付与するためプレースホルダブロックは入れない）
+      if (!recipe.toolId && !recipe.armorId && !recipe.potionId) {
+        newItems[recipe.result] = (newItems[recipe.result] ?? 0) + recipe.resultCount;
+      }
       return { items: newItems };
     });
     return true;

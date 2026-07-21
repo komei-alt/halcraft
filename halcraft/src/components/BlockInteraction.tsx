@@ -1586,7 +1586,14 @@ export function BlockInteraction() {
       if (usePlayerStore.getState().isDead) return;
       // ヘリコプター搭乗中はブロック操作を無効化
       if (useVehicleStore.getState().isInVehicle()) return;
-      if (equippedItem !== 'builder') return;
+      // 建築以外は破壊トリガーを消費しない（ライトセイバー側で消費）。
+      // ただし武器切替後にトリガーが残留しないよう、非ライトセイバー時は破棄する。
+      if (equippedItem !== 'builder') {
+        if (equippedItem !== 'lightsaber') {
+          consumeBreakBlock();
+        }
+        return;
+      }
 
       // 破壊
       if (consumeBreakBlock()) {
