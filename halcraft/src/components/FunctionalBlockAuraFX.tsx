@@ -1,7 +1,7 @@
 // 機能を持つブロックに、近距離で分かる控えめな光の目印を重ねる
 
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 import { useWorldStore, type IndexedBlockPosition } from '../stores/useWorldStore';
@@ -332,6 +332,11 @@ export function FunctionalBlockAuraFX() {
     if (groundRef.current.instanceColor) groundRef.current.instanceColor.needsUpdate = true;
     if (beaconRef.current.instanceColor) beaconRef.current.instanceColor.needsUpdate = true;
   });
+
+  useLayoutEffect(() => {
+    if (groundRef.current) groundRef.current.count = 0;
+    if (beaconRef.current) beaconRef.current.count = 0;
+  }, []);
 
   if (phase !== 'playing') return null;
 

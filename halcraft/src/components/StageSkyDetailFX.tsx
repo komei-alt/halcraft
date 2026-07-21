@@ -424,6 +424,8 @@ export function StageSkyDetailFX() {
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || phase !== 'playing') return null;
@@ -434,6 +436,7 @@ export function StageSkyDetailFX() {
       args={[sharedPanelGeometry, undefined, panels.length]}
       frustumCulled={false}
       renderOrder={-6}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}

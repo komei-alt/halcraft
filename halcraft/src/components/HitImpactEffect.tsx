@@ -1,7 +1,7 @@
 // 攻撃ヒット時の火花エフェクト
 // ダメージポップアップとは別に、当たった方向・会心・手ごたえを3Dで見せる
 
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { registerHitImpactEffectSpawner } from '../utils/effectTriggers';
@@ -154,7 +154,7 @@ export function HitImpactEffect() {
     blending: THREE.AdditiveBlending,
   }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (slashMeshRef.current) slashMeshRef.current.count = 0;
     if (ringMeshRef.current) ringMeshRef.current.count = 0;
     if (coreMeshRef.current) coreMeshRef.current.count = 0;

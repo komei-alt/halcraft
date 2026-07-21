@@ -1,7 +1,7 @@
 // ブロック破壊パーティクルエフェクトコンポーネント
 // ブロックが壊れた時にそのブロックの色を反映した破片が飛び散る演出
 
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_DEFS, type BlockId } from '../types/blocks';
@@ -147,7 +147,7 @@ export function BlockBreakEffect() {
     opacity: 0.9,
   }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (shardMeshRef.current) shardMeshRef.current.count = 0;
     if (ringMeshRef.current) ringMeshRef.current.count = 0;
   }, []);

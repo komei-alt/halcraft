@@ -1113,7 +1113,7 @@ function BiomeVistaCurtain({ config, phase }: { config: AtmosphereConfig; phase:
         map={texture}
         transparent
         depthWrite={false}
-        depthTest={false}
+        depthTest
         opacity={config.vista.opacity}
         side={THREE.DoubleSide}
         toneMapped={false}
@@ -1240,6 +1240,7 @@ function BiomeHorizon({ config, phase }: { config: AtmosphereConfig; phase: stri
                 opacity={config.horizon.opacity * 0.13}
                 depthWrite={false}
                 fog
+                toneMapped={false}
                 blending={THREE.AdditiveBlending}
               />
             </mesh>

@@ -1,7 +1,7 @@
 // ブロックを使った瞬間の小さな光エフェクト
 // 特殊ブロックの役割が、画面内でも手応えとして伝わるようにする
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { registerBlockUseEffectSpawner } from '../utils/effectTriggers';
@@ -461,6 +461,13 @@ export function BlockUseEffect() {
       if (signatureRef.current.instanceColor) signatureRef.current.instanceColor.needsUpdate = true;
     }
   });
+
+  useLayoutEffect(() => {
+    if (signatureRef.current) signatureRef.current.count = 0;
+    if (floorRingRef.current) floorRingRef.current.count = 0;
+    if (haloRingRef.current) haloRingRef.current.count = 0;
+    if (coreRef.current) coreRef.current.count = 0;
+  }, []);
 
   return (
     <>

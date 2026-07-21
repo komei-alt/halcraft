@@ -189,7 +189,12 @@ function SingleTurret({ position }: { position: TurretPos }) {
     emissiveIntensity: 0.9,
   }), []);
   const flashMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
+    color: MUZZLE_FLASH_COLOR,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
   }), []);
 
   // インパクト生成
