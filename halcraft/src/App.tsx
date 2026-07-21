@@ -118,6 +118,7 @@ import { HungerBar } from './components/ui/HungerBar';
 import { SettingsButton, SettingsMenu } from './components/ui/SettingsMenu';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
+import { isNarrowGameplayHud } from './utils/hudDensity';
 import { getPerformanceProfile } from './utils/performance';
 import { useSettingsStore } from './stores/useSettingsStore';
 import './App.css';
@@ -238,8 +239,8 @@ function GameCanvas() {
 export default function App() {
   const phase = useGameStore((s) => s.phase);
   const isTouch = isTouchDevice();
-  const compactGameplayHud = isTouch || window.innerWidth <= 560;
-  const showDetailedHud = !compactGameplayHud;
+  const hudDensity = useSettingsStore((s) => s.hudDensity);
+  const showDetailedHud = hudDensity === 'detailed' && !isNarrowGameplayHud();
   const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
   const spawnTank = useVehicleStore((s) => s.spawnTank);
   const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
@@ -355,10 +356,10 @@ export default function App() {
           <HealthBar />
           {showDetailedHud && <ToolHUD />}
           {showDetailedHud && <ArmorHUD />}
-          {showDetailedHud && <EffectIcons />}
+          <EffectIcons />
           <XPBar />
-          {showDetailedHud && <TimeDisplay />}
-          {showDetailedHud && <StageProgressHUD />}
+          <TimeDisplay />
+          <StageProgressHUD />
           <StageLandmarkMomentHUD />
           <StageMasteryMomentHUD />
           {showDetailedHud && <StageChallengeHUD />}
@@ -379,7 +380,7 @@ export default function App() {
           <WeaponSwitchPopover />
           <VehicleAimHUD />
           <CockpitHUD />
-          {showDetailedHud && <MinimapHUD />}
+          <MinimapHUD />
           <CoasterHUD />
           <MultiplayerConnectionHUD />
           <AirSupplyBar />

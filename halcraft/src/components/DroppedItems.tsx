@@ -48,8 +48,11 @@ function getItemTexture(textureName: string): THREE.Texture {
   const cached = textureCache.get(textureName);
   if (cached) return cached;
   const texture = textureLoader.load(`/textures/blocks/${textureName}`);
+  // ワールドブロックと同じくミップマップで遠景のチラつきを抑える
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
   texture.colorSpace = THREE.SRGBColorSpace;
   textureCache.set(textureName, texture);
   return texture;

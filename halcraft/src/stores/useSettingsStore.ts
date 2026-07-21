@@ -10,6 +10,7 @@ export type LightingQuality = 'simple' | 'standard' | 'rich';
 export type AtmosphereQuality = 'off' | 'simple' | 'standard' | 'rich';
 export type ShadowQuality = 'off' | 'low' | 'standard' | 'high';
 export type ResolutionScale = 'performance' | 'balanced' | 'crisp';
+export type HudDensity = 'simple' | 'detailed';
 
 export interface SettingsSnapshot {
   graphicsPreset: GraphicsPreset;
@@ -19,6 +20,7 @@ export interface SettingsSnapshot {
   shadowQuality: ShadowQuality;
   resolutionScale: ResolutionScale;
   waterAnimation: boolean;
+  hudDensity: HudDensity;
   showControlsGuide: boolean;
 }
 
@@ -31,6 +33,7 @@ interface SettingsState extends SettingsSnapshot {
   setShadowQuality: (quality: ShadowQuality) => void;
   setResolutionScale: (scale: ResolutionScale) => void;
   setWaterAnimation: (enabled: boolean) => void;
+  setHudDensity: (density: HudDensity) => void;
   setShowControlsGuide: (enabled: boolean) => void;
   resetSettings: () => void;
 }
@@ -43,7 +46,8 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   shadowQuality: 'standard',
   resolutionScale: 'balanced',
   waterAnimation: true,
-  showControlsGuide: true,
+  hudDensity: 'simple',
+  showControlsGuide: false,
 };
 
 const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
@@ -56,7 +60,8 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     shadowQuality: 'off',
     resolutionScale: 'performance',
     waterAnimation: false,
-    showControlsGuide: true,
+    hudDensity: 'simple',
+    showControlsGuide: false,
   },
   balanced: {
     graphicsPreset: 'balanced',
@@ -66,7 +71,8 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     shadowQuality: 'standard',
     resolutionScale: 'balanced',
     waterAnimation: true,
-    showControlsGuide: true,
+    hudDensity: 'simple',
+    showControlsGuide: false,
   },
   quality: {
     graphicsPreset: 'quality',
@@ -76,7 +82,8 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     shadowQuality: 'high',
     resolutionScale: 'crisp',
     waterAnimation: true,
-    showControlsGuide: true,
+    hudDensity: 'simple',
+    showControlsGuide: false,
   },
 };
 
@@ -100,6 +107,10 @@ function isResolutionScale(value: unknown): value is ResolutionScale {
   return value === 'performance' || value === 'balanced' || value === 'crisp';
 }
 
+function isHudDensity(value: unknown): value is HudDensity {
+  return value === 'simple' || value === 'detailed';
+}
+
 function clampRenderDistance(value: number): number {
   return Math.max(4, Math.min(10, Math.round(value)));
 }
@@ -113,6 +124,7 @@ function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot
     shadowQuality: state.shadowQuality,
     resolutionScale: state.resolutionScale,
     waterAnimation: state.waterAnimation,
+    hudDensity: state.hudDensity,
     showControlsGuide: state.showControlsGuide,
   };
 }
@@ -152,6 +164,9 @@ function loadSettings(): SettingsSnapshot {
       waterAnimation: typeof parsed.waterAnimation === 'boolean'
         ? parsed.waterAnimation
         : DEFAULT_SETTINGS.waterAnimation,
+      hudDensity: isHudDensity(parsed.hudDensity)
+        ? parsed.hudDensity
+        : DEFAULT_SETTINGS.hudDensity,
       showControlsGuide: typeof parsed.showControlsGuide === 'boolean'
         ? parsed.showControlsGuide
         : DEFAULT_SETTINGS.showControlsGuide,
@@ -184,6 +199,7 @@ export const useSettingsStore = create<SettingsState>((set) => {
     setShadowQuality: (shadowQuality) => setAndSave({ shadowQuality }),
     setResolutionScale: (resolutionScale) => setAndSave({ resolutionScale }),
     setWaterAnimation: (waterAnimation) => setAndSave({ waterAnimation }),
+    setHudDensity: (hudDensity) => setAndSave({ hudDensity }),
     setShowControlsGuide: (showControlsGuide) => setAndSave({ showControlsGuide }),
     resetSettings: () => setAndSave(DEFAULT_SETTINGS),
   };

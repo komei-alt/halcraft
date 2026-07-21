@@ -428,15 +428,21 @@ export function PlayerMachineGun() {
           continue;
         }
 
-        // 乗り物への弾丸ダメージ
-        const vehicleHit = checkProjectileHitVehicle(bullet.pos.x, bullet.pos.y, bullet.pos.z);
+        // 乗り物への弾丸ダメージ（線分スイープでトンネル抜けを防ぐ）
+        const vehicleHit = checkProjectileHitVehicle(
+          bullet.pos.x, bullet.pos.y, bullet.pos.z,
+          undefined,
+          bullet.prev.x, bullet.prev.y, bullet.prev.z,
+        );
         if (vehicleHit) {
           const precisionHit = bullet.scoped;
           const hitDamage = bulletDamage + (precisionHit ? 1 : 0);
           useVehicleStore.getState().damageVehicle(vehicleHit.type, hitDamage);
-          spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, precisionHit);
-          spawnDamagePopup(hitDamage, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, precisionHit);
-          playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
+          spawnHitImpactEffect(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ, moveDir.x, moveDir.y, moveDir.z, precisionHit);
+          spawnDamagePopup(hitDamage, vehicleHit.hitX, vehicleHit.hitY + 0.5, vehicleHit.hitZ, precisionHit);
+          playBulletImpactSound(camera.position.distanceTo(
+            new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
+          ), 'mob');
           useMasteryStore.getState().recordItemHit('machine_gun', {
             label: precisionHit ? '精密車両ヒット' : '乗り物ヒット',
             amount: precisionHit ? 10 : 7,
@@ -640,7 +646,14 @@ function PlayerGunTracer({ start, end, color }: { start: THREE.Vector3; end: THR
   return (
     <mesh position={midpoint} quaternion={quaternion}>
       <cylinderGeometry args={[0.018, 0.01, length, 6]} />
-      <meshBasicMaterial color={color} transparent opacity={0.86} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.86}
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
     </mesh>
   );
 }

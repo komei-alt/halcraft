@@ -18,7 +18,7 @@ import { getMasteryBonus } from '../types/masteryPerks';
 import { getMasteryTechniqueBonus } from '../types/masteryTechniquePerks';
 import { getStageCombatModifier, getStageCombatStyleForItem } from '../types/stageCombatStyles';
 
-import { mobileActions } from '../utils/touchInput';
+import { consumeBreakBlock } from '../utils/touchInput';
 import { getMobHitbox, getMobHitboxMinY, getMobHitboxMaxY } from '../utils/mobHitboxes';
 import { spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import {
@@ -578,8 +578,8 @@ export function Lightsaber() {
       }
     }
 
-    // モバイルタッチ入力対応
-    if (visible && mobileActions.breakBlock) {
+    // モバイルタッチ入力対応（1回消費して連打状態の残留を防ぐ）
+    if (visible && consumeBreakBlock()) {
       startSwing();
     }
 

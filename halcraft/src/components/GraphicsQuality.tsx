@@ -18,11 +18,11 @@ import {
   GRAPHICS_PRESSURE_DPR_SCALE,
   useGraphicsRuntimeStore,
 } from '../stores/useGraphicsRuntimeStore';
-import { useSettingsStore } from '../stores/useSettingsStore';
+import { useSettingsStore, type GraphicsPreset, type ResolutionScale } from '../stores/useSettingsStore';
 import { useGameStore } from '../stores/useGameStore';
 import type { BiomeId, StageCategory } from '../types/stages';
 import { isTouchDevice } from '../utils/device';
-import { getPerformanceProfile } from '../utils/performance';
+import { getPerformanceProfile, type PerformanceTier } from '../utils/performance';
 
 interface QualityTuning {
   bloomIntensity: number;
@@ -32,6 +32,7 @@ interface QualityTuning {
   saturation: number;
   contrast: number;
   bloomLevels: number;
+  resolutionScale: number;
   smaaPreset: SMAAPreset;
   aoQuality: 'performance' | 'low' | 'medium';
   aoSamples: number;
@@ -61,7 +62,26 @@ interface ReflectionRig {
 
 const CANVAS_RESOLUTION_SYNC_INTERVAL_MS = 300;
 
-function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuning {
+function getComposerResolutionScale(
+  isHighQuality: boolean,
+  isTouch: boolean,
+  resolutionScale: ResolutionScale,
+): number {
+  if (isHighQuality && !isTouch) return 1;
+  if (resolutionScale === 'crisp') return isTouch ? 0.92 : 1;
+  if (resolutionScale === 'performance') return isTouch ? 0.58 : 0.72;
+  return isTouch ? 0.78 : 0.88;
+}
+
+function isGraphicsPostFxEnabled(graphicsPreset: GraphicsPreset, tier: PerformanceTier): boolean {
+  return graphicsPreset !== 'light' && tier !== 'low';
+}
+
+function getQualityTuning(
+  isHighQuality: boolean,
+  isTouch: boolean,
+  resolutionScale: ResolutionScale,
+): QualityTuning {
   if (isHighQuality && !isTouch) {
     return {
       bloomIntensity: 0.34,
@@ -71,6 +91,7 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
       saturation: 0.06,
       contrast: 0.036,
       bloomLevels: 6,
+      resolutionScale: getComposerResolutionScale(isHighQuality, isTouch, resolutionScale),
       smaaPreset: SMAAPreset.HIGH,
       aoQuality: 'medium',
       aoSamples: 12,
@@ -86,6 +107,7 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     saturation: isTouch ? 0.025 : 0.04,
     contrast: isTouch ? 0.012 : 0.022,
     bloomLevels: 4,
+    resolutionScale: getComposerResolutionScale(isHighQuality, isTouch, resolutionScale),
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
     aoSamples: isTouch ? 4 : 6,
@@ -292,7 +314,7 @@ export function RendererColorPipeline() {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const profile = getPerformanceProfile();
-  const postProcessingEnabled = graphicsPreset !== 'light' && profile.tier !== 'low';
+  const postFxEnabled = isGraphicsPostFxEnabled(graphicsPreset, profile.tier);
   const exposure = profile.tier === 'high' || graphicsPreset === 'quality'
     ? 1.06
     : resolutionScale === 'performance'
@@ -303,12 +325,18 @@ export function RendererColorPipeline() {
   /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     gl.outputColorSpace = THREE.SRGBColorSpace;
-    // EffectComposer 使用時は最後の ToneMappingEffect だけに色変換を任せる。
-    gl.toneMapping = postProcessingEnabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    // ポストFXの ToneMapping と二重適用すると色が潰れる／白っぽくなるため切り替える
+    gl.toneMapping = postFxEnabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = exposure;
-  }, [gl, exposure, postProcessingEnabled]);
+  }, [gl, exposure, postFxEnabled]);
 
   useFrame(() => {
+    // ポストFX有効時は EffectComposer 側の ToneMapping が露出を担う
+    if (postFxEnabled) {
+      gl.toneMappingExposure = 1;
+      return;
+    }
+
     const gameState = useGameStore.getState();
     const stageBoost = gameState.dimension === 'overworld'
       ? gameState.currentStage?.rules.ambientIntensity ?? 1
@@ -382,20 +410,20 @@ export function GraphicsPostFX() {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const lightingQuality = useSettingsStore((s) => s.lightingQuality);
   const shadowQuality = useSettingsStore((s) => s.shadowQuality);
-  useSettingsStore((s) => s.resolutionScale);
   const stageBiome = useGameStore((s) => s.currentStage?.biome ?? null);
   const stageCategory = useGameStore((s) => s.currentStage?.category ?? null);
   const dimension = useGameStore((s) => s.dimension);
   const pressure = useGraphicsRuntimeStore((s) => s.pressure);
+  const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const profile = getPerformanceProfile();
   const isTouch = isTouchDevice();
   const isHighQuality = pressure === 0
     && (profile.tier === 'high' || graphicsPreset === 'quality' || lightingQuality === 'rich');
-  const enabled = graphicsPreset !== 'light' && profile.tier !== 'low';
+  const enabled = isGraphicsPostFxEnabled(graphicsPreset, profile.tier);
 
   if (!enabled) return null;
 
-  const tuning = getQualityTuning(isHighQuality, isTouch);
+  const tuning = getQualityTuning(isHighQuality, isTouch, resolutionScale);
   const stageLook = getStageLookTuning(stageBiome, stageCategory, dimension);
   const aoEnabled = shadowQuality !== 'off' && pressure < 2;
   const bloomThreshold = THREE.MathUtils.clamp(
@@ -409,6 +437,7 @@ export function GraphicsPostFX() {
   return (
     <EffectComposer
       multisampling={0}
+      resolutionScale={tuning.resolutionScale}
       depthBuffer={aoEnabled}
       renderPriority={1}
     >

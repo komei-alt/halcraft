@@ -419,8 +419,11 @@ function BlockHighlight({
           color={targetOutlineColor}
           transparent
           opacity={equippedItem === 'builder' ? 0.58 : 0.42}
-          depthTest={false}
+          depthTest
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </lineSegments>
       {showPlacementPreview && (
@@ -435,8 +438,11 @@ function BlockHighlight({
               color={previewColor}
               transparent
               opacity={isPlacementReady ? 0.2 : 0.08}
-              depthTest={false}
+              depthTest
               depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
             />
           </mesh>
           <lineSegments
@@ -449,8 +455,11 @@ function BlockHighlight({
               color={previewColor}
               transparent
               opacity={isPlacementReady ? 0.72 : 0.32}
-              depthTest={false}
+              depthTest
               depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
             />
           </lineSegments>
           <mesh
@@ -465,8 +474,11 @@ function BlockHighlight({
               color={previewColor}
               transparent
               opacity={isPlacementReady ? 0.58 : 0.28}
-              depthTest={false}
+              depthTest
               depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
               side={THREE.DoubleSide}
             />
           </mesh>
@@ -531,8 +543,11 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
           color={progressColor}
           transparent
           opacity={0.12 + progress * 0.16}
-          depthTest={false}
+          depthTest
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
@@ -542,8 +557,11 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
           color={progressColor}
           transparent
           opacity={0.3 + progress * 0.44}
-          depthTest={false}
+          depthTest
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </lineSegments>
       <lineSegments geometry={breakCrackGeometry} scale={scale} renderOrder={219}>
@@ -552,8 +570,11 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
           color={progressColor}
           transparent
           opacity={0.28 + progress * 0.54}
-          depthTest={false}
+          depthTest
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </lineSegments>
       <group ref={ringGroupRef} scale={ringScale}>
@@ -573,8 +594,11 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
               color={progressColor}
               transparent
               opacity={0.24 + progress * 0.32}
-              depthTest={false}
+              depthTest
               depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
               blending={THREE.AdditiveBlending}
               side={THREE.DoubleSide}
             />
@@ -1562,7 +1586,14 @@ export function BlockInteraction() {
       if (usePlayerStore.getState().isDead) return;
       // ヘリコプター搭乗中はブロック操作を無効化
       if (useVehicleStore.getState().isInVehicle()) return;
-      if (equippedItem !== 'builder') return;
+      // 建築以外は破壊トリガーを消費しない（ライトセイバー側で消費）。
+      // ただし武器切替後にトリガーが残留しないよう、非ライトセイバー時は破棄する。
+      if (equippedItem !== 'builder') {
+        if (equippedItem !== 'lightsaber') {
+          consumeBreakBlock();
+        }
+        return;
+      }
 
       // 破壊
       if (consumeBreakBlock()) {

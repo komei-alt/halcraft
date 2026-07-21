@@ -38,6 +38,7 @@ import {
   touchLook,
   mobileActions,
   resetTouchLookDelta,
+  consumeInteract,
 } from '../utils/touchInput';
 import { activateDesktopGameplayInput, getGameCanvas, isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
@@ -409,6 +410,24 @@ export function Player() {
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
     reportWorldPosition(pos.x, camera.position.y || pos.y, pos.z);
+
+    // 搭乗・建築飛行でもカメラ位置から水中オーバーレイを同期（早期 return で状態が固まるのを防ぐ）
+    {
+      const eyeX = camera.position.x;
+      const eyeY = camera.position.y;
+      const eyeZ = camera.position.z;
+      const inWaterEye = isInWater(getBlock, eyeX, eyeY, eyeZ);
+      const inWaterFeet = isInWater(getBlock, eyeX, eyeY - PLAYER_HEIGHT + 0.3, eyeZ);
+      const swimming = inWaterEye || inWaterFeet;
+      const liquidStore = usePlayerStore.getState();
+      if (liquidStore.isSubmerged !== inWaterEye) {
+        usePlayerStore.setState({ isSubmerged: inWaterEye });
+      }
+      if (liquidStore.isInWater !== swimming) {
+        usePlayerStore.setState({ isInWater: swimming });
+      }
+    }
+
     const isBuildMode = gameState.isBuildMode;
     let creativeFlying = isBuildMode && gameState.creativeFlying;
 
@@ -456,8 +475,11 @@ export function Player() {
       }
     }
 
-    // --- 搭乗/降車の処理（Fキー） ---
-    if (interactPressed.current && (isInputActive || (isInVehicle && isVehicleInputActive))) {
+    // --- 搭乗/降車の処理（Fキー / モバイル乗降ボタン） ---
+    if (isTouch.current && consumeInteract()) {
+      interactPressed.current = true;
+    }
+    if (interactPressed.current && (isInputActive || isTouch.current || (isInVehicle && isVehicleInputActive))) {
       interactPressed.current = false;
 
       // --- コースター搭乗/降車チェック ---
@@ -687,7 +709,7 @@ export function Player() {
         if (isTouch.current) {
           inputForward = -joystickInput.y;
           inputTurn = -joystickInput.x;
-          inputVertical = mobileActions.jump ? 1 : 0;
+          inputVertical = (mobileActions.jump ? 1 : 0) - (mobileActions.descend ? 1 : 0);
         } else {
           inputForward = isVehicleInputActive ? (keys.current.forward ? 1 : 0) - (keys.current.backward ? 1 : 0) : 0;
           inputTurn = isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0;
@@ -966,7 +988,7 @@ export function Player() {
         ? -joystickInput.x
         : (isVehicleInputActive ? (keys.current.left ? 1 : 0) - (keys.current.right ? 1 : 0) : 0);
       const inputPitch = isTouch.current
-        ? (mobileActions.jump ? 1 : 0)
+        ? (mobileActions.jump ? 1 : 0) - (mobileActions.descend ? 1 : 0)
         : (isVehicleInputActive ? (keys.current.jump ? 1 : 0) - (keys.current.descend ? 1 : 0) : 0);
 
       if (inputForward > 0) {
@@ -1289,6 +1311,10 @@ export function Player() {
         moveDir.current.applyEuler(moveEuler.current);
         vel.x = moveDir.current.x * flySpeed;
         vel.z = moveDir.current.z * flySpeed;
+      } else {
+        // 入力解除後に水平速度が残り続けるドリフトを防止
+        vel.x = 0;
+        vel.z = 0;
       }
       vel.y = inputY * CREATIVE_FLY_VERTICAL_SPEED;
 

@@ -347,6 +347,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
     transparent: true,
     opacity: 0,
     depthWrite: false,
+    toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
 
@@ -691,13 +692,20 @@ function TurretTrail({ projectile }: { projectile: TurretProjectile }) {
 
   return (
     <group>
-      <mesh ref={bulletRef}>
+      <mesh ref={bulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.1, 6, 6]} />
-        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.9} />
+        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
       </mesh>
       <mesh ref={trailRef} visible={false}>
         <cylinderGeometry args={[0.06, 0.02, 1, 4]} />
-        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.7} />
+        <meshBasicMaterial
+          color={TRACER_COLOR}
+          transparent
+          opacity={0.7}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
@@ -755,6 +763,8 @@ function TurretImpactEffect({ effect }: { effect: TurretImpact }) {
             color={i % 3 === 0 ? SPARK_COLOR : mainColor}
             transparent
             opacity={1}
+            depthWrite={false}
+            toneMapped={false}
           />
         </mesh>
       ))}

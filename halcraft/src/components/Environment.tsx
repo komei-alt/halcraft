@@ -287,7 +287,8 @@ function ensureSceneBackground(scene: THREE.Scene): THREE.Color {
 }
 
 function ensureLinearFog(scene: THREE.Scene): THREE.Fog {
-  if (!(scene.fog instanceof THREE.Fog) || scene.fog instanceof THREE.FogExp2) {
+  // FogExp2 は Fog を継承しないため、種類が違うときは作り直す
+  if (!(scene.fog instanceof THREE.Fog)) {
     scene.fog = new THREE.Fog(0x87ceeb, cachedFogNear, cachedFogFar);
   }
   return scene.fog;
@@ -632,9 +633,11 @@ export function Environment() {
       starMaterialRef.current.opacity = starOpacity;
     }
 
-    // ライト更新
+    // ライト更新（影の範囲をプレイヤー周辺に固定し、遠方で影が切れるのを防ぐ）
     if (sunRef.current) {
       sunRef.current.position.copy(_sunPosition);
+      sunRef.current.target.position.copy(camera.position);
+      sunRef.current.target.updateMatrixWorld();
       sunRef.current.intensity = sunIntensity;
       sunRef.current.color.copy(_sunColor);
     }
@@ -782,10 +785,13 @@ export function Environment() {
         shadow-camera-right={performanceProfile.shadowCameraSize}
         shadow-camera-top={performanceProfile.shadowCameraSize}
         shadow-camera-bottom={-performanceProfile.shadowCameraSize}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.02}
+        shadow-bias={-0.0002}
+        shadow-normalBias={0.04}
         color={0xfff5e0}
-      />
+      >
+        {/* target をシーンに載せて、プレイヤー追従の影カメラを安定させる */}
+        <object3D attach="target" />
+      </directionalLight>
 
       {/* 夜の輪郭を起こす、影なしの月光。追加シャドウパスは発生させない。 */}
       <directionalLight

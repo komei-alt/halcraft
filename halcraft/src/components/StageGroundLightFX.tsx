@@ -422,6 +422,8 @@ export function StageGroundLightFX() {
       mesh.setMatrixAt(i, dummy.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || phase !== 'playing' || !alphaTexture) return null;
@@ -432,6 +434,7 @@ export function StageGroundLightFX() {
       args={[sharedGroundGeometry, undefined, patches.length]}
       frustumCulled={false}
       renderOrder={1}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}

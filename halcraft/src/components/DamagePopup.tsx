@@ -81,12 +81,13 @@ for (let i = 0; i < MAX_POPUPS; i++) {
   const material = new THREE.SpriteMaterial({
     transparent: true,
     depthWrite: false,
-    depthTest: false,
+    // 壁越しにダメージ数字が見えないようにする
+    depthTest: true,
     sizeAttenuation: true,
   });
   const sprite = new THREE.Sprite(material);
   sprite.visible = false;
-  sprite.renderOrder = 999;
+  sprite.renderOrder = 20;
   SPRITE_POOL.push(sprite);
 }
 

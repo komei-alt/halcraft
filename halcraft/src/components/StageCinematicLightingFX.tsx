@@ -433,6 +433,8 @@ export function StageCinematicLightingFX() {
       mesh.setMatrixAt(i, dummy.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || !texture || panels.length === 0 || phase !== 'playing' || !enabled) return null;
@@ -443,6 +445,7 @@ export function StageCinematicLightingFX() {
       args={[sharedPanelGeometry, undefined, panels.length]}
       frustumCulled={false}
       renderOrder={8}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}
@@ -452,8 +455,9 @@ export function StageCinematicLightingFX() {
         opacity={config.opacity}
         alphaTest={0.012}
         depthWrite={false}
-        depthTest
-        fog
+        // オーロラだけ空向けに深度無視。地上パネルは壁抜けを防ぐ
+        depthTest={config.kind !== 'aurora'}
+        fog={config.kind === 'aurora'}
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.blending}

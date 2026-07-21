@@ -278,6 +278,7 @@ export function StageModeFlowFX() {
           args={[sharedSphereGeometry, undefined, particles.length]}
           frustumCulled={false}
           renderOrder={6}
+          visible={false}
         >
           <meshBasicMaterial
             ref={materialRef}
@@ -298,6 +299,7 @@ export function StageModeFlowFX() {
             geometry={sharedChargeRingGeometry}
             frustumCulled={false}
             renderOrder={5}
+            visible={false}
           >
             <meshBasicMaterial
               ref={chargeRingMaterialRef}
@@ -315,6 +317,7 @@ export function StageModeFlowFX() {
             args={[sharedSphereGeometry, undefined, chargeParticles.length]}
             frustumCulled={false}
             renderOrder={5}
+            visible={false}
           >
             <meshBasicMaterial
               ref={chargeMaterialRef}

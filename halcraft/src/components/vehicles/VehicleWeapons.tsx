@@ -739,18 +739,21 @@ export function VehicleWeapons() {
           continue;
         }
 
-        // 乗り物への弾丸ダメージ判定
+        // 乗り物への弾丸ダメージ判定（線分スイープでトンネル抜けを防ぐ）
         const activeType = useVehicleStore.getState().getActiveVehicle();
         if (!bullet.isRemote) {
           const vehicleHit = checkProjectileHitVehicle(
             bullet.pos.x, bullet.pos.y, bullet.pos.z,
             activeType ?? undefined,
+            bullet.prev.x, bullet.prev.y, bullet.prev.z,
           );
           if (vehicleHit) {
             useVehicleStore.getState().damageVehicle(vehicleHit.type, GUN_CONSTANTS.DAMAGE);
-            spawnHitImpactEffect(bullet.pos.x, bullet.pos.y, bullet.pos.z, moveDir.x, moveDir.y, moveDir.z, false);
-            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, bullet.pos.x, bullet.pos.y + 0.5, bullet.pos.z, false);
-            playBulletImpactSound(bullet.pos.distanceTo(camera.position), 'mob');
+            spawnHitImpactEffect(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ, moveDir.x, moveDir.y, moveDir.z, false);
+            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, vehicleHit.hitX, vehicleHit.hitY + 0.5, vehicleHit.hitZ, false);
+            playBulletImpactSound(camera.position.distanceTo(
+              new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
+            ), 'mob');
             continue;
           }
         }
@@ -791,16 +794,16 @@ export function VehicleWeapons() {
           continue;
         }
 
-        // ロケットの乗り物ヒット判定（ブロック/モブに当たらなかった場合のみ）
+        // ロケットの乗り物ヒット判定（線分スイープ）
         const activeType = useVehicleStore.getState().getActiveVehicle();
         const vehicleHit = checkProjectileHitVehicle(
           rocket.pos.x, rocket.pos.y, rocket.pos.z,
           activeType ?? undefined,
+          rocket.prev.x, rocket.prev.y, rocket.prev.z,
         );
         if (vehicleHit) {
-          // 乗り物にロケット直撃
           useVehicleStore.getState().damageVehicle(vehicleHit.type, 25);
-          explodeRocket(rocket, rocket.pos);
+          explodeRocket(rocket, new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ));
           continue;
         }
 
@@ -848,15 +851,16 @@ export function VehicleWeapons() {
           continue;
         }
 
-        // 乗り物への爆弾ヒット判定
+        // 乗り物への爆弾ヒット判定（線分スイープ）
         const activeType = useVehicleStore.getState().getActiveVehicle();
         const vehicleHit = checkProjectileHitVehicle(
           bomb.pos.x, bomb.pos.y, bomb.pos.z,
           activeType ?? undefined,
+          bomb.prev.x, bomb.prev.y, bomb.prev.z,
         );
         if (vehicleHit) {
           useVehicleStore.getState().damageVehicle(vehicleHit.type, 40);
-          explodeBomb(bomb, bomb.pos);
+          explodeBomb(bomb, new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ));
           continue;
         }
 
@@ -902,7 +906,14 @@ export function VehicleWeapons() {
       {explosions.map((explosion) => (
         <mesh key={explosion.id} position={explosion.pos}>
           <sphereGeometry args={[Math.max(EXPLOSION_RADIUS, BOMB_EXPLOSION_RADIUS) * (1 - explosion.life / 0.65), 18, 12]} />
-          <meshBasicMaterial color="#ff7b22" transparent opacity={Math.max(0, explosion.life / 0.65) * 0.35} />
+          <meshBasicMaterial
+            color="#ff7b22"
+            transparent
+            opacity={Math.max(0, explosion.life / 0.65) * 0.35}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
         </mesh>
       ))}
     </group>
@@ -1006,7 +1017,14 @@ function Tracer({
   return (
     <mesh position={midpoint} quaternion={quaternion}>
       <cylinderGeometry args={[radius, radius, length, 8]} />
-      <meshBasicMaterial color={color} transparent opacity={0.9} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.9}
+        depthWrite={false}
+        toneMapped={false}
+        blending={THREE.AdditiveBlending}
+      />
     </mesh>
   );
 }

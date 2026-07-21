@@ -627,8 +627,9 @@ export function CraftingScreen({ externalOpen, onClose }: CraftingScreenProps) {
               const toolDef = isToolRecipe ? TOOL_DEFS[recipe.toolId as ToolId] : null;
               const armorDef = isArmorRecipe ? ARMOR_DEFS[recipe.armorId as ArmorId] : null;
               const potionDef = isPotionRecipe ? POTION_DEFS[recipe.potionId as PotionId] : null;
+              // 防具は同じID装備中のみ「所持済み」。別素材への強化クラフトは許可する
               const alreadyHas = (isToolRecipe && !!playerTools[recipe.toolId!])
-                || (isArmorRecipe && !!equippedArmor[armorDef?.slot ?? 'helmet']);
+                || (isArmorRecipe && equippedArmor[armorDef?.slot ?? 'helmet'] === recipe.armorId);
               // ポーションは何度でも作れるので alreadyHas にならない
               const texUrl = getTextureUrl(recipe.result);
 

@@ -108,6 +108,13 @@ const TONES: Record<string, ButtonTone> = {
     accent: '#ff9a66',
     glow: 'rgba(255, 95, 70, 0.3)',
   },
+  interact: {
+    background: 'rgba(100, 210, 170, 0.2)',
+    border: '2px solid rgba(130, 230, 190, 0.42)',
+    color: 'rgba(230, 255, 245, 0.88)',
+    accent: '#8ef0c8',
+    glow: 'rgba(100, 210, 170, 0.28)',
+  },
 };
 
 const buttonBaseStyle: CSSProperties = {
@@ -344,7 +351,7 @@ function ActionButton({
 }
 
 interface VehicleActionsProps {
-  activeVehicle: 'tank' | 'airplane';
+  activeVehicle: VehicleType;
   stageId: string | null;
   challengeStats: ReturnType<typeof useStageChallengeStore.getState>['stats'];
   completedChallengeIds: string[];
@@ -352,6 +359,7 @@ interface VehicleActionsProps {
   onGunEnd: TouchHandler;
   onRocket: TouchHandler;
   onBomb: TouchHandler;
+  onInteract: TouchHandler;
 }
 
 function VehicleActions({
@@ -363,35 +371,49 @@ function VehicleActions({
   onGunEnd,
   onRocket,
   onBomb,
+  onInteract,
 }: VehicleActionsProps) {
   const tactic = getVehicleTactic(stageId, activeVehicle);
   const vehicleProgress = findChallengeProgress(stageId, 'vehicle_hits', challengeStats, completedChallengeIds);
   const secondaryTone = activeVehicle === 'tank' ? TONES.rocket : TONES.bomb;
+  const hasCombatControls = activeVehicle === 'tank' || activeVehicle === 'airplane';
 
   return (
     <>
+      {hasCombatControls && (
+        <>
+          <ActionButton
+            ariaLabel={activeVehicle === 'tank' ? '戦車ガトリング' : '飛行機機銃'}
+            badge={tactic.badge}
+            bottom={PRIMARY_ATTACK_BOTTOM}
+            icon="🔫"
+            meterRatio={tactic.meterRatio}
+            onTouchCancel={onGunEnd}
+            onTouchEnd={onGunEnd}
+            onTouchStart={onGunStart}
+            placement="left-attack"
+            pulse={tactic.pulse}
+            tone={TONES.machineGun}
+          />
+          <ActionButton
+            ariaLabel={activeVehicle === 'tank' ? '戦車主砲' : '飛行機爆弾'}
+            badge={vehicleProgress ?? (activeVehicle === 'tank' ? '主砲' : '空爆')}
+            bottom={getBottom(1)}
+            icon={activeVehicle === 'tank' ? '💥' : '💣'}
+            meterRatio={tactic.meterRatio}
+            onTouchStart={activeVehicle === 'tank' ? onRocket : onBomb}
+            pulse={tactic.pulse}
+            tone={secondaryTone}
+          />
+        </>
+      )}
       <ActionButton
-        ariaLabel={activeVehicle === 'tank' ? '戦車ガトリング' : '飛行機機銃'}
-        badge={tactic.badge}
-        bottom={PRIMARY_ATTACK_BOTTOM}
-        icon="🔫"
-        meterRatio={tactic.meterRatio}
-        onTouchCancel={onGunEnd}
-        onTouchEnd={onGunEnd}
-        onTouchStart={onGunStart}
-        placement="left-attack"
-        pulse={tactic.pulse}
-        tone={TONES.machineGun}
-      />
-      <ActionButton
-        ariaLabel={activeVehicle === 'tank' ? '戦車主砲' : '飛行機爆弾'}
-        badge={vehicleProgress ?? (activeVehicle === 'tank' ? '主砲' : '空爆')}
-        bottom={getBottom(1)}
-        icon={activeVehicle === 'tank' ? '💥' : '💣'}
-        meterRatio={tactic.meterRatio}
-        onTouchStart={activeVehicle === 'tank' ? onRocket : onBomb}
-        pulse={tactic.pulse}
-        tone={secondaryTone}
+        ariaLabel="乗り物から降りる"
+        badge="降りる"
+        bottom={getBottom(hasCombatControls ? 2 : 0)}
+        icon="🚪"
+        onTouchStart={onInteract}
+        tone={TONES.interact}
       />
     </>
   );
@@ -415,6 +437,7 @@ interface WalkingActionsProps {
   onLightsaber: TouchHandler;
   onTogglePlace: TouchHandler;
   onCrafting: TouchHandler;
+  onInteract: TouchHandler;
 }
 
 function WalkingActions({
@@ -435,6 +458,7 @@ function WalkingActions({
   onLightsaber,
   onTogglePlace,
   onCrafting,
+  onInteract,
 }: WalkingActionsProps) {
   const actionTone = getActionTone(equippedItem, combatMatched, combatFocusActive);
 
@@ -497,6 +521,14 @@ function WalkingActions({
         icon="🔧"
         onTouchStart={onCrafting}
         tone={TONES.craft}
+      />
+      <ActionButton
+        ariaLabel="乗り物に乗る"
+        badge="乗る"
+        bottom={getBottom(2)}
+        icon="🚗"
+        onTouchStart={onInteract}
+        tone={TONES.interact}
       />
     </>
   );
@@ -633,7 +665,13 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     mobileActions.vehicleBomb = true;
   }, []);
 
-  if (activeVehicle === 'tank' || activeVehicle === 'airplane') {
+  const handleInteract = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mobileActions.interact = true;
+  }, []);
+
+  if (activeVehicle !== null) {
     return (
       <VehicleActions
         activeVehicle={activeVehicle}
@@ -642,6 +680,7 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
         onBomb={handleVehicleBomb}
         onGunEnd={handleVehicleGunEnd}
         onGunStart={handleVehicleGunStart}
+        onInteract={handleInteract}
         onRocket={handleVehicleRocket}
         stageId={currentStageId}
       />
@@ -661,6 +700,7 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
       equippedItem={equippedItem}
       isPlaceMode={isPlaceMode}
       onCrafting={handleCrafting}
+      onInteract={handleInteract}
       onLightsaber={handleLightsaber}
       onMachineGunEnd={handleMachineGunEnd}
       onMachineGunStart={handleMachineGunStart}

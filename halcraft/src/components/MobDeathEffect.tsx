@@ -1,7 +1,7 @@
 // モブ死亡エフェクトコンポーネント
 // 敵を倒した瞬間に、粉じん・ボクセル破片・地面を走る衝撃波を出す
 
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MobType } from '../stores/useMobStore';
@@ -135,6 +135,7 @@ export function MobDeathEffect() {
     opacity: 0.9,
     sizeAttenuation: true,
     depthWrite: false,
+    toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
 
@@ -155,7 +156,7 @@ export function MobDeathEffect() {
     blending: THREE.AdditiveBlending,
   }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (shardMeshRef.current) shardMeshRef.current.count = 0;
     if (waveMeshRef.current) waveMeshRef.current.count = 0;
   }, []);
@@ -364,9 +365,8 @@ export function MobDeathEffect() {
         ref={shardMeshRef}
         args={[shardGeometry, shardMaterial, maxShards]}
         frustumCulled={false}
-        castShadow
       />
-      <points ref={pointsRef} geometry={dustGeometry} material={dustMaterial} />
+      <points ref={pointsRef} geometry={dustGeometry} material={dustMaterial} frustumCulled={false} />
     </>
   );
 }

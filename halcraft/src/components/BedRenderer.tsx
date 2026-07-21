@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { BLOCK_IDS } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
+import { facingToYaw, inferBedFacing } from '../utils/blockFacing';
 
 // === 共有マテリアル（全ベッドで再利用） ===
 const woodFrameMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.85 });
@@ -86,6 +87,7 @@ pillowGeom.translate(0, 0.43, 0.29);
 export function BedRenderer() {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
+  const getBlock = useWorldStore((s) => s.getBlock);
 
   // 索引済みのベッド位置だけを取得
   const bedPositions = useMemo(() => {
@@ -100,6 +102,7 @@ export function BedRenderer() {
         <BedModel
           key={`bed-${pos.x}-${pos.y}-${pos.z}`}
           position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
+          yaw={facingToYaw(inferBedFacing(getBlock, pos.x, pos.y, pos.z))}
         />
       ))}
     </group>
@@ -107,9 +110,9 @@ export function BedRenderer() {
 }
 
 /** 個別のベッド3Dモデル（共有マテリアル・ジオメトリ使用） */
-function BedModel({ position }: { position: [number, number, number] }) {
+function BedModel({ position, yaw }: { position: [number, number, number]; yaw: number }) {
   return (
-    <group position={position}>
+    <group position={position} rotation={[0, yaw, 0]}>
       <mesh geometry={woodFrameGeom} material={woodFrameMat} castShadow receiveShadow />
       <mesh geometry={mattressGeom} material={sheetMat} castShadow receiveShadow />
       <mesh geometry={blanketGeom} material={blanketMat} castShadow receiveShadow />

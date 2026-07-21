@@ -1,11 +1,12 @@
 // ブロック破壊パーティクルエフェクトコンポーネント
 // ブロックが壊れた時にそのブロックの色を反映した破片が飛び散る演出
 
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BLOCK_DEFS, type BlockId } from '../types/blocks';
 import { registerBlockBreakEffectSpawner } from '../utils/effectTriggers';
+import { createSizedPointsMaterial } from '../utils/sizedPointsMaterial';
 
 /** ブロックのテクスチャから代表色を取得するキャッシュ */
 const blockColorCache = new Map<number, THREE.Color>();
@@ -111,7 +112,7 @@ export function BlockBreakEffect() {
     const sizes = new Float32Array(maxParticles);
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('particleSize', new THREE.BufferAttribute(sizes, 1));
     geo.setDrawRange(0, 0);
     return geo;
   }, [maxParticles]);
@@ -141,14 +142,12 @@ export function BlockBreakEffect() {
   const dummyObject = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
 
-  const material = useMemo(() => {
-    return new THREE.PointsMaterial({
-      size: 0.15, vertexColors: true, transparent: true,
-      opacity: 0.9, sizeAttenuation: true, depthWrite: false,
-    });
-  }, []);
+  const material = useMemo(() => createSizedPointsMaterial({
+    size: 0.15,
+    opacity: 0.9,
+  }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (shardMeshRef.current) shardMeshRef.current.count = 0;
     if (ringMeshRef.current) ringMeshRef.current.count = 0;
   }, []);
@@ -282,7 +281,7 @@ export function BlockBreakEffect() {
 
     const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
     const colAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
-    const sizeAttr = geometry.getAttribute('size') as THREE.BufferAttribute;
+    const sizeAttr = geometry.getAttribute('particleSize') as THREE.BufferAttribute;
     const positions = posAttr.array as Float32Array;
     const colors = colAttr.array as Float32Array;
     const sizes = sizeAttr.array as Float32Array;
@@ -325,12 +324,13 @@ export function BlockBreakEffect() {
         shard.vz *= 0.965;
 
         const alpha = Math.max(0, shard.life / shard.totalLife);
-        const scale = shard.size * (0.18 + alpha * 0.82);
+        // 色を暗くせず、スケールでフェードアウトして黒く残らないようにする
+        const scale = shard.size * Math.max(0.02, alpha * alpha);
         dummyObject.position.set(shard.x, shard.y, shard.z);
         dummyObject.rotation.set(shard.rx, shard.ry, shard.rz);
         dummyObject.scale.set(scale, scale * (0.78 + alpha * 0.22), scale);
         dummyObject.updateMatrix();
-        tempColor.copy(shard.color).multiplyScalar(0.34 + alpha * 0.72);
+        tempColor.copy(shard.color);
         if (shardMeshRef.current) {
           shardMeshRef.current.setMatrixAt(shardIdx, dummyObject.matrix);
           shardMeshRef.current.setColorAt(shardIdx, tempColor);

@@ -543,6 +543,8 @@ export function StageScenicPropFX() {
       mesh.setMatrixAt(i, dummy.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    // 初回行列反映前の原点フラッシュを防ぐ
+    mesh.visible = true;
   });
 
   if (!config || !texture || phase !== 'playing') return null;
@@ -553,6 +555,7 @@ export function StageScenicPropFX() {
       args={[sharedPropGeometry, undefined, props.length]}
       frustumCulled={false}
       renderOrder={config.renderOrder}
+      visible={false}
     >
       <meshBasicMaterial
         ref={materialRef}
@@ -561,7 +564,7 @@ export function StageScenicPropFX() {
         opacity={config.opacity}
         alphaTest={0.035}
         depthWrite={false}
-        depthTest={false}
+        depthTest
         side={THREE.DoubleSide}
         toneMapped={false}
       />

@@ -22,6 +22,7 @@ import { onRemoteGunFire } from '../../stores/useMultiplayerStore';
 import { useWorldStore } from '../../stores/useWorldStore';
 import { spawnDamagePopup } from '../../utils/effectTriggers';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
+import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 import { playMachineGunSound, playBulletImpactSound } from '../../utils/sounds';
 
 // ─── 定数 ──────────────────────────────────────────────
@@ -292,11 +293,11 @@ export function MachineGun() {
   }), []);
   const flashLeftMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
-    depthWrite: false, blending: THREE.AdditiveBlending,
+    depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending,
   }), []);
   const flashRightMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: MUZZLE_FLASH_COLOR, transparent: true, opacity: 0,
-    depthWrite: false, blending: THREE.AdditiveBlending,
+    depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending,
   }), []);
 
   // ─── 射撃処理 ─────────────────────────────────────
@@ -496,6 +497,9 @@ export function MachineGun() {
         // 共通レイマーチングで衝突判定
         const moveDir = proj.vel.clone().normalize();
         const moveDist = BULLET_SPEED * delta;
+        const fromX = proj.pos.x;
+        const fromY = proj.pos.y;
+        const fromZ = proj.pos.z;
 
         // ローカル弾のみダメージ判定あり、リモート弾は視覚のみ
         const hitResult = rayMarchProjectile(
@@ -532,6 +536,23 @@ export function MachineGun() {
             spawnDamagePopup(GUN_CONSTANTS.DAMAGE, rp.position[0], rp.position[1] + 1.0, rp.position[2], false);
           }
           proj.dead = true;
+        } else if (!proj.isRemote) {
+          // ヘリの機関銃でも他乗り物へダメージ（自分のヘリは除外）
+          const vehicleHit = checkProjectileHitVehicle(
+            proj.pos.x, proj.pos.y, proj.pos.z,
+            'helicopter',
+            fromX, fromY, fromZ,
+          );
+          if (vehicleHit) {
+            useVehicleStore.getState().damageVehicle(vehicleHit.type, GUN_CONSTANTS.DAMAGE);
+            spawnImpact(
+              new THREE.Vector3(vehicleHit.hitX, vehicleHit.hitY, vehicleHit.hitZ),
+              moveDir.clone().negate(),
+              'mob',
+            );
+            spawnDamagePopup(GUN_CONSTANTS.DAMAGE, vehicleHit.hitX, vehicleHit.hitY + 0.5, vehicleHit.hitZ, false);
+            proj.dead = true;
+          }
         }
 
         if (!proj.dead) {
@@ -883,24 +904,45 @@ function ProjectileTrail({ projectile }: { projectile: Projectile }) {
   return (
     <group ref={groupRef}>
       {/* 弾頭（明るい光る球 — より大きく） */}
-      <mesh ref={bulletRef}>
+      <mesh ref={bulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.15, 6, 6]} />
-        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} />
+        <meshBasicMaterial color={SPARK_COLOR} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
       </mesh>
       {/* 弾頭のグロー（外側の光芒） */}
-      <mesh ref={glowBulletRef}>
+      <mesh ref={glowBulletRef} position={projectile.pos}>
         <sphereGeometry args={[0.35, 6, 6]} />
-        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.45} />
+        <meshBasicMaterial
+          color={TRACER_COLOR}
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
       {/* コアトレイル（明るく太い） */}
       <mesh ref={trailRef} visible={false}>
         <cylinderGeometry args={[0.08, 0.03, 1, 6]} />
-        <meshBasicMaterial color={TRACER_COLOR} transparent opacity={0.85} />
+        <meshBasicMaterial
+          color={TRACER_COLOR}
+          transparent
+          opacity={0.85}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
       {/* グロートレイル（外側の太い光芒） */}
       <mesh ref={glowTrailRef} visible={false}>
         <cylinderGeometry args={[0.18, 0.06, 1, 6]} />
-        <meshBasicMaterial color={TRACER_GLOW_COLOR} transparent opacity={0.35} />
+        <meshBasicMaterial
+          color={TRACER_GLOW_COLOR}
+          transparent
+          opacity={0.35}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
     </group>
   );
@@ -972,6 +1014,9 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
           color={isBlock ? 0xffddaa : 0xff6633}
           transparent
           opacity={1}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
 
@@ -987,6 +1032,8 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
             color={i % 3 === 0 ? SPARK_COLOR : mainColor}
             transparent
             opacity={1}
+            depthWrite={false}
+            toneMapped={false}
           />
         </mesh>
       ))}
@@ -996,11 +1043,11 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
         <>
           <mesh position={effect.pos.clone()}>
             <boxGeometry args={[0.15, 0.15, 0.15]} />
-            <meshBasicMaterial color={0x886633} transparent opacity={0.8} />
+            <meshBasicMaterial color={0x886633} transparent opacity={0.8} depthWrite={false} />
           </mesh>
           <mesh position={[effect.pos.x + 0.1, effect.pos.y + 0.05, effect.pos.z - 0.1]}>
             <boxGeometry args={[0.1, 0.1, 0.1]} />
-            <meshBasicMaterial color={0x997744} transparent opacity={0.6} />
+            <meshBasicMaterial color={0x997744} transparent opacity={0.6} depthWrite={false} />
           </mesh>
         </>
       )}
@@ -1010,11 +1057,11 @@ function ImpactParticles({ effect }: { effect: ImpactEffect }) {
         <group position={effect.pos.clone()}>
           <mesh rotation={[0, 0, Math.PI / 4]}>
             <boxGeometry args={[0.4, 0.06, 0.06]} />
-            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
           </mesh>
           <mesh rotation={[0, 0, -Math.PI / 4]}>
             <boxGeometry args={[0.4, 0.06, 0.06]} />
-            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} />
+            <meshBasicMaterial color={0xff0000} transparent opacity={0.9} depthWrite={false} toneMapped={false} />
           </mesh>
         </group>
       )}

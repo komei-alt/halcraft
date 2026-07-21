@@ -1,9 +1,10 @@
 // エフェクトアイコンHUD — 画面右上にアクティブエフェクトを表示
-// 絵文字アイコン + 残り時間バー
+// シンプル時はアイコンのみ、詳細時は名前・残り時間も出す
 
 import { useEffectStore } from '../../stores/useEffectStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { EFFECT_INFO } from '../../types/potions';
+import { useSimpleHud } from '../../utils/hudDensity';
 
 /** 秒数を mm:ss 形式に変換 */
 function formatTime(seconds: number): string {
@@ -15,6 +16,7 @@ function formatTime(seconds: number): string {
 export function EffectIcons() {
   const effects = useEffectStore((s) => s.effects);
   const phase = useGameStore((s) => s.phase);
+  const isSimpleHud = useSimpleHud();
 
   if (phase !== 'playing' || effects.length === 0) return null;
 
@@ -23,11 +25,11 @@ export function EffectIcons() {
       id="effect-icons"
       style={{
         position: 'fixed',
-        top: 10,
+        top: isSimpleHud ? 42 : 10,
         right: 10,
         display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
+        flexDirection: isSimpleHud ? 'row' : 'column',
+        gap: isSimpleHud ? 5 : 4,
         zIndex: 100,
         pointerEvents: 'none',
       }}
@@ -36,6 +38,33 @@ export function EffectIcons() {
         const info = EFFECT_INFO[effect.type];
         const ratio = effect.remainingTime / effect.totalDuration;
         const isExpiring = effect.remainingTime < 10;
+
+        if (isSimpleHud) {
+          return (
+            <div
+              key={effect.type}
+              title={`${info.name} ${formatTime(effect.remainingTime)}`}
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: 28,
+                height: 28,
+                background: 'rgba(0, 0, 0, 0.45)',
+                borderRadius: 6,
+                border: `1px solid ${effect.color}${isExpiring ? 'aa' : '40'}`,
+                animation: isExpiring ? 'effectBlink 0.5s ease-in-out infinite' : 'none',
+              }}
+            >
+              <span style={{
+                fontSize: 15,
+                filter: ratio < 0.2 ? 'grayscale(0.5)' : 'none',
+                lineHeight: 1,
+              }}>
+                {effect.emoji}
+              </span>
+            </div>
+          );
+        }
 
         return (
           <div
@@ -51,7 +80,6 @@ export function EffectIcons() {
               animation: isExpiring ? 'effectBlink 0.5s ease-in-out infinite' : 'none',
             }}
           >
-            {/* 絵文字アイコン */}
             <span style={{
               fontSize: 16,
               filter: ratio < 0.2 ? 'grayscale(0.5)' : 'none',
@@ -59,7 +87,6 @@ export function EffectIcons() {
               {effect.emoji}
             </span>
 
-            {/* エフェクト名 + 残り時間 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <div style={{
                 fontSize: 10,
@@ -71,7 +98,6 @@ export function EffectIcons() {
                 {info.name}
               </div>
 
-              {/* 残り時間バー */}
               <div style={{
                 width: 50,
                 height: 3,
@@ -88,7 +114,6 @@ export function EffectIcons() {
                 }} />
               </div>
 
-              {/* 残り時間テキスト */}
               <div style={{
                 fontSize: 9,
                 color: isExpiring ? '#FF6B6B' : 'rgba(255,255,255,0.5)',
@@ -102,7 +127,6 @@ export function EffectIcons() {
         );
       })}
 
-      {/* 点滅アニメーション */}
       <style>{`
         @keyframes effectBlink {
           0%, 100% { opacity: 1; }
