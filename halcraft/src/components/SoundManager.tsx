@@ -16,7 +16,7 @@ import {
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
-import { setBGMPresence, startBGM, stopBGM } from '../utils/musicManager';
+import { setBGMPresence, setBGMVolume, startBGM, stopBGM } from '../utils/musicManager';
 import {
   initAmbientSounds,
   setAmbientPresence,
@@ -26,6 +26,8 @@ import {
 import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
 import { stopLightsaberHumLoop } from '../utils/lightsaberSounds';
+import { setSfxVolume } from '../utils/sounds';
+import { useSettingsStore } from '../stores/useSettingsStore';
 
 /** 足音の最小水平速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -105,6 +107,9 @@ export function SoundManager() {
       // BGMと環境音を開始
       if (!bgmStarted.current) {
         bgmStarted.current = true;
+        const settings = useSettingsStore.getState();
+        setBGMVolume(settings.bgmVolume);
+        setSfxVolume(settings.sfxVolume);
         startBGM();
         initAmbientSounds();
         setBGMPresence(1);

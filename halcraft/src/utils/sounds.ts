@@ -9,6 +9,11 @@ import type { StageChallengeMedal } from '../types/stageChallenges';
 /** AudioContext のシングルトン */
 let audioCtx: AudioContext | null = null;
 
+/** 効果音全体の音量係数（設定スライダー 0-1） */
+let sfxVolume = 1;
+/** 効果音用マスターゲイン（全SFXがここへ接続） */
+let sfxMaster: GainNode | null = null;
+
 /** AudioContext を取得/初期化する */
 function getAudioContext(): AudioContext | null {
   if (audioCtx) return audioCtx;
@@ -17,6 +22,37 @@ function getAudioContext(): AudioContext | null {
     return audioCtx;
   } catch {
     return null;
+  }
+}
+
+/** 効果音の出力先（音量スライダー対応） */
+function getSfxDestination(): AudioNode {
+  const ctx = getAudioContext();
+  if (!ctx) {
+    // 呼び出し側で ctx を確認済み。到達しない想定。
+    throw new Error('AudioContext is not available');
+  }
+  if (!sfxMaster || sfxMaster.context !== ctx) {
+    sfxMaster = ctx.createGain();
+    sfxMaster.gain.value = sfxVolume;
+    sfxMaster.connect(getSfxDestination());
+  }
+  return sfxMaster;
+}
+
+/** 効果音の現在の音量係数（0-1） */
+export function getSfxVolume(): number {
+  return sfxVolume;
+}
+
+/** 効果音の音量を設定（0-1） */
+export function setSfxVolume(volume: number): void {
+  sfxVolume = Math.max(0, Math.min(1, volume));
+  if (sfxMaster) {
+    const now = sfxMaster.context.currentTime;
+    sfxMaster.gain.cancelScheduledValues(now);
+    sfxMaster.gain.setValueAtTime(sfxMaster.gain.value, now);
+    sfxMaster.gain.linearRampToValueAtTime(sfxVolume, now + 0.08);
   }
 }
 
@@ -85,7 +121,7 @@ export function playHitSound(): void {
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
   osc.connect(oscGain);
-  oscGain.connect(ctx.destination);
+  oscGain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.1);
 
@@ -103,7 +139,7 @@ export function playHitSound(): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.06);
 }
@@ -135,7 +171,7 @@ export function playHurtSound(): void {
 
   osc.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.25);
 
@@ -149,7 +185,7 @@ export function playHurtSound(): void {
   pulseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
   pulse.connect(pulseGain);
-  pulseGain.connect(ctx.destination);
+  pulseGain.connect(getSfxDestination());
   pulse.start(now);
   pulse.stop(now + 0.15);
 }
@@ -254,6 +290,41 @@ export function playLandingSound(
   playBiomeFootstepSound(biome, category, intensity);
 }
 
+/** ジャンプ音（短く軽いフワッとした音） */
+export function playJumpSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('jump', 160)) return;
+
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(220, now);
+  osc.frequency.exponentialRampToValueAtTime(140, now + 0.09);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.12);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(900, now);
+  const nGain = ctx.createGain();
+  nGain.gain.setValueAtTime(0.05, now);
+  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  noise.connect(filter);
+  filter.connect(nGain);
+  nGain.connect(getSfxDestination());
+  noise.start(now);
+  noise.stop(now + 0.08);
+}
+
 export function playBiomeFootstepSound(
   biome: BiomeId = 'forest',
   category: StageCategory | null = null,
@@ -285,7 +356,7 @@ export function playBiomeFootstepSound(
 
   noise.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + profile.noiseDuration * timingJitter);
 
@@ -299,7 +370,7 @@ export function playBiomeFootstepSound(
   thudGain.gain.exponentialRampToValueAtTime(0.001, now + profile.thudDuration * timingJitter);
 
   thud.connect(thudGain);
-  thudGain.connect(ctx.destination);
+  thudGain.connect(getSfxDestination());
   thud.start(now);
   thud.stop(now + profile.thudDuration * timingJitter);
 
@@ -317,7 +388,7 @@ export function playBiomeFootstepSound(
 
   grit.connect(gritFilter);
   gritFilter.connect(gritGain);
-  gritGain.connect(ctx.destination);
+  gritGain.connect(getSfxDestination());
   grit.start(now + 0.006);
   grit.stop(now + profile.gritDuration * timingJitter);
 
@@ -331,7 +402,7 @@ export function playBiomeFootstepSound(
     tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.048);
 
     tick.connect(tickGain);
-    tickGain.connect(ctx.destination);
+    tickGain.connect(getSfxDestination());
     tick.start(now + 0.014);
     tick.stop(now + 0.052);
   }
@@ -378,7 +449,7 @@ export function playAllyMove(distance: number): void {
 
   osc.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.3);
 }
@@ -441,7 +512,7 @@ export function playZombieGrunt(distance: number): void {
   osc1.connect(filter);
   osc2.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
 
   osc1.start(now);
   osc2.start(now);
@@ -475,7 +546,7 @@ export function playMobDeathSound(distance: number): void {
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
   osc.connect(oscGain);
-  oscGain.connect(ctx.destination);
+  oscGain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.2);
 
@@ -490,7 +561,7 @@ export function playMobDeathSound(distance: number): void {
   sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
   sparkle.connect(sparkleGain);
-  sparkleGain.connect(ctx.destination);
+  sparkleGain.connect(getSfxDestination());
   sparkle.start(now + 0.02);
   sparkle.stop(now + 0.15);
 
@@ -509,7 +580,7 @@ export function playMobDeathSound(distance: number): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.12);
 }
@@ -546,7 +617,7 @@ export function playMachineGunSound(distance: number): void {
 
   osc.connect(filter);
   filter.connect(oscGain);
-  oscGain.connect(ctx.destination);
+  oscGain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.1);
 
@@ -565,7 +636,7 @@ export function playMachineGunSound(distance: number): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.08);
 }
@@ -599,7 +670,7 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(getSfxDestination());
     noise.start(now);
     noise.stop(now + 0.1);
   } else {
@@ -614,7 +685,7 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
     oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    oscGain.connect(getSfxDestination());
     osc.start(now);
     osc.stop(now + 0.1);
     
@@ -629,7 +700,7 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(getSfxDestination());
     noise.start(now);
     noise.stop(now + 0.1);
   }
@@ -659,7 +730,7 @@ export function playRocketLaunchSound(distance: number): void {
   thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
 
   thump.connect(thumpGain);
-  thumpGain.connect(ctx.destination);
+  thumpGain.connect(getSfxDestination());
   thump.start(now);
   thump.stop(now + 0.32);
 
@@ -677,7 +748,7 @@ export function playRocketLaunchSound(distance: number): void {
 
   hiss.connect(hissFilter);
   hissFilter.connect(hissGain);
-  hissGain.connect(ctx.destination);
+  hissGain.connect(getSfxDestination());
   hiss.start(now);
   hiss.stop(now + 0.24);
 }
@@ -712,7 +783,7 @@ export function playRocketExplosionSound(distance: number): void {
 
   boom.connect(boomFilter);
   boomFilter.connect(boomGain);
-  boomGain.connect(ctx.destination);
+  boomGain.connect(getSfxDestination());
   boom.start(now);
   boom.stop(now + 0.55);
 
@@ -729,7 +800,7 @@ export function playRocketExplosionSound(distance: number): void {
 
   crack.connect(crackFilter);
   crackFilter.connect(crackGain);
-  crackGain.connect(ctx.destination);
+  crackGain.connect(getSfxDestination());
   crack.start(now);
   crack.stop(now + 0.22);
 
@@ -747,7 +818,7 @@ export function playRocketExplosionSound(distance: number): void {
 
   tail.connect(tailFilter);
   tailFilter.connect(tailGain);
-  tailGain.connect(ctx.destination);
+  tailGain.connect(getSfxDestination());
   tail.start(now);
   tail.stop(now + 0.65);
 }
@@ -781,7 +852,7 @@ export function playRocketDirectHitSound(distance: number, precision: boolean): 
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.16);
   });
@@ -799,7 +870,7 @@ export function playRocketDirectHitSound(distance: number, precision: boolean): 
 
   tick.connect(tickFilter);
   tickFilter.connect(tickGain);
-  tickGain.connect(ctx.destination);
+  tickGain.connect(getSfxDestination());
   tick.start(now + 0.01);
   tick.stop(now + 0.13);
 }
@@ -833,7 +904,7 @@ export function playHelicopterRotor(distance: number): void {
 
   osc.connect(filter);
   filter.connect(oscGain);
-  oscGain.connect(ctx.destination);
+  oscGain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.12);
 
@@ -852,7 +923,7 @@ export function playHelicopterRotor(distance: number): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.1);
 }
@@ -888,7 +959,7 @@ export function playVehicleExplosionSound(distance: number): void {
 
   boom.connect(boomFilter);
   boomFilter.connect(boomGain);
-  boomGain.connect(ctx.destination);
+  boomGain.connect(getSfxDestination());
   boom.start(now);
   boom.stop(now + 0.9);
 
@@ -906,7 +977,7 @@ export function playVehicleExplosionSound(distance: number): void {
 
   crack.connect(crackFilter);
   crackFilter.connect(crackGain);
-  crackGain.connect(ctx.destination);
+  crackGain.connect(getSfxDestination());
   crack.start(now);
   crack.stop(now + 0.15);
 
@@ -926,7 +997,7 @@ export function playVehicleExplosionSound(distance: number): void {
 
   shrapnel.connect(shrapnelFilter);
   shrapnelFilter.connect(shrapnelGain);
-  shrapnelGain.connect(ctx.destination);
+  shrapnelGain.connect(getSfxDestination());
   shrapnel.start(now);
   shrapnel.stop(now + 0.4);
 
@@ -947,7 +1018,7 @@ export function playVehicleExplosionSound(distance: number): void {
 
   secondary.connect(secFilter);
   secFilter.connect(secGain);
-  secGain.connect(ctx.destination);
+  secGain.connect(getSfxDestination());
   secondary.start(now + 0.18);
   secondary.stop(now + 0.7);
 
@@ -966,7 +1037,7 @@ export function playVehicleExplosionSound(distance: number): void {
 
   rumble.connect(rumbleFilter);
   rumbleFilter.connect(rumbleGain);
-  rumbleGain.connect(ctx.destination);
+  rumbleGain.connect(getSfxDestination());
   rumble.start(now);
   rumble.stop(now + 1.2);
 }
@@ -999,7 +1070,7 @@ export function playBombFallingSound(distance: number): void {
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
   osc.connect(oscGain);
-  oscGain.connect(ctx.destination);
+  oscGain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + duration);
 
@@ -1015,7 +1086,7 @@ export function playBombFallingSound(distance: number): void {
   osc2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.85);
 
   osc2.connect(osc2Gain);
-  osc2Gain.connect(ctx.destination);
+  osc2Gain.connect(getSfxDestination());
   osc2.start(now);
   osc2.stop(now + duration);
 
@@ -1036,7 +1107,7 @@ export function playBombFallingSound(distance: number): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + duration);
 }
@@ -1072,7 +1143,7 @@ export function playTntExplosionSound(distance: number): void {
 
   boom.connect(boomFilter);
   boomFilter.connect(boomGain);
-  boomGain.connect(ctx.destination);
+  boomGain.connect(getSfxDestination());
   boom.start(now);
   boom.stop(now + 0.7);
 
@@ -1090,7 +1161,7 @@ export function playTntExplosionSound(distance: number): void {
 
   crack.connect(crackFilter);
   crackFilter.connect(crackGain);
-  crackGain.connect(ctx.destination);
+  crackGain.connect(getSfxDestination());
   crack.start(now);
   crack.stop(now + 0.18);
 
@@ -1110,7 +1181,7 @@ export function playTntExplosionSound(distance: number): void {
 
   debris.connect(debrisFilter);
   debrisFilter.connect(debrisGain);
-  debrisGain.connect(ctx.destination);
+  debrisGain.connect(getSfxDestination());
   debris.start(now);
   debris.stop(now + 0.35);
 
@@ -1129,7 +1200,7 @@ export function playTntExplosionSound(distance: number): void {
 
   rumble.connect(rumbleFilter);
   rumbleFilter.connect(rumbleGain);
-  rumbleGain.connect(ctx.destination);
+  rumbleGain.connect(getSfxDestination());
   rumble.start(now);
   rumble.stop(now + 0.9);
 }
@@ -1159,7 +1230,7 @@ export function playBlockBreakSound(): void {
 
   noise.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.08);
 
@@ -1173,7 +1244,7 @@ export function playBlockBreakSound(): void {
   thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
 
   thud.connect(thudGain);
-  thudGain.connect(ctx.destination);
+  thudGain.connect(getSfxDestination());
   thud.start(now);
   thud.stop(now + 0.06);
 }
@@ -1194,7 +1265,7 @@ export function playBlockPlaceSound(): void {
   thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
 
   thud.connect(thudGain);
-  thudGain.connect(ctx.destination);
+  thudGain.connect(getSfxDestination());
   thud.start(now);
   thud.stop(now + 0.09);
 
@@ -1212,7 +1283,7 @@ export function playBlockPlaceSound(): void {
 
   tick.connect(tickFilter);
   tickFilter.connect(tickGain);
-  tickGain.connect(ctx.destination);
+  tickGain.connect(getSfxDestination());
   tick.start(now);
   tick.stop(now + 0.045);
 }
@@ -1235,7 +1306,7 @@ export function playBlockUseFeedbackSound(kind: BlockUseFeedbackSoundKind): void
   compressor.release.setValueAtTime(0.16, now);
   output.connect(panner);
   panner.connect(compressor);
-  compressor.connect(ctx.destination);
+  compressor.connect(getSfxDestination());
 
   const notes: Record<BlockUseFeedbackSoundKind, number[]> = {
     condition: [523.25, 659.25, 880],
@@ -1366,7 +1437,7 @@ export function playInventoryEmptySound(): void {
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
 
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.13);
 }
@@ -1393,7 +1464,7 @@ export function playMiningBlockedSound(): void {
 
   clank.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   clank.start(now);
   clank.stop(now + 0.14);
 
@@ -1406,7 +1477,7 @@ export function playMiningBlockedSound(): void {
   knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
 
   knock.connect(knockGain);
-  knockGain.connect(ctx.destination);
+  knockGain.connect(getSfxDestination());
   knock.start(now + 0.04);
   knock.stop(now + 0.17);
 }
@@ -1452,7 +1523,7 @@ export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.15);
   });
@@ -1471,7 +1542,7 @@ export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(getSfxDestination());
     noise.start(now);
     noise.stop(now + 0.16);
   }
@@ -1504,7 +1575,7 @@ export function playStageCombatCueSound(kind: StageCombatCueSoundKind = 'match')
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.18);
   });
@@ -1523,7 +1594,7 @@ export function playStageCombatCueSound(kind: StageCombatCueSoundKind = 'match')
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(getSfxDestination());
     noise.start(now + 0.02);
     noise.stop(now + 0.2);
   }
@@ -1561,7 +1632,7 @@ export function playCombatFeedbackSound(kind: CombatFeedbackSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.14);
   });
@@ -1600,7 +1671,7 @@ export function playCombatTechniqueSound(kind: CombatTechniqueSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.18);
   });
@@ -1642,7 +1713,7 @@ export function playVehicleFirepowerSound(kind: VehicleFirepowerSoundKind): void
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.18);
   });
@@ -1662,7 +1733,7 @@ export function playVehicleFirepowerSound(kind: VehicleFirepowerSoundKind): void
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.16);
 }
@@ -1684,7 +1755,7 @@ export function playToolBreakSound(): void {
   crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
   crack.connect(crackGain);
-  crackGain.connect(ctx.destination);
+  crackGain.connect(getSfxDestination());
   crack.start(now);
   crack.stop(now + 0.2);
 
@@ -1699,7 +1770,7 @@ export function playToolBreakSound(): void {
   ringGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
 
   ring.connect(ringGain);
-  ringGain.connect(ctx.destination);
+  ringGain.connect(getSfxDestination());
   ring.start(now);
   ring.stop(now + 0.4);
 }
@@ -1723,7 +1794,7 @@ export function playPotionDrinkSound(): void {
     gulpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
 
     gulp.connect(gulpGain);
-    gulpGain.connect(ctx.destination);
+    gulpGain.connect(getSfxDestination());
     gulp.start(t);
     gulp.stop(t + 0.1);
   }
@@ -1744,7 +1815,7 @@ export function playPotionDrinkSound(): void {
   noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
   noise.connect(hpf);
   hpf.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now + 0.3);
   noise.stop(now + 0.5);
 }
@@ -1765,7 +1836,7 @@ export function playEffectExpireSound(): void {
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.2);
 }
@@ -1786,7 +1857,7 @@ export function playXPGainSound(): void {
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.08);
 }
@@ -1875,7 +1946,7 @@ export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void 
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.18);
   });
@@ -1895,7 +1966,7 @@ export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void 
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.16);
 }
@@ -1928,7 +1999,7 @@ export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId):
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.28);
   });
@@ -1947,7 +2018,7 @@ export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId):
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(getSfxDestination());
     noise.start(now);
     noise.stop(now + 0.2);
   }
@@ -2015,7 +2086,7 @@ export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId):
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.24);
   });
@@ -2037,7 +2108,7 @@ export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId):
 
   texture.connect(textureFilter);
   textureFilter.connect(textureGain);
-  textureGain.connect(ctx.destination);
+  textureGain.connect(getSfxDestination());
   texture.start(now + 0.1);
   texture.stop(now + 0.36);
 }
@@ -2085,7 +2156,7 @@ export function playStageClearFanfareSound(
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.34);
   }
@@ -2102,7 +2173,7 @@ export function playStageClearFanfareSound(
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(now + index * 0.01);
     osc.stop(now + 0.78);
   });
@@ -2121,7 +2192,7 @@ export function playStageClearFanfareSound(
 
   texture.connect(textureFilter);
   textureFilter.connect(textureGain);
-  textureGain.connect(ctx.destination);
+  textureGain.connect(getSfxDestination());
   texture.start(now + 0.04);
   texture.stop(now + (isBuild ? 0.3 : 0.24));
 
@@ -2137,7 +2208,7 @@ export function playStageClearFanfareSound(
   crownGain.gain.exponentialRampToValueAtTime(0.001, now + 0.66);
 
   crown.connect(crownGain);
-  crownGain.connect(ctx.destination);
+  crownGain.connect(getSfxDestination());
   crown.start(now + 0.26);
   crown.stop(now + 0.66);
 }
@@ -2173,7 +2244,7 @@ export function playModeFlowProgressSound(kind: StageCategory, tier: ModeFlowPro
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.21);
   });
@@ -2193,7 +2264,7 @@ export function playModeFlowProgressSound(kind: StageCategory, tier: ModeFlowPro
 
   nearReady.connect(nearReadyFilter);
   nearReadyFilter.connect(nearReadyGain);
-  nearReadyGain.connect(ctx.destination);
+  nearReadyGain.connect(getSfxDestination());
   nearReady.start(now);
   nearReady.stop(now + 0.14);
 }
@@ -2232,7 +2303,7 @@ export function playStageOpportunitySound(kind: StageOpportunitySoundKind): void
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.24);
   });
@@ -2247,7 +2318,7 @@ export function playStageOpportunitySound(kind: StageOpportunitySoundKind): void
     sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
     sparkle.connect(sparkleGain);
-    sparkleGain.connect(ctx.destination);
+    sparkleGain.connect(getSfxDestination());
     sparkle.start(now + 0.12);
     sparkle.stop(now + 0.28);
     return;
@@ -2266,7 +2337,7 @@ export function playStageOpportunitySound(kind: StageOpportunitySoundKind): void
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.18);
 }
@@ -2309,7 +2380,7 @@ export function playStageConditionSound(kind: StageConditionSoundKind, chain = 1
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.28);
   }
@@ -2339,7 +2410,7 @@ export function playStageConditionSound(kind: StageConditionSoundKind, chain = 1
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(getSfxDestination());
       osc.start(t);
       osc.stop(t + 0.2);
     });
@@ -2357,7 +2428,7 @@ export function playStageConditionSound(kind: StageConditionSoundKind, chain = 1
 
     shimmer.connect(shimmerFilter);
     shimmerFilter.connect(shimmerGain);
-    shimmerGain.connect(ctx.destination);
+    shimmerGain.connect(getSfxDestination());
     shimmer.start(now + 0.06);
     shimmer.stop(now + 0.26);
   }
@@ -2377,7 +2448,7 @@ export function playStageConditionSound(kind: StageConditionSoundKind, chain = 1
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.16);
 }
@@ -2414,7 +2485,7 @@ export function playStageRewardSound(kind: StageRewardSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.24);
   }
@@ -2430,7 +2501,7 @@ export function playStageRewardSound(kind: StageRewardSoundKind): void {
   tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
 
   tick.connect(tickGain);
-  tickGain.connect(ctx.destination);
+  tickGain.connect(getSfxDestination());
   tick.start(now + 0.11);
   tick.stop(now + 0.22);
 }
@@ -2464,7 +2535,7 @@ export function playModeFlowSurgeSound(kind: StageStartSoundKind, rank: number):
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.24);
   });
@@ -2484,7 +2555,7 @@ export function playModeFlowSurgeSound(kind: StageStartSoundKind, rank: number):
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.17);
 }
@@ -2513,7 +2584,7 @@ export function playBuildFocusPlaceSound(chain: number): void {
 
   tap.connect(tapFilter);
   tapFilter.connect(tapGain);
-  tapGain.connect(ctx.destination);
+  tapGain.connect(getSfxDestination());
   tap.start(now);
   tap.stop(now + 0.12);
 
@@ -2528,7 +2599,7 @@ export function playBuildFocusPlaceSound(chain: number): void {
   sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
   sparkle.connect(sparkleGain);
-  sparkleGain.connect(ctx.destination);
+  sparkleGain.connect(getSfxDestination());
   sparkle.start(now + 0.035);
   sparkle.stop(now + 0.16);
 }
@@ -2558,7 +2629,7 @@ export function playCombatFocusHitSound(chain: number, rank: number): void {
 
   strike.connect(strikeFilter);
   strikeFilter.connect(strikeGain);
-  strikeGain.connect(ctx.destination);
+  strikeGain.connect(getSfxDestination());
   strike.start(now);
   strike.stop(now + 0.16);
 
@@ -2573,7 +2644,7 @@ export function playCombatFocusHitSound(chain: number, rank: number): void {
   pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
   ping.connect(pingGain);
-  pingGain.connect(ctx.destination);
+  pingGain.connect(getSfxDestination());
   ping.start(now + 0.035);
   ping.stop(now + 0.18);
 }
@@ -2606,7 +2677,7 @@ export function playStageLandmarkSound(kind: StageStartSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.26);
   });
@@ -2620,7 +2691,7 @@ export function playStageLandmarkSound(kind: StageStartSoundKind): void {
   pulseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
 
   pulse.connect(pulseGain);
-  pulseGain.connect(ctx.destination);
+  pulseGain.connect(getSfxDestination());
   pulse.start(now + 0.11);
   pulse.stop(now + 0.32);
 }
@@ -2646,7 +2717,7 @@ export function playBossSpawnSound(): void {
 
   rumble.connect(rumbleFilter);
   rumbleFilter.connect(rumbleGain);
-  rumbleGain.connect(ctx.destination);
+  rumbleGain.connect(getSfxDestination());
   rumble.start(now);
   rumble.stop(now + 0.5);
 
@@ -2667,7 +2738,7 @@ export function playBossSpawnSound(): void {
 
     horn.connect(hornFilter);
     hornFilter.connect(hornGain);
-    hornGain.connect(ctx.destination);
+    hornGain.connect(getSfxDestination());
     horn.start(t);
     horn.stop(t + 0.24);
   }
@@ -2698,7 +2769,7 @@ export function playBossSummonSound(distance: number): void {
 
   pulse.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   pulse.start(now);
   pulse.stop(now + 0.26);
 
@@ -2715,7 +2786,7 @@ export function playBossSummonSound(distance: number): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.18);
 }
@@ -2753,7 +2824,7 @@ export function playStagePressureSound(
 
   osc.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getSfxDestination());
   osc.start(now);
   osc.stop(now + 0.28);
 
@@ -2770,7 +2841,7 @@ export function playStagePressureSound(
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.22);
 }
@@ -2811,7 +2882,7 @@ export function playStageEventSound(kind: StageEventSoundKind): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.28);
   }
@@ -2831,7 +2902,7 @@ export function playStageEventSound(kind: StageEventSoundKind): void {
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
-  noiseGain.connect(ctx.destination);
+  noiseGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.18);
 }
@@ -2854,7 +2925,7 @@ export function playLevelUpSound(): void {
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.3);
   }
@@ -2884,7 +2955,7 @@ export function playPerkUnlockSound(): void {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getSfxDestination());
     osc.start(t);
     osc.stop(t + 0.24);
   }
@@ -2898,7 +2969,7 @@ export function playPerkUnlockSound(): void {
   chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
 
   chime.connect(chimeGain);
-  chimeGain.connect(ctx.destination);
+  chimeGain.connect(getSfxDestination());
   chime.start(now + 0.14);
   chime.stop(now + 0.42);
 }

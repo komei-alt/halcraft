@@ -13,6 +13,8 @@ import {
 } from '../../stores/useSettingsStore';
 import { isTouchDevice } from '../../utils/device';
 import { getPerformanceProfile, type PerformanceTier } from '../../utils/performance';
+import { setBGMVolume } from '../../utils/musicManager';
+import { setSfxVolume } from '../../utils/sounds';
 import { SG } from './startScreenTheme';
 
 interface SettingsButtonProps {
@@ -274,6 +276,8 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const waterAnimation = useSettingsStore((s) => s.waterAnimation);
   const hudDensity = useSettingsStore((s) => s.hudDensity);
   const showControlsGuide = useSettingsStore((s) => s.showControlsGuide);
+  const bgmVolume = useSettingsStore((s) => s.bgmVolume);
+  const sfxVolume = useSettingsStore((s) => s.sfxVolume);
   const applyGraphicsPreset = useSettingsStore((s) => s.applyGraphicsPreset);
   const setGraphicsPreset = useSettingsStore((s) => s.setGraphicsPreset);
   const setRenderDistance = useSettingsStore((s) => s.setRenderDistance);
@@ -284,6 +288,8 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setWaterAnimation = useSettingsStore((s) => s.setWaterAnimation);
   const setHudDensity = useSettingsStore((s) => s.setHudDensity);
   const setShowControlsGuide = useSettingsStore((s) => s.setShowControlsGuide);
+  const setBgmVolumeSetting = useSettingsStore((s) => s.setBgmVolume);
+  const setSfxVolumeSetting = useSettingsStore((s) => s.setSfxVolume);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
   const isTouch = isTouchDevice();
   const performanceProfile = getPerformanceProfile();
@@ -314,11 +320,25 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [open, onClose]);
 
+  // 保存済み音量をエンジンへ反映
+  useEffect(() => {
+    setBGMVolume(bgmVolume);
+    setSfxVolume(sfxVolume);
+  }, [bgmVolume, sfxVolume]);
+
   if (!open) return null;
 
   const handleRenderDistanceChange = (e: ChangeEvent<HTMLInputElement>) => {
     setGraphicsPreset('balanced');
     setRenderDistance(Number(e.currentTarget.value));
+  };
+
+  const handleBgmVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setBgmVolumeSetting(Number(e.currentTarget.value) / 100);
+  };
+
+  const handleSfxVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setSfxVolumeSetting(Number(e.currentTarget.value) / 100);
   };
 
   return (
@@ -365,7 +385,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               fontWeight: 700,
               letterSpacing: '0.08em',
             }}>
-              GRAPHICS / HUD
+              GRAPHICS / SOUND / HUD
             </div>
           </div>
           <button
@@ -562,6 +582,37 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               onChange={setShowControlsGuide}
             />
           </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <div style={labelStyle}>
+            <span>音楽の音量</span>
+            <span style={valueStyle}>{Math.round(bgmVolume * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(bgmVolume * 100)}
+            onChange={handleBgmVolumeChange}
+            style={{ width: '100%', accentColor: '#63c8ff' }}
+            aria-label="音楽の音量"
+          />
+          <div style={labelStyle}>
+            <span>効果音の音量</span>
+            <span style={valueStyle}>{Math.round(sfxVolume * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(sfxVolume * 100)}
+            onChange={handleSfxVolumeChange}
+            style={{ width: '100%', accentColor: '#ffc06d' }}
+            aria-label="効果音の音量"
+          />
         </div>
 
         <div style={sectionStyle}>

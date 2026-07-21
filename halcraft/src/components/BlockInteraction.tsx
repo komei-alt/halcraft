@@ -1358,6 +1358,20 @@ export function BlockInteraction() {
 
   // レイマーチングで照準先のブロックを検出
   useFrame((_, frameDelta) => {
+    // ポーズ・メニュー中は破壊/設置/攻撃を進行させない
+    if (useGameStore.getState().phase !== 'playing') {
+      isBreakingRef.current = false;
+      isPlacingRef.current = false;
+      breakProgressRef.current = null;
+      placeTimerRef.current = 0;
+      placeRepeatStartedRef.current = false;
+      if (miningFocusKeyRef.current) {
+        miningFocusKeyRef.current = '';
+        useMiningFocusStore.getState().clearTarget();
+      }
+      return;
+    }
+
     const dt = Math.min(frameDelta, 0.1);
     rayDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     rayOrigin.current.copy(camera.position);
@@ -1641,6 +1655,8 @@ export function BlockInteraction() {
   const handleMouseDown = useCallback((e: MouseEvent) => {
     // タッチデバイスではマウスクリックは使わない
     if (isTouch.current) return;
+    // ポーズ中は操作不可
+    if (useGameStore.getState().phase !== 'playing') return;
     // PointerLockが取れない環境でも、canvasがアクティブなら操作を受ける
     if (!isDesktopGameplayInputActive()) return;
     // 死亡中は操作不可

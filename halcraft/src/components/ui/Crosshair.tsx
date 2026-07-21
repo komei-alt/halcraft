@@ -67,6 +67,7 @@ function formatReticleSeconds(remainingMs: number): string {
 
 export function Crosshair() {
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
@@ -98,8 +99,8 @@ export function Crosshair() {
   }, [buildFocusUntil, combatFocusUntil]);
   const modeRule = useMemo(() => getStageModeRule(currentStageId), [currentStageId]);
 
-  // 乗り物搭乗中は専用照準に任せる
-  if (activeVehicle !== null) return null;
+  // プレイ中以外・乗り物搭乗中は専用照準/UIに任せる
+  if (phase !== 'playing' || activeVehicle !== null) return null;
 
   const profile = CROSSHAIR_PROFILES[equippedItem];
   const charge = Math.max(0, Math.min(1, getChargeForItem(equippedItem, rocketCharge, attackCharge)));

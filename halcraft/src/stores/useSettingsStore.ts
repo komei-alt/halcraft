@@ -22,6 +22,10 @@ export interface SettingsSnapshot {
   waterAnimation: boolean;
   hudDensity: HudDensity;
   showControlsGuide: boolean;
+  /** BGM 音量 0-1 */
+  bgmVolume: number;
+  /** 効果音 音量 0-1 */
+  sfxVolume: number;
 }
 
 interface SettingsState extends SettingsSnapshot {
@@ -35,6 +39,8 @@ interface SettingsState extends SettingsSnapshot {
   setWaterAnimation: (enabled: boolean) => void;
   setHudDensity: (density: HudDensity) => void;
   setShowControlsGuide: (enabled: boolean) => void;
+  setBgmVolume: (volume: number) => void;
+  setSfxVolume: (volume: number) => void;
   resetSettings: () => void;
 }
 
@@ -48,11 +54,14 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   waterAnimation: true,
   hudDensity: 'simple',
   showControlsGuide: false,
+  bgmVolume: 0.85,
+  sfxVolume: 1,
 };
 
 const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
   auto: DEFAULT_SETTINGS,
   light: {
+    ...DEFAULT_SETTINGS,
     graphicsPreset: 'light',
     renderDistance: 5,
     lightingQuality: 'simple',
@@ -64,6 +73,7 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     showControlsGuide: false,
   },
   balanced: {
+    ...DEFAULT_SETTINGS,
     graphicsPreset: 'balanced',
     renderDistance: 7,
     lightingQuality: 'standard',
@@ -75,6 +85,7 @@ const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
     showControlsGuide: false,
   },
   quality: {
+    ...DEFAULT_SETTINGS,
     graphicsPreset: 'quality',
     renderDistance: 9,
     lightingQuality: 'rich',
@@ -115,6 +126,10 @@ function clampRenderDistance(value: number): number {
   return Math.max(4, Math.min(10, Math.round(value)));
 }
 
+function clampVolume(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot {
   return {
     graphicsPreset: state.graphicsPreset,
@@ -126,6 +141,8 @@ function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot
     waterAnimation: state.waterAnimation,
     hudDensity: state.hudDensity,
     showControlsGuide: state.showControlsGuide,
+    bgmVolume: state.bgmVolume,
+    sfxVolume: state.sfxVolume,
   };
 }
 
@@ -170,6 +187,12 @@ function loadSettings(): SettingsSnapshot {
       showControlsGuide: typeof parsed.showControlsGuide === 'boolean'
         ? parsed.showControlsGuide
         : DEFAULT_SETTINGS.showControlsGuide,
+      bgmVolume: typeof parsed.bgmVolume === 'number'
+        ? clampVolume(parsed.bgmVolume)
+        : DEFAULT_SETTINGS.bgmVolume,
+      sfxVolume: typeof parsed.sfxVolume === 'number'
+        ? clampVolume(parsed.sfxVolume)
+        : DEFAULT_SETTINGS.sfxVolume,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -192,7 +215,16 @@ export const useSettingsStore = create<SettingsState>((set) => {
     ...loadSettings(),
 
     setGraphicsPreset: (graphicsPreset) => setAndSave({ graphicsPreset }),
-    applyGraphicsPreset: (preset) => setAndSave(PRESET_SETTINGS[preset]),
+    applyGraphicsPreset: (preset) => set((state) => {
+      // 音量は画質プリセット切替で変えない
+      const next = {
+        ...PRESET_SETTINGS[preset],
+        bgmVolume: state.bgmVolume,
+        sfxVolume: state.sfxVolume,
+      };
+      saveSettings(next);
+      return next;
+    }),
     setRenderDistance: (renderDistance) => setAndSave({ renderDistance: clampRenderDistance(renderDistance) }),
     setLightingQuality: (lightingQuality) => setAndSave({ lightingQuality }),
     setAtmosphereQuality: (atmosphereQuality) => setAndSave({ atmosphereQuality }),
@@ -201,6 +233,8 @@ export const useSettingsStore = create<SettingsState>((set) => {
     setWaterAnimation: (waterAnimation) => setAndSave({ waterAnimation }),
     setHudDensity: (hudDensity) => setAndSave({ hudDensity }),
     setShowControlsGuide: (showControlsGuide) => setAndSave({ showControlsGuide }),
+    setBgmVolume: (bgmVolume) => setAndSave({ bgmVolume: clampVolume(bgmVolume) }),
+    setSfxVolume: (sfxVolume) => setAndSave({ sfxVolume: clampVolume(sfxVolume) }),
     resetSettings: () => setAndSave(DEFAULT_SETTINGS),
   };
 });

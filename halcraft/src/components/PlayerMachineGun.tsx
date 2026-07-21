@@ -265,7 +265,11 @@ export function PlayerMachineGun() {
     idleTimer.current += delta;
     recoilKick.current = Math.max(0, recoilKick.current - delta * 12);
     heatGlow.current = Math.max(0, heatGlow.current - delta * 0.9);
-    const visible = equippedItem === 'machine_gun' && !isDead && !useVehicleStore.getState().isInVehicle();
+    const phasePlaying = useGameStore.getState().phase === 'playing';
+    const visible = phasePlaying
+      && equippedItem === 'machine_gun'
+      && !isDead
+      && !useVehicleStore.getState().isInVehicle();
     const scoped = visible && isRightMouseDown.current && isDesktopGameplayInputActive();
     const firingInput = visible && (
       (isMouseDown.current && isDesktopGameplayInputActive()) ||

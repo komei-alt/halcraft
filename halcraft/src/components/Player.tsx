@@ -49,7 +49,7 @@ import { STAGE_LANDMARK_CENTER } from '../types/stageLandmarks';
 import { TANK_CAMERA_POSITION, TANK_TURRET_PIVOT } from './vehicles/vehicleModelConfig';
 import { useEffectStore } from '../stores/useEffectStore';
 import { getSpeedMultiplier, getJumpBoostMultiplier } from '../types/potions';
-import { playLandingSound } from '../utils/sounds';
+import { playJumpSound, playLandingSound } from '../utils/sounds';
 
 // 定数
 const MOVE_SPEED = 4.5;
@@ -391,6 +391,9 @@ export function Player() {
       }
     };
     const onWheel = (e: WheelEvent) => {
+      // ポーズや設定UI中にホイールでホットバーが切り替わらないようにする
+      if (useGameStore.getState().phase !== 'playing') return;
+      if (!isDesktopGameplayInputActive()) return;
       const current = usePlayerStore.getState().selectedSlot;
       const dir = e.deltaY > 0 ? 1 : -1;
       const slotCount = usePlayerStore.getState().hotbarSlots.length;
@@ -1588,6 +1591,7 @@ export function Player() {
         if (jumpLevel > 0) {
           vel.y = JUMP_VELOCITY * getJumpBoostMultiplier(jumpLevel);
         }
+        playJumpSound();
       }
     }
 
