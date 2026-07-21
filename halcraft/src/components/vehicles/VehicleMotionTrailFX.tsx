@@ -12,6 +12,8 @@ import {
   type VehicleType,
 } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useWorldStore } from '../../stores/useWorldStore';
+import { BLOCK_DEFS, BLOCK_IDS, WORLD_HEIGHT } from '../../types/blocks';
 import type { BiomeId } from '../../types/stages';
 import { isTouchDevice } from '../../utils/device';
 import { getPerformanceProfile } from '../../utils/performance';
@@ -100,8 +102,26 @@ function clampMotionPower(value: number): number {
   return THREE.MathUtils.clamp(value, 0.08, 1.25);
 }
 
-function getGroundHeight(x: number, z: number): number {
-  return getTerrainHeight(Math.round(x), Math.round(z)) + 0.08;
+function getGroundHeight(x: number, z: number, nearY?: number): number {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const getBlock = useWorldStore.getState().getBlock;
+  const startY = THREE.MathUtils.clamp(
+    Math.floor((nearY ?? getTerrainHeight(ix, iz)) + 6),
+    0,
+    WORLD_HEIGHT - 1,
+  );
+
+  // 置かれたブロックや破壊後の地形も拾い、影・砂ぼこりが浮いたり沈んだりしないようにする
+  for (let y = startY; y >= 0; y--) {
+    const blockId = getBlock(ix, y, iz);
+    if (blockId === BLOCK_IDS.AIR) continue;
+    const def = BLOCK_DEFS[blockId];
+    if (!def || def.isLiquid || def.nonStandard) continue;
+    return y + 1 + 0.08;
+  }
+
+  return getTerrainHeight(ix, iz) + 0.08;
 }
 
 function createSoftShadowTexture(): THREE.CanvasTexture | null {
@@ -122,6 +142,7 @@ function createSoftShadowTexture(): THREE.CanvasTexture | null {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -253,7 +274,7 @@ export function VehicleMotionTrailFX() {
     ) => {
       if (!shadowMesh || !vehicle.spawned || vehicle.destroyed || shadowIndex >= MAX_CONTACT_SHADOWS) return;
 
-      const groundY = getGroundHeight(vehicle.x, vehicle.z);
+      const groundY = getGroundHeight(vehicle.x, vehicle.z, vehicle.y);
       const altitude = Math.max(0, vehicle.y - groundY);
       if (altitude > maxAltitude) return;
 
@@ -313,7 +334,7 @@ export function VehicleMotionTrailFX() {
     addContactShadow(car, 2.7, 4.5, 3.6, 0.018);
 
     if (helicopter.spawned && !helicopter.destroyed) {
-      const groundY = getGroundHeight(helicopter.x, helicopter.z);
+      const groundY = getGroundHeight(helicopter.x, helicopter.z, helicopter.y);
       const heightAboveGround = Math.max(1, helicopter.y - groundY);
       const rotorPower = helicopter.engineOn
         ? 0.8
@@ -382,7 +403,7 @@ export function VehicleMotionTrailFX() {
 
       const forward = resolveForward(_vehicleForward, vehicle.rotationY);
       const right = resolveRight(_vehicleRight, forward);
-      const groundY = getGroundHeight(vehicle.x, vehicle.z);
+      const groundY = getGroundHeight(vehicle.x, vehicle.z, vehicle.y);
       const power = getVehicleBasePower(vehicle, maxSpeed);
       const palette = getVehicleGroundPalette(type, biomeId);
       const baseBack = type === 'tank' ? 1.8 : 1.35;

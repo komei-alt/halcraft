@@ -131,7 +131,7 @@ function createCurveRailGeometry(): { positions: number[]; colors: number[] } {
   const railColor = new THREE.Color(RAIL_COLOR_HEX);
   const tieColor = new THREE.Color(TIE_COLOR);
 
-  const SEGMENTS = 6; // 弧の分割数
+  const SEGMENTS = 8; // 弧の分割数
   const INNER_R = 0.15; // 内側レールの半径
   const OUTER_R = 0.85; // 外側レールの半径
   const RAIL_W = 0.04; // レールの幅（断面半径）
@@ -140,32 +140,49 @@ function createCurveRailGeometry(): { positions: number[]; colors: number[] } {
   // 弧の中心（ブロック左下コーナー寄り）
   const arcCX = -0.5;
   const arcCZ = -0.5;
+  const transform = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3(1, 1, 1);
+  const tangent = new THREE.Vector3();
+  const radial = new THREE.Vector3();
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const xAxis = new THREE.Vector3(1, 0, 0);
 
-  // レールセグメントを弧に沿って配置
+  // レールセグメントを接線方向に回転させて弧へ沿わせる
   for (let i = 0; i < SEGMENTS; i++) {
     const a0 = (i / SEGMENTS) * (Math.PI / 2);
     const a1 = ((i + 1) / SEGMENTS) * (Math.PI / 2);
     const aMid = (a0 + a1) / 2;
-
-    // セグメント長
-    const segLen = ((a1 - a0) * (INNER_R + OUTER_R) / 2);
+    const cosA = Math.cos(aMid);
+    const sinA = Math.sin(aMid);
+    tangent.set(-sinA, 0, cosA).normalize();
+    radial.set(cosA, 0, sinA).normalize();
 
     // 内側レール
-    const ix = arcCX + Math.cos(aMid) * INNER_R;
-    const iz = arcCZ + Math.sin(aMid) * INNER_R;
-    addBox(positions, colors, ix, 0.05, iz, RAIL_W * 2, RAIL_H * 2, segLen, railColor);
+    const innerSegLen = (a1 - a0) * INNER_R;
+    position.set(arcCX + cosA * INNER_R, 0.05, arcCZ + sinA * INNER_R);
+    quaternion.setFromUnitVectors(zAxis, tangent);
+    transform.compose(position, quaternion, scale);
+    addTransformedBox(positions, colors, transform, 0, 0, 0, RAIL_W * 2, RAIL_H * 2, innerSegLen, railColor);
 
     // 外側レール
-    const ox = arcCX + Math.cos(aMid) * OUTER_R;
-    const oz = arcCZ + Math.sin(aMid) * OUTER_R;
-    addBox(positions, colors, ox, 0.05, oz, RAIL_W * 2, RAIL_H * 2, segLen, railColor);
+    const outerSegLen = (a1 - a0) * OUTER_R;
+    position.set(arcCX + cosA * OUTER_R, 0.05, arcCZ + sinA * OUTER_R);
+    transform.compose(position, quaternion, scale);
+    addTransformedBox(positions, colors, transform, 0, 0, 0, RAIL_W * 2, RAIL_H * 2, outerSegLen, railColor);
 
-    // 枕木（2セグメントに1本）
+    // 枕木（2セグメントに1本）— 半径方向へ伸ばす
     if (i % 2 === 0) {
-      const tmx = arcCX + Math.cos(aMid) * ((INNER_R + OUTER_R) / 2);
-      const tmz = arcCZ + Math.sin(aMid) * ((INNER_R + OUTER_R) / 2);
       const tieLen = OUTER_R - INNER_R;
-      addBox(positions, colors, tmx, 0.0, tmz, tieLen, 0.04, 0.10, tieColor);
+      position.set(
+        arcCX + cosA * ((INNER_R + OUTER_R) / 2),
+        0.0,
+        arcCZ + sinA * ((INNER_R + OUTER_R) / 2),
+      );
+      quaternion.setFromUnitVectors(xAxis, radial);
+      transform.compose(position, quaternion, scale);
+      addTransformedBox(positions, colors, transform, 0, 0, 0, tieLen, 0.04, 0.10, tieColor);
     }
   }
 
@@ -278,7 +295,10 @@ export function RailRenderer() {
       }
 
       const mat = new THREE.Matrix4();
-      mat.makeTranslation(rail.x + 0.5, rail.y, rail.z + 0.5);
+      // 坂道は原点回転で一端が沈むため、半分の高さ分だけ持ち上げて地面に載せる
+      const isSlope = rail.orientation.startsWith('slope-');
+      const slopeLift = isSlope ? 0.5 * Math.SQRT1_2 : 0;
+      mat.makeTranslation(rail.x + 0.5, rail.y + slopeLift, rail.z + 0.5);
       mat.multiply(rotMat);
 
       const tmpVec = new THREE.Vector3();

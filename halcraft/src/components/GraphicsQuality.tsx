@@ -14,7 +14,7 @@ import {
 } from '@react-three/postprocessing';
 import { BlendFunction, SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
-import { useSettingsStore, type GraphicsPreset } from '../stores/useSettingsStore';
+import { useSettingsStore, type GraphicsPreset, type ResolutionScale } from '../stores/useSettingsStore';
 import { useGameStore } from '../stores/useGameStore';
 import type { BiomeId, StageCategory } from '../types/stages';
 import { isTouchDevice } from '../utils/device';
@@ -61,7 +61,22 @@ interface ReflectionRig {
 
 const CANVAS_RESOLUTION_SYNC_INTERVAL_MS = 300;
 
-function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuning {
+function getComposerResolutionScale(
+  isHighQuality: boolean,
+  isTouch: boolean,
+  resolutionScale: ResolutionScale,
+): number {
+  if (isHighQuality && !isTouch) return 1;
+  if (resolutionScale === 'crisp') return isTouch ? 0.92 : 1;
+  if (resolutionScale === 'performance') return isTouch ? 0.58 : 0.72;
+  return isTouch ? 0.78 : 0.88;
+}
+
+function getQualityTuning(
+  isHighQuality: boolean,
+  isTouch: boolean,
+  resolutionScale: ResolutionScale,
+): QualityTuning {
   if (isHighQuality && !isTouch) {
     return {
       bloomIntensity: 0.34,
@@ -70,7 +85,7 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
       aoRadius: 3.2,
       saturation: 0.06,
       contrast: 0.036,
-      resolutionScale: 1,
+      resolutionScale: getComposerResolutionScale(isHighQuality, isTouch, resolutionScale),
       smaaPreset: SMAAPreset.HIGH,
       aoQuality: 'medium',
       aoSamples: 12,
@@ -85,7 +100,7 @@ function getQualityTuning(isHighQuality: boolean, isTouch: boolean): QualityTuni
     aoRadius: isTouch ? 1.8 : 2.4,
     saturation: isTouch ? 0.025 : 0.04,
     contrast: isTouch ? 0.012 : 0.022,
-    resolutionScale: isTouch ? 0.72 : 0.85,
+    resolutionScale: getComposerResolutionScale(isHighQuality, isTouch, resolutionScale),
     smaaPreset: isTouch ? SMAAPreset.LOW : SMAAPreset.MEDIUM,
     aoQuality: isTouch ? 'performance' : 'low',
     aoSamples: isTouch ? 5 : 8,
@@ -404,7 +419,7 @@ export function GraphicsPostFX() {
   const graphicsPreset = useSettingsStore((s) => s.graphicsPreset);
   const lightingQuality = useSettingsStore((s) => s.lightingQuality);
   const shadowQuality = useSettingsStore((s) => s.shadowQuality);
-  useSettingsStore((s) => s.resolutionScale);
+  const resolutionScale = useSettingsStore((s) => s.resolutionScale);
   const stageBiome = useGameStore((s) => s.currentStage?.biome ?? null);
   const stageCategory = useGameStore((s) => s.currentStage?.category ?? null);
   const dimension = useGameStore((s) => s.dimension);
@@ -415,7 +430,7 @@ export function GraphicsPostFX() {
 
   if (!enabled) return null;
 
-  const tuning = getQualityTuning(isHighQuality, isTouch);
+  const tuning = getQualityTuning(isHighQuality, isTouch, resolutionScale);
   const stageLook = getStageLookTuning(stageBiome, stageCategory, dimension);
   const aoEnabled = shadowQuality !== 'off';
   const bloomThreshold = THREE.MathUtils.clamp(

@@ -171,6 +171,7 @@ function createRadialTexture(stops: Array<{ offset: number; color: string }>): T
   ctx.fillRect(0, 0, 128, 128);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }

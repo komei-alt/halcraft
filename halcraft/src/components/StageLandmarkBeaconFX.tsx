@@ -514,9 +514,10 @@ export function StageLandmarkBeaconFX() {
         <meshBasicMaterial color={visual.glow} transparent opacity={0.86} depthWrite={false} />
       </mesh>
 
-      <mesh position={[0, visual.coreHeight, 0]}>
+      {/* 外光輪は少し大きくして、コアと共面の二重描画を避ける */}
+      <mesh position={[0, visual.coreHeight, 0]} scale={1.38}>
         <CoreGeometryMesh geometry={visual.coreGeometry} />
-        <meshBasicMaterial color={visual.glow} transparent opacity={0.16} depthWrite={false} />
+        <meshBasicMaterial color={visual.halo} transparent opacity={0.14} depthWrite={false} />
       </mesh>
     </group>
   );
