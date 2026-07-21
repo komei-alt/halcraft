@@ -442,31 +442,41 @@ export function BlockUseEffect() {
 
     if (floorRingRef.current) {
       floorRingRef.current.count = ringIndex;
+      floorRingRef.current.visible = ringIndex > 0;
       floorRingRef.current.instanceMatrix.needsUpdate = true;
       if (floorRingRef.current.instanceColor) floorRingRef.current.instanceColor.needsUpdate = true;
     }
     if (haloRingRef.current) {
       haloRingRef.current.count = haloIndex;
+      haloRingRef.current.visible = haloIndex > 0;
       haloRingRef.current.instanceMatrix.needsUpdate = true;
       if (haloRingRef.current.instanceColor) haloRingRef.current.instanceColor.needsUpdate = true;
     }
     if (coreRef.current) {
       coreRef.current.count = coreIndex;
+      coreRef.current.visible = coreIndex > 0;
       coreRef.current.instanceMatrix.needsUpdate = true;
       if (coreRef.current.instanceColor) coreRef.current.instanceColor.needsUpdate = true;
     }
     if (signatureRef.current) {
       signatureRef.current.count = signatureIndex;
+      signatureRef.current.visible = signatureIndex > 0;
       signatureRef.current.instanceMatrix.needsUpdate = true;
       if (signatureRef.current.instanceColor) signatureRef.current.instanceColor.needsUpdate = true;
     }
   });
 
   useLayoutEffect(() => {
-    if (signatureRef.current) signatureRef.current.count = 0;
-    if (floorRingRef.current) floorRingRef.current.count = 0;
-    if (haloRingRef.current) haloRingRef.current.count = 0;
-    if (coreRef.current) coreRef.current.count = 0;
+    for (const mesh of [
+      signatureRef.current,
+      floorRingRef.current,
+      haloRingRef.current,
+      coreRef.current,
+    ]) {
+      if (!mesh) continue;
+      mesh.count = 0;
+      mesh.visible = false;
+    }
   }, []);
 
   return (

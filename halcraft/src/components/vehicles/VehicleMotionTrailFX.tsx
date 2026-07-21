@@ -458,9 +458,12 @@ export function VehicleMotionTrailFX() {
     }
 
     groundMesh.count = groundIndex;
+    groundMesh.visible = groundIndex > 0;
     airMesh.count = airIndex;
+    airMesh.visible = airIndex > 0;
     if (shadowMesh) {
       shadowMesh.count = shadowIndex;
+      shadowMesh.visible = shadowIndex > 0;
       shadowMesh.instanceMatrix.needsUpdate = true;
     }
     groundMesh.instanceMatrix.needsUpdate = true;
@@ -477,9 +480,11 @@ export function VehicleMotionTrailFX() {
   });
 
   useLayoutEffect(() => {
-    if (shadowMeshRef.current) shadowMeshRef.current.count = 0;
-    if (groundMeshRef.current) groundMeshRef.current.count = 0;
-    if (airMeshRef.current) airMeshRef.current.count = 0;
+    for (const mesh of [shadowMeshRef.current, groundMeshRef.current, airMeshRef.current]) {
+      if (!mesh) continue;
+      mesh.count = 0;
+      mesh.visible = false;
+    }
   }, []);
 
   if (phase !== 'playing') return null;

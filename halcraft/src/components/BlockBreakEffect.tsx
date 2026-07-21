@@ -148,8 +148,11 @@ export function BlockBreakEffect() {
   }), []);
 
   useLayoutEffect(() => {
-    if (shardMeshRef.current) shardMeshRef.current.count = 0;
-    if (ringMeshRef.current) ringMeshRef.current.count = 0;
+    for (const mesh of [shardMeshRef.current, ringMeshRef.current]) {
+      if (!mesh) continue;
+      mesh.count = 0;
+      mesh.visible = false;
+    }
   }, []);
 
   const spawnEffect = useCallback((blockId: BlockId, x: number, y: number, z: number) => {
@@ -372,11 +375,13 @@ export function BlockBreakEffect() {
 
     if (shardMeshRef.current) {
       shardMeshRef.current.count = shardIdx;
+      shardMeshRef.current.visible = shardIdx > 0;
       shardMeshRef.current.instanceMatrix.needsUpdate = true;
       if (shardMeshRef.current.instanceColor) shardMeshRef.current.instanceColor.needsUpdate = true;
     }
     if (ringMeshRef.current) {
       ringMeshRef.current.count = ringIdx;
+      ringMeshRef.current.visible = ringIdx > 0;
       ringMeshRef.current.instanceMatrix.needsUpdate = true;
       if (ringMeshRef.current.instanceColor) ringMeshRef.current.instanceColor.needsUpdate = true;
     }

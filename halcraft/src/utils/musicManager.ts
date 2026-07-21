@@ -7,6 +7,8 @@ let masterGain: GainNode | null = null;
 let isPlaying = false;
 let nextNoteTime = 0;
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+/** ポーズ等で一時的に下げる係数（0-1） */
+let bgmPresence = 1;
 
 /** BGMの音量（0-1） */
 const BGM_VOLUME = 0.08;
@@ -106,7 +108,7 @@ export function startBGM(): void {
     });
   }
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = BGM_VOLUME;
+  masterGain.gain.value = BGM_VOLUME * bgmPresence;
   masterGain.connect(audioCtx.destination);
 
   nextNoteTime = audioCtx.currentTime + 2; // 2秒後から開始
@@ -136,9 +138,21 @@ export function stopBGM(): void {
   }, 1500);
 }
 
-/** BGM音量調整 */
+/** BGM音量調整（0-1。設定スライダー向け） */
 export function setBGMVolume(vol: number): void {
   if (masterGain && audioCtx) {
-    masterGain.gain.setValueAtTime(vol * BGM_VOLUME, audioCtx.currentTime);
+    const clamped = Math.max(0, Math.min(1, vol));
+    masterGain.gain.setValueAtTime(clamped * BGM_VOLUME * bgmPresence, audioCtx.currentTime);
+  }
+}
+
+/** ポーズ/死亡時などに BGM を一時的に下げる（0=無音、1=通常） */
+export function setBGMPresence(presence: number): void {
+  bgmPresence = Math.max(0, Math.min(1, presence));
+  if (masterGain && audioCtx) {
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+    masterGain.gain.linearRampToValueAtTime(bgmPresence * BGM_VOLUME, now + 0.18);
   }
 }

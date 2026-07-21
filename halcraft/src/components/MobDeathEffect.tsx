@@ -157,8 +157,11 @@ export function MobDeathEffect() {
   }), []);
 
   useLayoutEffect(() => {
-    if (shardMeshRef.current) shardMeshRef.current.count = 0;
-    if (waveMeshRef.current) waveMeshRef.current.count = 0;
+    for (const mesh of [shardMeshRef.current, waveMeshRef.current]) {
+      if (!mesh) continue;
+      mesh.count = 0;
+      mesh.visible = false;
+    }
   }, []);
 
   const spawnEffect = useCallback((mobType: MobType, x: number, y: number, z: number) => {
@@ -343,11 +346,13 @@ export function MobDeathEffect() {
 
     if (shardMeshRef.current) {
       shardMeshRef.current.count = shardIndex;
+      shardMeshRef.current.visible = shardIndex > 0;
       shardMeshRef.current.instanceMatrix.needsUpdate = true;
       if (shardMeshRef.current.instanceColor) shardMeshRef.current.instanceColor.needsUpdate = true;
     }
     if (waveMeshRef.current) {
       waveMeshRef.current.count = waveIndex;
+      waveMeshRef.current.visible = waveIndex > 0;
       waveMeshRef.current.instanceMatrix.needsUpdate = true;
       if (waveMeshRef.current.instanceColor) waveMeshRef.current.instanceColor.needsUpdate = true;
     }

@@ -41,9 +41,21 @@ export function resetMobileActionTriggers(): void {
   mobileActions.placeBlock = false;
   mobileActions.fireRocket = false;
   mobileActions.fireMachineGun = false;
+  mobileActions.vehicleGun = false;
   mobileActions.vehicleRocket = false;
   mobileActions.vehicleBomb = false;
   mobileActions.interact = false;
+}
+
+/** 押しっぱなし系を含むモバイル入力を全クリア（ポーズ/タブ離脱用） */
+export function clearAllMobileActions(): void {
+  mobileActions.jump = false;
+  mobileActions.descend = false;
+  resetMobileActionTriggers();
+  joystickInput.x = 0;
+  joystickInput.y = 0;
+  touchLook.deltaX = 0;
+  touchLook.deltaY = 0;
 }
 
 /**

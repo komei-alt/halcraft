@@ -149,6 +149,8 @@ let biomeSignatureBodyFilterNode: BiquadFilterNode | null = null;
 let biomeSignatureAirFilterNode: BiquadFilterNode | null = null;
 let activeSources: AudioScheduledSourceNode[] = [];
 let isRunning = false;
+/** ポーズ等で一時的に下げる係数（0-1） */
+let ambientPresence = 1;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -274,7 +276,7 @@ export function initAmbientSounds(): void {
   }
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = AMBIENT_VOLUME;
+  masterGain.gain.value = AMBIENT_VOLUME * ambientPresence;
   masterGain.connect(audioCtx.destination);
 
   // --- 風音: 音程を持つオシレーターではなく、自然音に近い色付きノイズで構成 ---
@@ -638,6 +640,17 @@ export function updateAmbientSounds(
   const signatureAirTarget = profile.signatureAirLevel * signaturePresence * (0.78 + safeModeRatio * 0.2);
   smoothParam(biomeSignatureBodyGain.gain, signatureBodyTarget, now, 0.42);
   smoothParam(biomeSignatureAirGain.gain, signatureAirTarget, now, 0.38);
+}
+
+/** ポーズ/死亡時などに環境音を一時的に下げる（0=無音、1=通常） */
+export function setAmbientPresence(presence: number): void {
+  ambientPresence = Math.max(0, Math.min(1, presence));
+  if (masterGain && audioCtx) {
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+    masterGain.gain.linearRampToValueAtTime(ambientPresence * AMBIENT_VOLUME, now + 0.18);
+  }
 }
 
 /** 環境音の停止 */

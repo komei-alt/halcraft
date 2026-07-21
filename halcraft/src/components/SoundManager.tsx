@@ -16,10 +16,11 @@ import {
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
-import { startBGM } from '../utils/musicManager';
-import { initAmbientSounds, updateAmbientSounds } from '../utils/ambientSounds';
+import { setBGMPresence, startBGM } from '../utils/musicManager';
+import { initAmbientSounds, setAmbientPresence, updateAmbientSounds } from '../utils/ambientSounds';
 import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
+import { stopLightsaberHumLoop } from '../utils/lightsaberSounds';
 
 /** 足音の最小水平速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -46,14 +47,33 @@ export function SoundManager() {
   const lastCameraPos = useRef({ x: 0, y: 0, z: 0 });
   const initialized = useRef(false);
   const bgmStarted = useRef(false);
+  const lastAudioPresence = useRef(1);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.1);
     const gameState = useGameStore.getState();
     const playerState = usePlayerStore.getState();
 
-    // ゲームプレイ中のみ
-    if (gameState.phase !== 'playing' || playerState.isDead) return;
+    // ポーズ・死亡・メニューでは BGM/環境音を下げ、効果音ループも止める
+    const audioActive = gameState.phase === 'playing' && !playerState.isDead;
+    const targetPresence = audioActive
+      ? 1
+      : gameState.phase === 'paused'
+        ? 0.22
+        : gameState.phase === 'stageclear'
+          ? 0.35
+          : 0.08;
+    if (Math.abs(lastAudioPresence.current - targetPresence) > 0.001) {
+      lastAudioPresence.current = targetPresence;
+      setBGMPresence(targetPresence);
+      setAmbientPresence(targetPresence);
+      if (!audioActive) {
+        stopLightsaberHumLoop();
+      }
+    }
+
+    // ゲームプレイ中のみ SFX / 環境パラメータ更新
+    if (!audioActive) return;
 
     const cx = camera.position.x;
     const cy = camera.position.y;
@@ -75,6 +95,8 @@ export function SoundManager() {
         bgmStarted.current = true;
         startBGM();
         initAmbientSounds();
+        setBGMPresence(1);
+        setAmbientPresence(1);
       }
       return;
     }

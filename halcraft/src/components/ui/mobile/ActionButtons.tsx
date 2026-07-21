@@ -18,7 +18,7 @@ import {
   getStageCombatStyleForItem,
 } from '../../../types/stageCombatStyles';
 import { getStageModeRule } from '../../../types/stageModeRules';
-import { mobileActions } from '../../../utils/touchInput';
+import { clearAllMobileActions, mobileActions } from '../../../utils/touchInput';
 
 const BUTTON_SIZE = 48;
 const RIGHT = 20;
@@ -553,6 +553,27 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
   const combatFocusItem = useModeFlowStore((s) => s.combatFocusItem);
   const combatFocusRank = useModeFlowStore((s) => s.combatFocusRank);
   const [now, setNow] = useState(() => getRuntimeNow());
+
+  // ポーズやタブ離脱で押しっぱなし射撃が残らないようにする
+  useEffect(() => {
+    const clearHeld = () => clearAllMobileActions();
+    const onVisibility = () => {
+      if (document.hidden) clearHeld();
+    };
+    window.addEventListener('blur', clearHeld);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', clearHeld);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearHeld();
+    };
+  }, []);
+
+  useEffect(() => {
+    // 乗り物切替時に徒歩機関銃の押しっぱなしを解除
+    mobileActions.fireMachineGun = false;
+    mobileActions.vehicleGun = false;
+  }, [activeVehicle]);
 
   useEffect(() => {
     const currentNow = getRuntimeNow();

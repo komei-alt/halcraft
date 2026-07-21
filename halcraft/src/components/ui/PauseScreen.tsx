@@ -7,6 +7,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { isTouchDevice } from '../../utils/device';
 import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
+import { clearAllMobileActions } from '../../utils/touchInput';
 import { SG } from './startScreenTheme';
 
 interface PauseScreenProps {
@@ -112,10 +113,13 @@ export function PauseScreen({ onOpenSettings }: PauseScreenProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePause]);
 
-  // ポーズ時にPointerLockを解除
+  // ポーズ時にPointerLockを解除し、モバイル押しっぱなしもクリア
   useEffect(() => {
-    if (phase === 'paused' && document.pointerLockElement) {
-      document.exitPointerLock();
+    if (phase === 'paused') {
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+      clearAllMobileActions();
     }
   }, [phase]);
 
