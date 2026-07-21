@@ -387,8 +387,9 @@ export function Lightsaber() {
     if (closestMobId && closestMobPos) {
       const isFinisher = step.damageMultiplier >= 1.5;
       const isCritical = isFinisher || justCombo;
-      useMobStore.getState().damageMob(closestMobId, damage, dir.x, dir.z);
-      useMultiplayerStore.getState().sendMobDamage(closestMobId, damage, dir.x * 1.5, dir.z * 1.5);
+      // 近接も弱い押しだけ
+      useMobStore.getState().damageMob(closestMobId, damage, dir.x * 0.4, dir.z * 0.4);
+      useMultiplayerStore.getState().sendMobDamage(closestMobId, damage, dir.x * 0.4, dir.z * 0.4);
       spawnDamagePopup(damage, closestMobPos.x, closestMobPos.hitY - 1.0, closestMobPos.z, isCritical);
       spawnHitImpactEffect(
         closestMobPos.x, closestMobPos.hitY, closestMobPos.z,

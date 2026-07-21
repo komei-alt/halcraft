@@ -154,8 +154,9 @@ export function updateAllyMobAI(
         m.vz = 0;
 
         if (state.attackCooldown <= 0 && tDist > 0.01) {
-          const kbX = tdx / tDist;
-          const kbZ = tdz / tDist;
+          // 味方近接も弱い押しだけ
+          const kbX = (tdx / tDist) * 0.35;
+          const kbZ = (tdz / tDist) * 0.35;
           useMobStore.getState().damageMob(targetEnemy.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
           state.attackCooldown = PROTOTYPE_ATTACK_COOLDOWN;
         }

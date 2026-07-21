@@ -338,21 +338,54 @@ export const useMobStore = create<MobState>((set, get) => ({
             });
             return null;
           }
-          // モブタイプごとのノックバック耐性（味方の大型モブは飛びにくい）
-          const kbResistance = (m.type === 'prototype' || m.type === 'iron_golem') ? 0.3 : 0.7 + Math.random() * 0.3;
-          const kbMultiplier = kbResistance * (4 + Math.random() * 3);
 
           // フレンドリーファイヤー: 味方モブがダメージを受けたら怒り状態にする
           const shouldBeAngry = m.isAlly && m.type !== 'chicken';
 
+          // ノックバックは「ごく弱い押し」だけ。銃撃は 0,0 を渡して速度を維持する。
+          // 爆発は小さい力を渡す想定。方向を正規化し、速度上限で大幅に抑える。
+          const rawKb = Math.hypot(knockbackX, knockbackZ);
+          const isBoss = m.type === 'boss_giant';
+          const isHeavyAlly = m.type === 'prototype' || m.type === 'iron_golem';
+          // タイプ別耐性（ボスはほぼ動かない）
+          const resistance = isBoss ? 0.12 : isHeavyAlly ? 0.18 : 0.35;
+          // 水平ノックバック速度の上限（ブロック/秒）— 以前は 5〜7 で大きく吹き飛んでいた
+          const maxKbSpeed = isBoss ? 0.55 : 1.35;
+
+          let nextVx = m.vx;
+          let nextVz = m.vz;
+          // 上方向は付与しない（浮遊・後退感の主因）
+          let nextVy = m.vy;
+          // 被弾フラッシュ用。接近AIは止めない（短め）
+          let nextHitTimer = 0.12;
+
+          if (rawKb > 0.04) {
+            const dirX = knockbackX / rawKb;
+            const dirZ = knockbackZ / rawKb;
+            // 入力の大きさを弱い力に写像（単位方向の銃撃を誤って強くしないよう上限を厳しく）
+            const impulse = Math.min(maxKbSpeed, rawKb * 0.22) * resistance;
+            if (impulse > 0.02) {
+              nextVx = m.vx + dirX * impulse;
+              nextVz = m.vz + dirZ * impulse;
+              // 合成速度を上限でクランプ
+              const speed = Math.hypot(nextVx, nextVz);
+              const hardCap = maxKbSpeed + (isBoss ? 0.4 : 1.2);
+              if (speed > hardCap) {
+                const s = hardCap / speed;
+                nextVx *= s;
+                nextVz *= s;
+              }
+              nextHitTimer = isBoss ? 0.1 : 0.16;
+            }
+          }
+
           return {
             ...m,
             hp: newHp,
-            vx: knockbackX * kbMultiplier,
-            // ノックバックの上方向は控えめに（空中浮遊の原因になる）
-            vy: 0.8 + Math.random() * 1.2,
-            vz: knockbackZ * kbMultiplier,
-            hitTimer: 0.3,
+            vx: nextVx,
+            vy: nextVy,
+            vz: nextVz,
+            hitTimer: nextHitTimer,
             // 味方がダメージを受けたら怒り状態に（ニワトリは除外）
             angryAtPlayer: shouldBeAngry ? true : m.angryAtPlayer,
             angryTimer: shouldBeAngry ? ANGRY_DURATION : m.angryTimer,

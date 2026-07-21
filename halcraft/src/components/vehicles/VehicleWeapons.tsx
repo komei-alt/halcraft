@@ -387,10 +387,13 @@ export function VehicleWeapons() {
       const damage = calculateExplosionDamage(mobCenter.distanceTo(center));
       if (damage <= 0) continue;
 
-      const dirX = mob.x - center.x;
-      const dirZ = mob.z - center.z;
-      multi.sendMobDamage(mob.id, damage, dirX * 1.8, dirZ * 1.8);
-      mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      // 爆発ノックバックはごく弱く
+      const dist = Math.max(0.2, mobCenter.distanceTo(center));
+      const dirX = (mob.x - center.x) / dist;
+      const dirZ = (mob.z - center.z) / dist;
+      const kbForce = 0.55 * (1 - Math.min(1, dist / EXPLOSION_RADIUS));
+      multi.sendMobDamage(mob.id, damage, dirX * kbForce, dirZ * kbForce);
+      mobStore.damageMob(mob.id, damage, dirX * kbForce, dirZ * kbForce);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= EXPLOSION_DAMAGE * 0.7);
       recordVehicleStrike('tank', 1, damage >= EXPLOSION_DAMAGE * 0.7, 'cannon');
@@ -432,10 +435,13 @@ export function VehicleWeapons() {
       const damage = calculateBombExplosionDamage(mobCenter.distanceTo(center));
       if (damage <= 0) continue;
 
-      const dirX = mob.x - center.x;
-      const dirZ = mob.z - center.z;
-      multi.sendMobDamage(mob.id, damage, dirX * 2.5, dirZ * 2.5);
-      mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      // 爆発ノックバックはごく弱く
+      const dist = Math.max(0.2, mobCenter.distanceTo(center));
+      const dirX = (mob.x - center.x) / dist;
+      const dirZ = (mob.z - center.z) / dist;
+      const kbForce = 0.65 * (1 - Math.min(1, dist / BOMB_EXPLOSION_RADIUS));
+      multi.sendMobDamage(mob.id, damage, dirX * kbForce, dirZ * kbForce);
+      mobStore.damageMob(mob.id, damage, dirX * kbForce, dirZ * kbForce);
       spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, damage >= BOMB_EXPLOSION_DAMAGE * 0.75);
       spawnHitImpactEffect(mob.x, mob.y + 0.9, mob.z, dirX, 0.35, dirZ, damage >= BOMB_EXPLOSION_DAMAGE * 0.7);
       recordVehicleStrike('airplane', 1, damage >= BOMB_EXPLOSION_DAMAGE * 0.7, 'bomb');
@@ -725,8 +731,9 @@ export function VehicleWeapons() {
         if (hit.type === 'mob' && hit.targetId) {
           const mob = mobs.find((m) => m.id === hit.targetId);
           if (mob) {
-            useMultiplayerStore.getState().sendMobDamage(hit.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
-            useMobStore.getState().damageMob(hit.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
+            // 銃撃はノックバックなし（接近を止めない）
+            useMultiplayerStore.getState().sendMobDamage(hit.targetId, GUN_CONSTANTS.DAMAGE, 0, 0);
+            useMobStore.getState().damageMob(hit.targetId, GUN_CONSTANTS.DAMAGE, 0, 0);
             spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
             recordVehicleStrike(bullet.type);
           }

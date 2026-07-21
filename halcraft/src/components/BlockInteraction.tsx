@@ -1337,7 +1337,8 @@ export function BlockInteraction() {
       attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
       const actualDamage = Math.max(1, Math.round(ATTACK_DAMAGE * multiplier));
       const isCritical = multiplier >= 0.9;
-      damageMob(targetMob.id, actualDamage, attackDir.current.x, attackDir.current.z);
+      // 近接も弱い押しだけ（銃撃ほど止めない）
+      damageMob(targetMob.id, actualDamage, attackDir.current.x * 0.35, attackDir.current.z * 0.35);
       spawnDamagePopup(actualDamage, targetMob.x, targetMob.hitY - 1.0, targetMob.z, isCritical);
       spawnHitImpactEffect(
         targetMob.x,

@@ -402,8 +402,9 @@ export function PlayerMachineGun() {
           const precisionHit = bullet.scoped;
           const hitDamage = bulletDamage + (precisionHit ? 1 : 0);
           if (mob) {
-            useMultiplayerStore.getState().sendMobDamage(hit.targetId, hitDamage, moveDir.x * 1.5, moveDir.z * 1.5);
-            useMobStore.getState().damageMob(hit.targetId, hitDamage, moveDir.x, moveDir.z);
+            // 銃撃はノックバックなし（接近を止めない）
+            useMultiplayerStore.getState().sendMobDamage(hit.targetId, hitDamage, 0, 0);
+            useMobStore.getState().damageMob(hit.targetId, hitDamage, 0, 0);
             spawnDamagePopup(hitDamage, mob.x, mob.y + 1.0, mob.z, precisionHit);
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, precisionHit);

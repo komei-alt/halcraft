@@ -182,9 +182,11 @@ export function VehicleCombat() {
         const dist = mobPos.distanceTo(new THREE.Vector3(cx, cy, cz));
         const damage = calculateProximityDamage(dist);
         if (damage <= 0) continue;
-        const dirX = mob.x - cx;
-        const dirZ = mob.z - cz;
-        multi.sendMobDamage(mob.id, damage, dirX * 2, dirZ * 2);
+        // 爆発ノックバックはごく弱く
+        const distSafe = Math.max(0.2, dist);
+        const dirX = ((mob.x - cx) / distSafe) * 0.6 * (1 - Math.min(1, dist / 12));
+        const dirZ = ((mob.z - cz) / distSafe) * 0.6 * (1 - Math.min(1, dist / 12));
+        multi.sendMobDamage(mob.id, damage, dirX, dirZ);
         useMobStore.getState().damageMob(mob.id, damage, dirX, dirZ);
         spawnDamagePopup(damage, mob.x, mob.y + 1.1, mob.z, false);
       }

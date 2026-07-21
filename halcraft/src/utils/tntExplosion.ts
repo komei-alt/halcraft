@@ -111,8 +111,9 @@ export function triggerTntExplosion(
       const damageFactor = 1 - mobDist / (EXPLOSION_RADIUS * 1.5);
       const damage = Math.ceil(EXPLOSION_MAX_DAMAGE * damageFactor);
       if (damage > 0) {
-        const kbX = mobDist > 0 ? (mob.x - x) / mobDist : 0;
-        const kbZ = mobDist > 0 ? (mob.z - z) / mobDist : 0;
+        // 爆発ノックバックはごく弱く
+        const kbX = mobDist > 0 ? ((mob.x - x) / mobDist) * 0.5 * damageFactor : 0;
+        const kbZ = mobDist > 0 ? ((mob.z - z) / mobDist) * 0.5 * damageFactor : 0;
         mobStore.damageMob(mob.id, damage, kbX, kbZ);
       }
     }

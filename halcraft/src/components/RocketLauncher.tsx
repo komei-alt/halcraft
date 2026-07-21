@@ -479,10 +479,13 @@ export function RocketLauncher() {
       if (damage <= 0) continue;
       masteryHits += 1;
 
-      const dirX = mob.x - center.x;
-      const dirZ = mob.z - center.z;
-      multi.sendMobDamage(mob.id, damage, dirX * 1.8, dirZ * 1.8);
-      mobStore.damageMob(mob.id, damage, dirX, dirZ);
+      // 爆発ノックバックはごく弱く（方向のみ・距離で減衰）
+      const dist = Math.max(0.2, distance);
+      const dirX = (mob.x - center.x) / dist;
+      const dirZ = (mob.z - center.z) / dist;
+      const kbForce = 0.55 * (1 - Math.min(1, distance / Math.max(0.1, explosionRadius)));
+      multi.sendMobDamage(mob.id, damage, dirX * kbForce, dirZ * kbForce);
+      mobStore.damageMob(mob.id, damage, dirX * kbForce, dirZ * kbForce);
       const impactDir = mobCenter.clone().sub(center);
       if (impactDir.lengthSq() < 0.001) {
         impactDir.set(0, 1, 0);

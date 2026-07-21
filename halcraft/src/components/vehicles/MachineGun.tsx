@@ -524,8 +524,9 @@ export function MachineGun() {
         } else if (hitResult.type === 'mob' && hitResult.targetId) {
           spawnImpact(hitResult.hitPos, hitResult.normal, 'mob');
           const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-          sendMobDamage(hitResult.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x * 3, moveDir.z * 3);
-          useMobStore.getState().damageMob(hitResult.targetId, GUN_CONSTANTS.DAMAGE, moveDir.x, moveDir.z);
+          // 銃撃はノックバックなし（接近を止めない）
+          sendMobDamage(hitResult.targetId, GUN_CONSTANTS.DAMAGE, 0, 0);
+          useMobStore.getState().damageMob(hitResult.targetId, GUN_CONSTANTS.DAMAGE, 0, 0);
           const mob = mobs.find(m => m.id === hitResult.targetId);
           if (mob) spawnDamagePopup(GUN_CONSTANTS.DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
           proj.dead = true;

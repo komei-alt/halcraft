@@ -565,9 +565,10 @@ function SingleTurret({ position }: { position: TurretPos }) {
           proj.dead = true;
         } else if (hitResult.type === 'mob' && hitResult.targetId) {
           spawnImpact(hitResult.hitPos, hitResult.normal, 'mob');
-          useMobStore.getState().damageMob(hitResult.targetId, TURRET_DAMAGE, moveDir.x, moveDir.z);
+          // 銃撃はノックバックなし（接近を止めない）
+          useMobStore.getState().damageMob(hitResult.targetId, TURRET_DAMAGE, 0, 0);
           const sendMobDamage = useMultiplayerStore.getState().sendMobDamage;
-          sendMobDamage(hitResult.targetId, TURRET_DAMAGE, moveDir.x * 3, moveDir.z * 3);
+          sendMobDamage(hitResult.targetId, TURRET_DAMAGE, 0, 0);
           const mob = mobs.find(m => m.id === hitResult.targetId);
           if (mob) spawnDamagePopup(TURRET_DAMAGE, mob.x, mob.y + 1.0, mob.z, false);
           proj.dead = true;

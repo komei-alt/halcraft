@@ -46,14 +46,20 @@ export function updateBossAI(
   const distXZ = Math.sqrt(dx * dx + dz * dz);
   const speed = BOSS_SPEED * (m.speedMultiplier ?? 1);
 
-  // プレイヤーに向かって移動
+  // プレイヤーに向かって移動（被弾中も接近を止めない）
   if (distXZ > BOSS_STOP_RANGE) {
     m.rotation = Math.atan2(dx, dz);
-    if (m.hitTimer <= 0) {
-      const nx = Math.sin(m.rotation);
-      const nz = Math.cos(m.rotation);
-      m.vx = nx * speed;
-      m.vz = nz * speed;
+    const nx = Math.sin(m.rotation);
+    const nz = Math.cos(m.rotation);
+    const chaseVx = nx * speed;
+    const chaseVz = nz * speed;
+    if (m.hitTimer > 0) {
+      // ボスはほぼノックバックを無視して押し進む
+      m.vx = m.vx * 0.25 + chaseVx * 0.9;
+      m.vz = m.vz * 0.25 + chaseVz * 0.9;
+    } else {
+      m.vx = chaseVx;
+      m.vz = chaseVz;
     }
   } else {
     m.vx = 0;
@@ -61,12 +67,6 @@ export function updateBossAI(
     if (distXZ > 0.1) {
       m.rotation = Math.atan2(dx, dz);
     }
-  }
-
-  // ノックバック減衰
-  if (m.hitTimer > 0) {
-    m.vx *= 0.5; // ボスはノックバックに強い
-    m.vz *= 0.5;
   }
 
   // 物理更新

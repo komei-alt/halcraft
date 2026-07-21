@@ -96,11 +96,17 @@ export function updateZombieAI(
 
     m.rotation = Math.atan2(dx, dz);
 
-    if (m.hitTimer <= 0) {
-      const nx = Math.sin(moveAngle);
-      const nz = Math.cos(moveAngle);
-      m.vx = (nx * ZOMBIE_SPEED * speedMultiplier) + sepX;
-      m.vz = (nz * ZOMBIE_SPEED * speedMultiplier) + sepZ;
+    // 被弾中も接近を止めない（軽いノックバックは速度に混ぜて減衰）
+    const nx = Math.sin(moveAngle);
+    const nz = Math.cos(moveAngle);
+    const chaseVx = (nx * ZOMBIE_SPEED * speedMultiplier) + sepX;
+    const chaseVz = (nz * ZOMBIE_SPEED * speedMultiplier) + sepZ;
+    if (m.hitTimer > 0) {
+      m.vx = m.vx * 0.55 + chaseVx * 0.7;
+      m.vz = m.vz * 0.55 + chaseVz * 0.7;
+    } else {
+      m.vx = chaseVx;
+      m.vz = chaseVz;
     }
   } else {
     m.vx = sepX;
@@ -113,10 +119,10 @@ export function updateZombieAI(
   // 物理
   applyMobGravityAndYCollision(m, dt, checkCollision, MOB_RADIUS, MOB_HEIGHT, ctx.getBlock);
 
-  // X衝突（ノックバック中はジャンプしない）
+  // X衝突
   const newX = m.x + m.vx * dt;
   if (checkCollision(newX, m.y, m.z, MOB_RADIUS, MOB_HEIGHT)) {
-    if (m.hitTimer <= 0 && !checkCollision(newX, m.y + 1, m.z, MOB_RADIUS, MOB_HEIGHT)) {
+    if (!checkCollision(newX, m.y + 1, m.z, MOB_RADIUS, MOB_HEIGHT)) {
       m.vy = 4;
       m.x = newX;
     } else {
@@ -129,7 +135,7 @@ export function updateZombieAI(
   // Z衝突
   const newZ = m.z + m.vz * dt;
   if (checkCollision(m.x, m.y, newZ, MOB_RADIUS, MOB_HEIGHT)) {
-    if (m.hitTimer <= 0 && !checkCollision(m.x, m.y + 1, newZ, MOB_RADIUS, MOB_HEIGHT)) {
+    if (!checkCollision(m.x, m.y + 1, newZ, MOB_RADIUS, MOB_HEIGHT)) {
       m.vy = 4;
       m.z = newZ;
     } else {
@@ -137,12 +143,6 @@ export function updateZombieAI(
     }
   } else {
     m.z = newZ;
-  }
-
-  // ノックバック減衰
-  if (m.hitTimer > 0) {
-    m.vx *= 0.85;
-    m.vz *= 0.85;
   }
 
   // 攻撃対象への距離計算

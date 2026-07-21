@@ -43,11 +43,17 @@ export function updateSpiderAI(
     if (distS > 0.1) {
       m.rotation = Math.atan2(dxS, dzS);
     }
-    if (m.hitTimer <= 0) {
-      const nxS = dxS / distS;
-      const nzS = dzS / distS;
-      m.vx = nxS * SPIDER_SPEED * speedMultiplier;
-      m.vz = nzS * SPIDER_SPEED * speedMultiplier;
+    // 被弾中も接近を止めない
+    const nxS = dxS / distS;
+    const nzS = dzS / distS;
+    const chaseVx = nxS * SPIDER_SPEED * speedMultiplier;
+    const chaseVz = nzS * SPIDER_SPEED * speedMultiplier;
+    if (m.hitTimer > 0) {
+      m.vx = m.vx * 0.5 + chaseVx * 0.75;
+      m.vz = m.vz * 0.5 + chaseVz * 0.75;
+    } else {
+      m.vx = chaseVx;
+      m.vz = chaseVz;
     }
   } else {
     m.vx = 0;
@@ -61,7 +67,7 @@ export function updateSpiderAI(
   // X衝突
   const newXS = m.x + m.vx * dt;
   if (checkCollision(newXS, m.y, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
-    if (m.hitTimer <= 0 && !checkCollision(newXS, m.y + 1, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+    if (!checkCollision(newXS, m.y + 1, m.z, SPIDER_RADIUS, SPIDER_HEIGHT)) {
       m.vy = 5;
       m.x = newXS;
     } else {
@@ -74,7 +80,7 @@ export function updateSpiderAI(
   // Z衝突
   const newZS = m.z + m.vz * dt;
   if (checkCollision(m.x, m.y, newZS, SPIDER_RADIUS, SPIDER_HEIGHT)) {
-    if (m.hitTimer <= 0 && !checkCollision(m.x, m.y + 1, newZS, SPIDER_RADIUS, SPIDER_HEIGHT)) {
+    if (!checkCollision(m.x, m.y + 1, newZS, SPIDER_RADIUS, SPIDER_HEIGHT)) {
       m.vy = 5;
       m.z = newZS;
     } else {
@@ -82,12 +88,6 @@ export function updateSpiderAI(
     }
   } else {
     m.z = newZS;
-  }
-
-  // ノックバック減衰
-  if (m.hitTimer > 0) {
-    m.vx *= 0.85;
-    m.vz *= 0.85;
   }
 
   // プレイヤー攻撃判定
