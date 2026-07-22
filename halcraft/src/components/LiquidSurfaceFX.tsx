@@ -10,6 +10,7 @@ import { BLOCK_IDS, CHUNK_SIZE, RENDER_DISTANCE, type BlockId } from '../types/b
 import type { BiomeId } from '../types/stages';
 import { isTouchDevice } from '../utils/device';
 import { getPerformanceProfile } from '../utils/performance';
+import { isBlockTransparent } from '../utils/terrain/blockExposure';
 
 type LiquidFxKind = 'water' | 'lava';
 
@@ -59,7 +60,8 @@ const TOUCH_SCALE = 0.56;
 const CENTER_UPDATE_INTERVAL_MS = 520;
 const SURFACE_REFRESH_CELL_SIZE = 8;
 const WATER_RENDER_ORDER = 106;
-const LAVA_RENDER_ORDER = 107;
+// 溶岩FXは地形より大きく前に出さない（壁抜け・地面透け防止）
+const LAVA_RENDER_ORDER = 2;
 
 const sharedWaterRingGeometry = new THREE.RingGeometry(0.26, 0.48, 54);
 const sharedWaterGlintGeometry = new THREE.PlaneGeometry(1, 1);
@@ -148,7 +150,10 @@ function collectSurfaceInstances(
     }
 
     const topBlock = getBlock(pos.x, pos.y + 1, pos.z);
+    // 同じ流体の内部、または固体の下には表面FXを出さない
+    // （固体下にリングを置くと depthWrite:false で地面が透けて見える）
     if (topBlock === config.blockId) continue;
+    if (!isBlockTransparent(topBlock)) continue;
 
     const dx = pos.x + 0.5 - camera.position.x;
     const dz = pos.z + 0.5 - camera.position.z;

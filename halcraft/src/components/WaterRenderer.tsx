@@ -164,23 +164,53 @@ function createWaterMaterial(): THREE.ShaderMaterial {
   return material;
 }
 
+/**
+ * 流体が「空気・透明・別ブロック」に触れて露出しているか。
+ * 注意: `above !== blockId` だけでは固体の下の溶岩まで描画してしまい、
+ * 地面が透けてマグマが見える原因になる。固体に完全に囲まれた流体は描かない。
+ */
+function isLiquidBlockExposed(
+  getBlock: (x: number, y: number, z: number) => BlockId,
+  x: number,
+  y: number,
+  z: number,
+  blockId: BlockId,
+): boolean {
+  const neighbors: BlockId[] = [
+    getBlock(x, y + 1, z),
+    getBlock(x, y - 1, z),
+    getBlock(x + 1, y, z),
+    getBlock(x - 1, y, z),
+    getBlock(x, y, z + 1),
+    getBlock(x, y, z - 1),
+  ];
+  for (const neighbor of neighbors) {
+    if (neighbor === blockId) continue;
+    // 空気・ガラス・非標準・別流体に接していれば露出
+    if (isBlockTransparent(neighbor)) return true;
+  }
+  return false;
+}
+
 /** 溶岩シェーダーマテリアル（発光 + 熱ゆらぎ + 表面の割れ目） */
 function createLavaMaterial(): THREE.ShaderMaterial {
   const material = new THREE.ShaderMaterial({
-    // 溶岩はほぼ不透明なので深度を書いて、背後の透過ブレンド破綻を防ぐ
+    // 溶岩は不透明。深度を書いて地面を突き抜けない
     transparent: false,
     depthWrite: true,
-    // 地面ブロック上面との共面をわずかに手前へ押し出し、マグマ床のチラつきを抑える
+    depthTest: true,
+    // 地形面の“手前”へ押し出さない（+方向で地形の奥へ寄せ、透けを防ぐ）
     polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
     side: THREE.FrontSide,
     fog: true,
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
         uTime: { value: 0 },
-        uWaveStrength: { value: 1 },
+        // 波で上面が地面ブロックへ食い込むと透けに見えるため弱める
+        uWaveStrength: { value: 0.22 },
         uOpacity: { value: 1 },
       },
     ]),
@@ -202,25 +232,28 @@ function createLavaMaterial(): THREE.ShaderMaterial {
         float molten = clamp((flowA * 0.38) + (flowB * 0.34) + (flowC * 0.28), 0.0, 1.0);
 
         vec3 crustColor = vec3(0.28, 0.035, 0.01);
-        vec3 lavaColor = vec3(1.0, 0.24, 0.025);
-        vec3 hotCoreColor = vec3(1.0, 0.78, 0.12);
+        vec3 lavaColor = vec3(0.92, 0.22, 0.02);
+        vec3 hotCoreColor = vec3(0.95, 0.62, 0.1);
 
         float crackLine = smoothstep(0.64, 0.95, molten);
-        float heatGlow = smoothstep(0.015, 0.055, vWave) * 0.35;
+        float heatGlow = smoothstep(0.015, 0.055, vWave) * 0.28;
         vec3 color = mix(crustColor, lavaColor, 0.45 + molten * 0.45);
-        color = mix(color, hotCoreColor, crackLine * 0.58 + heatGlow);
+        color = mix(color, hotCoreColor, crackLine * 0.5 + heatGlow);
 
         float ember = sin(vWorldPos.x * 11.0 + uTime * 4.0)
                     * sin(vWorldPos.z * 9.0 - uTime * 3.2);
-        color += max(ember, 0.0) * vec3(0.18, 0.07, 0.015);
-        color *= 0.92 + vTopSurface * 0.12;
+        color += max(ember, 0.0) * vec3(0.12, 0.05, 0.01);
+        color *= 0.9 + vTopSurface * 0.1;
+        // Bloom で地面を突き抜けて光らないよう輝度を抑える
+        color = min(color, vec3(0.98, 0.72, 0.22));
 
         gl_FragColor = vec4(color, uOpacity);
         #include <fog_fragment>
       }
     `,
   });
-  material.toneMapped = false;
+  // ポストFXの Bloom が溶岩を過大に膨らませ、地面透けに見えるのを抑える
+  material.toneMapped = true;
   return material;
 }
 
@@ -283,18 +316,11 @@ function LiquidRenderer({
         continue;
       }
 
-      // 空気・透明ブロック・別流体に接する面だけ描画し、埋もれた流体は省く
-      const above = getBlock(pos.x, pos.y + 1, pos.z);
-      const hasExposedFace =
-        above !== blockId ||
-        isBlockTransparent(getBlock(pos.x, pos.y - 1, pos.z)) ||
-        isBlockTransparent(getBlock(pos.x + 1, pos.y, pos.z)) ||
-        isBlockTransparent(getBlock(pos.x - 1, pos.y, pos.z)) ||
-        isBlockTransparent(getBlock(pos.x, pos.y, pos.z + 1)) ||
-        isBlockTransparent(getBlock(pos.x, pos.y, pos.z - 1));
-      if (hasExposedFace) {
-        positions.push(pos.x, pos.y, pos.z);
+      // 固体に完全に囲まれた流体は描かない（地下マグマの地面透け防止）
+      if (!isLiquidBlockExposed(getBlock, pos.x, pos.y, pos.z, blockId)) {
+        continue;
       }
+      positions.push(pos.x, pos.y, pos.z);
     }
 
     return new Float32Array(positions);
@@ -307,21 +333,30 @@ function LiquidRenderer({
     if (!meshRef.current || count === 0) return;
     const dummy = dummyRef.current;
     const scale = instanceScale;
+    const isLava = blockId === BLOCK_IDS.LAVA;
     for (let i = 0; i < count; i++) {
       const off = i * 3;
-      dummy.position.set(
-        liquidPositions[off] + 0.5,
-        liquidPositions[off + 1] + 0.5,
-        liquidPositions[off + 2] + 0.5,
-      );
-      // 溶岩はわずかに小さくして、地形ブロックの描画面が深度で勝つようにする
-      dummy.scale.set(scale, scale, scale);
+      const bx = liquidPositions[off];
+      const by = liquidPositions[off + 1];
+      const bz = liquidPositions[off + 2];
+      // 溶岩の上に固体がある場合は上面を下げ、地面ブロックへ食い込まない
+      let yScale = scale;
+      let yCenter = by + 0.5;
+      if (isLava) {
+        const above = getBlock(bx, by + 1, bz);
+        if (!isBlockTransparent(above)) {
+          yScale = scale * 0.88;
+          yCenter = by + 0.5 * yScale;
+        }
+      }
+      dummy.position.set(bx + 0.5, yCenter, bz + 0.5);
+      dummy.scale.set(scale, yScale, scale);
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
     meshRef.current.visible = true;
-  }, [liquidPositions, count, instanceScale]);
+  }, [blockId, getBlock, liquidPositions, count, instanceScale]);
 
   // マテリアル破棄
   useEffect(() => () => {
@@ -392,10 +427,11 @@ export function LavaRenderer() {
     <LiquidRenderer
       blockId={BLOCK_IDS.LAVA}
       createMaterial={createLavaMaterial}
-      renderOrder={1}
+      // 地形（renderOrder 0）より後でも depthTest で遮る。手前押しはしない
+      renderOrder={0}
       visibleChunkPadding={2}
-      // 地形面よりわずかに内側へ縮め、隣接面の共面チラつきと透けを防ぐ
-      instanceScale={0.988}
+      // 地形面より内側へ縮め、隣接面の共面チラつきを防ぐ
+      instanceScale={0.96}
     />
   );
 }

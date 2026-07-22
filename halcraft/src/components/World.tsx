@@ -164,10 +164,11 @@ function isBlockTransparent(blockId: BlockId): boolean {
 
 function shouldRenderFace(blockId: BlockId, neighborId: BlockId): boolean {
   if (neighborId === BLOCK_IDS.AIR) return true;
-  // 溶岩は World メッシュに乗らない（LavaRenderer 専用）。
-  // 地形↔溶岩の境界面は必ず地形側を残し、透けを防ぐ。
-  if (neighborId === BLOCK_IDS.LAVA && !BLOCK_DEFS[blockId]?.isLiquid) return true;
-  if (blockId === BLOCK_IDS.LAVA) return false;
+  // 溶岩・水は World メッシュに乗らない。地形↔流体の境は必ず地形面を残す。
+  // （流体を不透明扱いにすると地形側面が落ち、地面が透けてマグマが見える）
+  const neighborDef = BLOCK_DEFS[neighborId];
+  if (neighborDef?.isLiquid && !BLOCK_DEFS[blockId]?.isLiquid) return true;
+  if (BLOCK_DEFS[blockId]?.isLiquid) return false;
   const selfTransparent = isBlockTransparent(blockId);
   const neighborTransparent = isBlockTransparent(neighborId);
   if (!selfTransparent && neighborTransparent) return true;
