@@ -1,7 +1,7 @@
 // ステージ進行HUD
 // 選んだマップごとの目的・進行・ランドマークを常時見える状態にする
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useStageBuildScoreStore, type StageBuildScoreBest } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore, type StageChallengeBest } from '../../stores/useStageChallengeStore';
@@ -1055,10 +1055,13 @@ export function StageProgressHUD() {
     return `${boss.bossEncounterId ?? ''}|${hpRatio}`;
   });
   const bossPresence = useMemo(() => {
-    if (!bossPresenceKey) return null as null | { encounterId?: string; hpRatio: number };
+    if (!bossPresenceKey) return null as null | { encounterId?: Parameters<typeof getStageBossEncounterById>[0]; hpRatio: number };
     const [encounterId, hpRatioRaw] = bossPresenceKey.split('|');
+    const known = getStageBossEncounterById(
+      encounterId ? (encounterId as Parameters<typeof getStageBossEncounterById>[0]) : undefined,
+    );
     return {
-      encounterId: encounterId || undefined,
+      encounterId: known?.id,
       hpRatio: Number(hpRatioRaw),
     };
   }, [bossPresenceKey]);
@@ -1138,7 +1141,7 @@ export function StageProgressHUD() {
       ? `${buildScore}pt`
       : formatElapsed(stageElapsedSeconds);
   const accent = stage.category === 'build' ? '#9bdcff' : '#ffb36d';
-  const guidance: StageGuidance = boss && bossEncounter
+  const guidance: StageGuidance = bossPresence && bossEncounter
     ? {
         icon: bossEncounter.icon,
         label: bossEncounter.title,

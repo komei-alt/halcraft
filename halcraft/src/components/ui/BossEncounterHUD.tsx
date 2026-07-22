@@ -8,6 +8,7 @@ import {
   formatStageBossReward,
   getStageBossEncounter,
   getStageBossEncounterById,
+  type StageBossEncounterId,
 } from '../../types/stageBossEncounters';
 import { isTouchDevice } from '../../utils/device';
 import { playBossSpawnSound } from '../../utils/sounds';
@@ -16,7 +17,7 @@ interface BossHudSnapshot {
   id: string;
   hp: number;
   maxHp: number;
-  bossEncounterId?: string;
+  bossEncounterId?: StageBossEncounterId;
   traitAccent?: string;
   traitLabel?: string;
   bossSummonLabel?: string;
@@ -40,11 +41,14 @@ function selectBossHudKey(mobs: ReturnType<typeof useMobStore.getState>['mobs'])
 function parseBossHudKey(key: string): BossHudSnapshot | null {
   if (!key) return null;
   const [id, hp, maxHp, bossEncounterId, traitAccent, traitLabel, bossSummonLabel] = key.split('\u001f');
+  const encounter = getStageBossEncounterById(
+    bossEncounterId ? (bossEncounterId as StageBossEncounterId) : undefined,
+  );
   return {
     id,
     hp: Number(hp),
     maxHp: Number(maxHp),
-    bossEncounterId: bossEncounterId || undefined,
+    bossEncounterId: encounter?.id,
     traitAccent: traitAccent || undefined,
     traitLabel: traitLabel || undefined,
     bossSummonLabel: bossSummonLabel || undefined,
