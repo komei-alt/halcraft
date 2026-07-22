@@ -22,6 +22,7 @@ import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { useVehicleFirepowerStore, type VehicleFirepowerKind } from '../../stores/useVehicleFirepowerStore';
 import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
 import { consumeVehicleRocket, consumeVehicleBomb, mobileActions } from '../../utils/touchInput';
+import { useGameStore } from '../../stores/useGameStore';
 import { rayMarchProjectile, type RemotePlayerTarget } from '../../utils/projectilePhysics';
 import { airplaneRealtime } from '../../utils/airplaneRealtime';
 import { spawnBlockBreakEffect, spawnCombatExplosion, spawnDamagePopup, spawnHitImpactEffect } from '../../utils/effectTriggers';
@@ -56,7 +57,6 @@ const EXPLOSION_BLOCK_RADIUS = 2.8;
 const EXPLOSION_MAX_DESTROY_BLOCKS = 80;
 const EXPLOSION_SURFACE_OFFSET = 0.36;
 const ROCKET_AIM_DISTANCE = 80;
-const ROCKET_MIN_AIM_DISTANCE = 1.5;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const TANK_CANNON_MUZZLE_LOCAL = new THREE.Vector3(0.95, 2.1, -3.25);
 const TANK_GATLING_MUZZLE_LOCAL = new THREE.Vector3(1.18, 1.35, -2.35);
@@ -240,6 +240,58 @@ function getTankCannonMuzzle(): THREE.Vector3 {
   return getTankTurretWorldPoint(TANK_CANNON_MUZZLE_LOCAL);
 }
 
+/** 戦車砲塔の砲身前方（モデルは砲塔ローカル -Z が前方） */
+function getTankCannonDirection(): THREE.Vector3 {
+  const tank = useVehicleStore.getState().tank;
+  return new THREE.Vector3(0, 0, -1)
+    .applyAxisAngle(Y_AXIS, tank.turretYaw)
+    .applyAxisAngle(Y_AXIS, tank.rotationY)
+    .normalize();
+}
+
+/** 戦車ガトリング前方（車体向き） */
+function getTankGatlingDirection(): THREE.Vector3 {
+  const tank = useVehicleStore.getState().tank;
+  return new THREE.Vector3(0, 0, -1)
+    .applyAxisAngle(Y_AXIS, tank.rotationY)
+    .normalize();
+}
+
+/** 飛行機ガトリング前方（機首向き） */
+function getAirplaneGatlingDirection(): THREE.Vector3 {
+  const src = airplaneRealtime.valid ? airplaneRealtime : useVehicleStore.getState().airplane;
+  return new THREE.Vector3(0, 0, -1)
+    .applyEuler(new THREE.Euler(src.pitch, src.rotationY, src.roll))
+    .normalize();
+}
+
+/**
+ * 銃口から照準点へ向けつつ、砲身／銃身方向から大きく外れない方向を返す
+ * （カメラと銃口の視差で弾が銃身から曲がって見えるのを防ぐ）
+ */
+function getBarrelAlignedAimDirection(
+  startPos: THREE.Vector3,
+  barrelDir: THREE.Vector3,
+  camera: THREE.Camera,
+  range: number,
+  minDot = 0.35,
+): THREE.Vector3 {
+  const cameraAim = getCameraAimDirection(camera, startPos, range);
+  // 銃身方向との整合性。離れすぎたら銃身優先
+  if (cameraAim.dot(barrelDir) < minDot) {
+    return barrelDir.clone();
+  }
+  return cameraAim;
+}
+
+/** playing 中かつ生存中のみ乗り物武器を使える */
+function canUseVehicleWeapons(): boolean {
+  const phase = useGameStore.getState().phase;
+  if (phase !== 'playing') return false;
+  if (usePlayerStore.getState().isDead) return false;
+  return true;
+}
+
 export function VehicleWeapons() {
   const { camera } = useThree();
   const [bullets, setBullets] = useState<BulletProjectile[]>([]);
@@ -251,19 +303,27 @@ export function VehicleWeapons() {
   const lastRocketFire = useRef(0);
   const lastBombDrop = useRef(0);
   const shootDir = useRef(new THREE.Vector3());
-  const cameraAimDir = useRef(new THREE.Vector3());
-  const aimPoint = useRef(new THREE.Vector3());
 
   const fireGatling = useCallback((type: VehicleType, mount: 'center' | 'left' | 'right' = 'center', isRemote = false, remoteDir?: THREE.Vector3, remotePos?: THREE.Vector3) => {
+    if (!isRemote && !canUseVehicleWeapons()) return;
     const now = performance.now() / 1000;
     if (!isRemote && now - lastGunFire.current < GUN_CONSTANTS.FIRE_COOLDOWN) return;
     if (!isRemote) lastGunFire.current = now;
 
     const startPos = remotePos ?? getVehicleMuzzle(type, mount);
-    const dir = remoteDir ?? getCameraAimDirection(camera, startPos, GUN_CONSTANTS.RANGE);
+    let dir: THREE.Vector3;
+    if (remoteDir) {
+      dir = remoteDir.clone().normalize();
+    } else {
+      // 銃口位置から照準するが、銃身／機首方向から大きく外れない
+      const barrelDir = type === 'tank'
+        ? getTankGatlingDirection()
+        : getAirplaneGatlingDirection();
+      dir = getBarrelAlignedAimDirection(startPos, barrelDir, camera, GUN_CONSTANTS.RANGE);
+    }
 
     if (!isRemote) {
-      const spread = 0.012;
+      const spread = 0.01;
       dir.x += (Math.random() - 0.5) * spread;
       dir.y += (Math.random() - 0.5) * spread;
       dir.z += (Math.random() - 0.5) * spread;
@@ -466,41 +526,18 @@ export function VehicleWeapons() {
   }, [camera]);
 
   const fireTankRocket = useCallback(() => {
+    if (!canUseVehicleWeapons()) return;
+    if (useVehicleStore.getState().getActiveVehicle() !== 'tank') return;
     const now = performance.now() / 1000;
     if (now - lastRocketFire.current < TANK_CONSTANTS.CANNON_COOLDOWN) return;
     lastRocketFire.current = now;
 
     const startPos = getTankCannonMuzzle();
-    cameraAimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const currentMobs = useMobStore.getState().mobs;
-    const multi = useMultiplayerStore.getState();
-    const aimHit = rayMarchProjectile(
-      camera.position.clone(),
-      cameraAimDir.current.clone(),
-      ROCKET_AIM_DISTANCE,
-      useWorldStore.getState().getBlock,
-      currentMobs,
-      ROCKET_HIT_RADIUS,
-      {
-        remotePlayers: multi.remotePlayers as Map<string, RemotePlayerTarget>,
-        playerHitRadius: PLAYER_HIT_RADIUS,
-        playerHitHeight: PLAYER_HIT_HEIGHT,
-      },
+    const barrelDir = getTankCannonDirection();
+    // カメラ照準点へ寄せつつ、砲身方向から大きく外れたら砲身優先
+    shootDir.current.copy(
+      getBarrelAlignedAimDirection(startPos, barrelDir, camera, ROCKET_AIM_DISTANCE, 0.25),
     );
-
-    if (aimHit.type !== 'none') {
-      aimPoint.current.copy(aimHit.hitPos);
-    } else {
-      aimPoint.current.copy(camera.position).addScaledVector(cameraAimDir.current, ROCKET_AIM_DISTANCE);
-    }
-
-    shootDir.current.copy(aimPoint.current).sub(startPos);
-    if (
-      shootDir.current.lengthSq() < ROCKET_MIN_AIM_DISTANCE * ROCKET_MIN_AIM_DISTANCE
-      || shootDir.current.normalize().dot(cameraAimDir.current) < 0.2
-    ) {
-      shootDir.current.copy(cameraAimDir.current);
-    }
 
     const vel = shootDir.current.clone().multiplyScalar(ROCKET_SPEED);
     const syncId = `tank_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
@@ -557,6 +594,8 @@ export function VehicleWeapons() {
   const pendingBombTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dropBomb = useCallback(() => {
+    if (!canUseVehicleWeapons()) return;
+    if (useVehicleStore.getState().getActiveVehicle() !== 'airplane') return;
     const now = performance.now() / 1000;
     if (now - lastBombDrop.current < BOMB_COOLDOWN) return;
     lastBombDrop.current = now;
@@ -624,6 +663,7 @@ export function VehicleWeapons() {
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
+      if (!canUseVehicleWeapons()) return;
       const active = useVehicleStore.getState().getActiveVehicle();
       if (e.button === 0) {
         isMouseDown.current = true;
@@ -638,6 +678,9 @@ export function VehicleWeapons() {
         dropBomb();
       }
     };
+    const onBlur = () => {
+      isMouseDown.current = false;
+    };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) isMouseDown.current = false;
     };
@@ -650,10 +693,12 @@ export function VehicleWeapons() {
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('blur', onBlur);
     return () => {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('blur', onBlur);
     };
   }, [fireTankRocket, dropBomb]);
 
@@ -661,6 +706,7 @@ export function VehicleWeapons() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyB' && !e.repeat) {
+        if (!canUseVehicleWeapons()) return;
         const active = useVehicleStore.getState().getActiveVehicle();
         if (active === 'airplane') {
           dropBomb();
@@ -680,22 +726,28 @@ export function VehicleWeapons() {
   }, [fireGatling]);
 
   useFrame((_, delta) => {
-    const active = useVehicleStore.getState().getActiveVehicle();
-    const canUsePointer = isDesktopGameplayInputActive();
+    // ポーズ・メニュー・死亡中は新規射撃のみ止める（飛翔中の弾は更新を続ける）
+    const weaponsLive = canUseVehicleWeapons();
+    if (!weaponsLive) {
+      isMouseDown.current = false;
+    } else {
+      const active = useVehicleStore.getState().getActiveVehicle();
+      const canUsePointer = isDesktopGameplayInputActive();
 
-    if ((active === 'tank' || active === 'airplane') && ((isMouseDown.current && canUsePointer) || mobileActions.vehicleGun)) {
-      const mount = active === 'airplane'
-        ? (Math.random() < 0.5 ? 'left' : 'right')
-        : 'center';
-      fireGatling(active, mount);
-    }
+      if ((active === 'tank' || active === 'airplane') && ((isMouseDown.current && canUsePointer) || mobileActions.vehicleGun)) {
+        const mount = active === 'airplane'
+          ? (Math.random() < 0.5 ? 'left' : 'right')
+          : 'center';
+        fireGatling(active, mount);
+      }
 
-    if (active === 'tank' && consumeVehicleRocket()) {
-      fireTankRocket();
-    }
+      if (active === 'tank' && consumeVehicleRocket()) {
+        fireTankRocket();
+      }
 
-    if (active === 'airplane' && consumeVehicleBomb()) {
-      dropBomb();
+      if (active === 'airplane' && consumeVehicleBomb()) {
+        dropBomb();
+      }
     }
 
     const now = performance.now() / 1000;

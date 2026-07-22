@@ -26,6 +26,8 @@ import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 import { playMachineGunSound, playBulletImpactSound } from '../../utils/sounds';
 import { mobileActions } from '../../utils/touchInput';
 import { useGameStore } from '../../stores/useGameStore';
+import { isDesktopGameplayInputActive } from '../../utils/gameCanvas';
+import { usePlayerStore } from '../../stores/usePlayerStore';
 
 // ─── 定数 ──────────────────────────────────────────────
 /** 弾速（ブロック/秒） */
@@ -380,6 +382,9 @@ export function MachineGun() {
 
   // ─── 射撃処理 ─────────────────────────────────────
   const fireGun = useCallback((side: 'left' | 'right') => {
+    // ポーズ・死亡中は撃てない
+    if (useGameStore.getState().phase !== 'playing') return;
+    if (usePlayerStore.getState().isDead) return;
     const now = performance.now() / 1000;
     if (now - lastFireTime.current < GUN_CONSTANTS.FIRE_COOLDOWN) return;
     lastFireTime.current = now;
@@ -655,11 +660,15 @@ export function MachineGun() {
     });
 
     // ガンナー席の射撃（デスクトップ左クリック / モバイル機銃ボタン）
+    // ポーズ・死亡・入力無効時は完全停止
+    if (useGameStore.getState().phase !== 'playing' || usePlayerStore.getState().isDead) {
+      isMouseDown.current = false;
+      return;
+    }
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';
-    const hasPointerLock = !!document.pointerLockElement;
-    const desktopFiring = isMouseDown.current && hasPointerLock;
+    const desktopFiring = isMouseDown.current && isDesktopGameplayInputActive();
     const mobileFiring = mobileActions.vehicleGun;
-    if (isGunner && (desktopFiring || mobileFiring) && useGameStore.getState().phase === 'playing') {
+    if (isGunner && (desktopFiring || mobileFiring)) {
       // 180度回転グループ内でモデルの左右が反転するため、
       // gunner_left（ワールド左）→ モデル right銃（ワールド左）
       // gunner_right（ワールド右）→ モデル left銃（ワールド右）

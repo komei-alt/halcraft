@@ -45,6 +45,14 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-22',
+    items: [
+      { type: 'fix', text: 'ポーズ中に戦車や飛行機で撃ててしまう不具合を直したよ！' },
+      { type: 'fix', text: '戦車の主砲やガトリングの弾が、砲身の向きから大きく外れないようにしたよ！' },
+      { type: 'fix', text: 'ヘリの銃手席でも、ポーズやメニュー中に撃てないようにしたよ！' },
+    ],
+  },
+  {
     date: '2026-07-21',
     items: [
       { type: 'fix', text: 'ヘリの機関銃の向きと弾の飛ぶ方向がずれていたのを直して、銃口の向きどおりに飛ぶようにしたよ！' },
