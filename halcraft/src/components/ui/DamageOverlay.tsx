@@ -57,14 +57,33 @@ function DamageDirectionIndicator({ direction }: { direction: number | null }) {
             left: '50%',
             top: 0,
             transform: 'translateX(-50%)',
-            width: 0,
-            height: 0,
-            borderLeft: '12px solid transparent',
-            borderRight: '12px solid transparent',
-            borderBottom: '24px solid rgba(255, 70, 70, 0.85)',
-            filter: 'drop-shadow(0 0 10px rgba(255, 40, 40, 0.8))',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            animation: 'damageArrowPulse 0.5s ease-out forwards',
           }}
-        />
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: '14px solid transparent',
+              borderRight: '14px solid transparent',
+              borderBottom: '28px solid rgba(255, 70, 70, 0.92)',
+              filter: 'drop-shadow(0 0 12px rgba(255, 40, 40, 0.9))',
+            }}
+          />
+          <div
+            style={{
+              marginTop: 4,
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              border: '2px solid rgba(255, 90, 90, 0.8)',
+              boxShadow: '0 0 12px rgba(255, 40, 40, 0.7)',
+            }}
+          />
+        </div>
       </div>
     </div>
   );

@@ -250,9 +250,18 @@ export function Crosshair() {
             ? `${profileCode} ${Math.round(charge * 100)}%`
             : profileCode;
 
+  const chargeReady = !isBuilder
+    && (
+      (equippedItem === 'rocket_launcher' && rocketCharge >= 0.995)
+      || (equippedItem === 'gravity_glove' && glovePushReady >= 0.995 && !glovePulling)
+      || (equippedItem === 'bomb_slinger' && bombArmedCount > 0)
+      || (equippedItem === 'lightsaber' && attackCharge >= 0.995)
+    );
+
   return (
     <div
       id="crosshair"
+      className={chargeReady ? 'crosshair-ready' : undefined}
       style={{
         position: 'fixed',
         top: '50%',

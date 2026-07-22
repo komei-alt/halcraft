@@ -237,6 +237,75 @@ function getTechniqueFeedback(feedback: CombatFeedback): TechniqueFeedback {
     };
   }
 
+  if (feedback.item === 'gravity_glove') {
+    if (feedback.label.includes('押し') || feedback.label.includes('衝撃')) {
+      const crit = feedback.kind === 'critical';
+      return {
+        eyebrow: '引力技',
+        label: crit ? 'まとめて押し' : '押し飛ばし',
+        detail: '引き寄せてから押すと群れを崩しやすい',
+        meterLabel: 'PUSH',
+        meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'BLAST',
+        ratio: crit ? 1 : 0.78,
+        soundKind: crit ? 'blast' : null,
+      };
+    }
+    if (feedback.label.includes('引き寄せ')) {
+      return {
+        eyebrow: '引力技',
+        label: feedback.label.includes('まとめて') ? 'まとめて吸引' : '引き寄せ',
+        detail: '掴んだら右クリックで押し飛ばし',
+        meterLabel: 'PULL',
+        meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'HOLD',
+        ratio: Math.min(1, 0.45 + feedback.streak * 0.12),
+        soundKind: feedback.streak >= 4 ? 'chain' : null,
+      };
+    }
+    return {
+      eyebrow: '引力技',
+      label: feedback.kind === 'defeat' ? '場外撃破' : '引力ヒット',
+      detail: '引いて寄せ、押して崩す',
+      meterLabel: 'GLOVE',
+      meterText: feedback.kind === 'defeat' ? 'DOWN' : 'HIT',
+      ratio: feedback.kind === 'defeat' ? 1 : 0.62,
+      soundKind: feedback.kind === 'defeat' ? 'finish' : null,
+    };
+  }
+
+  if (feedback.item === 'bomb_slinger') {
+    if (feedback.label.includes('連鎖') || feedback.label.includes('同時') || feedback.label.includes('一斉')) {
+      return {
+        eyebrow: 'ボム技',
+        label: feedback.kind === 'critical' ? '連鎖起爆' : '一斉起爆',
+        detail: '複数貼ってからまとめて爆発',
+        meterLabel: 'BOOM',
+        meterText: feedback.streak >= 3 ? `x${feedback.streak}` : 'MULTI',
+        ratio: 1,
+        soundKind: 'blast',
+      };
+    }
+    if (feedback.label.includes('投擲')) {
+      return {
+        eyebrow: 'ボム技',
+        label: 'ボム投擲',
+        detail: '壁・床・敵に貼って仕掛ける',
+        meterLabel: 'ARM',
+        meterText: 'SET',
+        ratio: 0.55,
+        soundKind: null,
+      };
+    }
+    return {
+      eyebrow: 'ボム技',
+      label: feedback.kind === 'defeat' ? '爆破撃破' : 'ボムヒット',
+      detail: '右クリックで一斉起爆',
+      meterLabel: 'BOMB',
+      meterText: feedback.kind === 'defeat' ? 'DOWN' : 'HIT',
+      ratio: feedback.kind === 'defeat' ? 1 : 0.7,
+      soundKind: feedback.kind === 'defeat' ? 'finish' : null,
+    };
+  }
+
   if (feedback.item === 'lightsaber') {
     if (feedback.techniqueRecordUpdated) {
       return {

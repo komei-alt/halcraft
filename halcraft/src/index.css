@@ -239,8 +239,35 @@ body {
 
 /* ダメージフラッシュアニメーション */
 @keyframes damageFlash {
-  0% { opacity: 0.7; }
+  0% { opacity: 0.78; }
   100% { opacity: 0; }
+}
+
+/* ダメージ方向矢印 */
+@keyframes damageArrowPulse {
+  0% { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.55); }
+  40% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.1); }
+  100% { opacity: 0.88; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+/* 武器READY / チャージ完了のパルス */
+@keyframes weaponReadyPulse {
+  0% { opacity: 0.82; transform: scale(1); filter: brightness(1); }
+  100% { opacity: 1; transform: scale(1.06); filter: brightness(1.25); }
+}
+
+/* クロスヘア準備完了の呼吸 */
+@keyframes crosshairReadyBreathe {
+  0% { opacity: 0.72; filter: drop-shadow(0 0 2px rgba(255,255,255,0.2)); }
+  100% { opacity: 1; filter: drop-shadow(0 0 8px rgba(255,255,255,0.55)); }
+}
+
+.weapon-status-ready {
+  animation: weaponReadyPulse 0.7s ease-in-out infinite alternate;
+}
+
+.crosshair-ready {
+  animation: crosshairReadyBreathe 0.75s ease-in-out infinite alternate;
 }
 
 /* ポーズ画面アニメーション */
