@@ -667,10 +667,11 @@ export function RocketLauncher() {
     muzzleFlashTimer.current = 0.2;
     backblastTimer.current = 0.28;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
-    // 発射の手応え — 軽いカメラシェイク
+    // 発射の手応え — 軽いカメラシェイク + 三人称リコイル同期
     usePlayerStore.setState((s) => ({
       cameraShake: Math.min(1, Math.max(s.cameraShake, 0.28)),
     }));
+    usePlayerStore.getState().triggerWeaponAction('rocket');
     useMasteryStore.getState().recordItemUse('rocket_launcher');
     multi.sendRocketFire(
       rocketId,

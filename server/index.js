@@ -1140,13 +1140,14 @@ io.on('connection', (socket) => {
     player.position = data.position;
     player.rotation = data.rotation;
     if (data.equippedItem) player.equippedItem = data.equippedItem;
-    // meleeSwing は開始パルス（true のときだけ転送して帯域を抑える）
+    // weaponAction / meleeSwing は開始パルスのみ転送
     const payload = {
       id: socket.id,
       position: data.position,
       rotation: data.rotation,
       equippedItem: player.equippedItem,
     };
+    if (data.weaponAction) payload.weaponAction = data.weaponAction;
     if (data.meleeSwing) payload.meleeSwing = true;
     socket.to(player.stageId).emit('player:moved', payload);
   });

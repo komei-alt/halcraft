@@ -254,6 +254,8 @@ export function PlayerMachineGun() {
     heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.1 : 0.16));
     flashTimer.current = combatFocus.active ? 0.13 : scopedShot ? 0.12 : 0.095;
     playMachineGunSound(startPos.distanceTo(camera.position));
+    // 三人称リコイル同期
+    usePlayerStore.getState().triggerWeaponAction('gun');
     useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
       [startPos.x, startPos.y, startPos.z],

@@ -28,6 +28,12 @@ interface VoxelAvatarProps {
   aimPitch?: number;
   /** 近接スイング進行度 0-1（0=非スイング） */
   meleeSwingProgress?: number;
+  /** ライトセーバースイング進行度 0-1 */
+  saberSwingProgress?: number;
+  /** 機関銃リコイル進行度 0-1（1=キック直後） */
+  gunRecoilProgress?: number;
+  /** ロケットリコイル進行度 0-1（1=キック直後） */
+  rocketRecoilProgress?: number;
   /** 死亡状態か */
   isDead?: boolean;
   /** 死亡開始時刻（Date.now()） */
@@ -376,6 +382,9 @@ export function VoxelAvatar({
   equippedItem = 'builder',
   aimPitch = 0,
   meleeSwingProgress = 0,
+  saberSwingProgress = 0,
+  gunRecoilProgress = 0,
+  rocketRecoilProgress = 0,
   isDead = false,
   deathTime = 0,
 }: VoxelAvatarProps) {
@@ -557,39 +566,69 @@ export function VoxelAvatar({
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'rocket_launcher') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        rightArmRef.current.position.set(0.43, 1.08, -0.04);
-        leftArmRef.current.position.set(-0.16, 1.04, -0.24);
-        rightArmRef.current.rotation.x = 1.24 + pitch * 0.35;
-        leftArmRef.current.rotation.x = 1.48 + pitch * 0.45;
-        rightArmRef.current.rotation.z = -0.26;
-        leftArmRef.current.rotation.z = 0.58;
-        leftLegRef.current.rotation.x = 0;
-        rightLegRef.current.rotation.x = 0;
+        // rocketRecoilProgress: 1=キック直後 → 0=収束
+        const kick = THREE.MathUtils.clamp(rocketRecoilProgress, 0, 1);
+        const kickEase = kick * kick;
+        rightArmRef.current.position.set(
+          0.43 + kickEase * 0.06,
+          1.08 + kickEase * 0.04,
+          -0.04 + kickEase * 0.22,
+        );
+        leftArmRef.current.position.set(-0.16 + kickEase * 0.04, 1.04 + kickEase * 0.03, -0.24 + kickEase * 0.16);
+        rightArmRef.current.rotation.x = 1.24 + pitch * 0.35 - kickEase * 0.55;
+        leftArmRef.current.rotation.x = 1.48 + pitch * 0.45 - kickEase * 0.4;
+        rightArmRef.current.rotation.z = -0.26 - kickEase * 0.15;
+        leftArmRef.current.rotation.z = 0.58 + kickEase * 0.1;
+        bodyRef.current.rotation.x = -kickEase * 0.18;
+        bodyRef.current.position.z = kickEase * 0.08;
+        leftLegRef.current.rotation.x = kickEase * 0.2;
+        rightLegRef.current.rotation.x = -kickEase * 0.25;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'machine_gun') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        rightArmRef.current.position.set(0.38, 0.92, -0.14);
-        leftArmRef.current.position.set(-0.26, 0.92, -0.2);
-        rightArmRef.current.rotation.x = 1.1 + pitch * 0.4;
-        leftArmRef.current.rotation.x = 1.16 + pitch * 0.45;
-        rightArmRef.current.rotation.z = -0.2;
+        const kick = THREE.MathUtils.clamp(gunRecoilProgress, 0, 1);
+        const kickEase = kick * kick;
+        const shake = kick > 0.05 ? Math.sin(performance.now() * 0.08) * kickEase * 0.04 : 0;
+        rightArmRef.current.position.set(
+          0.38 + shake,
+          0.92 + kickEase * 0.03,
+          -0.14 + kickEase * 0.12,
+        );
+        leftArmRef.current.position.set(-0.26 + shake * 0.5, 0.92, -0.2 + kickEase * 0.08);
+        rightArmRef.current.rotation.x = 1.1 + pitch * 0.4 - kickEase * 0.28;
+        leftArmRef.current.rotation.x = 1.16 + pitch * 0.45 - kickEase * 0.2;
+        rightArmRef.current.rotation.z = -0.2 + shake;
         leftArmRef.current.rotation.z = 0.32;
+        bodyRef.current.rotation.x = -kickEase * 0.06;
         leftLegRef.current.rotation.x = 0;
         rightLegRef.current.rotation.x = 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'lightsaber') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        // 刃を体の前へ構え、両手が同じ柄へ自然に集まる姿勢
-        rightArmRef.current.position.set(0.36, 0.9, -0.12);
-        leftArmRef.current.position.set(-0.2, 0.88, -0.13);
-        rightArmRef.current.rotation.x = 1.32 + pitch * 0.34;
-        leftArmRef.current.rotation.x = 1.18 + pitch * 0.3;
-        rightArmRef.current.rotation.z = -0.28;
-        leftArmRef.current.rotation.z = 0.42;
-        leftLegRef.current.rotation.x = 0;
-        rightLegRef.current.rotation.x = 0;
+        const swing = remoteMeleePose(saberSwingProgress);
+        const swinging = saberSwingProgress > 0.01;
+        // 刃を体の前へ構え、スイング時は大きく弧を描く
+        rightArmRef.current.position.set(
+          0.36 + swing.push * 0.2,
+          0.9 + swing.lift * 0.9,
+          -0.12 + swing.push * 0.7,
+        );
+        leftArmRef.current.position.set(
+          -0.2 + (swinging ? 0.08 : 0),
+          0.88 + swing.lift * 0.4,
+          -0.13 + swing.push * 0.3,
+        );
+        rightArmRef.current.rotation.x = 1.32 + pitch * 0.34 + swing.pitch * 1.15;
+        leftArmRef.current.rotation.x = 1.18 + pitch * 0.3 + swing.pitch * 0.45;
+        rightArmRef.current.rotation.z = -0.28 + swing.roll * 1.1;
+        leftArmRef.current.rotation.z = 0.42 + swing.roll * 0.35;
+        rightArmRef.current.rotation.y = swing.roll * 0.4;
+        bodyRef.current.rotation.y = swinging ? swing.roll * 0.35 : 0;
+        bodyRef.current.rotation.x = swinging ? swing.pitch * 0.12 : 0;
+        leftLegRef.current.rotation.x = swinging ? 0.2 : 0;
+        rightLegRef.current.rotation.x = swinging ? -0.28 : 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'builder') {

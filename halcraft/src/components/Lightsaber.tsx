@@ -447,6 +447,8 @@ export function Lightsaber() {
     swingProgress.current = 0;
     hasHitThisSwing.current = false;
     lastComboTime.current = now;
+    // 三人称スイング同期
+    usePlayerStore.getState().triggerWeaponAction('saber');
     playLightsaberSwing(comboIndex.current);
     if (nextJustCombo) {
       playLightsaberJustCombo(justComboChain.current);

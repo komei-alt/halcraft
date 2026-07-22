@@ -10,7 +10,12 @@ import { connectToServer, disconnectFromServer, getSocket } from '../utils/socke
 import { useWorldStore } from './useWorldStore';
 import { useGameStore } from './useGameStore';
 import { useMobStore } from './useMobStore';
-import { usePlayerStore, type EquippedItem } from './usePlayerStore';
+import {
+  usePlayerStore,
+  WEAPON_ACTION_DURATION,
+  type EquippedItem,
+  type WeaponActionKind,
+} from './usePlayerStore';
 import {
   useVehicleStore,
   type SeatType,
@@ -47,6 +52,12 @@ export interface RemotePlayer {
   equippedItem: EquippedItem;
   /** 近接スイング残り時間（秒・受信側で減衰） */
   meleeSwingTimer: number;
+  /** ライトセーバースイング残り */
+  saberSwingTimer: number;
+  /** 機関銃リコイル残り */
+  gunRecoilTimer: number;
+  /** ロケットリコイル残り */
+  rocketRecoilTimer: number;
 }
 
 interface MultiplayerState {
@@ -161,10 +172,8 @@ interface MultiplayerState {
 let lastSentPos: [number, number, number] | null = null;
 let lastSentRot: [number, number] | null = null;
 let lastSentEquipped: EquippedItem | null = null;
-let lastSentMeleeSwing = false;
 const configuredSockets = new WeakSet<Socket>();
-/** 近接スイング同期用の長さ（クライアント MELEE_SWING_DURATION と揃える） */
-const REMOTE_MELEE_SWING_DURATION = 0.38;
+const REMOTE_ACTION_DURATION = WEAPON_ACTION_DURATION;
 
 function getOfflineConnectionMessage(): string {
   return import.meta.env.DEV
@@ -205,7 +214,6 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     lastSentPos = null;
     lastSentRot = null;
     lastSentEquipped = null;
-    lastSentMeleeSwing = false;
     disconnectFromServer();
     useGameStore.getState().setMultiplayer(false);
     set({
@@ -225,9 +233,11 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
 
     const playerState = usePlayerStore.getState();
     const equippedItem = playerState.equippedItem;
-    const isMeleeSwinging = (playerState.meleeSwingTimer ?? 0) > 0.01;
-    // スイング開始エッジだけ true を送る
-    const meleeSwingPulse = isMeleeSwinging && !lastSentMeleeSwing;
+    // 武器アクション開始パルス（1回送信したら消費）
+    const weaponAction = playerState.pendingWeaponAction;
+    if (weaponAction) {
+      usePlayerStore.setState({ pendingWeaponAction: null });
+    }
     const positionUnchanged = lastSentPos !== null
       && Math.abs(position[0] - lastSentPos[0]) < 0.01
       && Math.abs(position[1] - lastSentPos[1]) < 0.01
@@ -236,15 +246,14 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       && angleDistance(rotation[0], lastSentRot[0]) < 0.01
       && Math.abs(rotation[1] - lastSentRot[1]) < 0.01;
 
-    // 動いていない場合でも、視点角度・装備・スイング開始は相手に反映する
+    // 動いていない場合でも、視点角度・装備・武器アクションは相手に反映する
     if (
       lastSentPos
       && lastSentEquipped === equippedItem
       && positionUnchanged
       && rotationUnchanged
-      && !meleeSwingPulse
+      && !weaponAction
     ) {
-      lastSentMeleeSwing = isMeleeSwinging;
       return;
     }
 
@@ -252,12 +261,13 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       position,
       rotation,
       equippedItem,
-      ...(meleeSwingPulse ? { meleeSwing: true } : {}),
+      ...(weaponAction ? { weaponAction } : {}),
+      // 後方互換: 旧クライアント向け
+      ...(weaponAction === 'melee' ? { meleeSwing: true } : {}),
     });
     lastSentPos = [...position];
     lastSentRot = [...rotation];
     lastSentEquipped = equippedItem;
-    lastSentMeleeSwing = isMeleeSwinging;
   },
 
   sendBlockBreak: (x, y, z) => {
@@ -280,9 +290,21 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     let changed = false;
 
     for (const [, player] of players) {
-      // 近接スイングタイマー減衰（三人称アニメ用）
+      // 武器アクションタイマー減衰（三人称アニメ用）
       if (player.meleeSwingTimer > 0) {
         player.meleeSwingTimer = Math.max(0, player.meleeSwingTimer - dt);
+        changed = true;
+      }
+      if (player.saberSwingTimer > 0) {
+        player.saberSwingTimer = Math.max(0, player.saberSwingTimer - dt);
+        changed = true;
+      }
+      if (player.gunRecoilTimer > 0) {
+        player.gunRecoilTimer = Math.max(0, player.gunRecoilTimer - dt);
+        changed = true;
+      }
+      if (player.rocketRecoilTimer > 0) {
+        player.rocketRecoilTimer = Math.max(0, player.rocketRecoilTimer - dt);
         changed = true;
       }
 
@@ -495,6 +517,9 @@ function setupSocketListeners(
           deathTime: 0,
           equippedItem: p.equippedItem || 'builder',
           meleeSwingTimer: 0,
+          saberSwingTimer: 0,
+          gunRecoilTimer: 0,
+          rocketRecoilTimer: 0,
         });
       }
     }
@@ -515,6 +540,9 @@ function setupSocketListeners(
       deathTime: 0,
       equippedItem: data.equippedItem || 'builder',
       meleeSwingTimer: 0,
+      saberSwingTimer: 0,
+      gunRecoilTimer: 0,
+      rocketRecoilTimer: 0,
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);
@@ -533,6 +561,7 @@ function setupSocketListeners(
     position: [number, number, number];
     rotation: [number, number];
     equippedItem?: EquippedItem;
+    weaponAction?: WeaponActionKind;
     meleeSwing?: boolean;
   }) => {
     const players = get().remotePlayers;
@@ -546,9 +575,14 @@ function setupSocketListeners(
         player.equippedItem = data.equippedItem;
         needsSet = true;
       }
-      // 近接スイング開始パルス
-      if (data.meleeSwing) {
-        player.meleeSwingTimer = REMOTE_MELEE_SWING_DURATION;
+      const action: WeaponActionKind | null = data.weaponAction
+        ?? (data.meleeSwing ? 'melee' : null);
+      if (action) {
+        const duration = REMOTE_ACTION_DURATION[action];
+        if (action === 'melee') player.meleeSwingTimer = duration;
+        if (action === 'saber') player.saberSwingTimer = duration;
+        if (action === 'gun') player.gunRecoilTimer = duration;
+        if (action === 'rocket') player.rocketRecoilTimer = duration;
         needsSet = true;
       }
       if (needsSet) {

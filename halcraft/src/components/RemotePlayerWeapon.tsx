@@ -55,6 +55,12 @@ interface RemotePlayerWeaponProps {
   equippedItem: EquippedItem;
   /** 近接スイング進行度 0-1 */
   meleeSwingProgress?: number;
+  /** ライトセーバースイング進行度 0-1 */
+  saberSwingProgress?: number;
+  /** 機関銃リコイル 1=キック直後 → 0 */
+  gunRecoilProgress?: number;
+  /** ロケットリコイル 1=キック直後 → 0 */
+  rocketRecoilProgress?: number;
   /** 移動中かどうか（腕振りと同期） */
   isMoving: boolean;
   /** プレイヤー視点の上下角度 */
@@ -193,58 +199,109 @@ function MachineGunModel() {
  * リモートプレイヤーの右手に武器を配置するコンポーネント
  * VoxelAvatar の右腕（position=[0.42, 0.85, 0]）にアタッチされる
  */
+function swingOffsets(progress: number, power = 1): {
+  pitch: number; roll: number; y: number; z: number; trail: number;
+} {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const smooth = (t: number) => {
+    const x = THREE.MathUtils.clamp(t, 0, 1);
+    return x * x * (3 - 2 * x);
+  };
+  if (p <= 0.01) return { pitch: 0, roll: 0, y: 0, z: 0, trail: 0 };
+  if (p < 0.28) {
+    const u = smooth(p / 0.28);
+    return {
+      pitch: -1.0 * u * power,
+      roll: -0.5 * u * power,
+      y: 0.12 * u,
+      z: -0.06 * u,
+      trail: 0.3 * u,
+    };
+  }
+  if (p < 0.48) {
+    const u = smooth((p - 0.28) / 0.2);
+    return {
+      pitch: THREE.MathUtils.lerp(-1.0, 1.2, u) * power,
+      roll: THREE.MathUtils.lerp(-0.5, 0.75, u) * power,
+      y: THREE.MathUtils.lerp(0.12, -0.1, u),
+      z: THREE.MathUtils.lerp(-0.06, 0.16, u),
+      trail: THREE.MathUtils.lerp(0.3, 1, u),
+    };
+  }
+  if (p < 0.7) {
+    const u = smooth((p - 0.48) / 0.22);
+    return {
+      pitch: THREE.MathUtils.lerp(1.2, 0.85, u) * power,
+      roll: THREE.MathUtils.lerp(0.75, 0.4, u) * power,
+      y: THREE.MathUtils.lerp(-0.1, -0.04, u),
+      z: THREE.MathUtils.lerp(0.16, 0.08, u),
+      trail: THREE.MathUtils.lerp(1, 0.45, u),
+    };
+  }
+  const u = smooth((p - 0.7) / 0.3);
+  return {
+    pitch: THREE.MathUtils.lerp(0.85, 0, u) * power,
+    roll: THREE.MathUtils.lerp(0.4, 0, u) * power,
+    y: THREE.MathUtils.lerp(-0.04, 0, u),
+    z: THREE.MathUtils.lerp(0.08, 0, u),
+    trail: THREE.MathUtils.lerp(0.45, 0, u),
+  };
+}
+
 export function RemotePlayerWeapon({
   equippedItem,
   isMoving,
   viewPitch,
   meleeSwingProgress = 0,
+  saberSwingProgress = 0,
+  gunRecoilProgress = 0,
+  rocketRecoilProgress = 0,
 }: RemotePlayerWeaponProps) {
   const groupRef = useRef<THREE.Group>(null);
   const trailRef = useRef<THREE.Mesh>(null);
+  const muzzleFlashRef = useRef<THREE.Mesh>(null);
   const clampedPitch = THREE.MathUtils.clamp(viewPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
   const pose = getRemoteWeaponPose(equippedItem, clampedPitch);
 
   useFrame(() => {
     if (!groupRef.current) return;
-    const bob = isMoving && meleeSwingProgress < 0.01
+    const activeSwing = Math.max(meleeSwingProgress, saberSwingProgress);
+    const bob = isMoving && activeSwing < 0.01 && gunRecoilProgress < 0.05 && rocketRecoilProgress < 0.05
       ? Math.sin(performance.now() * 0.008) * 0.025
       : 0;
-    const p = THREE.MathUtils.clamp(meleeSwingProgress, 0, 1);
-    // ツールの振り（右腕に追従する追加オフセット）
+
     let swingPitch = 0;
     let swingRoll = 0;
     let swingY = 0;
     let swingZ = 0;
-    if (p > 0.01 && equippedItem === 'builder') {
-      const smooth = (t: number) => {
-        const x = THREE.MathUtils.clamp(t, 0, 1);
-        return x * x * (3 - 2 * x);
-      };
-      if (p < 0.28) {
-        const u = smooth(p / 0.28);
-        swingPitch = -1.0 * u;
-        swingRoll = -0.5 * u;
-        swingY = 0.12 * u;
-        swingZ = -0.06 * u;
-      } else if (p < 0.48) {
-        const u = smooth((p - 0.28) / 0.2);
-        swingPitch = THREE.MathUtils.lerp(-1.0, 1.2, u);
-        swingRoll = THREE.MathUtils.lerp(-0.5, 0.75, u);
-        swingY = THREE.MathUtils.lerp(0.12, -0.1, u);
-        swingZ = THREE.MathUtils.lerp(-0.06, 0.16, u);
-      } else if (p < 0.7) {
-        const u = smooth((p - 0.48) / 0.22);
-        swingPitch = THREE.MathUtils.lerp(1.2, 0.85, u);
-        swingRoll = THREE.MathUtils.lerp(0.75, 0.4, u);
-        swingY = THREE.MathUtils.lerp(-0.1, -0.04, u);
-        swingZ = THREE.MathUtils.lerp(0.16, 0.08, u);
-      } else {
-        const u = smooth((p - 0.7) / 0.3);
-        swingPitch = THREE.MathUtils.lerp(0.85, 0, u);
-        swingRoll = THREE.MathUtils.lerp(0.4, 0, u);
-        swingY = THREE.MathUtils.lerp(-0.04, 0, u);
-        swingZ = THREE.MathUtils.lerp(0.08, 0, u);
-      }
+    let trailAmt = 0;
+
+    if (equippedItem === 'builder' && meleeSwingProgress > 0.01) {
+      const s = swingOffsets(meleeSwingProgress, 1);
+      swingPitch = s.pitch;
+      swingRoll = s.roll;
+      swingY = s.y;
+      swingZ = s.z;
+      trailAmt = s.trail;
+    } else if (equippedItem === 'lightsaber' && saberSwingProgress > 0.01) {
+      const s = swingOffsets(saberSwingProgress, 1.25);
+      swingPitch = s.pitch;
+      swingRoll = s.roll;
+      swingY = s.y;
+      swingZ = s.z;
+      trailAmt = s.trail;
+    } else if (equippedItem === 'machine_gun' && gunRecoilProgress > 0.02) {
+      const kick = gunRecoilProgress * gunRecoilProgress;
+      swingPitch = -kick * 0.22;
+      swingY = kick * 0.03;
+      swingZ = kick * 0.14;
+      trailAmt = kick * 0.6;
+    } else if (equippedItem === 'rocket_launcher' && rocketRecoilProgress > 0.02) {
+      const kick = rocketRecoilProgress * rocketRecoilProgress;
+      swingPitch = -kick * 0.55;
+      swingY = kick * 0.06;
+      swingZ = kick * 0.28;
+      trailAmt = kick * 0.85;
     }
 
     groupRef.current.position.set(
@@ -260,16 +317,33 @@ export function RemotePlayerWeapon({
 
     if (trailRef.current) {
       const mat = trailRef.current.material as THREE.MeshBasicMaterial;
-      const trail = p > 0.2 && p < 0.75
-        ? 1 - Math.abs(p - 0.42) / 0.32
-        : 0;
-      if (trail > 0.05) {
+      if (trailAmt > 0.05 && (equippedItem === 'builder' || equippedItem === 'lightsaber')) {
         trailRef.current.visible = true;
-        mat.opacity = trail * 0.75;
-        trailRef.current.scale.setScalar(0.7 + trail * 0.6);
+        mat.opacity = trailAmt * (equippedItem === 'lightsaber' ? 0.9 : 0.75);
+        mat.color.set(equippedItem === 'lightsaber' ? '#66ffcc' : '#88d8ff');
+        trailRef.current.scale.setScalar(0.7 + trailAmt * 0.7);
         trailRef.current.rotation.z = -0.6 + swingRoll;
       } else {
         trailRef.current.visible = false;
+      }
+    }
+
+    if (muzzleFlashRef.current) {
+      const mat = muzzleFlashRef.current.material as THREE.MeshBasicMaterial;
+      const flash = equippedItem === 'machine_gun'
+        ? gunRecoilProgress
+        : equippedItem === 'rocket_launcher'
+          ? rocketRecoilProgress
+          : 0;
+      if (flash > 0.08) {
+        muzzleFlashRef.current.visible = true;
+        mat.opacity = flash * (equippedItem === 'rocket_launcher' ? 0.95 : 0.8);
+        const s = equippedItem === 'rocket_launcher'
+          ? 0.35 + flash * 0.55
+          : 0.18 + flash * 0.28;
+        muzzleFlashRef.current.scale.setScalar(s);
+      } else {
+        muzzleFlashRef.current.visible = false;
       }
     }
   });
@@ -293,9 +367,55 @@ export function RemotePlayerWeapon({
           </mesh>
         </>
       )}
-      {equippedItem === 'rocket_launcher' && <RocketLauncherModel />}
-      {equippedItem === 'machine_gun' && <MachineGunModel />}
-      {equippedItem === 'lightsaber' && <LightsaberModel />}
+      {equippedItem === 'rocket_launcher' && (
+        <>
+          <RocketLauncherModel />
+          <mesh ref={muzzleFlashRef} position={[0.02, 0.02, -0.72]} visible={false}>
+            <sphereGeometry args={[0.5, 12, 10]} />
+            <meshBasicMaterial
+              color="#ff9a40"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        </>
+      )}
+      {equippedItem === 'machine_gun' && (
+        <>
+          <MachineGunModel />
+          <mesh ref={muzzleFlashRef} position={[0.02, 0.0, -0.55]} visible={false}>
+            <sphereGeometry args={[0.35, 10, 8]} />
+            <meshBasicMaterial
+              color="#ffd080"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        </>
+      )}
+      {equippedItem === 'lightsaber' && (
+        <>
+          <LightsaberModel />
+          <mesh ref={trailRef} position={[0.02, 0.35, -0.1]} visible={false}>
+            <torusGeometry args={[0.42, 0.016, 6, 32, Math.PI * 1.2]} />
+            <meshBasicMaterial
+              color="#66ffcc"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }

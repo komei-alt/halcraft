@@ -136,6 +136,21 @@ function RemotePlayerModel({
             ? 1 - player.meleeSwingTimer / 0.38
             : 0
         }
+        saberSwingProgress={
+          player.saberSwingTimer > 0
+            ? 1 - player.saberSwingTimer / 0.48
+            : 0
+        }
+        gunRecoilProgress={
+          player.gunRecoilTimer > 0
+            ? player.gunRecoilTimer / 0.14
+            : 0
+        }
+        rocketRecoilProgress={
+          player.rocketRecoilTimer > 0
+            ? player.rocketRecoilTimer / 0.52
+            : 0
+        }
         isDead={player.isDead}
         deathTime={player.deathTime}
       />
@@ -148,6 +163,21 @@ function RemotePlayerModel({
           meleeSwingProgress={
             player.meleeSwingTimer > 0
               ? 1 - player.meleeSwingTimer / 0.38
+              : 0
+          }
+          saberSwingProgress={
+            player.saberSwingTimer > 0
+              ? 1 - player.saberSwingTimer / 0.48
+              : 0
+          }
+          gunRecoilProgress={
+            player.gunRecoilTimer > 0
+              ? player.gunRecoilTimer / 0.14
+              : 0
+          }
+          rocketRecoilProgress={
+            player.rocketRecoilTimer > 0
+              ? player.rocketRecoilTimer / 0.52
               : 0
           }
         />

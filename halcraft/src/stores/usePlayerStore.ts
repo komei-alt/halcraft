@@ -52,6 +52,15 @@ const ATTACK_COOLDOWN = 0.45;
 export const MELEE_SWING_DURATION = 0.38;
 /** スイング開始からダメージ確定までの秒（ヒットフレーム） */
 export const MELEE_HIT_AT = 0.14;
+/** 三人称同期用の武器アクション種別 */
+export type WeaponActionKind = 'melee' | 'saber' | 'gun' | 'rocket';
+/** 各武器アクションの三人称再生時間 */
+export const WEAPON_ACTION_DURATION: Record<WeaponActionKind, number> = {
+  melee: MELEE_SWING_DURATION,
+  saber: 0.48,
+  gun: 0.14,
+  rocket: 0.52,
+};
 /** ロケットランチャーのクールダウン時間（秒） */
 const ROCKET_COOLDOWN = 2.8;
 /** ロケット再装填完了を知らせるHUDパルス時間（ミリ秒） */
@@ -121,6 +130,17 @@ interface PlayerState {
    * 0=非スイング。1人称振り・ヒットフレームと同期する。
    */
   meleeSwingTimer: number;
+  /** ライトセーバースイング残り（三人称同期） */
+  saberSwingTimer: number;
+  /** 機関銃リコイル残り（三人称同期） */
+  gunRecoilTimer: number;
+  /** ロケットリコイル残り（三人称同期） */
+  rocketRecoilTimer: number;
+  /**
+   * 未送信の武器アクションパルス（sendPosition が消費）。
+   * マルチの三人称演出トリガー。
+   */
+  pendingWeaponAction: WeaponActionKind | null;
 
   /** ロケットランチャーのクールダウン残り時間（秒） */
   rocketCooldown: number;
@@ -204,6 +224,9 @@ interface PlayerState {
    */
   startMeleeSwing: (options?: { noShake?: boolean; lightShake?: boolean }) => boolean;
 
+  /** 三人称同期用の武器アクションを発火 */
+  triggerWeaponAction: (kind: WeaponActionKind) => void;
+
   /** 攻撃クールダウンを毎フレーム更新 */
   updateAttackCooldown: (dt: number) => void;
 
@@ -280,6 +303,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   attackCooldown: 0,
   attackCharge: 1,
   meleeSwingTimer: 0,
+  saberSwingTimer: 0,
+  gunRecoilTimer: 0,
+  rocketRecoilTimer: 0,
+  pendingWeaponAction: null,
   rocketCooldown: 0,
   rocketCooldownDuration: ROCKET_COOLDOWN,
   rocketCharge: 1,
@@ -375,6 +402,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       attackCooldown: ATTACK_COOLDOWN,
       attackCharge: 0,
       meleeSwingTimer: MELEE_SWING_DURATION,
+      pendingWeaponAction: 'melee',
       ...(options?.noShake ? {} : { cameraShake: Math.max(state.cameraShake, 0.22 + charge * 0.28) }),
     });
 
@@ -389,6 +417,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       attackCooldown: ATTACK_COOLDOWN,
       attackCharge: 0,
       meleeSwingTimer: MELEE_SWING_DURATION,
+      pendingWeaponAction: 'melee',
       ...(options?.noShake
         ? {}
         : {
@@ -401,11 +430,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     return true;
   },
 
+  triggerWeaponAction: (kind) => {
+    const duration = WEAPON_ACTION_DURATION[kind];
+    set((state) => ({
+      pendingWeaponAction: kind,
+      meleeSwingTimer: kind === 'melee' ? duration : state.meleeSwingTimer,
+      saberSwingTimer: kind === 'saber' ? duration : state.saberSwingTimer,
+      gunRecoilTimer: kind === 'gun' ? duration : state.gunRecoilTimer,
+      rocketRecoilTimer: kind === 'rocket' ? duration : state.rocketRecoilTimer,
+    }));
+  },
+
   updateAttackCooldown: (dt) => {
     const state = get();
     const newCooldown = Math.max(0, state.attackCooldown - dt);
     const newCharge = newCooldown <= 0 ? 1 : Math.min(1, 1 - newCooldown / ATTACK_COOLDOWN);
     const newSwing = Math.max(0, (state.meleeSwingTimer ?? 0) - dt);
+    const newSaber = Math.max(0, (state.saberSwingTimer ?? 0) - dt);
+    const newGun = Math.max(0, (state.gunRecoilTimer ?? 0) - dt);
+    const newRocketRecoil = Math.max(0, (state.rocketRecoilTimer ?? 0) - dt);
     const newRocketCooldown = Math.max(0, state.rocketCooldown - dt);
     const rocketDuration = Math.max(0.1, state.rocketCooldownDuration || ROCKET_COOLDOWN);
     const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / rocketDuration);
@@ -420,6 +463,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (
       newCooldown !== state.attackCooldown ||
       newSwing !== state.meleeSwingTimer ||
+      newSaber !== state.saberSwingTimer ||
+      newGun !== state.gunRecoilTimer ||
+      newRocketRecoil !== state.rocketRecoilTimer ||
       newRocketCooldown !== state.rocketCooldown ||
       newShake !== state.cameraShake ||
       rocketJustReady
@@ -428,6 +474,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         attackCooldown: newCooldown,
         attackCharge: newCharge,
         meleeSwingTimer: newSwing,
+        saberSwingTimer: newSaber,
+        gunRecoilTimer: newGun,
+        rocketRecoilTimer: newRocketRecoil,
         rocketCooldown: newRocketCooldown,
         rocketCharge: newRocketCharge,
         rocketReadyPulseUntil,
@@ -587,6 +636,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       attackCooldown: 0,
       attackCharge: 1,
       meleeSwingTimer: 0,
+      saberSwingTimer: 0,
+      gunRecoilTimer: 0,
+      rocketRecoilTimer: 0,
+      pendingWeaponAction: null,
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCooldownDuration: ROCKET_COOLDOWN,
