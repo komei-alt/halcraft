@@ -84,7 +84,7 @@ interface ChallengeFeedback {
   advanced: boolean;
 }
 
-const DISPLAY_MS = 1120;
+const DISPLAY_MS = 1380;
 
 function isCombatFeedbackEvent(event: MasteryEvent): boolean {
   return event.kind === 'hit' || event.kind === 'defeat';
@@ -571,9 +571,9 @@ export function CombatFeedbackHUD() {
       style={{
         position: 'fixed',
         // 射撃の視界中心と射線を空けつつ、手応えは画面端へ寄せる。
-        left: isCompact ? 'auto' : 'calc(50% + 52px)',
+        left: isCompact ? 'auto' : 'calc(50% + 48px)',
         right: isCompact ? 10 : 'auto',
-        top: isCompact ? 'calc(118px + env(safe-area-inset-top))' : 'calc(50% - 156px)',
+        top: isCompact ? 'calc(112px + env(safe-area-inset-top))' : 'calc(50% - 168px)',
         transform: 'none',
         zIndex: 121,
         pointerEvents: 'none',
@@ -582,22 +582,26 @@ export function CombatFeedbackHUD() {
     >
       <div
         style={{
-          width: isCompact ? 'min(206px, calc(100vw - 128px))' : 222,
-          padding: isCompact ? '5px 7px' : '6px 9px',
-          borderRadius: 6,
-          border: `1px solid ${accent}73`,
+          width: isCompact ? 'min(218px, calc(100vw - 120px))' : 236,
+          padding: isCompact ? '6px 8px' : '7px 10px',
+          borderRadius: 7,
+          border: `1px solid ${accent}${isCritical || isDefeat ? 'aa' : '80'}`,
           background: isDefeat
-            ? 'rgba(28, 18, 8, 0.72)'
+            ? 'rgba(32, 20, 8, 0.82)'
+            : isCritical
+              ? 'rgba(28, 18, 10, 0.8)'
             : stageTactic?.matched
-              ? 'rgba(12, 15, 18, 0.72)'
-              : 'rgba(8, 12, 18, 0.66)',
+              ? 'rgba(12, 15, 18, 0.78)'
+              : 'rgba(8, 12, 18, 0.72)',
           color: '#fff',
-          boxShadow: `0 0 ${stageTactic?.matched ? 24 : 16}px ${isDefeat ? 'rgba(255, 214, 96, 0.28)' : glow}`,
-          backdropFilter: 'blur(6px)',
-          WebkitBackdropFilter: 'blur(6px)',
-          animation: stageTactic?.matched
-            ? 'combatFeedbackPop 0.76s ease-out forwards, combatStagePulse 0.58s ease-out'
-            : 'combatFeedbackPop 0.76s ease-out forwards',
+          boxShadow: `0 0 ${isDefeat || isCritical ? 30 : stageTactic?.matched ? 26 : 18}px ${
+            isDefeat ? 'rgba(255, 214, 96, 0.36)' : isCritical ? 'rgba(255, 180, 80, 0.32)' : glow
+          }`,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          animation: stageTactic?.matched || isCritical || isDefeat
+            ? 'combatFeedbackPop 0.82s ease-out forwards, combatStagePulse 0.62s ease-out'
+            : 'combatFeedbackPop 0.78s ease-out forwards',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>

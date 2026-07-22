@@ -34,23 +34,23 @@ const CROSSHAIR_PROFILES: Record<EquippedItem, CrosshairProfile> = {
   },
   rocket_launcher: {
     color: '#ffc06d',
-    glow: 'rgba(255, 120, 48, 0.5)',
+    glow: 'rgba(255, 120, 48, 0.58)',
     code: 'RKT',
-    line: 13,
-    gap: 7,
+    line: 14,
+    gap: 8,
   },
   machine_gun: {
     color: '#ffe28a',
-    glow: 'rgba(255, 220, 90, 0.44)',
+    glow: 'rgba(255, 220, 90, 0.5)',
     code: 'BURST',
-    line: 8,
+    line: 9,
     gap: 12,
   },
   lightsaber: {
     color: '#c8b0ff',
-    glow: 'rgba(170, 130, 255, 0.5)',
+    glow: 'rgba(170, 130, 255, 0.58)',
     code: 'COMBO',
-    line: 12,
+    line: 13,
     gap: 5,
   },
 };
@@ -281,9 +281,19 @@ export function Crosshair() {
             background: `conic-gradient(${activeColor} ${Math.round(charge * 360)}deg, rgba(255,255,255,0.16) 0deg)`,
             WebkitMask: 'radial-gradient(circle, transparent 55%, #000 58%)',
             mask: 'radial-gradient(circle, transparent 55%, #000 58%)',
-            filter: `drop-shadow(0 0 ${combatFocusActive ? 9 : 5}px ${activeGlow})`,
-            opacity: combatFocusActive ? 0.92 : equippedItem === 'machine_gun' ? 0.68 : 0.82,
-            animation: combatFocusActive ? 'builderFocusReticle 0.66s ease-in-out infinite alternate' : undefined,
+            filter: `drop-shadow(0 0 ${
+              combatFocusActive || isRocketReady ? 10 : 5
+            }px ${activeGlow})`,
+            opacity: combatFocusActive
+              ? 0.94
+              : isRocketReady
+                ? 0.95
+                : equippedItem === 'machine_gun'
+                  ? 0.72
+                  : 0.84,
+            animation: combatFocusActive || isRocketReady
+              ? 'builderFocusReticle 0.62s ease-in-out infinite alternate'
+              : undefined,
           }}
         />
       )}

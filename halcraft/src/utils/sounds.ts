@@ -753,24 +753,37 @@ export function playRocketLaunchSound(distance: number): void {
 
   const maxDist = 55;
   if (distance > maxDist) return;
-  const volume = Math.max(0, 0.68 * (1 - distance / maxDist));
+  const volume = Math.max(0, 0.78 * (1 - distance / maxDist));
 
   const now = ctx.currentTime;
 
   // 低音の発射衝撃
   const thump = ctx.createOscillator();
   thump.type = 'triangle';
-  thump.frequency.setValueAtTime(110, now);
-  thump.frequency.exponentialRampToValueAtTime(32, now + 0.34);
+  thump.frequency.setValueAtTime(118, now);
+  thump.frequency.exponentialRampToValueAtTime(28, now + 0.38);
 
   const thumpGain = ctx.createGain();
-  thumpGain.gain.setValueAtTime(volume * 0.72, now);
-  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+  thumpGain.gain.setValueAtTime(volume * 0.82, now);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
 
   thump.connect(thumpGain);
   thumpGain.connect(getSfxDestination());
   thump.start(now);
-  thump.stop(now + 0.38);
+  thump.stop(now + 0.42);
+
+  // サブバズ
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(72, now);
+  sub.frequency.exponentialRampToValueAtTime(24, now + 0.3);
+  const subGain = ctx.createGain();
+  subGain.gain.setValueAtTime(volume * 0.4, now);
+  subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+  sub.connect(subGain);
+  subGain.connect(getSfxDestination());
+  sub.start(now);
+  sub.stop(now + 0.32);
 
   // 推進ヒス
   const hiss = ctx.createBufferSource();
@@ -778,34 +791,34 @@ export function playRocketLaunchSound(distance: number): void {
 
   const hissFilter = ctx.createBiquadFilter();
   hissFilter.type = 'bandpass';
-  hissFilter.frequency.setValueAtTime(1100, now);
-  hissFilter.frequency.exponentialRampToValueAtTime(520, now + 0.28);
-  hissFilter.Q.setValueAtTime(0.9, now);
+  hissFilter.frequency.setValueAtTime(1200, now);
+  hissFilter.frequency.exponentialRampToValueAtTime(480, now + 0.3);
+  hissFilter.Q.setValueAtTime(0.95, now);
 
   const hissGain = ctx.createGain();
-  hissGain.gain.setValueAtTime(volume * 0.52, now);
-  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+  hissGain.gain.setValueAtTime(volume * 0.6, now);
+  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
 
   hiss.connect(hissFilter);
   hissFilter.connect(hissGain);
   hissGain.connect(getSfxDestination());
   hiss.start(now);
-  hiss.stop(now + 0.32);
+  hiss.stop(now + 0.34);
 
   // 高域の「シュッ」
   const whoosh = ctx.createBufferSource();
   whoosh.buffer = getNoiseBuffer(ctx);
   const whooshFilter = ctx.createBiquadFilter();
   whooshFilter.type = 'highpass';
-  whooshFilter.frequency.setValueAtTime(2400, now);
+  whooshFilter.frequency.setValueAtTime(2600, now);
   const whooshGain = ctx.createGain();
-  whooshGain.gain.setValueAtTime(volume * 0.28, now);
-  whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  whooshGain.gain.setValueAtTime(volume * 0.34, now);
+  whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
   whoosh.connect(whooshFilter);
   whooshFilter.connect(whooshGain);
   whooshGain.connect(getSfxDestination());
   whoosh.start(now);
-  whoosh.stop(now + 0.18);
+  whoosh.stop(now + 0.2);
 }
 
 // ============================================

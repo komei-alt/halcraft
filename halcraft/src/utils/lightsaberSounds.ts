@@ -419,7 +419,7 @@ export function playLightsaberJustCombo(chain: number): void {
 
 export function playLightsaberHit(): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('lsHit', 70)) return;
+  if (!ctx || !canPlay('lsHit', 55)) return;
   resumeIfNeeded(ctx);
 
   const now = ctx.currentTime;
@@ -428,36 +428,36 @@ export function playLightsaberHit(): void {
   // 低音パンチ。
   const punch = ctx.createOscillator();
   punch.type = 'sine';
-  punch.frequency.setValueAtTime(220, now);
-  punch.frequency.exponentialRampToValueAtTime(54, now + 0.14);
+  punch.frequency.setValueAtTime(240, now);
+  punch.frequency.exponentialRampToValueAtTime(48, now + 0.16);
 
   const punchGain = ctx.createGain();
-  punchGain.gain.setValueAtTime(0.46, now);
-  punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  punchGain.gain.setValueAtTime(0.58, now);
+  punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
   punch.connect(punchGain);
   punchGain.connect(out);
   punch.start(now);
-  punch.stop(now + 0.17);
+  punch.stop(now + 0.19);
 
   // 金属的なクラッシュ。
   const clashA = ctx.createOscillator();
   clashA.type = 'square';
-  clashA.frequency.setValueAtTime(720, now);
-  clashA.frequency.exponentialRampToValueAtTime(1280, now + 0.09);
+  clashA.frequency.setValueAtTime(780, now);
+  clashA.frequency.exponentialRampToValueAtTime(1380, now + 0.1);
   const clashB = ctx.createOscillator();
   clashB.type = 'sawtooth';
-  clashB.frequency.setValueAtTime(910, now);
-  clashB.frequency.exponentialRampToValueAtTime(520, now + 0.12);
+  clashB.frequency.setValueAtTime(980, now);
+  clashB.frequency.exponentialRampToValueAtTime(480, now + 0.13);
 
   const clashFilter = ctx.createBiquadFilter();
   clashFilter.type = 'bandpass';
-  clashFilter.frequency.setValueAtTime(1450, now);
-  clashFilter.Q.setValueAtTime(4.4, now);
+  clashFilter.frequency.setValueAtTime(1550, now);
+  clashFilter.Q.setValueAtTime(4.6, now);
 
   const clashGain = ctx.createGain();
-  clashGain.gain.setValueAtTime(0.18, now);
-  clashGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  clashGain.gain.setValueAtTime(0.26, now);
+  clashGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
   clashA.connect(clashFilter);
   clashB.connect(clashFilter);
@@ -465,11 +465,24 @@ export function playLightsaberHit(): void {
   clashGain.connect(out);
   clashA.start(now);
   clashB.start(now);
-  clashA.stop(now + 0.17);
-  clashB.stop(now + 0.17);
+  clashA.stop(now + 0.19);
+  clashB.stop(now + 0.19);
+
+  // 高域の「シュッ」
+  const sizzle = ctx.createOscillator();
+  sizzle.type = 'triangle';
+  sizzle.frequency.setValueAtTime(2100, now);
+  sizzle.frequency.exponentialRampToValueAtTime(900, now + 0.08);
+  const sizzleGain = ctx.createGain();
+  sizzleGain.gain.setValueAtTime(0.12, now);
+  sizzleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  sizzle.connect(sizzleGain);
+  sizzleGain.connect(out);
+  sizzle.start(now);
+  sizzle.stop(now + 0.09);
 
   // 火花ノイズを小さく複数回飛ばす。
-  for (let i = 0; i < 5; i++) {
-    connectFilteredNoise(ctx, now + i * 0.014, 0.055, 'highpass', 2400 + i * 420, 1.0, 0.09);
+  for (let i = 0; i < 7; i++) {
+    connectFilteredNoise(ctx, now + i * 0.012, 0.06, 'highpass', 2200 + i * 380, 1.1, 0.11);
   }
 }

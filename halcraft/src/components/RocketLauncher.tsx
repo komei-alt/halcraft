@@ -663,10 +663,14 @@ export function RocketLauncher() {
     };
 
     syncProjectiles([...projectilesRef.current.slice(-4), projectile]);
-    recoil.current = 1;
-    muzzleFlashTimer.current = 0.16;
-    backblastTimer.current = 0.22;
+    recoil.current = 1.35;
+    muzzleFlashTimer.current = 0.2;
+    backblastTimer.current = 0.28;
     playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
+    // 発射の手応え — 軽いカメラシェイク
+    usePlayerStore.setState((s) => ({
+      cameraShake: Math.min(1, Math.max(s.cameraShake, 0.28)),
+    }));
     useMasteryStore.getState().recordItemUse('rocket_launcher');
     multi.sendRocketFire(
       rocketId,
@@ -747,7 +751,7 @@ export function RocketLauncher() {
     const dt = Math.min(delta, 0.05);
 
     idleTimer.current += dt;
-    recoil.current = Math.max(0, recoil.current - dt * 5.6);
+    recoil.current = Math.max(0, recoil.current - dt * 4.8);
     readyPulse.current = Math.max(0, readyPulse.current - dt * 2.4);
     muzzleFlashTimer.current = Math.max(0, muzzleFlashTimer.current - dt);
     backblastTimer.current = Math.max(0, backblastTimer.current - dt);
@@ -761,8 +765,9 @@ export function RocketLauncher() {
       offsetWorld.current.copy(SHOULDER_OFFSET);
       offsetWorld.current.x += Math.sin(idleTimer.current * 0.92) * 0.007;
       offsetWorld.current.y += Math.sin(idleTimer.current * 1.38) * 0.01 + readyBob;
-      offsetWorld.current.z += recoil.current * 0.12;
-      offsetWorld.current.y -= recoil.current * 0.025;
+      offsetWorld.current.z += recoil.current * 0.18;
+      offsetWorld.current.y -= recoil.current * 0.04;
+      offsetWorld.current.x += Math.sin(recoil.current * Math.PI) * 0.02;
       offsetWorld.current.applyQuaternion(camera.quaternion);
 
       launcherPos.current.copy(camera.position).add(offsetWorld.current);
@@ -1189,8 +1194,26 @@ export function RocketLauncher() {
           <sprite
             position={[MUZZLE_LOCAL_OFFSET.x, MUZZLE_LOCAL_OFFSET.y, MUZZLE_LOCAL_OFFSET.z]}
             scale={[
-              0.28 + muzzleFlashTimer.current * 1.35,
-              0.28 + muzzleFlashTimer.current * 1.35,
+              0.34 + muzzleFlashTimer.current * 1.7,
+              0.34 + muzzleFlashTimer.current * 1.7,
+              1,
+            ]}
+          >
+            <spriteMaterial
+              map={glowTexture}
+              color={rocketAccentSoft}
+              transparent
+              opacity={clamp01(muzzleFlashTimer.current * 9)}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            toneMapped={false}
+            />
+          </sprite>
+          <sprite
+            position={[MUZZLE_LOCAL_OFFSET.x, MUZZLE_LOCAL_OFFSET.y, MUZZLE_LOCAL_OFFSET.z - 0.12]}
+            scale={[
+              0.5 + muzzleFlashTimer.current * 2.1,
+              0.38 + muzzleFlashTimer.current * 1.4,
               1,
             ]}
           >
@@ -1198,19 +1221,26 @@ export function RocketLauncher() {
               map={glowTexture}
               color={rocketAccent}
               transparent
-              opacity={clamp01(muzzleFlashTimer.current * 8)}
+              opacity={clamp01(muzzleFlashTimer.current * 6.5)}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
-            toneMapped={false}
+              toneMapped={false}
             />
           </sprite>
+          <pointLight
+            position={[MUZZLE_LOCAL_OFFSET.x, MUZZLE_LOCAL_OFFSET.y, MUZZLE_LOCAL_OFFSET.z]}
+            color={rocketAccent}
+            intensity={clamp01(muzzleFlashTimer.current * 10) * 6}
+            distance={6}
+            decay={2}
+          />
 
           {/* 後方バックブラスト */}
           <sprite
             position={[BACKBLAST_LOCAL_OFFSET.x, BACKBLAST_LOCAL_OFFSET.y, BACKBLAST_LOCAL_OFFSET.z]}
             scale={[
-              0.4 + backblastTimer.current * 1.8,
-              0.4 + backblastTimer.current * 1.2,
+              0.5 + backblastTimer.current * 2.2,
+              0.48 + backblastTimer.current * 1.5,
               1,
             ]}
           >
@@ -1218,10 +1248,26 @@ export function RocketLauncher() {
               map={glowTexture}
               color={rocketTailColor}
               transparent
-              opacity={clamp01(backblastTimer.current * 6)}
+              opacity={clamp01(backblastTimer.current * 7)}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
             toneMapped={false}
+            />
+          </sprite>
+          <sprite
+            position={[BACKBLAST_LOCAL_OFFSET.x, BACKBLAST_LOCAL_OFFSET.y, BACKBLAST_LOCAL_OFFSET.z + 0.18]}
+            scale={[
+              0.35 + backblastTimer.current * 1.6,
+              0.55 + backblastTimer.current * 1.9,
+              1,
+            ]}
+          >
+            <spriteMaterial
+              map={smokeTexture}
+              color="#c8b8a8"
+              transparent
+              opacity={clamp01(backblastTimer.current * 3.2) * 0.55}
+              depthWrite={false}
             />
           </sprite>
         </group>

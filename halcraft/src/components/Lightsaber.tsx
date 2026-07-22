@@ -71,9 +71,9 @@ const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 const BLADE_LENGTH = 1.55;
 const BLADE_CENTER = BLADE_LENGTH / 2;
-const TRAIL_SEGMENT_COUNT = 10;
-const TRAIL_LIFETIME = 0.22;
-const TRAIL_SAMPLE_INTERVAL = 0.012;
+const TRAIL_SEGMENT_COUNT = 14;
+const TRAIL_LIFETIME = 0.3;
+const TRAIL_SAMPLE_INTERVAL = 0.01;
 const BLADE_BASE_LOCAL = new THREE.Vector3(0, 0.02, 0);
 const BLADE_TIP_LOCAL = new THREE.Vector3(0, BLADE_LENGTH + 0.04, 0);
 const HILT_FIN_ANGLES = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3] as const;
@@ -396,6 +396,11 @@ export function Lightsaber() {
         dir.x, dir.y, dir.z, isCritical,
       );
       playLightsaberHit();
+      // 斬撃の手応え — 会心・フィニッシュほど強く画面を揺らす
+      const hitShake = isFinisher ? 0.38 : isCritical ? 0.28 : justCombo ? 0.22 : 0.16;
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, hitShake)),
+      }));
       useMasteryStore.getState().recordItemHit('lightsaber', {
         label: isFinisher
           ? justCombo ? 'ジャストフィニッシュ' : 'フィニッシュヒット'
@@ -406,7 +411,7 @@ export function Lightsaber() {
       useStageChallengeStore.getState().recordWeaponHit('lightsaber');
       useStageConditionStore.getState().recordWeaponHit('lightsaber');
       useModeFlowStore.getState().recordCombatStyleHit('lightsaber', 1, isCritical);
-      lightBoost.current = justCombo ? 1.25 : 1;
+      lightBoost.current = justCombo ? 1.45 : isCritical ? 1.3 : 1.1;
       hasHitThisSwing.current = true;
       return true;
     }
