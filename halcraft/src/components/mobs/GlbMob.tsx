@@ -157,8 +157,11 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const { scene } = useGLTF(config.path);
   const groupRef = useRef<THREE.Group>(null);
   const modelAnchorRef = useRef<THREE.Group>(null);
+  const hitFlashMeshRef = useRef<THREE.Mesh>(null);
+  const hitRingMeshRef = useRef<THREE.Mesh>(null);
   const rigRef = useRef<ProceduralMobRig | null>(null);
   const animClock = useRef(0);
+  const wasHitActive = useRef(false);
   const rigStyle = config.rigStyle ?? 'humanoid';
 
   // 静的クローン（フォールバック用）とリグ
@@ -204,21 +207,36 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
 
   const isDamaged = mob.hitTimer > 0;
   const isAngry = mob.angryAtPlayer;
+  const hitDuration = 0.34;
+  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / hitDuration, 0, 1);
+  // ヒット直後だけ白く尖らせ、その後赤みへ
+  const whiteFlash = THREE.MathUtils.clamp((mob.hitTimer - hitDuration * 0.45) / (hitDuration * 0.25), 0, 1);
+  const damagedTint = useMemo(() => config.damagedTint ?? new THREE.Color(0xff6666), [config.damagedTint]);
+  const angryTintColor = useMemo(() => config.angryTint ?? new THREE.Color(0xff6644), [config.angryTint]);
   const tint = useMemo(() => {
-    if (isDamaged) return config.damagedTint ?? new THREE.Color(0xff6666);
-    if (isAngry) return config.angryTint ?? new THREE.Color(0xff6644);
+    if (isDamaged) {
+      return damagedTint.clone().lerp(new THREE.Color(0xffffff), whiteFlash * 0.75);
+    }
+    if (isAngry) return angryTintColor;
     return null;
-  }, [config.angryTint, config.damagedTint, isAngry, isDamaged]);
+  }, [angryTintColor, damagedTint, isAngry, isDamaged, whiteFlash]);
   const traitAccent = mob.traitAccent;
-  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.22, 0, 1);
   const glowColor = useMemo(() => {
+    if (isDamaged) {
+      return new THREE.Color(0xffffff).lerp(damagedTint, 1 - whiteFlash * 0.85);
+    }
     if (tint) return tint.clone().multiplyScalar(0.72);
     if (traitAccent) return new THREE.Color(traitAccent).multiplyScalar(0.34);
     return new THREE.Color(0xffe7bd).multiplyScalar(0.16);
-  }, [tint, traitAccent]);
-  const glowIntensity = 0.18 + hitPulse * 0.72 + (isAngry ? 0.16 : 0) + (traitAccent ? 0.07 : 0);
+  }, [damagedTint, isDamaged, tint, traitAccent, whiteFlash]);
+  const glowIntensity =
+    0.18
+    + hitPulse * 0.95
+    + whiteFlash * 1.35
+    + (isAngry ? 0.16 : 0)
+    + (traitAccent ? 0.07 : 0);
 
-  // 被ダメ・怒りの色
+  // 被ダメ・怒りの色（ヒット中は毎フレーム useFrame でも更新）
   useEffect(() => {
     if (rig) {
       tintMaterials(rig.traverseMaterials, originalColorsRig, tint, glowColor, glowIntensity);
@@ -241,10 +259,82 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
     const t = animClock.current;
     const speed = Math.hypot(mob.vx, mob.vz);
     const moving = speed > 0.12;
+    const hp = THREE.MathUtils.clamp(mob.hitTimer / hitDuration, 0, 1);
+    const wf = THREE.MathUtils.clamp((mob.hitTimer - hitDuration * 0.45) / (hitDuration * 0.25), 0, 1);
 
     if (groupRef.current) {
       groupRef.current.position.set(mob.x, mob.y, mob.z);
       groupRef.current.rotation.y = mob.rotation;
+    }
+
+    // ヒット中は emissive を毎フレーム尖らせ、終了フレームで通常色へ戻す
+    const hitActive = hp > 0.01;
+    if (hitActive) {
+      const liveTint = damagedTint.clone().lerp(new THREE.Color(0xffffff), wf * 0.8);
+      const liveGlow = new THREE.Color(0xffffff).lerp(damagedTint, 1 - wf * 0.9);
+      const liveIntensity = 0.25 + hp * 1.1 + wf * 1.6;
+      if (rig) {
+        tintMaterials(rig.traverseMaterials, originalColorsRig, liveTint, liveGlow, liveIntensity);
+      } else {
+        tintScene(fallbackScene, originalColorsFallback, liveTint, liveGlow, liveIntensity);
+      }
+    } else if (wasHitActive.current) {
+      if (isAngry) {
+        if (rig) {
+          tintMaterials(
+            rig.traverseMaterials,
+            originalColorsRig,
+            angryTintColor,
+            angryTintColor.clone().multiplyScalar(0.5),
+            0.34,
+          );
+        } else {
+          tintScene(
+            fallbackScene,
+            originalColorsFallback,
+            angryTintColor,
+            angryTintColor.clone().multiplyScalar(0.5),
+            0.34,
+          );
+        }
+      } else {
+        const idleGlow = traitAccent
+          ? new THREE.Color(traitAccent).multiplyScalar(0.34)
+          : new THREE.Color(0xffe7bd).multiplyScalar(0.16);
+        const idleIntensity = 0.18 + (traitAccent ? 0.07 : 0);
+        if (rig) {
+          tintMaterials(rig.traverseMaterials, originalColorsRig, null, idleGlow, idleIntensity);
+        } else {
+          tintScene(fallbackScene, originalColorsFallback, null, idleGlow, idleIntensity);
+        }
+      }
+    }
+    wasHitActive.current = hitActive;
+
+    // ヒットフラッシュ・リング
+    if (hitFlashMeshRef.current) {
+      const mat = hitFlashMeshRef.current.material as THREE.MeshBasicMaterial;
+      if (hitActive) {
+        hitFlashMeshRef.current.visible = true;
+        const s = 0.55 + (1 - hp) * 0.85 + wf * 0.35;
+        hitFlashMeshRef.current.scale.setScalar(s);
+        mat.opacity = 0.15 + wf * 0.55 + hp * 0.25;
+      } else {
+        hitFlashMeshRef.current.visible = false;
+        mat.opacity = 0;
+      }
+    }
+    if (hitRingMeshRef.current) {
+      const mat = hitRingMeshRef.current.material as THREE.MeshBasicMaterial;
+      if (hitActive) {
+        hitRingMeshRef.current.visible = true;
+        const s = 0.7 + (1 - hp) * 1.4;
+        hitRingMeshRef.current.scale.set(s, s, 1);
+        mat.opacity = hp * 0.55 + wf * 0.25;
+      } else {
+        hitRingMeshRef.current.visible = false;
+        mat.opacity = 0;
+      }
     }
 
     // ルートの軽いボブはリグ側の骨盤で行うため控えめ
@@ -257,18 +347,26 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
         : 0;
 
     if (modelAnchorRef.current) {
-      const hitLean = -hitPulse * 0.18;
-      const hitRoll = Math.sin(t * 40) * hitPulse * 0.08;
+      // ヒット方向に後傾・ロール（モデルローカル）
+      const hdx = mob.hitDirX ?? 0;
+      const hdz = mob.hitDirZ ?? 0;
+      // ワールドヒット方向 → ローカル（rotation 済みルート内）
+      const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
+      const localZ = hdx * Math.sin(mob.rotation) + hdz * Math.cos(mob.rotation);
+      const hitLean = -hp * 0.28 - Math.abs(localZ) * hp * 0.12;
+      const hitRoll = localX * hp * 0.32 + Math.sin(t * 48) * hp * 0.1;
+      const hitYaw = localX * hp * 0.18;
       const strideLean = !rig && moving ? Math.sin(t * bobSpeed) * Math.min(0.1, speed * 0.04) : 0;
       const sideLean = !rig && moving ? Math.cos(t * bobSpeed * 0.5) * Math.min(0.06, speed * 0.02) : 0;
-      const squashY = 1 - hitPulse * 0.08;
-      const squashXZ = 1 + hitPulse * 0.06;
+      const squashY = 1 - hp * 0.12 - wf * 0.04;
+      const squashXZ = 1 + hp * 0.09 + wf * 0.05;
+      const recoilZ = -hp * 0.08;
       modelAnchorRef.current.position.set(
-        groundedPosition[0],
-        groundedPosition[1] + rootBob,
-        groundedPosition[2],
+        groundedPosition[0] + localX * hp * 0.06,
+        groundedPosition[1] + rootBob - hp * 0.04,
+        groundedPosition[2] + recoilZ,
       );
-      modelAnchorRef.current.rotation.set(hitLean + strideLean, 0, hitRoll + sideLean);
+      modelAnchorRef.current.rotation.set(hitLean + strideLean, hitYaw, hitRoll + sideLean);
       modelAnchorRef.current.scale.set(
         config.scale * squashXZ,
         config.scale * squashY,
@@ -281,6 +379,8 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       moving,
       speed,
       hitTimer: mob.hitTimer,
+      hitDirX: mob.hitDirX ?? 0,
+      hitDirZ: mob.hitDirZ ?? 0,
       attackTimer: mob.attackTimer ?? 0,
       attackDuration: config.attackDuration,
       angry: isAngry,
@@ -349,6 +449,36 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
           />
         </mesh>
       )}
+
+      {/* 被ダメフラッシュ（白→赤の瞬間光） */}
+      <mesh ref={hitFlashMeshRef} position={[0, config.hpBarY * 0.38, 0]} visible={false}>
+        <sphereGeometry args={[0.55, 16, 12]} />
+        <meshBasicMaterial
+          color={0xfff0e0}
+          transparent
+          opacity={0}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh
+        ref={hitRingMeshRef}
+        position={[0, 0.05, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        visible={false}
+      >
+        <ringGeometry args={[0.35, 0.58, 36]} />
+        <meshBasicMaterial
+          color={0xff5533}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
 
       <group ref={modelAnchorRef} position={groundedPosition} scale={config.scale}>
         {rig ? (

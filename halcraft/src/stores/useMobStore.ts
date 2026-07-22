@@ -33,6 +33,9 @@ export interface MobData {
   rotation: number;
   /** ダメージ受けたフレーム（ノックバック用） */
   hitTimer: number;
+  /** 最後に受けたヒットの水平方向（ひるみ演出用・正規化済み） */
+  hitDirX: number;
+  hitDirZ: number;
   /** 攻撃モーション残り時間（秒）。0 で待機/歩行 */
   attackTimer: number;
   /** 消滅タイマー（夜明けで燃える演出用） */
@@ -305,6 +308,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       vx: 0, vy: 0, vz: 0,
       rotation: Math.random() * Math.PI * 2,
       hitTimer: 0,
+      hitDirX: 0,
+      hitDirZ: 0,
       attackTimer: 0,
       burnTimer: 0,
       isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
@@ -360,8 +365,19 @@ export const useMobStore = create<MobState>((set, get) => ({
           // 上方向は付与しない（浮遊・後退感の主因）
           const nextVy = m.vy;
           // 被弾フラッシュ用（ノックバック無しでもはっきり見える長さ）。接近AIは止めない
-          // ボスは少し長く光らせて「当たった」感を出す
-          let nextHitTimer = isBoss ? 0.28 : 0.22;
+          // 敵はひるみモーションが見えるようやや長め、ボスは更に長く
+          let nextHitTimer = isBoss ? 0.38 : 0.3;
+          // ヒット方向（ノックバック無しでも前方を既定に）
+          let nextHitDirX = m.hitDirX ?? 0;
+          let nextHitDirZ = m.hitDirZ ?? 0;
+          if (rawKb > 0.001) {
+            nextHitDirX = knockbackX / rawKb;
+            nextHitDirZ = knockbackZ / rawKb;
+          } else if (Math.abs(nextHitDirX) + Math.abs(nextHitDirZ) < 0.01) {
+            // 不明時は背面側にひるむ（モデル前方の逆）
+            nextHitDirX = -Math.sin(m.rotation);
+            nextHitDirZ = -Math.cos(m.rotation);
+          }
 
           if (rawKb > 0.04) {
             const dirX = knockbackX / rawKb;
@@ -379,7 +395,7 @@ export const useMobStore = create<MobState>((set, get) => ({
                 nextVx *= s;
                 nextVz *= s;
               }
-              nextHitTimer = isBoss ? 0.32 : 0.24;
+              nextHitTimer = isBoss ? 0.42 : 0.34;
             }
           }
 
@@ -391,6 +407,8 @@ export const useMobStore = create<MobState>((set, get) => ({
             vz: nextVz,
             // 連射でフラッシュが途切れないよう、残り時間より短くしない
             hitTimer: Math.max(m.hitTimer, nextHitTimer),
+            hitDirX: nextHitDirX,
+            hitDirZ: nextHitDirZ,
             // 味方がダメージを受けたら怒り状態に（ニワトリは除外）
             angryAtPlayer: shouldBeAngry ? true : m.angryAtPlayer,
             angryTimer: shouldBeAngry ? ANGRY_DURATION : m.angryTimer,
@@ -566,6 +584,8 @@ export const useMobStore = create<MobState>((set, get) => ({
       vz: 0,
       rotation: sm.rotation,
       hitTimer: sm.hitTimer,
+      hitDirX: 0,
+      hitDirZ: 0,
       attackTimer: 0,
       burnTimer: 0,
       isAlly: sm.isAlly,

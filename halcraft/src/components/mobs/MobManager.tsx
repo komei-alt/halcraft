@@ -398,6 +398,8 @@ export function MobManager() {
         vy: latest.vy,
         vz: latest.vz,
         hitTimer: latest.hitTimer,
+        hitDirX: latest.hitDirX ?? m.hitDirX ?? 0,
+        hitDirZ: latest.hitDirZ ?? m.hitDirZ ?? 0,
         angryAtPlayer: latest.angryAtPlayer,
         angryTimer: latest.angryTimer,
       }];

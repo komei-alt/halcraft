@@ -58,8 +58,8 @@ export function Spider({ mob, animTime }: SpiderProps) {
   const eyesRef = useRef<THREE.InstancedMesh>(null);
   const fangsRef = useRef<THREE.InstancedMesh>(null);
   const animClock = useRef(0);
-  const isDamaged = mob.hitTimer > 0;
-  const hitPulse = Math.min(1, mob.hitTimer / 0.22);
+  const hitFlashRef = useRef<THREE.Mesh>(null);
+  const hitRingRef = useRef<THREE.Mesh>(null);
 
   // 個体ごとのマテリアル（被ダメ時も参照を固定して InstancedMesh を再マウントしない）
   const materials = useMemo(() => ({
@@ -80,29 +80,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
     materials.leg.dispose();
   }, [materials]);
 
-  useLayoutEffect(() => {
-    if (isDamaged) {
-      materials.body.color.setHex(0xff5b50);
-      materials.head.color.setHex(0xff5b50);
-      materials.leg.color.setHex(0xff5b50);
-      materials.body.emissive.setHex(0xaa2010);
-      materials.body.emissiveIntensity = 0.75;
-      materials.head.emissive.setHex(0xaa2010);
-      materials.head.emissiveIntensity = 0.75;
-      materials.leg.emissive.setHex(0x881808);
-      materials.leg.emissiveIntensity = 0.55;
-    } else {
-      materials.body.color.setHex(0x292528);
-      materials.head.color.setHex(0x373034);
-      materials.leg.color.setHex(0x473322);
-      materials.body.emissive.setHex(0x000000);
-      materials.body.emissiveIntensity = 0;
-      materials.head.emissive.setHex(0x000000);
-      materials.head.emissiveIntensity = 0;
-      materials.leg.emissive.setHex(0x000000);
-      materials.leg.emissiveIntensity = 0;
-    }
-  }, [isDamaged, materials]);
+  // 被ダメ色は useFrame で毎フレーム尖らせる（useLayoutEffect だと同期遅延で弱い）
 
   // 目・牙は一度だけ配置
   useLayoutEffect(() => {
@@ -167,7 +145,39 @@ export function Spider({ mob, animTime }: SpiderProps) {
 
     const isMoving = !isAttacking && speed > 0.12;
     const walkCycle = t * (isMoving ? 11 : 1.8);
-    const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 28) * (0.12 + hitPulse * 0.1) : 0;
+    // 被ダメフラッシュ（白→赤）
+    const hp = THREE.MathUtils.clamp(mob.hitTimer / 0.34, 0, 1);
+    const wf = THREE.MathUtils.clamp((mob.hitTimer - 0.15) / 0.1, 0, 1);
+    if (hp > 0.01) {
+      const flash = 0.55 + wf * 0.45;
+      materials.body.color.setRGB(flash, 0.25 + wf * 0.55, 0.22 + wf * 0.5);
+      materials.head.color.setRGB(flash, 0.25 + wf * 0.55, 0.22 + wf * 0.5);
+      materials.leg.color.setRGB(flash * 0.9, 0.2 + wf * 0.4, 0.15);
+      materials.body.emissive.setRGB(1, 0.35 + wf * 0.5, 0.15);
+      materials.body.emissiveIntensity = 0.55 + hp * 1.2 + wf * 1.4;
+      materials.head.emissive.setRGB(1, 0.3 + wf * 0.5, 0.12);
+      materials.head.emissiveIntensity = 0.55 + hp * 1.2 + wf * 1.4;
+      materials.leg.emissive.setRGB(0.9, 0.2, 0.08);
+      materials.leg.emissiveIntensity = 0.35 + hp * 0.9;
+    } else {
+      materials.body.color.setHex(0x292528);
+      materials.head.color.setHex(0x373034);
+      materials.leg.color.setHex(0x473322);
+      materials.body.emissive.setHex(0x000000);
+      materials.body.emissiveIntensity = 0;
+      materials.head.emissive.setHex(0x000000);
+      materials.head.emissiveIntensity = 0;
+      materials.leg.emissive.setHex(0x000000);
+      materials.leg.emissiveIntensity = 0;
+    }
+
+    const hdx = mob.hitDirX ?? 0;
+    const hdz = mob.hitDirZ ?? 0;
+    const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
+    const hitTilt = hp > 0
+      ? Math.sin(mob.hitTimer * 36) * (0.16 + hp * 0.14) - hp * 0.2
+      : 0;
+    const hitRoll = localX * hp * 0.45 + (hp > 0 ? Math.sin(t * 42) * hp * 0.1 : 0);
     const bodyBob = isMoving ? Math.abs(Math.sin(walkCycle * 2)) * 0.035 : Math.sin(t * 2) * 0.008;
 
     if (rootRef.current) {
@@ -177,10 +187,39 @@ export function Spider({ mob, animTime }: SpiderProps) {
     if (bodyGroupRef.current) {
       bodyGroupRef.current.rotation.set(
         hitTilt + crouch * 0.9 - lunge * 0.25,
-        0,
-        hitTilt * 0.3,
+        localX * hp * 0.2,
+        hitRoll + hitTilt * 0.2,
       );
-      bodyGroupRef.current.position.set(0, bodyBob + crouch * 0.08, lunge);
+      bodyGroupRef.current.position.set(
+        localX * hp * 0.08,
+        bodyBob + crouch * 0.08 - hp * 0.05,
+        lunge - hp * 0.1,
+      );
+      const squash = 1 - hp * 0.12;
+      const widen = 1 + hp * 0.1;
+      bodyGroupRef.current.scale.set(widen, squash, widen);
+    }
+
+    if (hitFlashRef.current) {
+      const mat = hitFlashRef.current.material as THREE.MeshBasicMaterial;
+      if (hp > 0.01) {
+        hitFlashRef.current.visible = true;
+        hitFlashRef.current.scale.setScalar(0.4 + (1 - hp) * 0.7 + wf * 0.3);
+        mat.opacity = 0.2 + wf * 0.55 + hp * 0.2;
+      } else {
+        hitFlashRef.current.visible = false;
+      }
+    }
+    if (hitRingRef.current) {
+      const mat = hitRingRef.current.material as THREE.MeshBasicMaterial;
+      if (hp > 0.01) {
+        hitRingRef.current.visible = true;
+        const s = 0.55 + (1 - hp) * 1.2;
+        hitRingRef.current.scale.set(s, s, 1);
+        mat.opacity = hp * 0.5;
+      } else {
+        hitRingRef.current.visible = false;
+      }
     }
 
     // 牙を攻撃に合わせて開く
@@ -277,6 +316,30 @@ export function Spider({ mob, animTime }: SpiderProps) {
           />
         </mesh>
       )}
+
+      <mesh ref={hitFlashRef} position={[0, 0.35, 0.1]} visible={false}>
+        <sphereGeometry args={[0.4, 12, 10]} />
+        <meshBasicMaterial
+          color={0xffe8e0}
+          transparent
+          opacity={0}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={hitRingRef} position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.28, 0.48, 28]} />
+        <meshBasicMaterial
+          color={0xff4422}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
 
       <group ref={bodyGroupRef}>
         {/* 多面体の腹部と頭胸部で、低ポリのまま丸い輪郭を作る */}

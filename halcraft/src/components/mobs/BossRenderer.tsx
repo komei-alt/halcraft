@@ -286,11 +286,43 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
   }, [accentMaterial, armorMaterial, bodyMaterial]);
 
   const modelGroupRef = useRef<THREE.Group>(null);
-  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.28, 0, 1);
+  const shockwaveRefs = useRef<(THREE.Mesh | null)[]>([null, null, null, null]);
+  const hitFlashRef = useRef<THREE.Mesh>(null);
+  const hitRingRef = useRef<THREE.Mesh>(null);
+  const impactFlashRef = useRef<THREE.Mesh>(null);
+  const dustPointsRef = useRef<THREE.Points>(null);
+  const lastAttackProgress = useRef(0);
+  const shockwaveLife = useRef(0);
+  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.42, 0, 1);
 
-  useFrame(() => {
+  const dustGeo = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const n = 48;
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    geo.setDrawRange(0, 0);
+    return geo;
+  }, []);
+  const dustMat = useMemo(() => new THREE.PointsMaterial({
+    size: 0.22,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  }), []);
+  const dustParticles = useRef<Array<{
+    x: number; y: number; z: number;
+    vx: number; vy: number; vz: number;
+    life: number; total: number;
+  }>>([]);
+
+  useFrame((_, delta) => {
     const group = groupRef.current;
     if (!group) return;
+    const dt = Math.min(delta, 0.05);
 
     targetPositionRef.current.set(mob.x, mob.y, mob.z);
     group.position.lerp(targetPositionRef.current, 0.3);
@@ -330,18 +362,161 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
       }
     }
 
+    // 着地瞬間で衝撃波を起動（progress 0.45 付近）
+    if (isAttacking && lastAttackProgress.current < 0.45 && atkProgress >= 0.45) {
+      shockwaveLife.current = 0.72;
+      // 砂塵パーティクルを周囲にばら撒く
+      dustParticles.current = [];
+      for (let i = 0; i < 48; i++) {
+        const ang = (i / 48) * Math.PI * 2 + Math.random() * 0.2;
+        const sp = 2.2 + Math.random() * 4.5;
+        dustParticles.current.push({
+          x: Math.cos(ang) * 0.4,
+          y: 0.08 + Math.random() * 0.15,
+          z: Math.sin(ang) * 0.4,
+          vx: Math.cos(ang) * sp,
+          vy: 1.2 + Math.random() * 3.2,
+          vz: Math.sin(ang) * sp,
+          life: 0.35 + Math.random() * 0.35,
+          total: 0.35 + Math.random() * 0.35,
+        });
+      }
+    }
+    lastAttackProgress.current = isAttacking ? atkProgress : 0;
+
+    if (shockwaveLife.current > 0) {
+      shockwaveLife.current = Math.max(0, shockwaveLife.current - dt);
+    }
+    const sw = shockwaveLife.current;
+    const swU = sw > 0 ? 1 - sw / 0.72 : 0;
+
+    // 多層衝撃波リング
+    shockwaveRefs.current.forEach((mesh, i) => {
+      if (!mesh) return;
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      if (sw <= 0) {
+        mesh.visible = false;
+        return;
+      }
+      mesh.visible = true;
+      const delay = i * 0.08;
+      const localT = THREE.MathUtils.clamp((swU - delay) / (1 - delay * 0.5), 0, 1);
+      if (localT <= 0) {
+        mesh.visible = false;
+        return;
+      }
+      const radius = 0.6 + localT * (2.4 + i * 0.85);
+      mesh.scale.set(radius, radius, 1);
+      mat.opacity = (1 - localT) * (0.75 - i * 0.12);
+      mesh.position.y = 0.04 + i * 0.03;
+    });
+
+    // 着地フラッシュ
+    if (impactFlashRef.current) {
+      const mat = impactFlashRef.current.material as THREE.MeshBasicMaterial;
+      if (sw > 0.45) {
+        const u = (sw - 0.45) / 0.27;
+        impactFlashRef.current.visible = true;
+        impactFlashRef.current.scale.setScalar(1.2 + (1 - u) * 2.4);
+        mat.opacity = u * 0.85;
+      } else {
+        impactFlashRef.current.visible = false;
+      }
+    }
+
+    // 砂塵更新
+    const posAttr = dustGeo.getAttribute('position') as THREE.BufferAttribute;
+    const colAttr = dustGeo.getAttribute('color') as THREE.BufferAttribute;
+    const positions = posAttr.array as Float32Array;
+    const colors = colAttr.array as Float32Array;
+    let di = 0;
+    for (let i = dustParticles.current.length - 1; i >= 0; i--) {
+      const p = dustParticles.current[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        dustParticles.current.splice(i, 1);
+        continue;
+      }
+      p.vy -= 9 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= 0.94;
+      p.vz *= 0.94;
+      if (di < 48) {
+        const a = p.life / p.total;
+        positions[di * 3] = p.x;
+        positions[di * 3 + 1] = p.y;
+        positions[di * 3 + 2] = p.z;
+        colors[di * 3] = 1 * a;
+        colors[di * 3 + 1] = (0.75 + 0.2 * a) * a;
+        colors[di * 3 + 2] = 0.35 * a;
+        di++;
+      }
+    }
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+    dustGeo.setDrawRange(0, di);
+    if (dustPointsRef.current) dustPointsRef.current.visible = di > 0;
+
     if (speed > 0.1 && !isAttacking) {
       group.position.y += Math.sin(animTime * 5) * 0.1;
     }
 
-    // 被ダメ時はスケールで一瞬ひるむ（マテリアル再生成なし・箱化バグ回避）
+    // 被ダメフラッシュ（白熱）
+    const hp = THREE.MathUtils.clamp(mob.hitTimer / 0.42, 0, 1);
+    const wf = THREE.MathUtils.clamp((mob.hitTimer - 0.2) / 0.12, 0, 1);
+    if (hp > 0.01) {
+      bodyMaterial.emissive.setRGB(1, 0.25 + wf * 0.5, 0.12);
+      bodyMaterial.emissiveIntensity = 0.35 + hp * 1.4 + wf * 1.8;
+      armorMaterial.emissive.setRGB(1, 0.4 + wf * 0.4, 0.2);
+      armorMaterial.emissiveIntensity = 0.4 + hp * 1.5 + wf * 1.6;
+      accentMaterial.emissiveIntensity = 2.2 + hp * 2.5 + wf * 2;
+    } else {
+      bodyMaterial.emissive.set(accent);
+      bodyMaterial.emissiveIntensity = 0.12;
+      armorMaterial.emissive.set(accent);
+      armorMaterial.emissiveIntensity = 0.16;
+      accentMaterial.emissiveIntensity = 2.2;
+    }
+
+    const hdx = mob.hitDirX ?? 0;
+    const hdz = mob.hitDirZ ?? 0;
+    const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
+    const hitLean = -hp * 0.18;
+    const hitRoll = localX * hp * 0.22 + Math.sin(animTime * 40) * hp * 0.08;
+
     if (modelGroupRef.current) {
-      const squash = (1 - hitPulse * 0.08) * slamScaleY;
-      const widen = (1 + hitPulse * 0.07) * slamScaleXZ;
+      const squash = (1 - hp * 0.12) * slamScaleY;
+      const widen = (1 + hp * 0.1) * slamScaleXZ;
       const base = BOSS_MODEL_SCALE;
       modelGroupRef.current.scale.set(base * widen, base * squash, base * widen);
-      modelGroupRef.current.rotation.x = windupPitch;
-      modelGroupRef.current.position.y = BOSS_MODEL_Y_OFFSET - slamDrop;
+      modelGroupRef.current.rotation.x = windupPitch + hitLean;
+      modelGroupRef.current.rotation.z = hitRoll;
+      modelGroupRef.current.position.y = BOSS_MODEL_Y_OFFSET - slamDrop - hp * 0.08;
+      modelGroupRef.current.position.x = localX * hp * 0.15;
+    }
+
+    if (hitFlashRef.current) {
+      const mat = hitFlashRef.current.material as THREE.MeshBasicMaterial;
+      if (hp > 0.01) {
+        hitFlashRef.current.visible = true;
+        hitFlashRef.current.scale.setScalar(1.1 + (1 - hp) * 1.4 + wf * 0.5);
+        mat.opacity = 0.18 + wf * 0.55 + hp * 0.25;
+      } else {
+        hitFlashRef.current.visible = false;
+      }
+    }
+    if (hitRingRef.current) {
+      const mat = hitRingRef.current.material as THREE.MeshBasicMaterial;
+      if (hp > 0.01) {
+        hitRingRef.current.visible = true;
+        const s = 0.9 + (1 - hp) * 1.6;
+        hitRingRef.current.scale.set(s, s, 1);
+        mat.opacity = hp * 0.6;
+      } else {
+        hitRingRef.current.visible = false;
+      }
     }
   });
 
@@ -350,11 +525,44 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
 
   return (
     <group ref={groupRef}>
+      {/* ボス着地の地面衝撃波（本体と独立して足元に表示） */}
+      {[0, 1, 2, 3].map((i) => (
+        <mesh
+          key={`sw-${i}`}
+          ref={(el) => { shockwaveRefs.current[i] = el; }}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.05, 0]}
+          visible={false}
+        >
+          <ringGeometry args={[0.85, 1.05, 56]} />
+          <meshBasicMaterial
+            color={i % 2 === 0 ? accent : '#ffe08a'}
+            transparent
+            opacity={0}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      ))}
+      <mesh ref={impactFlashRef} position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <circleGeometry args={[1, 40]} />
+        <meshBasicMaterial
+          color="#fff6d0"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <points ref={dustPointsRef} geometry={dustGeo} material={dustMat} frustumCulled={false} visible={false} />
+
       <group
         ref={modelGroupRef}
         position={[0, BOSS_MODEL_Y_OFFSET, 0]}
         scale={[BOSS_MODEL_SCALE, BOSS_MODEL_SCALE, BOSS_MODEL_SCALE]}
-        // rotation/position は攻撃アニメで useFrame 更新
       >
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.8, 0]}>
           <ringGeometry args={[0.92, 1.32, 44]} />
@@ -366,20 +574,29 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
             depthWrite={false}
           />
         </mesh>
-        {hitPulse > 0.02 && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
-            <ringGeometry args={[0.55, 1.05 + hitPulse * 0.9, 36]} />
-            <meshBasicMaterial
-              color="#ff5533"
-              transparent
-              opacity={hitPulse * 0.55}
-              side={THREE.DoubleSide}
-              depthWrite={false}
-              toneMapped={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </mesh>
-        )}
+        <mesh ref={hitRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]} visible={false}>
+          <ringGeometry args={[0.55, 1.05, 36]} />
+          <meshBasicMaterial
+            color="#ff5533"
+            transparent
+            opacity={0}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+        <mesh ref={hitFlashRef} position={[0, 1.1, 0]} visible={false}>
+          <sphereGeometry args={[0.9, 16, 12]} />
+          <meshBasicMaterial
+            color="#fff2e0"
+            transparent
+            opacity={0}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
 
         <InstancedBossParts geometry={BOX_GEOMETRY} material={bodyMaterial} parts={silhouette.body} />
         <InstancedBossParts geometry={BOX_GEOMETRY} material={armorMaterial} parts={silhouette.armor} />

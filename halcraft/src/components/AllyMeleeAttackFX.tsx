@@ -467,8 +467,9 @@ export function AllyMeleeAttackFX() {
       const dir = new THREE.Vector3(b.dirX, b.dirY, b.dirZ);
       if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
       dir.normalize();
+      const isHeavy = b.style === 'heavy';
 
-      if (ringMeshRef.current && ringIdx < MAX_BURSTS * 2) {
+      if (ringMeshRef.current && ringIdx < MAX_BURSTS * 6) {
         const r = (0.25 + u * 1.35) * b.scale;
         dummy.position.set(b.x, b.y, b.z);
         dummy.lookAt(b.x + dir.x, b.y + dir.y, b.z + dir.z);
@@ -479,16 +480,22 @@ export function AllyMeleeAttackFX() {
         ringMeshRef.current.setColorAt(ringIdx, tempColor);
         ringIdx++;
 
-        // 地面リング
-        dummy.position.set(b.x, b.y - 0.85, b.z);
-        dummy.rotation.set(-Math.PI / 2, 0, 0);
-        const gr = (0.4 + u * 1.8) * b.scale;
-        dummy.scale.set(gr, gr, 1);
-        dummy.updateMatrix();
-        ringMeshRef.current.setMatrixAt(ringIdx, dummy.matrix);
-        tempColor.copy(b.accent).multiplyScalar(fade * 0.55);
-        ringMeshRef.current.setColorAt(ringIdx, tempColor);
-        ringIdx++;
+        // 地面リング（heavy=ボス等は多層衝撃波）
+        const groundLayers = isHeavy ? 4 : 1;
+        for (let g = 0; g < groundLayers && ringIdx < MAX_BURSTS * 6; g++) {
+          const delay = g * 0.12;
+          const gu = THREE.MathUtils.clamp((u - delay) / Math.max(0.2, 1 - delay), 0, 1);
+          if (gu <= 0.001) continue;
+          dummy.position.set(b.x, b.y - 0.9 + g * 0.02, b.z);
+          dummy.rotation.set(-Math.PI / 2, 0, 0);
+          const gr = (0.45 + gu * (1.9 + g * 0.85)) * b.scale * (isHeavy ? 1.35 : 1);
+          dummy.scale.set(gr, gr, 1);
+          dummy.updateMatrix();
+          ringMeshRef.current.setMatrixAt(ringIdx, dummy.matrix);
+          tempColor.copy(b.accent).lerp(white, g * 0.12).multiplyScalar((1 - gu) * (isHeavy ? 0.7 : 0.55));
+          ringMeshRef.current.setColorAt(ringIdx, tempColor);
+          ringIdx++;
+        }
       }
 
       if (flashMeshRef.current && flashIdx < MAX_BURSTS * 2) {
@@ -573,7 +580,7 @@ export function AllyMeleeAttackFX() {
       />
       <instancedMesh
         ref={ringMeshRef}
-        args={[ringGeo, ringMat, MAX_BURSTS * 2]}
+        args={[ringGeo, ringMat, MAX_BURSTS * 6]}
         frustumCulled={false}
         visible={false}
       />

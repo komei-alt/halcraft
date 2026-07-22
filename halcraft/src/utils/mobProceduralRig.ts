@@ -16,6 +16,9 @@ export interface MobRigAnimState {
   speed: number;
   /** 被ダメ残り時間（秒） */
   hitTimer: number;
+  /** ヒット方向（ワールド水平・正規化）。ひるみの向きに使う */
+  hitDirX?: number;
+  hitDirZ?: number;
   /** 攻撃モーション残り時間（秒）。0 で非攻撃 */
   attackTimer?: number;
   /** 攻撃モーション全体の長さ（秒）。progress 計算用 */
@@ -694,16 +697,65 @@ export function buildProceduralMobRig(
       setBoneEuler('head', -0.08, Math.sin(state.time * 6) * 0.08, 0);
     }
 
-    // 被ダメリアクション（攻撃中は弱め）
+    // 被ダメリアクション（攻撃中は弱め）— 多部位ひるみ + ヒット方向ロール
     if (hit > 0.01) {
-      const flinch = hit * hit * (attacking ? 0.35 : 1);
-      setBoneEuler('spine', -0.35 * flinch, Math.sin(state.time * 40) * 0.12 * hit, 0);
-      setBoneEuler('chest', -0.25 * flinch, 0, Math.sin(state.time * 38) * 0.1 * hit);
-      setBoneEuler('head', 0.4 * flinch, Math.sin(state.time * 30) * 0.2 * hit, 0);
+      // 序盤ほど強く、残時間で減衰（二乗より立方でピークを尖らせる）
+      const flinch = hit * hit * (0.55 + hit * 0.45) * (attacking ? 0.4 : 1.15);
+      const shake = Math.sin(state.time * 52) * hit;
+      const shake2 = Math.cos(state.time * 41) * hit;
+      // ローカルひるみ向き（モデル前方基準でヒット方向をざっくり反映）
+      const hdx = state.hitDirX ?? 0;
+      const hdz = state.hitDirZ ?? 0;
+      const localYaw = Math.atan2(hdx, hdz) - 0; // ルートが既に回転しているため相対は弱め
+      const sideRoll = THREE.MathUtils.clamp(hdx * 0.35 + shake * 0.12, -0.45, 0.45);
+
+      setBoneEuler(
+        'hips',
+        -0.18 * flinch,
+        sideRoll * 0.35 + shake * 0.06,
+        sideRoll * 0.55,
+      );
+      boneMap.hips.position.y -= flinch * bodyHeight * 0.035;
+      boneMap.hips.position.z -= flinch * bodyHeight * 0.04;
+
+      setBoneEuler(
+        'spine',
+        -0.55 * flinch + shake * 0.08,
+        sideRoll * 0.4 + shake * 0.1,
+        sideRoll * 0.25,
+      );
+      setBoneEuler(
+        'chest',
+        -0.42 * flinch,
+        sideRoll * 0.55 + shake2 * 0.08,
+        sideRoll * 0.35 + shake * 0.06,
+      );
+      setBoneEuler(
+        'neck',
+        0.25 * flinch,
+        sideRoll * 0.3 + shake * 0.12,
+        0,
+      );
+      setBoneEuler(
+        'head',
+        0.55 * flinch + shake * 0.15,
+        sideRoll * 0.5 + Math.sin(state.time * 36) * 0.22 * hit,
+        shake2 * 0.12,
+      );
+
       if (!attacking) {
-        setBoneEuler('L_upperArm', -0.5 * flinch, 0, 0.4 * flinch);
-        setBoneEuler('R_upperArm', -0.5 * flinch, 0, -0.4 * flinch);
+        // 腕を顔の前へガード気味に
+        setBoneEuler('L_upperArm', -0.75 * flinch, 0.2, 0.55 * flinch + 0.15);
+        setBoneEuler('R_upperArm', -0.75 * flinch, -0.2, -0.55 * flinch - 0.15);
+        setBoneEuler('L_lowerArm', 0.9 * flinch + 0.2, 0, 0.1);
+        setBoneEuler('R_lowerArm', 0.9 * flinch + 0.2, 0, -0.1);
+        // 脚を少し開いて踏ん張る
+        setBoneEuler('L_upperLeg', 0.2 * flinch, 0, 0.12 * flinch);
+        setBoneEuler('R_upperLeg', 0.2 * flinch, 0, -0.12 * flinch);
+        setBoneEuler('L_lowerLeg', 0.25 * flinch, 0, 0);
+        setBoneEuler('R_lowerLeg', 0.25 * flinch, 0, 0);
       }
+      void localYaw;
     }
 
     root.updateMatrixWorld(true);
