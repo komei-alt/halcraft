@@ -355,9 +355,10 @@ export const useMobStore = create<MobState>((set, get) => ({
           let nextVx = m.vx;
           let nextVz = m.vz;
           // 上方向は付与しない（浮遊・後退感の主因）
-          let nextVy = m.vy;
-          // 被弾フラッシュ用。接近AIは止めない（短め）
-          let nextHitTimer = 0.12;
+          const nextVy = m.vy;
+          // 被弾フラッシュ用（ノックバック無しでもはっきり見える長さ）。接近AIは止めない
+          // ボスは少し長く光らせて「当たった」感を出す
+          let nextHitTimer = isBoss ? 0.28 : 0.22;
 
           if (rawKb > 0.04) {
             const dirX = knockbackX / rawKb;
@@ -375,7 +376,7 @@ export const useMobStore = create<MobState>((set, get) => ({
                 nextVx *= s;
                 nextVz *= s;
               }
-              nextHitTimer = isBoss ? 0.1 : 0.16;
+              nextHitTimer = isBoss ? 0.32 : 0.24;
             }
           }
 
@@ -385,7 +386,8 @@ export const useMobStore = create<MobState>((set, get) => ({
             vx: nextVx,
             vy: nextVy,
             vz: nextVz,
-            hitTimer: nextHitTimer,
+            // 連射でフラッシュが途切れないよう、残り時間より短くしない
+            hitTimer: Math.max(m.hitTimer, nextHitTimer),
             // 味方がダメージを受けたら怒り状態に（ニワトリは除外）
             angryAtPlayer: shouldBeAngry ? true : m.angryAtPlayer,
             angryTimer: shouldBeAngry ? ANGRY_DURATION : m.angryTimer,

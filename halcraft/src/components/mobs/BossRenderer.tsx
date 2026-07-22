@@ -260,14 +260,15 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
   }), [accent]);
 
   useEffect(() => {
-    bodyMaterial.color.set(isDamaged ? '#ffb4aa' : silhouette.bodyColor);
-    bodyMaterial.emissive.set(accent);
-    bodyMaterial.emissiveIntensity = isDamaged ? 0.5 : 0.12;
-    armorMaterial.color.set(isDamaged ? '#ffe0d8' : silhouette.armorColor);
-    armorMaterial.emissive.set(accent);
-    armorMaterial.emissiveIntensity = isDamaged ? 0.58 : 0.16;
+    bodyMaterial.color.set(isDamaged ? '#ff9a8e' : silhouette.bodyColor);
+    bodyMaterial.emissive.set(isDamaged ? '#ff3318' : accent);
+    bodyMaterial.emissiveIntensity = isDamaged ? 0.95 : 0.12;
+    armorMaterial.color.set(isDamaged ? '#ffd0c4' : silhouette.armorColor);
+    armorMaterial.emissive.set(isDamaged ? '#ff4422' : accent);
+    armorMaterial.emissiveIntensity = isDamaged ? 1.05 : 0.16;
     accentMaterial.color.set(accent);
-    accentMaterial.emissive.set(accent);
+    accentMaterial.emissive.set(isDamaged ? '#ffffff' : accent);
+    accentMaterial.emissiveIntensity = isDamaged ? 3.4 : 2.2;
   }, [
     accent,
     accentMaterial,
@@ -284,6 +285,9 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     accentMaterial.dispose();
   }, [accentMaterial, armorMaterial, bodyMaterial]);
 
+  const modelGroupRef = useRef<THREE.Group>(null);
+  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.28, 0, 1);
+
   useFrame(() => {
     const group = groupRef.current;
     if (!group) return;
@@ -297,14 +301,23 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     if (speed > 0.1) {
       group.position.y += Math.sin(animTime * 5) * 0.1;
     }
+
+    // 被ダメ時はスケールで一瞬ひるむ（マテリアル再生成なし・箱化バグ回避）
+    if (modelGroupRef.current) {
+      const squash = 1 - hitPulse * 0.08;
+      const widen = 1 + hitPulse * 0.07;
+      const base = BOSS_MODEL_SCALE;
+      modelGroupRef.current.scale.set(base * widen, base * squash, base * widen);
+    }
   });
 
-  const auraOpacity = 0.18 + Math.sin(animTime * 3.2) * 0.05;
-  const corePulse = 1 + Math.sin(animTime * 4.6) * 0.08;
+  const auraOpacity = 0.18 + Math.sin(animTime * 3.2) * 0.05 + hitPulse * 0.35;
+  const corePulse = 1 + Math.sin(animTime * 4.6) * 0.08 + hitPulse * 0.22;
 
   return (
     <group ref={groupRef}>
       <group
+        ref={modelGroupRef}
         position={[0, BOSS_MODEL_Y_OFFSET, 0]}
         scale={[BOSS_MODEL_SCALE, BOSS_MODEL_SCALE, BOSS_MODEL_SCALE]}
       >
@@ -318,6 +331,20 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
             depthWrite={false}
           />
         </mesh>
+        {hitPulse > 0.02 && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
+            <ringGeometry args={[0.55, 1.05 + hitPulse * 0.9, 36]} />
+            <meshBasicMaterial
+              color="#ff5533"
+              transparent
+              opacity={hitPulse * 0.55}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        )}
 
         <InstancedBossParts geometry={BOX_GEOMETRY} material={bodyMaterial} parts={silhouette.body} />
         <InstancedBossParts geometry={BOX_GEOMETRY} material={armorMaterial} parts={silhouette.armor} />

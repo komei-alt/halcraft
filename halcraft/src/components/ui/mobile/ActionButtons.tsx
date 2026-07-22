@@ -27,7 +27,8 @@ const PRIMARY_ATTACK_BOTTOM = 172;
 const BASE_BOTTOM = 64 + 80;
 const STACK_GAP = 12;
 
-type TouchHandler = (e: React.TouchEvent) => void;
+/** タッチ／ポインタ両対応の押下ハンドラ */
+type PressHandler = (e: React.SyntheticEvent) => void;
 
 interface ButtonTone {
   background: string;
@@ -46,9 +47,9 @@ interface ActionButtonProps {
   meterRatio?: number | null;
   pulse?: boolean;
   placement?: 'right-stack' | 'left-attack';
-  onTouchStart: TouchHandler;
-  onTouchEnd?: TouchHandler;
-  onTouchCancel?: TouchHandler;
+  onTouchStart: PressHandler;
+  onTouchEnd?: PressHandler;
+  onTouchCancel?: PressHandler;
 }
 
 const TONES: Record<string, ButtonTone> = {
@@ -257,12 +258,41 @@ function ActionButton({
         right: RIGHT,
       };
 
+  // pointer イベント + capture で、指がボタン外に出ても end を確実に受ける
+  // （押しっぱなし射撃が解除されない不具合の再発防止）
+  // touch と二重発火しないよう pointer のみ使う（現代ブラウザはタッチも pointer になる）
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // capture 非対応環境は無視
+    }
+    onTouchStart(e);
+  };
+  const handlePointerEnd = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onTouchEnd?.(e);
+  };
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (onTouchCancel ?? onTouchEnd)?.(e);
+  };
+
   return (
     <div
       aria-label={ariaLabel}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={onTouchCancel}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={() => {
+        // キャプチャ喪失時も押しっぱなしを確実に解除
+        const noop = { preventDefault() {}, stopPropagation() {} } as React.SyntheticEvent;
+        (onTouchCancel ?? onTouchEnd)?.(noop);
+      }}
       style={{
         ...buttonBaseStyle,
         ...positionStyle,
@@ -355,11 +385,11 @@ interface VehicleActionsProps {
   stageId: string | null;
   challengeStats: ReturnType<typeof useStageChallengeStore.getState>['stats'];
   completedChallengeIds: string[];
-  onGunStart: TouchHandler;
-  onGunEnd: TouchHandler;
-  onRocket: TouchHandler;
-  onBomb: TouchHandler;
-  onInteract: TouchHandler;
+  onGunStart: PressHandler;
+  onGunEnd: PressHandler;
+  onRocket: PressHandler;
+  onBomb: PressHandler;
+  onInteract: PressHandler;
 }
 
 function VehicleActions({
@@ -443,13 +473,13 @@ interface WalkingActionsProps {
   combatFocusBadge: string | null;
   combatFocusRatio: number | null;
   combatMatched: boolean;
-  onRocket: TouchHandler;
-  onMachineGunStart: TouchHandler;
-  onMachineGunEnd: TouchHandler;
-  onLightsaber: TouchHandler;
-  onTogglePlace: TouchHandler;
-  onCrafting: TouchHandler;
-  onInteract: TouchHandler;
+  onRocket: PressHandler;
+  onMachineGunStart: PressHandler;
+  onMachineGunEnd: PressHandler;
+  onLightsaber: PressHandler;
+  onTogglePlace: PressHandler;
+  onCrafting: PressHandler;
+  onInteract: PressHandler;
 }
 
 function WalkingActions({
@@ -636,69 +666,69 @@ export function ActionButtons({ onOpenCrafting }: ActionButtonsProps) {
     : null;
 
   // 設置/破壊モード切替
-  const handleTogglePlace = useCallback((e: React.TouchEvent) => {
+  const handleTogglePlace = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     togglePlaceMode();
   }, [togglePlaceMode]);
 
   // クラフト画面開閉
-  const handleCrafting = useCallback((e: React.TouchEvent) => {
+  const handleCrafting = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     onOpenCrafting();
   }, [onOpenCrafting]);
 
   // ロケット発射
-  const handleRocket = useCallback((e: React.TouchEvent) => {
+  const handleRocket = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.fireRocket = true;
   }, []);
 
-  const handleMachineGunStart = useCallback((e: React.TouchEvent) => {
+  const handleMachineGunStart = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.fireMachineGun = true;
   }, []);
 
-  const handleMachineGunEnd = useCallback((e: React.TouchEvent) => {
+  const handleMachineGunEnd = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.fireMachineGun = false;
   }, []);
 
-  const handleLightsaber = useCallback((e: React.TouchEvent) => {
+  const handleLightsaber = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.breakBlock = true;
   }, []);
 
-  const handleVehicleGunStart = useCallback((e: React.TouchEvent) => {
+  const handleVehicleGunStart = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.vehicleGun = true;
   }, []);
 
-  const handleVehicleGunEnd = useCallback((e: React.TouchEvent) => {
+  const handleVehicleGunEnd = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.vehicleGun = false;
   }, []);
 
-  const handleVehicleRocket = useCallback((e: React.TouchEvent) => {
+  const handleVehicleRocket = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.vehicleRocket = true;
   }, []);
 
-  const handleVehicleBomb = useCallback((e: React.TouchEvent) => {
+  const handleVehicleBomb = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.vehicleBomb = true;
   }, []);
 
-  const handleInteract = useCallback((e: React.TouchEvent) => {
+  const handleInteract = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     mobileActions.interact = true;

@@ -135,13 +135,14 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
     return null;
   }, [config.angryTint, config.damagedTint, isAngry, isDamaged]);
   const traitAccent = mob.traitAccent;
-  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.3, 0, 1);
+  // hitTimer 0.22〜0.28 を想定。ノックバック無しでも赤フラッシュがはっきり見える
+  const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.22, 0, 1);
   const glowColor = useMemo(() => {
-    if (tint) return tint.clone().multiplyScalar(0.58);
+    if (tint) return tint.clone().multiplyScalar(0.72);
     if (traitAccent) return new THREE.Color(traitAccent).multiplyScalar(0.34);
     return new THREE.Color(0xffe7bd).multiplyScalar(0.16);
   }, [tint, traitAccent]);
-  const glowIntensity = 0.18 + hitPulse * 0.34 + (isAngry ? 0.16 : 0) + (traitAccent ? 0.07 : 0);
+  const glowIntensity = 0.18 + hitPulse * 0.72 + (isAngry ? 0.16 : 0) + (traitAccent ? 0.07 : 0);
 
   useEffect(() => {
     tintScene(clonedScene, originalColors, tint, glowColor, glowIntensity);
@@ -157,10 +158,10 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const movePhase = animTime * (config.bobSpeed ?? 4);
   const strideLean = isMoving ? Math.sin(movePhase) * Math.min(0.12, speed * 0.045) : 0;
   const sideLean = isMoving ? Math.cos(movePhase * 0.5) * Math.min(0.07, speed * 0.025) : 0;
-  const hitLean = -hitPulse * 0.2;
-  const hitRoll = Math.sin(animTime * 34) * hitPulse * 0.08;
-  const squashY = 1 - hitPulse * 0.05 + (isMoving ? Math.abs(Math.sin(movePhase)) * 0.015 : 0);
-  const squashXZ = 1 + hitPulse * 0.045;
+  const hitLean = -hitPulse * 0.28;
+  const hitRoll = Math.sin(animTime * 42) * hitPulse * 0.12;
+  const squashY = 1 - hitPulse * 0.1 + (isMoving ? Math.abs(Math.sin(movePhase)) * 0.015 : 0);
+  const squashXZ = 1 + hitPulse * 0.08;
   const shadowScale = Math.max(0.34, config.hpBarWidth * 0.72) * (1 + speed * 0.08 + hitPulse * 0.08);
   const angryPulse = isAngry ? 0.5 + Math.sin(animTime * 8) * 0.18 : 0;
   const traitPulse = traitAccent ? 0.42 + Math.sin(animTime * 3.2) * 0.08 : 0;

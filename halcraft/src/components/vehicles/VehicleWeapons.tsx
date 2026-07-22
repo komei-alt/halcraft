@@ -103,6 +103,15 @@ interface ExplosionFlash {
   life: number;
 }
 
+interface MuzzleFlash {
+  id: number;
+  pos: THREE.Vector3;
+  dir: THREE.Vector3;
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
 interface BombProjectile {
   id: number;
   syncId: string;
@@ -298,6 +307,7 @@ export function VehicleWeapons() {
   const [rockets, setRockets] = useState<CannonRocket[]>([]);
   const [bombs, setBombs] = useState<BombProjectile[]>([]);
   const [explosions, setExplosions] = useState<ExplosionFlash[]>([]);
+  const [muzzleFlashes, setMuzzleFlashes] = useState<MuzzleFlash[]>([]);
   const isMouseDown = useRef(false);
   const lastGunFire = useRef(0);
   const lastRocketFire = useRef(0);
@@ -338,6 +348,16 @@ export function VehicleWeapons() {
       createdAt: now,
       isRemote,
       type,
+    }]);
+
+    // 銃口フラッシュ（手応え）
+    setMuzzleFlashes((prev) => [...prev.slice(-12), {
+      id: nextProjectileId++,
+      pos: startPos.clone(),
+      dir: dir.clone(),
+      life: 0.06,
+      maxLife: 0.06,
+      color: type === 'tank' ? '#fff36a' : '#8ff6ff',
     }]);
 
     if (!isRemote) {
@@ -552,6 +572,14 @@ export function VehicleWeapons() {
     }]);
 
     playRocketLaunchSound(startPos.distanceTo(camera.position));
+    setMuzzleFlashes((prev) => [...prev.slice(-12), {
+      id: nextProjectileId++,
+      pos: startPos.clone(),
+      dir: shootDir.current.clone(),
+      life: 0.12,
+      maxLife: 0.12,
+      color: '#ff9a40',
+    }]);
     useMultiplayerStore.getState().sendRocketFire(
       syncId,
       [startPos.x, startPos.y, startPos.z],
@@ -730,6 +758,7 @@ export function VehicleWeapons() {
     const weaponsLive = canUseVehicleWeapons();
     if (!weaponsLive) {
       isMouseDown.current = false;
+      mobileActions.vehicleGun = false;
     } else {
       const active = useVehicleStore.getState().getActiveVehicle();
       const canUsePointer = isDesktopGameplayInputActive();
@@ -754,6 +783,12 @@ export function VehicleWeapons() {
     const getBlock = useWorldStore.getState().getBlock;
     const mobs = useMobStore.getState().mobs;
     const remotePlayers = useMultiplayerStore.getState().remotePlayers as Map<string, RemotePlayerTarget>;
+
+    if (muzzleFlashes.length > 0) {
+      setMuzzleFlashes((prev) => prev
+        .map((flash) => ({ ...flash, life: flash.life - delta }))
+        .filter((flash) => flash.life > 0));
+    }
 
     setBullets((prev) => {
       if (prev.length === 0) return prev;
@@ -988,6 +1023,48 @@ export function VehicleWeapons() {
               />
             </mesh>
             <pointLight color="#ff7b22" intensity={t * 10} distance={22} decay={2} />
+          </group>
+        );
+      })}
+      {/* 銃口マズルフラッシュ */}
+      {muzzleFlashes.map((flash) => {
+        const t = Math.max(0, flash.life / flash.maxLife);
+        const mid = flash.pos.clone().addScaledVector(flash.dir, 0.35 * t + 0.15);
+        const quat = new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          flash.dir.lengthSq() > 0.0001 ? flash.dir.clone().normalize() : new THREE.Vector3(0, 0, -1),
+        );
+        return (
+          <group key={flash.id}>
+            <mesh position={flash.pos}>
+              <sphereGeometry args={[0.12 + (1 - t) * 0.18, 10, 8]} />
+              <meshBasicMaterial
+                color="#ffffff"
+                transparent
+                opacity={t * 0.95}
+                depthWrite={false}
+                toneMapped={false}
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            <mesh position={mid} quaternion={quat}>
+              <coneGeometry args={[0.14 + (1 - t) * 0.1, 0.55 + (1 - t) * 0.35, 8]} />
+              <meshBasicMaterial
+                color={flash.color}
+                transparent
+                opacity={t * 0.8}
+                depthWrite={false}
+                toneMapped={false}
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            <pointLight
+              position={flash.pos}
+              color={flash.color}
+              intensity={t * 5.5}
+              distance={8}
+              decay={2}
+            />
           </group>
         );
       })}

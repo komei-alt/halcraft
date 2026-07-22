@@ -663,6 +663,7 @@ export function MachineGun() {
     // ポーズ・死亡・入力無効時は完全停止
     if (useGameStore.getState().phase !== 'playing' || usePlayerStore.getState().isDead) {
       isMouseDown.current = false;
+      mobileActions.vehicleGun = false;
       return;
     }
     const isGunner = mySeat === 'gunner_left' || mySeat === 'gunner_right';

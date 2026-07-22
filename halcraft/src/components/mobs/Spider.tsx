@@ -57,7 +57,8 @@ export function Spider({ mob, animTime }: SpiderProps) {
   const isDamaged = mob.hitTimer > 0;
   const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
   const walkCycle = animTime * (isMoving ? 10 : 1.5);
-  const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 20) * 0.1 : 0;
+  const hitPulse = Math.min(1, mob.hitTimer / 0.22);
+  const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 28) * (0.12 + hitPulse * 0.1) : 0;
 
   // 個体ごとのマテリアル（被ダメ時も参照を固定して InstancedMesh を再マウントしない）
   const materials = useMemo(() => ({
@@ -83,12 +84,12 @@ export function Spider({ mob, animTime }: SpiderProps) {
       materials.body.color.setHex(0xff5b50);
       materials.head.color.setHex(0xff5b50);
       materials.leg.color.setHex(0xff5b50);
-      materials.body.emissive.setHex(0x661510);
-      materials.body.emissiveIntensity = 0.45;
-      materials.head.emissive.setHex(0x661510);
-      materials.head.emissiveIntensity = 0.45;
-      materials.leg.emissive.setHex(0x661510);
-      materials.leg.emissiveIntensity = 0.35;
+      materials.body.emissive.setHex(0xaa2010);
+      materials.body.emissiveIntensity = 0.75;
+      materials.head.emissive.setHex(0xaa2010);
+      materials.head.emissiveIntensity = 0.75;
+      materials.leg.emissive.setHex(0x881808);
+      materials.leg.emissiveIntensity = 0.55;
     } else {
       materials.body.color.setHex(0x292528);
       materials.head.color.setHex(0x373034);
