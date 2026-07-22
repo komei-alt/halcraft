@@ -12,10 +12,51 @@ import {
 import { isTouchDevice } from '../../utils/device';
 import { playBossSpawnSound } from '../../utils/sounds';
 
+interface BossHudSnapshot {
+  id: string;
+  hp: number;
+  maxHp: number;
+  bossEncounterId?: string;
+  traitAccent?: string;
+  traitLabel?: string;
+  bossSummonLabel?: string;
+}
+
+/** zustand v5 は equalityFn 非対応のため、表示に効く値だけを文字列キーにする */
+function selectBossHudKey(mobs: ReturnType<typeof useMobStore.getState>['mobs']): string {
+  const boss = mobs.find((mob) => mob.type === 'boss_giant');
+  if (!boss) return '';
+  return [
+    boss.id,
+    boss.hp,
+    boss.maxHp,
+    boss.bossEncounterId ?? '',
+    boss.traitAccent ?? '',
+    boss.traitLabel ?? '',
+    boss.bossSummonLabel ?? '',
+  ].join('\u001f');
+}
+
+function parseBossHudKey(key: string): BossHudSnapshot | null {
+  if (!key) return null;
+  const [id, hp, maxHp, bossEncounterId, traitAccent, traitLabel, bossSummonLabel] = key.split('\u001f');
+  return {
+    id,
+    hp: Number(hp),
+    maxHp: Number(maxHp),
+    bossEncounterId: bossEncounterId || undefined,
+    traitAccent: traitAccent || undefined,
+    traitLabel: traitLabel || undefined,
+    bossSummonLabel: bossSummonLabel || undefined,
+  };
+}
+
 export function BossEncounterHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
-  const boss = useMobStore((s) => s.mobs.find((mob) => mob.type === 'boss_giant') ?? null);
+  // 位置更新では再レンダーしない（HP 等の表示に必要なフィールドだけ購読）
+  const bossKey = useMobStore((s) => selectBossHudKey(s.mobs));
+  const boss = useMemo(() => parseBossHudKey(bossKey), [bossKey]);
   const lastAnnouncedBossId = useRef<string | null>(null);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
 

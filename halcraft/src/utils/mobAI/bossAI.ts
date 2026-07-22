@@ -14,16 +14,22 @@ import {
   applyMobGravityAndYCollision,
   BOSS_ATTACK_ANIM_DURATION,
   BOSS_ATTACK_HIT_AT,
+  canMeleeHitPlayer,
   type MobAIContext,
 } from './constants';
 
 const BOSS_SPEED = 1.5;
 const BOSS_STOP_RANGE = 2.0;
 const BOSS_ATTACK_RANGE = 2.5;
+/** ヒットフレームの猶予（振り中のわずかな移動を許容） */
+const BOSS_ATTACK_HIT_RANGE = BOSS_ATTACK_RANGE * 1.12;
 const BOSS_ATTACK_DAMAGE = 5;
 const BOSS_ATTACK_COOLDOWN = 2.0;
 const BOSS_HEIGHT = 4.8;
 const BOSS_RADIUS = 1.2;
+/** 叩きつけの有効高さ（足元基準）。体高いっぱいまで伸ばさず、崖上への不正ヒットを防ぐ */
+const BOSS_ATTACK_MIN_Y = -0.35;
+const BOSS_ATTACK_MAX_Y = 2.85;
 
 export interface BossState {
   attackCooldown: number;
@@ -74,20 +80,34 @@ export function updateBossAI(
     }
     if (!state.attackHitApplied && state.attackElapsed >= BOSS_ATTACK_HIT_AT) {
       state.attackHitApplied = true;
-      const hx = playerX;
-      const hy = playerY + 1.2;
-      const hz = playerZ;
-      let dirX = hx - m.x;
-      let dirZ = hz - m.z;
-      let dirY = hy - (m.y + 2.0);
-      const len = Math.hypot(dirX, dirY, dirZ) || 1;
-      dirX /= len; dirY /= len; dirZ /= len;
-      triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
-      attack = {
-        damage: state.pendingDamage,
-        kbDirX: state.pendingKbX,
-        kbDirZ: state.pendingKbZ,
-      };
+      // ヒット瞬間に距離・高さ・正面を再判定（開始時だけだと崖上や背後でも被弾する）
+      const stillInReach = canMeleeHitPlayer(
+        m.x, m.y, m.z, m.rotation,
+        playerX, playerY, playerZ,
+        {
+          attackRange: BOSS_ATTACK_HIT_RANGE,
+          attackMinY: BOSS_ATTACK_MIN_Y,
+          attackMaxY: BOSS_ATTACK_MAX_Y,
+          requireFacing: true,
+          facingDotMin: 0.12,
+        },
+      );
+      if (stillInReach) {
+        const hx = playerX;
+        const hy = playerY + 1.2;
+        const hz = playerZ;
+        let dirX = hx - m.x;
+        let dirZ = hz - m.z;
+        let dirY = hy - (m.y + 2.0);
+        const len = Math.hypot(dirX, dirY, dirZ) || 1;
+        dirX /= len; dirY /= len; dirZ /= len;
+        triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
+        attack = {
+          damage: state.pendingDamage,
+          kbDirX: state.pendingKbX,
+          kbDirZ: state.pendingKbZ,
+        };
+      }
     }
     m.vx = 0;
     m.vz = 0;
@@ -137,10 +157,19 @@ export function updateBossAI(
   }
   m.z = newZ;
 
-  const playerDy = m.y - playerY;
-  const yClose = Math.abs(playerDy) < BOSS_HEIGHT + 0.5;
+  const canStartAttack = canMeleeHitPlayer(
+    m.x, m.y, m.z, m.rotation,
+    playerX, playerY, playerZ,
+    {
+      attackRange: BOSS_ATTACK_RANGE,
+      attackMinY: BOSS_ATTACK_MIN_Y,
+      attackMaxY: BOSS_ATTACK_MAX_Y,
+      requireFacing: true,
+      facingDotMin: 0.25,
+    },
+  );
 
-  if (!isAttacking && distXZ < BOSS_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
+  if (!isAttacking && canStartAttack && state.attackCooldown <= 0) {
     state.attackCooldown = BOSS_ATTACK_COOLDOWN;
     state.attackElapsed = 0;
     state.attackHitApplied = false;

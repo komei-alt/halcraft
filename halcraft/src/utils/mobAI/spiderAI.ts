@@ -12,6 +12,7 @@ import {
   SPIDER_ATTACK_ANIM_DURATION, SPIDER_ATTACK_HIT_AT,
   SPIDER_HEIGHT, SPIDER_RADIUS,
   applyMobGravityAndYCollision,
+  canMeleeHitPlayer,
   type MobAIContext,
 } from './constants';
 
@@ -65,20 +66,33 @@ export function updateSpiderAI(
     }
     if (!state.attackHitApplied && state.attackElapsed >= SPIDER_ATTACK_HIT_AT) {
       state.attackHitApplied = true;
-      const hx = playerX;
-      const hy = playerY + 0.9;
-      const hz = playerZ;
-      let dirX = hx - m.x;
-      let dirZ = hz - m.z;
-      let dirY = hy - (m.y + 0.4);
-      const len = Math.hypot(dirX, dirY, dirZ) || 1;
-      dirX /= len; dirY /= len; dirZ /= len;
-      triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
-      attack = {
-        damage: state.pendingDamage,
-        kbDirX: state.pendingKbX,
-        kbDirZ: state.pendingKbZ,
-      };
+      const stillInReach = canMeleeHitPlayer(
+        m.x, m.y, m.z, m.rotation,
+        playerX, playerY, playerZ,
+        {
+          attackRange: SPIDER_ATTACK_RANGE * 1.15,
+          attackMinY: -0.25,
+          attackMaxY: SPIDER_HEIGHT + 1.4,
+          requireFacing: true,
+          facingDotMin: 0.1,
+        },
+      );
+      if (stillInReach) {
+        const hx = playerX;
+        const hy = playerY + 0.9;
+        const hz = playerZ;
+        let dirX = hx - m.x;
+        let dirZ = hz - m.z;
+        let dirY = hy - (m.y + 0.4);
+        const len = Math.hypot(dirX, dirY, dirZ) || 1;
+        dirX /= len; dirY /= len; dirZ /= len;
+        triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
+        attack = {
+          damage: state.pendingDamage,
+          kbDirX: state.pendingKbX,
+          kbDirZ: state.pendingKbZ,
+        };
+      }
     }
     m.vx = 0;
     m.vz = 0;
@@ -130,9 +144,18 @@ export function updateSpiderAI(
     m.z = newZS;
   }
 
-  const playerDyS = m.y - playerY;
-  const yCloseS = Math.abs(playerDyS) < SPIDER_HEIGHT + 0.5;
-  if (!isAttacking && distS < SPIDER_ATTACK_RANGE && yCloseS && state.attackCooldown <= 0) {
+  const canStart = canMeleeHitPlayer(
+    m.x, m.y, m.z, m.rotation,
+    playerX, playerY, playerZ,
+    {
+      attackRange: SPIDER_ATTACK_RANGE,
+      attackMinY: -0.25,
+      attackMaxY: SPIDER_HEIGHT + 1.4,
+      requireFacing: true,
+      facingDotMin: 0.15,
+    },
+  );
+  if (!isAttacking && canStart && state.attackCooldown <= 0) {
     state.attackCooldown = SPIDER_ATTACK_COOLDOWN;
     state.attackElapsed = 0;
     state.attackHitApplied = false;

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { MobData } from '../../stores/useMobStore';
+import { useMobStore, type MobData } from '../../stores/useMobStore';
 import type { StageBossEncounterId } from '../../types/stageBossEncounters';
 import { MOB_HITBOXES } from '../../utils/mobHitboxes';
 
@@ -323,14 +323,16 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     const group = groupRef.current;
     if (!group) return;
     const dt = Math.min(delta, 0.05);
+    // 親の再レンダーに頼らず、ストア上の最新座標・攻撃タイマーを参照
+    const live = useMobStore.getState().mobs.find((entry) => entry.id === mob.id) ?? mob;
 
-    targetPositionRef.current.set(mob.x, mob.y, mob.z);
+    targetPositionRef.current.set(live.x, live.y, live.z);
     group.position.lerp(targetPositionRef.current, 0.3);
-    targetQuaternionRef.current.setFromAxisAngle(Y_AXIS, mob.rotation);
+    targetQuaternionRef.current.setFromAxisAngle(Y_AXIS, live.rotation);
     group.quaternion.slerp(targetQuaternionRef.current, 0.3);
 
-    const speed = Math.hypot(mob.vx, mob.vz);
-    const attackTimer = mob.attackTimer ?? 0;
+    const speed = Math.hypot(live.vx, live.vz);
+    const attackTimer = live.attackTimer ?? 0;
     const isAttacking = attackTimer > 0.01;
     const atkProgress = isAttacking
       ? THREE.MathUtils.clamp(1 - attackTimer / 0.72, 0, 1)
@@ -464,8 +466,8 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     }
 
     // 被ダメフラッシュ（白熱）
-    const hp = THREE.MathUtils.clamp(mob.hitTimer / 0.42, 0, 1);
-    const wf = THREE.MathUtils.clamp((mob.hitTimer - 0.2) / 0.12, 0, 1);
+    const hp = THREE.MathUtils.clamp(live.hitTimer / 0.42, 0, 1);
+    const wf = THREE.MathUtils.clamp((live.hitTimer - 0.2) / 0.12, 0, 1);
     if (hp > 0.01) {
       bodyMaterial.emissive.setRGB(1, 0.25 + wf * 0.5, 0.12);
       bodyMaterial.emissiveIntensity = 0.35 + hp * 1.4 + wf * 1.8;
@@ -480,9 +482,9 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
       accentMaterial.emissiveIntensity = 2.2;
     }
 
-    const hdx = mob.hitDirX ?? 0;
-    const hdz = mob.hitDirZ ?? 0;
-    const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
+    const hdx = live.hitDirX ?? 0;
+    const hdz = live.hitDirZ ?? 0;
+    const localX = hdx * Math.cos(live.rotation) - hdz * Math.sin(live.rotation);
     const hitLean = -hp * 0.18;
     const hitRoll = localX * hp * 0.22 + Math.sin(animTime * 40) * hp * 0.08;
 

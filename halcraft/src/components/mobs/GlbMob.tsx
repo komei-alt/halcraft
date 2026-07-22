@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Billboard, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { MobData } from '../../stores/useMobStore';
+import { useMobStore, type MobData } from '../../stores/useMobStore';
 import { computeGroundOffset } from '../../utils/autoGround';
 import {
   buildProceduralMobRig,
@@ -253,18 +253,21 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
     glowIntensity,
   ]);
 
-  // 毎フレーム: 位置補間なしで最新 mob 座標 + リグ更新
+  // 毎フレーム: ストア上の最新座標を直接読む（親の React 再レンダーに依存しない）
   useFrame((_, delta) => {
     animClock.current += delta;
     const t = animClock.current;
-    const speed = Math.hypot(mob.vx, mob.vz);
+    const live = useMobStore.getState().mobs.find((entry) => entry.id === mob.id) ?? mob;
+    const speed = Math.hypot(live.vx, live.vz);
     const moving = speed > 0.12;
-    const hp = THREE.MathUtils.clamp(mob.hitTimer / hitDuration, 0, 1);
-    const wf = THREE.MathUtils.clamp((mob.hitTimer - hitDuration * 0.45) / (hitDuration * 0.25), 0, 1);
+    const liveHitTimer = live.hitTimer;
+    const liveAngry = live.angryAtPlayer;
+    const hp = THREE.MathUtils.clamp(liveHitTimer / hitDuration, 0, 1);
+    const wf = THREE.MathUtils.clamp((liveHitTimer - hitDuration * 0.45) / (hitDuration * 0.25), 0, 1);
 
     if (groupRef.current) {
-      groupRef.current.position.set(mob.x, mob.y, mob.z);
-      groupRef.current.rotation.y = mob.rotation;
+      groupRef.current.position.set(live.x, live.y, live.z);
+      groupRef.current.rotation.y = live.rotation;
     }
 
     // ヒット中は emissive を毎フレーム尖らせ、終了フレームで通常色へ戻す
@@ -279,7 +282,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
         tintScene(fallbackScene, originalColorsFallback, liveTint, liveGlow, liveIntensity);
       }
     } else if (wasHitActive.current) {
-      if (isAngry) {
+      if (liveAngry) {
         if (rig) {
           tintMaterials(
             rig.traverseMaterials,
@@ -348,11 +351,11 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
 
     if (modelAnchorRef.current) {
       // ヒット方向に後傾・ロール（モデルローカル）
-      const hdx = mob.hitDirX ?? 0;
-      const hdz = mob.hitDirZ ?? 0;
+      const hdx = live.hitDirX ?? 0;
+      const hdz = live.hitDirZ ?? 0;
       // ワールドヒット方向 → ローカル（rotation 済みルート内）
-      const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
-      const localZ = hdx * Math.sin(mob.rotation) + hdz * Math.cos(mob.rotation);
+      const localX = hdx * Math.cos(live.rotation) - hdz * Math.sin(live.rotation);
+      const localZ = hdx * Math.sin(live.rotation) + hdz * Math.cos(live.rotation);
       const hitLean = -hp * 0.28 - Math.abs(localZ) * hp * 0.12;
       const hitRoll = localX * hp * 0.32 + Math.sin(t * 48) * hp * 0.1;
       const hitYaw = localX * hp * 0.18;
@@ -378,13 +381,13 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       time: t,
       moving,
       speed,
-      hitTimer: mob.hitTimer,
-      hitDirX: mob.hitDirX ?? 0,
-      hitDirZ: mob.hitDirZ ?? 0,
-      attackTimer: mob.attackTimer ?? 0,
+      hitTimer: liveHitTimer,
+      hitDirX: live.hitDirX ?? 0,
+      hitDirZ: live.hitDirZ ?? 0,
+      attackTimer: live.attackTimer ?? 0,
       attackDuration: config.attackDuration,
-      angry: isAngry,
-      ally: mob.isAlly,
+      angry: liveAngry,
+      ally: live.isAlly,
     });
   });
 

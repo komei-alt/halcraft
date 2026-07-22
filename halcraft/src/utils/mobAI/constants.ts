@@ -72,6 +72,54 @@ export const PROTOTYPE_STUCK_DIST = 0.5;
 export const BOSS_ATTACK_ANIM_DURATION = 0.72;
 export const BOSS_ATTACK_HIT_AT = 0.32;
 
+/** プレイヤー胴体の高さ（足元〜頭）。近接ヒットの縦判定に使う */
+export const PLAYER_BODY_HEIGHT = 1.7;
+
+/**
+ * 近接攻撃がプレイヤーに届くか（水平距離・高さ・任意で正面方向）。
+ * 振り始めだけでなくヒットフレームでも再判定し、崖上や背後への不正ヒットを防ぐ。
+ */
+export function canMeleeHitPlayer(
+  mobX: number,
+  mobY: number,
+  mobZ: number,
+  mobRotation: number,
+  playerX: number,
+  playerY: number,
+  playerZ: number,
+  options: {
+    attackRange: number;
+    /** モブ足元基準の攻撃下限 */
+    attackMinY: number;
+    /** モブ足元基準の攻撃上限 */
+    attackMaxY: number;
+    requireFacing?: boolean;
+    /** 正面ドット積の下限（1=真前, 0=真横, 既定 0.2 ≒ 約78°） */
+    facingDotMin?: number;
+  },
+): boolean {
+  const dx = playerX - mobX;
+  const dz = playerZ - mobZ;
+  const distXZ = Math.hypot(dx, dz);
+  if (distXZ > options.attackRange) return false;
+
+  const playerFeet = playerY;
+  const playerHead = playerY + PLAYER_BODY_HEIGHT;
+  const minY = mobY + options.attackMinY;
+  const maxY = mobY + options.attackMaxY;
+  // プレイヤーAABBと攻撃縦範囲が重なるときだけヒット
+  if (playerHead < minY || playerFeet > maxY) return false;
+
+  if (options.requireFacing && distXZ > 0.12) {
+    const forwardX = Math.sin(mobRotation);
+    const forwardZ = Math.cos(mobRotation);
+    const dot = (dx * forwardX + dz * forwardZ) / distXZ;
+    if (dot < (options.facingDotMin ?? 0.2)) return false;
+  }
+
+  return true;
+}
+
 // ─── 共通インターフェース ──────────────────────────────
 
 /** 衝突判定コールバック */

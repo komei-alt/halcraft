@@ -1047,7 +1047,21 @@ export function StageProgressHUD() {
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
   const bossSpawned = useGameStore((s) => s.bossSpawned);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
-  const boss = useMobStore((s) => s.mobs.find((mob) => mob.type === 'boss_giant') ?? null);
+  // 位置更新で 2000 行 UI を毎フレーム再レンダーしない（HP 比のみ、粗い量子化）
+  const bossPresenceKey = useMobStore((s) => {
+    const boss = s.mobs.find((mob) => mob.type === 'boss_giant');
+    if (!boss) return '';
+    const hpRatio = Math.round((boss.hp / Math.max(1, boss.maxHp)) * 50) / 50;
+    return `${boss.bossEncounterId ?? ''}|${hpRatio}`;
+  });
+  const bossPresence = useMemo(() => {
+    if (!bossPresenceKey) return null as null | { encounterId?: string; hpRatio: number };
+    const [encounterId, hpRatioRaw] = bossPresenceKey.split('|');
+    return {
+      encounterId: encounterId || undefined,
+      hpRatio: Number(hpRatioRaw),
+    };
+  }, [bossPresenceKey]);
   const challengeStats = useStageChallengeStore((s) => s.stats);
   const completedChallengeIds = useStageChallengeStore((s) => s.completedIds);
   const stageBestByStage = useStageChallengeStore((s) => s.bestByStage);
@@ -1093,7 +1107,7 @@ export function StageProgressHUD() {
   const landmarkNavigation = formatStageLandmarkNavigation(playerPosition);
   const landmarkReached = landmarkDistance !== null && landmarkDistance <= STAGE_LANDMARK_RADIUS;
   const buildStyle = getStageBuildStyle(stage.id);
-  const bossEncounter = getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(stage.id);
+  const bossEncounter = getStageBossEncounterById(bossPresence?.encounterId) ?? getStageBossEncounter(stage.id);
   const modeRule = getStageModeRule(stage.id);
   const recordTarget = getStageRecordTarget({
     stage,
@@ -1106,7 +1120,7 @@ export function StageProgressHUD() {
     modeRule,
     modeFlowRank,
   });
-  const bossHpRatio = boss ? Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp))) : null;
+  const bossHpRatio = bossPresence ? Math.max(0, Math.min(1, bossPresence.hpRatio)) : null;
   const bossHpPercent = bossHpRatio === null ? null : Math.ceil(bossHpRatio * 100);
   const hasProgressBar = Boolean(target) || Boolean(buildStyle);
   const progressRatio = target

@@ -310,14 +310,14 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   processFluidSimulation: () => {
     if (fluidUpdateQueue.length === 0) return;
 
+    // チャンク配列は in-place 更新。Map 全体のコピーは毎フレームの GC 圧になるため避ける。
     const { chunks } = get();
-    const nextChunks = new Map(chunks);
     const affectedChunkKeys = new Set<string>();
 
     const readBlock = (x: number, y: number, z: number): BlockId | undefined => {
       if (y < 0 || y >= WORLD_HEIGHT) return undefined;
       const { key, lx, lz } = getChunkCoords(x, z);
-      const chunk = nextChunks.get(key);
+      const chunk = chunks.get(key);
       if (!chunk) return undefined;
       return chunk[lx][y][lz];
     };
@@ -329,7 +329,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const writeBlock = (x: number, y: number, z: number, blockId: BlockId, fluidLevel = 0): boolean => {
       if (y < 0 || y >= WORLD_HEIGHT) return false;
       const { cx, cz, key, lx, lz } = getChunkCoords(x, z);
-      const chunk = nextChunks.get(key);
+      const chunk = chunks.get(key);
       if (!chunk) return false;
 
       const positionKey = blockKey(x, y, z);
@@ -428,14 +428,13 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
       for (const key of affectedChunkKeys) {
         const [cx, cz] = key.split(',').map(Number);
-        const chunk = nextChunks.get(key);
+        const chunk = chunks.get(key);
         if (!chunk) continue;
         newVersions.set(key, (newVersions.get(key) ?? 0) + 1);
         newIndexes.set(key, buildChunkBlockIndex(chunk, cx, cz));
       }
 
       return {
-        chunks: nextChunks,
         chunkVersions: newVersions,
         chunkBlockIndexes: newIndexes,
         blockIndexVersion: state.blockIndexVersion + 1,

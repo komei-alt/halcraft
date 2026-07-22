@@ -14,6 +14,7 @@ import {
   ZOMBIE_SEPARATION_RADIUS, ZOMBIE_SEPARATION_FORCE,
   ZOMBIE_FLANK_ANGLE,
   applyMobGravityAndYCollision,
+  canMeleeHitPlayer,
   type MobAIContext,
 } from './constants';
 
@@ -141,20 +142,33 @@ export function updateZombieAI(
           Math.cos(m.rotation),
         );
       } else {
-        const hx = playerX;
-        const hy = playerY + 1.1;
-        const hz = playerZ;
-        let dirX = hx - m.x;
-        let dirZ = hz - m.z;
-        let dirY = hy - (m.y + 1.1);
-        const len = Math.hypot(dirX, dirY, dirZ) || 1;
-        dirX /= len; dirY /= len; dirZ /= len;
-        triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
-        attack = {
-          damage: state.pendingDamage,
-          kbDirX: state.pendingKbX,
-          kbDirZ: state.pendingKbZ,
-        };
+        const stillInReach = canMeleeHitPlayer(
+          m.x, m.y, m.z, m.rotation,
+          playerX, playerY, playerZ,
+          {
+            attackRange: ZOMBIE_ATTACK_RANGE * 1.15,
+            attackMinY: -0.2,
+            attackMaxY: MOB_HEIGHT + 0.35,
+            requireFacing: true,
+            facingDotMin: 0.1,
+          },
+        );
+        if (stillInReach) {
+          const hx = playerX;
+          const hy = playerY + 1.1;
+          const hz = playerZ;
+          let dirX = hx - m.x;
+          let dirZ = hz - m.z;
+          let dirY = hy - (m.y + 1.1);
+          const len = Math.hypot(dirX, dirY, dirZ) || 1;
+          dirX /= len; dirY /= len; dirZ /= len;
+          triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
+          attack = {
+            damage: state.pendingDamage,
+            kbDirX: state.pendingKbX,
+            kbDirZ: state.pendingKbZ,
+          };
+        }
       }
     }
   }
@@ -237,11 +251,20 @@ export function updateZombieAI(
     m.z = newZ;
   }
 
-  // 攻撃開始判定
-  const targetDy = m.y - targetY;
-  const yClose = Math.abs(targetDy) < MOB_HEIGHT + 0.5;
+  // 攻撃開始判定（高さ・向きを含む）
+  const canStartPlayerAttack = canMeleeHitPlayer(
+    m.x, m.y, m.z, m.rotation,
+    targetX, targetY, targetZ,
+    {
+      attackRange: ZOMBIE_ATTACK_RANGE,
+      attackMinY: -0.2,
+      attackMaxY: MOB_HEIGHT + 0.35,
+      requireFacing: !targetingCore,
+      facingDotMin: 0.15,
+    },
+  );
 
-  if (!isAttacking && distXZ < ZOMBIE_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
+  if (!isAttacking && canStartPlayerAttack && state.attackCooldown <= 0) {
     const damage = Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier));
     if (targetingCore && corePosition) {
       startZombieAttack(m, state, damage, 0, 0, corePosition);

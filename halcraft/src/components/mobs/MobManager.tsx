@@ -3,7 +3,7 @@
 // マルチプレイ時: オーナーのみAI計算、非オーナーは描画のみ
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useMemo } from 'react';
 import { useMobStore, type MobData } from '../../stores/useMobStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
@@ -96,9 +96,26 @@ function applyBossEncounterReward(encounter: StageBossEncounter): void {
   playStageRewardSound('war_supply');
 }
 
+/** 描画マウント用の識別キー（位置変化では変えない → 毎フレーム再レンダーを防ぐ） */
+function buildMobIdentityKey(mobs: MobData[]): string {
+  if (mobs.length === 0) return '';
+  let key = String(mobs.length);
+  for (let i = 0; i < mobs.length; i++) {
+    const m = mobs[i];
+    // hp / 怒りは見た目に効くのでキーに含める。位置・速度は含めない
+    key += `|${m.id}:${m.type}:${m.hp}:${m.angryAtPlayer ? 1 : 0}`;
+  }
+  return key;
+}
+
 export function MobManager() {
   const { camera } = useThree();
-  const mobs = useMobStore((s) => s.mobs);
+  // 位置更新のたびに React ツリー全体を再レンダーしない
+  const mobIdentityKey = useMobStore((s) => buildMobIdentityKey(s.mobs));
+  const renderMobs = useMemo(
+    () => useMobStore.getState().mobs,
+    [mobIdentityKey],
+  );
   const setMobs = useMobStore((s) => s.setMobs);
   const trySpawnZombie = useMobStore((s) => s.trySpawnZombie);
   const trySpawnDarwin = useMobStore((s) => s.trySpawnDarwin);
@@ -476,7 +493,7 @@ export function MobManager() {
 
   return (
     <group>
-      {mobs.map((mob) => {
+      {renderMobs.map((mob) => {
         switch (mob.type) {
           case 'zombie':
             return <Zombie key={mob.id} mob={mob} animTime={animTimeValue} />;
