@@ -1128,11 +1128,12 @@ export function Hotbar() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
-                transition: 'border 0.1s, background 0.1s',
                 boxShadow: isSelected
-                  ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 14px ${glow}`
+                  ? `0 0 0 1px rgba(255,255,255,0.55), 0 0 16px ${glow}`
                   : 'none',
-                animation: isSelected && selectionPulseKey > 0 ? 'hotbarSlotSelectPop 0.42s ease-out both' : undefined,
+                animation: isSelected && selectionPulseKey > 0 ? 'hotbarSlotSelectPop 0.48s ease-out both' : undefined,
+                transform: isSelected ? 'translateY(-2px)' : 'translateY(0)',
+                transition: 'transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease',
                 imageRendering: 'pixelated',
                 touchAction: 'none',
                 WebkitTapHighlightColor: 'transparent',

@@ -12,6 +12,9 @@ export function VehicleHUD() {
   const speed = Math.abs(helicopter.speed).toFixed(1);
   const altitude = helicopter.y.toFixed(1);
 
+  const speedNum = Math.abs(helicopter.speed);
+  const speedHot = speedNum > 18;
+
   return (
     <div style={{
       position: 'fixed',
@@ -28,33 +31,41 @@ export function VehicleHUD() {
       {/* メーターパネル */}
       <div style={{
         display: 'flex',
-        gap: '20px',
-        background: 'rgba(0, 0, 0, 0.7)',
-        borderRadius: '12px',
-        padding: '10px 24px',
-        backdropFilter: 'blur(4px)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
+        gap: '22px',
+        background: 'rgba(8, 12, 18, 0.78)',
+        borderRadius: '14px',
+        padding: '10px 26px',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        border: `1px solid ${speedHot ? 'rgba(120, 200, 255, 0.45)' : 'rgba(255, 255, 255, 0.16)'}`,
+        boxShadow: speedHot
+          ? '0 0 18px rgba(80, 180, 255, 0.28)'
+          : '0 6px 16px rgba(0,0,0,0.35)',
       }}>
         {/* 速度計 */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          minWidth: 56,
         }}>
           <span style={{
             color: '#88ccff',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            letterSpacing: '1px',
+            fontSize: '10px',
+            fontWeight: 950,
+            letterSpacing: '1.2px',
             textTransform: 'uppercase',
+            fontFamily: 'monospace',
           }}>
             SPEED
           </span>
           <span style={{
-            color: '#ffffff',
-            fontSize: '24px',
-            fontWeight: 'bold',
+            color: speedHot ? '#b8e8ff' : '#ffffff',
+            fontSize: '26px',
+            fontWeight: 900,
             fontFamily: 'monospace',
+            textShadow: speedHot ? '0 0 10px rgba(120,200,255,0.6)' : 'none',
+            lineHeight: 1.1,
           }}>
             {speed}
           </span>
@@ -63,7 +74,7 @@ export function VehicleHUD() {
         {/* 区切り線 */}
         <div style={{
           width: '1px',
-          background: 'rgba(255, 255, 255, 0.2)',
+          background: 'rgba(255, 255, 255, 0.18)',
           alignSelf: 'stretch',
         }} />
 
@@ -72,21 +83,24 @@ export function VehicleHUD() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          minWidth: 56,
         }}>
           <span style={{
             color: '#ffcc44',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            letterSpacing: '1px',
+            fontSize: '10px',
+            fontWeight: 950,
+            letterSpacing: '1.2px',
             textTransform: 'uppercase',
+            fontFamily: 'monospace',
           }}>
             ALT
           </span>
           <span style={{
             color: '#ffffff',
-            fontSize: '24px',
-            fontWeight: 'bold',
+            fontSize: '26px',
+            fontWeight: 900,
             fontFamily: 'monospace',
+            lineHeight: 1.1,
           }}>
             {altitude}
           </span>
@@ -95,17 +109,19 @@ export function VehicleHUD() {
 
       {/* 操作ガイド（座席別） */}
       <div style={{
-        background: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: '8px',
-        padding: '6px 16px',
+        background: 'rgba(8, 12, 18, 0.62)',
+        borderRadius: '10px',
+        padding: '7px 16px',
         fontSize: '11px',
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: 'rgba(255, 255, 255, 0.7)',
         display: 'flex',
         gap: '12px',
         flexWrap: 'wrap',
         justifyContent: 'center',
+        border: '1px solid rgba(255,255,255,0.1)',
+        backdropFilter: 'blur(6px)',
       }}>
-        <span style={{ color: '#ffdd00', fontWeight: 'bold', fontSize: '10px' }}>
+        <span style={{ color: '#ffdd00', fontWeight: 950, fontSize: '10px', letterSpacing: 0.4 }}>
           {SEAT_NAMES[mySeat]}
         </span>
         {mySeat === 'pilot' && (

@@ -35,22 +35,41 @@ function useIsRegenerating(): boolean {
 }
 
 /** ハートアイコン（SVG） */
-function Heart({ filled, half, regenerating, index }: {
+function Heart({ filled, half, regenerating, lowHp, index }: {
   filled: boolean;
   half?: boolean;
   regenerating?: boolean;
+  lowHp?: boolean;
   index: number;
 }) {
-  // 回復中はパルスアニメーション（ハートごとに少しずらす）
-  const pulseStyle = regenerating && filled ? {
-    animation: `heartPulse 0.8s ease-in-out infinite`,
+  // 回復中／低体力時はパルス（ハートごとに少しずらす）
+  const pulseStyle = (regenerating || lowHp) && filled ? {
+    animation: lowHp && !regenerating
+      ? `heartLowPulse 0.55s ease-in-out infinite`
+      : `heartPulse 0.8s ease-in-out infinite`,
     animationDelay: `${index * 0.08}s`,
+    filter: lowHp ? 'drop-shadow(0 0 3px rgba(255,60,60,0.7))' : undefined,
   } : {};
+
+  const fillColor = half
+    ? '#880000'
+    : regenerating
+      ? '#FF5555'
+      : lowHp
+        ? '#FF3333'
+        : '#CC2222';
+  const strokeColor = half
+    ? '#550000'
+    : regenerating
+      ? '#FF3333'
+      : lowHp
+        ? '#FF1111'
+        : '#991111';
 
   return (
     <svg
-      width="18"
-      height="18"
+      width="19"
+      height="19"
       viewBox="0 0 18 18"
       style={{ display: 'block', ...pulseStyle }}
     >
@@ -65,8 +84,8 @@ function Heart({ filled, half, regenerating, index }: {
       {filled && (
         <path
           d="M9 15.5L2.5 9C0.5 7 0.5 3.5 3 2C5.5 0.5 7.5 1 9 3C10.5 1 12.5 0.5 15 2C17.5 3.5 17.5 7 15.5 9L9 15.5Z"
-          fill={half ? '#880000' : regenerating ? '#FF5555' : '#CC2222'}
-          stroke={half ? '#550000' : regenerating ? '#FF3333' : '#991111'}
+          fill={fillColor}
+          stroke={strokeColor}
           strokeWidth="0.5"
         />
       )}
@@ -108,6 +127,7 @@ export function HealthBar() {
   const totalHearts = Math.ceil(maxHp / 2);
   const fullHearts = Math.floor(hp / 2);
   const hasHalf = hp % 2 === 1;
+  const lowHp = hp > 0 && hp <= maxHp * 0.3;
 
   return (
     <div
@@ -121,7 +141,9 @@ export function HealthBar() {
         justifyContent: 'flex-end',
         gap: 1,
         zIndex: 100,
-        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+        filter: lowHp
+          ? 'drop-shadow(0 0 6px rgba(255,40,40,0.55)) drop-shadow(0 2px 4px rgba(0,0,0,0.5))'
+          : 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
         pointerEvents: 'none',
       }}
     >
@@ -135,9 +157,20 @@ export function HealthBar() {
             filled={isFull || isHalf}
             half={isHalf}
             regenerating={isRegenerating}
+            lowHp={lowHp}
           />
         );
       })}
+      <style>{`
+        @keyframes heartPulse {
+          0% { transform: scale(1); }
+          100% { transform: scale(1.12); }
+        }
+        @keyframes heartLowPulse {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.16); opacity: 0.82; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -30,11 +30,11 @@ function DamageDirectionIndicator({ direction }: { direction: number | null }) {
           inset: 0,
           background: `
             radial-gradient(
-              ellipse 120% 120% at 
-              ${50 - Math.sin(direction) * 40}% ${50 - Math.cos(direction) * 40}%,
-              rgba(220, 0, 0, 0.5) 0%,
-              rgba(200, 0, 0, 0.15) 30%,
-              transparent 70%
+              ellipse 130% 130% at 
+              ${50 - Math.sin(direction) * 42}% ${50 - Math.cos(direction) * 42}%,
+              rgba(240, 20, 20, 0.58) 0%,
+              rgba(200, 0, 0, 0.22) 32%,
+              transparent 72%
             )
           `,
         }}
@@ -45,8 +45,8 @@ function DamageDirectionIndicator({ direction }: { direction: number | null }) {
           position: 'absolute',
           left: '50%',
           top: '50%',
-          width: 200,
-          height: 200,
+          width: 220,
+          height: 220,
           transform: `translate(-50%, -50%) rotate(${-direction}rad)`,
         }}
       >
@@ -59,10 +59,10 @@ function DamageDirectionIndicator({ direction }: { direction: number | null }) {
             transform: 'translateX(-50%)',
             width: 0,
             height: 0,
-            borderLeft: '10px solid transparent',
-            borderRight: '10px solid transparent',
-            borderBottom: '20px solid rgba(255, 60, 60, 0.7)',
-            filter: 'drop-shadow(0 0 6px rgba(255, 0, 0, 0.6))',
+            borderLeft: '12px solid transparent',
+            borderRight: '12px solid transparent',
+            borderBottom: '24px solid rgba(255, 70, 70, 0.85)',
+            filter: 'drop-shadow(0 0 10px rgba(255, 40, 40, 0.8))',
           }}
         />
       </div>
@@ -102,10 +102,10 @@ export function DamageOverlay() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'radial-gradient(ellipse at center, transparent 30%, rgba(200, 0, 0, 0.4) 100%)',
+            background: 'radial-gradient(ellipse at center, transparent 22%, rgba(220, 0, 0, 0.28) 55%, rgba(180, 0, 0, 0.52) 100%)',
             pointerEvents: 'none',
             zIndex: 150,
-            animation: 'damageFlash 0.3s ease-out forwards',
+            animation: 'damageFlash 0.38s ease-out forwards',
           }}
         />
       )}
