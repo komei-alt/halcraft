@@ -361,6 +361,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       equippedItem: openingItem,
       attackCooldown: 0,
       attackCharge: 1,
+      meleeSwingTimer: 0,
       rocketCooldown: 0,
       rocketCooldownDuration: 2.8,
       rocketCharge: 1,
