@@ -82,6 +82,7 @@ import { useGameStore } from './stores/useGameStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
 import { getTerrainHeight } from './utils/terrain/heightmap';
 import { Crosshair } from './components/ui/Crosshair';
+import { MachineGunScopeHUD } from './components/ui/MachineGunScopeHUD';
 import { Hotbar } from './components/ui/Hotbar';
 import { HealthBar } from './components/ui/HealthBar';
 import { DamageOverlay } from './components/ui/DamageOverlay';
@@ -386,6 +387,7 @@ export default function App() {
         <>
           <GameCanvas />
           <Crosshair />
+          <MachineGunScopeHUD />
           <Hotbar />
           <HealthBar />
           {showDetailedHud && <ToolHUD />}

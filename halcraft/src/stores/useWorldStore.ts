@@ -26,8 +26,8 @@ const MAX_FLUID_UPDATES_PER_FRAME = 96;
 /** 水が横方向へ広がれる最大距離 */
 const WATER_MAX_FLOW_LEVEL = 5;
 
-/** 溶岩が横方向へ広がれる最大距離 */
-const LAVA_MAX_FLOW_LEVEL = 2;
+/** 溶岩が横方向へ広がれる最大距離（プレイヤー設置分のみ。世界生成溶岩は静止） */
+const LAVA_MAX_FLOW_LEVEL = 1;
 
 interface FluidUpdateTarget {
   x: number;
@@ -322,8 +322,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       return chunk[lx][y][lz];
     };
 
-    const getFluidLevel = (x: number, y: number, z: number): number => {
-      return fluidLevels.get(blockKey(x, y, z)) ?? 0;
+    const getFluidLevelEntry = (x: number, y: number, z: number): number | undefined => {
+      return fluidLevels.get(blockKey(x, y, z));
     };
 
     const writeBlock = (x: number, y: number, z: number, blockId: BlockId, fluidLevel = 0): boolean => {
@@ -334,8 +334,14 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
       const positionKey = blockKey(x, y, z);
       const previousBlock = chunk[lx][y][lz];
-      const previousLevel = fluidLevels.get(positionKey) ?? 0;
-      if (previousBlock === blockId && (!isLiquidBlock(blockId) || previousLevel === fluidLevel)) {
+      const previousLevel = fluidLevels.get(positionKey);
+      if (
+        previousBlock === blockId
+        && (
+          !isLiquidBlock(blockId)
+          || (previousLevel !== undefined && previousLevel === fluidLevel)
+        )
+      ) {
         return false;
       }
 
@@ -356,14 +362,22 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       if (targetBlock === undefined) return false;
 
       if (targetBlock === fluidBlock) {
-        if (getFluidLevel(x, y, z) <= fluidLevel) return false;
+        const existing = getFluidLevelEntry(x, y, z);
+        // 静止溶岩（登録なし）は上書きしない
+        if (existing === undefined) return false;
+        if (existing <= fluidLevel) return false;
         return writeBlock(x, y, z, fluidBlock, fluidLevel);
       }
 
+      // 水と溶岩がぶつかったときだけ石化（静止溶岩を侵食しない）
       if (isLiquidBlock(targetBlock)) {
+        if (targetBlock === BLOCK_IDS.LAVA && getFluidLevelEntry(x, y, z) === undefined) {
+          return false;
+        }
         return writeBlock(x, y, z, BLOCK_IDS.STONE);
       }
 
+      // 空気にしか流れない（地面ブロックをマグマで置換しない）
       if (targetBlock !== BLOCK_IDS.AIR) return false;
       return writeBlock(x, y, z, fluidBlock, fluidLevel);
     };
@@ -373,7 +387,10 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       for (const [dx, , dz] of HORIZONTAL_FLUID_DIRECTIONS) {
         const nx = x + dx;
         const nz = z + dz;
-        if (readBlock(nx, y, nz) === fluidBlock && getFluidLevel(nx, y, nz) < fluidLevel) {
+        if (readBlock(nx, y, nz) !== fluidBlock) continue;
+        const neighborLevel = getFluidLevelEntry(nx, y, nz);
+        // 登録済みのより強い流れ、または静止溶岩（世界生成）に隣接していれば維持
+        if (neighborLevel === undefined || neighborLevel < fluidLevel) {
           return true;
         }
       }
@@ -391,7 +408,13 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       const currentBlock = readBlock(target.x, target.y, target.z);
       if (currentBlock === undefined || !isLiquidBlock(currentBlock)) continue;
 
-      const currentLevel = getFluidLevel(target.x, target.y, target.z);
+      const levelEntry = getFluidLevelEntry(target.x, target.y, target.z);
+      // 世界生成の溶岩は fluidLevels 未登録 = 静止。掘っても無限に地面へ広がらない。
+      if (currentBlock === BLOCK_IDS.LAVA && levelEntry === undefined) {
+        continue;
+      }
+
+      const currentLevel = levelEntry ?? 0;
       if (currentLevel > 0 && !hasFluidSupport(target.x, target.y, target.z, currentBlock, currentLevel)) {
         changed = writeBlock(target.x, target.y, target.z, BLOCK_IDS.AIR) || changed;
         continue;
@@ -401,11 +424,15 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       if (belowY >= 0) {
         const belowBlock = readBlock(target.x, belowY, target.z);
         if (belowBlock === BLOCK_IDS.AIR) {
-          changed = writeFluid(target.x, belowY, target.z, currentBlock, 1) || changed;
+          // 落下した流れは必ず fluidLevels 付きで置く（静止ソース化を防ぐ）
+          changed = writeFluid(target.x, belowY, target.z, currentBlock, Math.max(1, currentLevel)) || changed;
           continue;
         }
         if (belowBlock !== undefined && isLiquidBlock(belowBlock) && belowBlock !== currentBlock) {
-          changed = writeBlock(target.x, belowY, target.z, BLOCK_IDS.STONE) || changed;
+          // 静止溶岩は石化しない
+          if (!(belowBlock === BLOCK_IDS.LAVA && getFluidLevelEntry(target.x, belowY, target.z) === undefined)) {
+            changed = writeBlock(target.x, belowY, target.z, BLOCK_IDS.STONE) || changed;
+          }
           continue;
         }
       }

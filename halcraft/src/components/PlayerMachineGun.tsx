@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Html, useGLTF } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
@@ -70,16 +70,6 @@ interface BulletProjectile {
   scoped: boolean;
 }
 
-/** オーバーレイ用：滑らかな進捗をDOMへ直接反映 */
-interface ScopeOverlayElements {
-  root: HTMLDivElement | null;
-  blackout: HTMLDivElement | null;
-  aperture: HTMLDivElement | null;
-  glass: HTMLDivElement | null;
-  reticle: HTMLDivElement | null;
-  label: HTMLDivElement | null;
-}
-
 let nextBulletId = 0;
 
 function easeInOutCubic(t: number): number {
@@ -140,23 +130,11 @@ export function PlayerMachineGun() {
   /** 0=腰だめ, 1=完全ADS */
   const scopeProgress = useRef(0);
   const lastStoreScope = useRef(-1);
-  const overlayEls = useRef<ScopeOverlayElements>({
-    root: null,
-    blackout: null,
-    aperture: null,
-    glass: null,
-    reticle: null,
-    label: null,
-  });
   const [bullets, setBullets] = useState<BulletProjectile[]>([]);
-  /** オーバーレイDOMのマウント制御（進捗>0の間だけ） */
-  const [scopeOverlayOn, setScopeOverlayOn] = useState(false);
-  const scopeOverlayOnRef = useRef(false);
   const stageVisualStyle = useMemo(
     () => getStageCombatStyleForItem(currentStageId, 'machine_gun'),
     [currentStageId],
   );
-  const accent = stageVisualStyle?.accent ?? '#7ee8ff';
   const muzzleCoreColor = useMemo(() => {
     const color = new THREE.Color(stageVisualStyle?.accent ?? '#fff0a0');
     if (stageVisualStyle) color.lerp(new THREE.Color('#ffffff'), 0.48);
@@ -275,8 +253,8 @@ export function PlayerMachineGun() {
     // スコープ途中でも進捗に応じてブレが減る
     const scopeBlend = easeOutCubic(scopeProgress.current);
 
-    // 腰だめ：銃口→照準点 / ADS：画面中心（カメラ前方）と弾道を一致させる
-    if (scopeBlend >= 0.5) {
+    // ADS（精密照準）: カメラ視線＝弾道。腰だめだけ銃口→照準点
+    if (scopeBlend >= 0.35 || scopedShot) {
       shootDir.current.copy(aimDir.current);
     } else {
       shootDir.current.copy(aimPoint.current).sub(muzzleWorld.current);
@@ -284,7 +262,6 @@ export function PlayerMachineGun() {
         shootDir.current.copy(aimDir.current);
       } else {
         shootDir.current.normalize();
-        // 覗き込み途中は銃口方向から視線方向へ滑らかに寄せる
         shootDir.current.lerp(aimDir.current, scopeBlend).normalize();
       }
     }
@@ -294,14 +271,23 @@ export function PlayerMachineGun() {
       * techniqueBonus.machineGunSpreadMultiplier
       * stageStyle.machineGunSpreadMultiplier
       * combatFocus.machineGunSpreadMultiplier;
-    shootDir.current.x += (Math.random() - 0.5) * spread;
-    shootDir.current.y += (Math.random() - 0.5) * spread;
-    shootDir.current.z += (Math.random() - 0.5) * spread;
-    shootDir.current.normalize();
+    // ADS 中はブレをほぼゼロにして照準点と着弾を一致させる
+    if (scopeBlend < 0.95) {
+      const spreadScale = 1 - scopeBlend;
+      shootDir.current.x += (Math.random() - 0.5) * spread * spreadScale;
+      shootDir.current.y += (Math.random() - 0.5) * spread * spreadScale;
+      shootDir.current.z += (Math.random() - 0.5) * spread * spreadScale;
+      shootDir.current.normalize();
+    }
 
-    // ADS 時は弾もカメラ中心付近から出し、レティクルと弾道トレイルを重ねる
-    const centerSpawn = camera.position.clone().addScaledVector(aimDir.current, SCOPED_SPAWN_FORWARD);
-    const startPos = muzzleWorld.current.clone().lerp(centerSpawn, scopeBlend);
+    // ADS 時は画面中心の少し前から発射（トレイルが照準と重なる）
+    let startPos: THREE.Vector3;
+    if (scopeBlend >= 0.35 || scopedShot) {
+      startPos = camera.position.clone().addScaledVector(aimDir.current, SCOPED_SPAWN_FORWARD);
+    } else {
+      const centerSpawn = camera.position.clone().addScaledVector(aimDir.current, SCOPED_SPAWN_FORWARD);
+      startPos = muzzleWorld.current.clone().lerp(centerSpawn, scopeBlend);
+    }
     const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
     setBullets((prev) => [...prev.slice(-28), {
       id: nextBulletId++,
@@ -367,9 +353,6 @@ export function PlayerMachineGun() {
     // 銃を先に顔へ寄せ、ズームとブラックアウトは少し遅れて「覗き込む」感じに
     const pRaise = easeOutCubic(Math.min(1, raw / 0.52));
     const pZoom = easeInOutCubic(Math.max(0, (raw - 0.12) / 0.88));
-    const pBlackout = easeOutCubic(Math.max(0, (raw - 0.06) / 0.5));
-    const pAperture = easeInOutCubic(Math.max(0, (raw - 0.18) / 0.72));
-    const pHud = easeOutCubic(Math.max(0, (raw - 0.42) / 0.58));
 
     // ストアへ間引き同期（クロスヘア非表示など）
     if (Math.abs(raw - lastStoreScope.current) > 0.04 || (raw === 0) !== (lastStoreScope.current === 0)) {
@@ -377,68 +360,7 @@ export function PlayerMachineGun() {
       usePlayerStore.setState({ machineGunScopeProgress: raw });
     }
 
-    const shouldShowOverlay = raw > 0.01;
-    if (shouldShowOverlay !== scopeOverlayOnRef.current) {
-      scopeOverlayOnRef.current = shouldShowOverlay;
-      setScopeOverlayOn(shouldShowOverlay);
-    }
-
-    // オーバーレイDOMを毎フレーム更新（React再レンダー不要）
-    const els = overlayEls.current;
-    if (els.root) {
-      els.root.style.opacity = String(THREE.MathUtils.clamp(pBlackout * 1.05, 0, 1));
-    }
-    if (els.blackout) {
-      // 中央は大きく透明（視界を塞がない）。外側だけ薄いビネット。
-      const holePct = THREE.MathUtils.lerp(28, 48, pAperture);
-      const midPct = holePct + THREE.MathUtils.lerp(8, 14, pAperture);
-      els.blackout.style.background = [
-        `radial-gradient(circle at 50% 50%,`,
-        `transparent 0%,`,
-        `transparent ${holePct}%,`,
-        `rgba(0,8,16,${0.35 * pBlackout}) ${midPct}%,`,
-        `rgba(0,0,0,${0.72 * pBlackout}) 78%,`,
-        `rgba(0,0,0,${0.88 * pBlackout}) 100%)`,
-      ].join(' ');
-    }
-    if (els.aperture) {
-      // 細い円枠のみ。鉄の筒ではなく透明スコープの縁として見せる
-      const size = THREE.MathUtils.lerp(36, 58, pAperture);
-      els.aperture.style.left = '50%';
-      els.aperture.style.top = '50%';
-      els.aperture.style.width = `min(${size}vw, ${size}vh)`;
-      els.aperture.style.height = `min(${size}vw, ${size}vh)`;
-      els.aperture.style.transform = 'translate(-50%, -50%)';
-      els.aperture.style.opacity = String(THREE.MathUtils.clamp(pAperture * 1.15, 0, 1));
-      els.aperture.style.border = `2px solid ${accent}${Math.round(140 + pHud * 70).toString(16).padStart(2, '0')}`;
-      els.aperture.style.boxShadow = [
-        `0 0 0 1px rgba(0,0,0,${0.35 * pBlackout})`,
-        `inset 0 0 0 1px rgba(255,255,255,${0.12 + pHud * 0.08})`,
-        `0 0 ${Math.round(10 + pHud * 16)}px ${accent}44`,
-      ].join(', ');
-    }
-    if (els.glass) {
-      // ごく薄いレンズ反射だけ。視界を濁らせない
-      els.glass.style.opacity = String(0.04 + pHud * 0.05);
-      els.glass.style.background = `radial-gradient(circle at 50% 42%, ${accent}18 0%, transparent 52%, rgba(0,10,18,0.08) 100%)`;
-    }
-    if (els.reticle) {
-      // 円内に標準的なHUD照準（クロス＋中央点）
-      els.reticle.style.opacity = String(THREE.MathUtils.clamp(pHud, 0, 1));
-      els.reticle.style.left = '50%';
-      els.reticle.style.top = '50%';
-      const reticleSize = THREE.MathUtils.lerp(40, 52, pAperture);
-      els.reticle.style.width = `min(${reticleSize}vw, ${reticleSize}vh)`;
-      els.reticle.style.height = `min(${reticleSize}vw, ${reticleSize}vh)`;
-      els.reticle.style.transformOrigin = '50% 50%';
-      els.reticle.style.transform = 'translate(-50%, -50%) scale(1)';
-    }
-    if (els.label) {
-      els.label.style.opacity = String(THREE.MathUtils.clamp(pHud * 0.75, 0, 1));
-      const zoomX = (baseFov.current ?? 70) / SCOPED_FOV;
-      const shownZoom = THREE.MathUtils.lerp(1, zoomX, pZoom);
-      els.label.textContent = `ADS  ×${shownZoom.toFixed(1)}`;
-    }
+    // スコープHUDは Canvas 外の MachineGunScopeHUD が描画（drei Html は照準が消えることがある）
 
     // FOV：覗き込みに合わせて滑らかに拡大
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -646,10 +568,6 @@ export function PlayerMachineGun() {
     });
   });
 
-  const bindOverlayRef = useCallback((key: keyof ScopeOverlayElements) => (node: HTMLDivElement | null) => {
-    overlayEls.current[key] = node;
-  }, []);
-
   return (
     <group>
       <group ref={weaponRef} visible={false}>
@@ -772,189 +690,9 @@ export function PlayerMachineGun() {
           />
         </group>
 
-        {/* 3D接眼は使わない（黒い鉄塊が視界を塞ぐため）。ADSは2D円形HUDのみ */}
+        {/* 3D接眼は使わない。ADS照準は Canvas 外の MachineGunScopeHUD */}
         <group ref={scopeOpticRef} visible={false} />
       </group>
-
-      {scopeOverlayOn && (
-        <Html
-          fullscreen
-          zIndexRange={[80, 0]}
-          style={{ pointerEvents: 'none' }}
-          wrapperClass="machine-gun-scope-html"
-        >
-          <div
-            ref={bindOverlayRef('root')}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              pointerEvents: 'none',
-              opacity: 0,
-              transition: 'none',
-            }}
-          >
-            {/* 周囲ビネット（中央は大きく透明） */}
-            <div
-              ref={bindOverlayRef('blackout')}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'radial-gradient(circle at 50% 50%, transparent 0%, transparent 42%, rgba(0,8,16,0.35) 58%, rgba(0,0,0,0.85) 100%)',
-              }}
-            />
-            {/* 円形スコープ枠（細い縁だけ） */}
-            <div
-              ref={bindOverlayRef('aperture')}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 'min(52vw, 52vh)',
-                height: 'min(52vw, 52vh)',
-                transform: 'translate(-50%, -50%)',
-                border: `2px solid ${accent}bb`,
-                borderRadius: '50%',
-                boxShadow: '0 0 0 1px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12)',
-                opacity: 0,
-                overflow: 'hidden',
-                background: 'transparent',
-              }}
-            >
-              <div
-                ref={bindOverlayRef('glass')}
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: '50%',
-                  opacity: 0.05,
-                  pointerEvents: 'none',
-                }}
-              />
-              {/* 薄い内側リング */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: '3%',
-                  borderRadius: '50%',
-                  border: '1px solid rgba(220, 245, 255, 0.18)',
-                  boxShadow: 'none',
-                }}
-              />
-            </div>
-
-            {/* 標準HUD照準（円内・画面中心） */}
-            <div
-              ref={bindOverlayRef('reticle')}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 'min(48vw, 48vh)',
-                height: 'min(48vw, 48vh)',
-                transform: 'translate(-50%, -50%)',
-                opacity: 0,
-                pointerEvents: 'none',
-              }}
-            >
-              {/* 縦線：中央ギャップ付き（標準クロスヘア） */}
-              <div style={{
-                position: 'absolute', left: '50%', top: '18%', height: '24%',
-                width: 2, transform: 'translateX(-50%)',
-                background: `${accent}ee`,
-                boxShadow: `0 0 4px ${accent}aa`,
-                borderRadius: 1,
-              }}
-              />
-              <div style={{
-                position: 'absolute', left: '50%', bottom: '18%', height: '24%',
-                width: 2, transform: 'translateX(-50%)',
-                background: `${accent}ee`,
-                boxShadow: `0 0 4px ${accent}aa`,
-                borderRadius: 1,
-              }}
-              />
-              {/* 横線：中央ギャップ付き */}
-              <div style={{
-                position: 'absolute', top: '50%', left: '18%', width: '24%',
-                height: 2, transform: 'translateY(-50%)',
-                background: `${accent}ee`,
-                boxShadow: `0 0 4px ${accent}aa`,
-                borderRadius: 1,
-              }}
-              />
-              <div style={{
-                position: 'absolute', top: '50%', right: '18%', width: '24%',
-                height: 2, transform: 'translateY(-50%)',
-                background: `${accent}ee`,
-                boxShadow: `0 0 4px ${accent}aa`,
-                borderRadius: 1,
-              }}
-              />
-              {/* 細い距離目盛り（控えめ） */}
-              {[0.42, 0.5, 0.58].map((t) => (
-                <div
-                  key={`h-${t}`}
-                  style={{
-                    position: 'absolute',
-                    left: `${t * 100}%`,
-                    top: '50%',
-                    width: 4,
-                    height: 1.5,
-                    transform: 'translate(-50%, -50%)',
-                    background: `${accent}99`,
-                  }}
-                />
-              ))}
-              {[0.42, 0.5, 0.58].map((t) => (
-                <div
-                  key={`v-${t}`}
-                  style={{
-                    position: 'absolute',
-                    top: `${t * 100}%`,
-                    left: '50%',
-                    width: 1.5,
-                    height: 4,
-                    transform: 'translate(-50%, -50%)',
-                    background: `${accent}99`,
-                  }}
-                />
-              ))}
-              {/* 中央照準点 */}
-              <div style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 4,
-                height: 4,
-                transform: 'translate(-50%, -50%)',
-                borderRadius: '50%',
-                background: '#fffef5',
-                boxShadow: `0 0 8px ${accent}, 0 0 2px #fff`,
-              }}
-              />
-            </div>
-
-            <div
-              ref={bindOverlayRef('label')}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: 'calc(50% + min(32vw, 32vh))',
-                transform: 'translateX(-50%)',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 11,
-                letterSpacing: '0.16em',
-                color: `${accent}bb`,
-                textShadow: '0 0 6px rgba(0,0,0,0.85)',
-                opacity: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              ADS
-            </div>
-          </div>
-        </Html>
-      )}
 
       {bullets.map((bullet) => (
         <PlayerGunTracer
