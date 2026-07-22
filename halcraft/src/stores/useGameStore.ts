@@ -368,6 +368,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingWeaponAction: null,
       glovePushReady: 1,
       glovePulling: false,
+      machineGunScopeProgress: 0,
       bombArmedCount: 0,
       bombMaxCount: 3,
       rocketCooldown: 0,

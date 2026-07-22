@@ -148,6 +148,8 @@ interface PlayerState {
   glovePushReady: number;
   /** 引力グローブ: 現在引き寄せ中か */
   glovePulling: boolean;
+  /** 機関銃スコープ（ADS）進捗 0-1。クロスヘア非表示などに使用 */
+  machineGunScopeProgress: number;
   /** ボムスリンガー: 設置中ボム数 */
   bombArmedCount: number;
   /** ボムスリンガー: 同時設置上限 */
@@ -320,6 +322,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   pendingWeaponAction: null,
   glovePushReady: 1,
   glovePulling: false,
+  machineGunScopeProgress: 0,
   bombArmedCount: 0,
   bombMaxCount: 3,
   rocketCooldown: 0,
@@ -657,6 +660,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       pendingWeaponAction: null,
       glovePushReady: 1,
       glovePulling: false,
+      machineGunScopeProgress: 0,
       bombArmedCount: 0,
       bombMaxCount: 3,
       equippedItem: 'builder',

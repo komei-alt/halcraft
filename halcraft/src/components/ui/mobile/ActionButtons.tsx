@@ -532,19 +532,44 @@ function WalkingActions({
           tone={combatFocusActive ? actionTone : TONES.rocket}
         />
       ) : equippedItem === 'machine_gun' ? (
-        <ActionButton
-          ariaLabel="機関銃"
-          badge={combatFocusBadge ?? combatProgress ?? combatBadge}
-          bottom={PRIMARY_ATTACK_BOTTOM}
-          icon="🔫"
-          meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
-          onTouchCancel={onMachineGunEnd}
-          onTouchEnd={onMachineGunEnd}
-          onTouchStart={onMachineGunStart}
-          placement="left-attack"
-          pulse={combatFocusActive || combatMatched}
-          tone={combatFocusActive ? actionTone : TONES.machineGun}
-        />
+        <>
+          <ActionButton
+            ariaLabel="機関銃"
+            badge={combatFocusBadge ?? combatProgress ?? combatBadge}
+            bottom={PRIMARY_ATTACK_BOTTOM}
+            icon="🔫"
+            meterRatio={combatFocusActive ? combatFocusRatio : combatMatched ? buildProgressRatio : null}
+            onTouchCancel={onMachineGunEnd}
+            onTouchEnd={onMachineGunEnd}
+            onTouchStart={onMachineGunStart}
+            placement="left-attack"
+            pulse={combatFocusActive || combatMatched}
+            tone={combatFocusActive ? actionTone : TONES.machineGun}
+          />
+          <ActionButton
+            ariaLabel="スコープ"
+            badge="ADS"
+            bottom={PRIMARY_ATTACK_BOTTOM + BUTTON_SIZE + STACK_GAP}
+            icon="🔭"
+            onTouchCancel={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              mobileActions.scopeMachineGun = false;
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              mobileActions.scopeMachineGun = false;
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              mobileActions.scopeMachineGun = true;
+            }}
+            placement="left-attack"
+            tone={TONES.machineGun}
+          />
+        </>
       ) : equippedItem === 'lightsaber' ? (
         <ActionButton
           ariaLabel="ライトセイバー"

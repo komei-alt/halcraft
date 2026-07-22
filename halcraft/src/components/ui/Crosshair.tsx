@@ -95,6 +95,7 @@ export function Crosshair() {
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
+  const machineGunScopeProgress = usePlayerStore((s) => s.machineGunScopeProgress);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
   const glovePushReady = usePlayerStore((s) => s.glovePushReady);
@@ -127,7 +128,9 @@ export function Crosshair() {
   const modeRule = useMemo(() => getStageModeRule(currentStageId), [currentStageId]);
 
   // プレイ中以外・乗り物搭乗中は専用照準/UIに任せる
+  // 機関銃ADS中はスコープHUDに照準を任せる
   if (phase !== 'playing' || activeVehicle !== null) return null;
+  if (equippedItem === 'machine_gun' && machineGunScopeProgress > 0.28) return null;
 
   const profile = CROSSHAIR_PROFILES[equippedItem];
   const charge = Math.max(0, Math.min(1, getChargeForItem(

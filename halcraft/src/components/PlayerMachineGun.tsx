@@ -1,5 +1,6 @@
 // 徒歩用機関銃
 // ロケットランチャーと同じカメラ装備枠で、弱めの連射弾とマズルフレアを扱う
+// 右クリック/モバイルでスコープADS：滑らかな覗き込み・ブラックアウト・HUD照準・精密射撃
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -37,13 +38,19 @@ const MOB_HIT_RADIUS = 0.85;
 const PLAYER_HIT_RADIUS = 0.48;
 const PLAYER_HIT_HEIGHT = 1.7;
 const HIP_MODEL_OFFSET = new THREE.Vector3(0.32, -0.32, -0.7);
-const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.05, -0.25, -0.64);
+/** ADS 完了時：スコープを目元に寄せて覗き込む位置 */
+const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.0, -0.14, -0.38);
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.17, -1.18);
 const MODEL_ROTATION = new THREE.Euler(0.02, Math.PI - 0.02, -0.03, 'YXZ');
 const HIP_SPREAD = 0.026;
-const SCOPED_SPREAD = 0.008;
-const SCOPED_FOV = 42;
-const FOV_LERP_RATE = 14;
+const SCOPED_SPREAD = 0.006;
+/** スコープ時FOV（通常~70-75から約2.5倍相当の拡大） */
+const SCOPED_FOV = 28;
+/** スコープ入り/抜けの速度（秒あたり進捗） */
+const SCOPE_IN_RATE = 2.6;
+const SCOPE_OUT_RATE = 3.4;
+/** この進捗以上で精密射撃扱い */
+const SCOPE_PRECISION_THRESHOLD = 0.58;
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 const MACHINE_GUN_BARREL_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
@@ -61,7 +68,27 @@ interface BulletProjectile {
   scoped: boolean;
 }
 
+/** オーバーレイ用：滑らかな進捗をDOMへ直接反映 */
+interface ScopeOverlayElements {
+  root: HTMLDivElement | null;
+  blackout: HTMLDivElement | null;
+  aperture: HTMLDivElement | null;
+  glass: HTMLDivElement | null;
+  reticle: HTMLDivElement | null;
+  label: HTMLDivElement | null;
+}
+
 let nextBulletId = 0;
+
+function easeInOutCubic(t: number): number {
+  const x = THREE.MathUtils.clamp(t, 0, 1);
+  return x < 0.5 ? 4 * x * x * x : 1 - ((-2 * x + 2) ** 3) / 2;
+}
+
+function easeOutCubic(t: number): number {
+  const x = THREE.MathUtils.clamp(t, 0, 1);
+  return 1 - (1 - x) ** 3;
+}
 
 function getMachineGunMasteryBonus() {
   const level = useMasteryStore.getState().items.machine_gun?.level ?? 1;
@@ -80,6 +107,8 @@ export function PlayerMachineGun() {
   const gltf = useGLTF(MACHINE_GUN_MODEL_PATH);
   const model = useMemo(() => cloneSceneWithMaterials(gltf.scene), [gltf.scene]);
   const weaponRef = useRef<THREE.Group>(null);
+  const gunBodyRef = useRef<THREE.Group>(null);
+  const scopeOpticRef = useRef<THREE.Group>(null);
   const barrelGroupRef = useRef<THREE.Group>(null);
   const barrelInstancesRef = useRef<THREE.InstancedMesh>(null);
   const flashCoreRef = useRef<THREE.Mesh>(null);
@@ -100,17 +129,32 @@ export function PlayerMachineGun() {
   const aimDir = useRef(new THREE.Vector3());
   const shootDir = useRef(new THREE.Vector3());
   const offsetWorld = useRef(new THREE.Vector3());
+  const hipOffsetWorld = useRef(new THREE.Vector3());
+  const scopedOffsetWorld = useRef(new THREE.Vector3());
   const rightWorld = useRef(new THREE.Vector3());
   const forwardWorld = useRef(new THREE.Vector3());
   const flashTimer = useRef(0);
   const baseFov = useRef<number | null>(null);
-  const scopeVisibleRef = useRef(false);
+  /** 0=腰だめ, 1=完全ADS */
+  const scopeProgress = useRef(0);
+  const lastStoreScope = useRef(-1);
+  const overlayEls = useRef<ScopeOverlayElements>({
+    root: null,
+    blackout: null,
+    aperture: null,
+    glass: null,
+    reticle: null,
+    label: null,
+  });
   const [bullets, setBullets] = useState<BulletProjectile[]>([]);
-  const [scopeVisible, setScopeVisible] = useState(false);
+  /** オーバーレイDOMのマウント制御（進捗>0の間だけ） */
+  const [scopeOverlayOn, setScopeOverlayOn] = useState(false);
+  const scopeOverlayOnRef = useRef(false);
   const stageVisualStyle = useMemo(
     () => getStageCombatStyleForItem(currentStageId, 'machine_gun'),
     [currentStageId],
   );
+  const accent = stageVisualStyle?.accent ?? '#7ee8ff';
   const muzzleCoreColor = useMemo(() => {
     const color = new THREE.Color(stageVisualStyle?.accent ?? '#fff0a0');
     if (stageVisualStyle) color.lerp(new THREE.Color('#ffffff'), 0.48);
@@ -155,6 +199,7 @@ export function PlayerMachineGun() {
     const onBlur = () => {
       isMouseDown.current = false;
       isRightMouseDown.current = false;
+      mobileActions.scopeMachineGun = false;
     };
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mouseup', onMouseUp);
@@ -173,7 +218,10 @@ export function PlayerMachineGun() {
       camera.fov = baseFov.current;
       camera.updateProjectionMatrix();
     }
+    usePlayerStore.setState({ machineGunScopeProgress: 0 });
   }, [camera]);
+
+  const isScopedAiming = useCallback(() => scopeProgress.current >= SCOPE_PRECISION_THRESHOLD, []);
 
   const fire = useCallback(() => {
     const now = performance.now() / 1000;
@@ -227,9 +275,11 @@ export function PlayerMachineGun() {
       shootDir.current.normalize();
     }
 
-    const scopedShot = isRightMouseDown.current && isDesktopGameplayInputActive();
+    const scopedShot = isScopedAiming();
     const masteryBonus = getMachineGunMasteryBonus();
-    const spread = (scopedShot ? SCOPED_SPREAD : HIP_SPREAD)
+    // スコープ途中でも進捗に応じてブレが減る
+    const scopeBlend = easeOutCubic(scopeProgress.current);
+    const spread = THREE.MathUtils.lerp(HIP_SPREAD, SCOPED_SPREAD, scopeBlend)
       * masteryBonus.machineGunSpreadMultiplier
       * techniqueBonus.machineGunSpreadMultiplier
       * stageStyle.machineGunSpreadMultiplier
@@ -250,7 +300,7 @@ export function PlayerMachineGun() {
       scoped: scopedShot,
     }]);
 
-    recoilKick.current = scopedShot ? 0.55 : 1.15;
+    recoilKick.current = scopedShot ? 0.42 : 1.15;
     heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.1 : 0.16));
     flashTimer.current = combatFocus.active ? 0.13 : scopedShot ? 0.12 : 0.095;
     playMachineGunSound(startPos.distanceTo(camera.position));
@@ -262,7 +312,7 @@ export function PlayerMachineGun() {
       [shootDir.current.x, shootDir.current.y, shootDir.current.z],
       'left',
     );
-  }, [camera]);
+  }, [camera, isScopedAiming]);
 
   useFrame((_, delta) => {
     idleTimer.current += delta;
@@ -273,7 +323,10 @@ export function PlayerMachineGun() {
       && equippedItem === 'machine_gun'
       && !isDead
       && !useVehicleStore.getState().isInVehicle();
-    const scoped = visible && isRightMouseDown.current && isDesktopGameplayInputActive();
+    const wantScope = visible && (
+      (isRightMouseDown.current && isDesktopGameplayInputActive())
+      || mobileActions.scopeMachineGun
+    );
     const firingInput = visible && (
       (isMouseDown.current && isDesktopGameplayInputActive()) ||
       mobileActions.fireMachineGun
@@ -283,19 +336,97 @@ export function PlayerMachineGun() {
       isMouseDown.current = false;
       isRightMouseDown.current = false;
       mobileActions.fireMachineGun = false;
+      mobileActions.scopeMachineGun = false;
     }
 
-    if (scopeVisibleRef.current !== scoped) {
-      scopeVisibleRef.current = scoped;
-      setScopeVisible(scoped);
+    // --- スコープ進捗（非対称の入り/抜け） ---
+    const scopeRate = wantScope ? SCOPE_IN_RATE : SCOPE_OUT_RATE;
+    const scopeTarget = wantScope ? 1 : 0;
+    scopeProgress.current = THREE.MathUtils.damp(
+      scopeProgress.current,
+      scopeTarget,
+      scopeRate,
+      delta,
+    );
+    if (!wantScope && scopeProgress.current < 0.004) scopeProgress.current = 0;
+    if (wantScope && scopeProgress.current > 0.996) scopeProgress.current = 1;
+
+    const raw = scopeProgress.current;
+    // 銃を先に顔へ寄せ、ズームとブラックアウトは少し遅れて「覗き込む」感じに
+    const pRaise = easeOutCubic(Math.min(1, raw / 0.52));
+    const pZoom = easeInOutCubic(Math.max(0, (raw - 0.12) / 0.88));
+    const pBlackout = easeOutCubic(Math.max(0, (raw - 0.06) / 0.5));
+    const pAperture = easeInOutCubic(Math.max(0, (raw - 0.18) / 0.72));
+    const pHud = easeOutCubic(Math.max(0, (raw - 0.42) / 0.58));
+
+    // ストアへ間引き同期（クロスヘア非表示など）
+    if (Math.abs(raw - lastStoreScope.current) > 0.04 || (raw === 0) !== (lastStoreScope.current === 0)) {
+      lastStoreScope.current = raw;
+      usePlayerStore.setState({ machineGunScopeProgress: raw });
     }
 
+    const shouldShowOverlay = raw > 0.01;
+    if (shouldShowOverlay !== scopeOverlayOnRef.current) {
+      scopeOverlayOnRef.current = shouldShowOverlay;
+      setScopeOverlayOn(shouldShowOverlay);
+    }
+
+    // オーバーレイDOMを毎フレーム更新（React再レンダー不要）
+    const els = overlayEls.current;
+    if (els.root) {
+      els.root.style.opacity = String(THREE.MathUtils.clamp(pBlackout * 1.05, 0, 1));
+    }
+    if (els.blackout) {
+      // 中央の透明穴は進捗で広がり（小さな接眼部→視界いっぱいのスコープ）
+      const holePct = THREE.MathUtils.lerp(18, 42, pAperture);
+      const midPct = holePct + THREE.MathUtils.lerp(6, 10, pAperture);
+      els.blackout.style.background = [
+        `radial-gradient(circle at center,`,
+        `transparent 0%,`,
+        `transparent ${holePct}%,`,
+        `rgba(0,0,0,${0.55 * pBlackout}) ${midPct}%,`,
+        `rgba(0,0,0,${0.92 * pBlackout}) 72%,`,
+        `rgba(0,0,0,${0.98 * pBlackout}) 100%)`,
+      ].join(' ');
+    }
+    if (els.aperture) {
+      // 覗き込み：小→大に広がり、中を拡大していく感じ
+      const size = THREE.MathUtils.lerp(28, 56, pAperture);
+      els.aperture.style.width = `min(${size}vw, ${size}vh)`;
+      els.aperture.style.height = `min(${size}vw, ${size}vh)`;
+      els.aperture.style.opacity = String(THREE.MathUtils.clamp(pAperture * 1.2, 0, 1));
+      els.aperture.style.borderColor = `${accent}${Math.round(180 + pHud * 60).toString(16).padStart(2, '0')}`;
+      els.aperture.style.boxShadow = [
+        `0 0 0 ${Math.round(2 + pAperture * 4)}px rgba(0,0,0,${0.55 * pBlackout})`,
+        `inset 0 0 ${Math.round(20 + pHud * 36)}px ${accent}55`,
+        `0 0 ${Math.round(12 + pHud * 22)}px ${accent}66`,
+      ].join(', ');
+    }
+    if (els.glass) {
+      els.glass.style.opacity = String(0.06 + pHud * 0.1);
+      els.glass.style.background = `radial-gradient(circle at 42% 38%, ${accent}33 0%, transparent 55%, rgba(0,12,18,0.22) 100%)`;
+    }
+    if (els.reticle) {
+      els.reticle.style.opacity = String(THREE.MathUtils.clamp(pHud, 0, 1));
+      const scale = THREE.MathUtils.lerp(1.35, 1, pHud);
+      els.reticle.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
+    if (els.label) {
+      els.label.style.opacity = String(THREE.MathUtils.clamp(pHud * 0.95, 0, 1));
+      const zoomX = (baseFov.current ?? 70) / SCOPED_FOV;
+      const shownZoom = THREE.MathUtils.lerp(1, zoomX, pZoom);
+      els.label.textContent = `ADS  ×${shownZoom.toFixed(1)}`;
+    }
+
+    // FOV：覗き込みに合わせて滑らかに拡大
     if (camera instanceof THREE.PerspectiveCamera) {
       if (baseFov.current === null) baseFov.current = camera.fov;
-      const targetFov = scoped ? SCOPED_FOV : baseFov.current;
-      const nextFov = THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-FOV_LERP_RATE * delta));
-      if (Math.abs(camera.fov - nextFov) > 0.01) {
-        camera.fov = nextFov;
+      const targetFov = THREE.MathUtils.lerp(baseFov.current, SCOPED_FOV, pZoom);
+      if (Math.abs(camera.fov - targetFov) > 0.02) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
+      } else if (raw === 0 && baseFov.current !== null && Math.abs(camera.fov - baseFov.current) > 0.02) {
+        camera.fov = baseFov.current;
         camera.updateProjectionMatrix();
       }
     }
@@ -303,9 +434,12 @@ export function PlayerMachineGun() {
     if (weaponRef.current) {
       weaponRef.current.visible = visible;
       if (visible) {
-        offsetWorld.current.copy(scoped ? SCOPED_MODEL_OFFSET : HIP_MODEL_OFFSET).applyQuaternion(camera.quaternion);
-        const bobStrength = scoped ? 0.004 : 0.014;
-        const swayStrength = scoped ? 0.003 : 0.012;
+        hipOffsetWorld.current.copy(HIP_MODEL_OFFSET).applyQuaternion(camera.quaternion);
+        scopedOffsetWorld.current.copy(SCOPED_MODEL_OFFSET).applyQuaternion(camera.quaternion);
+        offsetWorld.current.lerpVectors(hipOffsetWorld.current, scopedOffsetWorld.current, pRaise);
+
+        const bobStrength = THREE.MathUtils.lerp(0.014, 0.0025, pRaise);
+        const swayStrength = THREE.MathUtils.lerp(0.012, 0.002, pRaise);
         rightWorld.current.set(1, 0, 0).applyQuaternion(camera.quaternion);
         forwardWorld.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         offsetWorld.current
@@ -314,9 +448,25 @@ export function PlayerMachineGun() {
             rightWorld.current,
             Math.sin(idleTimer.current * 1.05) * swayStrength + recoilKick.current * 0.016,
           )
-          .addScaledVector(forwardWorld.current, -recoilKick.current * 0.09);
+          .addScaledVector(forwardWorld.current, -recoilKick.current * (0.09 - pRaise * 0.04));
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(new THREE.Quaternion().setFromEuler(MODEL_ROTATION));
+
+        // ADS中は銃本体を徐々に隠し、スコープ接眼部だけが視界を占有
+        if (gunBodyRef.current) {
+          const bodyFade = 1 - pRaise * 0.92;
+          gunBodyRef.current.visible = bodyFade > 0.08;
+          gunBodyRef.current.scale.setScalar(THREE.MathUtils.lerp(1, 0.55, pRaise));
+        }
+        if (scopeOpticRef.current) {
+          // 覗き込み中に接眼リングがカメラ手前へせり出す
+          scopeOpticRef.current.visible = raw > 0.08;
+          const opticZ = THREE.MathUtils.lerp(-0.55, -0.22, pRaise);
+          scopeOpticRef.current.position.set(0.02, 0.06, opticZ);
+          scopeOpticRef.current.scale.setScalar(THREE.MathUtils.lerp(0.55, 1.15, pAperture));
+        }
+      } else if (scopeOpticRef.current) {
+        scopeOpticRef.current.visible = false;
       }
     }
 
@@ -477,187 +627,347 @@ export function PlayerMachineGun() {
     });
   });
 
+  const bindOverlayRef = useCallback((key: keyof ScopeOverlayElements) => (node: HTMLDivElement | null) => {
+    overlayEls.current[key] = node;
+  }, []);
+
   return (
     <group>
       <group ref={weaponRef} visible={false}>
-        <primitive
-          object={model}
-          scale={0.13}
-          position={[0, -0.02, 0]}
-          rotation={[0, 0, 0]}
-        />
-        {/* 射撃中に回る銃身で連射感を出す */}
-        <group ref={barrelGroupRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.15]}>
-          <instancedMesh ref={barrelInstancesRef} args={[undefined, undefined, MACHINE_GUN_BARREL_OFFSETS.length]}>
-            <cylinderGeometry args={[0.011, 0.012, 0.42, 6]} />
-            <meshStandardMaterial color="#202327" roughness={0.42} metalness={0.72} />
-          </instancedMesh>
-          {/* 穴あき放熱筒と砲口カラー。GLB本体は保持し、追加機構だけ高精細化する */}
-          <mesh position={[0, 0, -0.015]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.064, 0.07, 0.31, 10, 1, true]} />
-            <meshStandardMaterial color="#30363d" roughness={0.4} metalness={0.72} side={THREE.DoubleSide} />
+        <group ref={gunBodyRef}>
+          <primitive
+            object={model}
+            scale={0.13}
+            position={[0, -0.02, 0]}
+            rotation={[0, 0, 0]}
+          />
+          {/* 射撃中に回る銃身で連射感を出す */}
+          <group ref={barrelGroupRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.15]}>
+            <instancedMesh ref={barrelInstancesRef} args={[undefined, undefined, MACHINE_GUN_BARREL_OFFSETS.length]}>
+              <cylinderGeometry args={[0.011, 0.012, 0.42, 6]} />
+              <meshStandardMaterial color="#202327" roughness={0.42} metalness={0.72} />
+            </instancedMesh>
+            {/* 穴あき放熱筒と砲口カラー。GLB本体は保持し、追加機構だけ高精細化する */}
+            <mesh position={[0, 0, -0.015]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.064, 0.07, 0.31, 10, 1, true]} />
+              <meshStandardMaterial color="#30363d" roughness={0.4} metalness={0.72} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, 0, -0.21]}>
+              <torusGeometry args={[0.06, 0.009, 7, 16]} />
+              <meshStandardMaterial color="#737b83" roughness={0.34} metalness={0.78} />
+            </mesh>
+          </group>
+          <mesh ref={heatBandRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.1]}>
+            <torusGeometry args={[0.085, 0.006, 8, 24]} />
+            <meshBasicMaterial
+              color={muzzleGlowColor}
+              transparent
+              opacity={0}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
           </mesh>
-          <mesh position={[0, 0, -0.21]}>
-            <torusGeometry args={[0.06, 0.009, 7, 16]} />
-            <meshStandardMaterial color="#737b83" roughness={0.34} metalness={0.78} />
+          <pointLight
+            ref={heatLightRef}
+            position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.05]}
+            color={muzzleGlowColor}
+            intensity={0}
+            distance={2.5}
+            decay={2}
+          />
+          {/* 右腕とグリップ: トリガー側を手で握っているように見せる */}
+          <mesh position={[0.24, -0.34, -0.12]} rotation={[-0.78, 0.12, -0.24]}>
+            <boxGeometry args={[0.15, 0.48, 0.15]} />
+            <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+          </mesh>
+          <mesh position={[0.12, -0.14, -0.38]} rotation={[-0.1, 0.08, -0.08]}>
+            <boxGeometry args={[0.18, 0.16, 0.16]} />
+            <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+          </mesh>
+          {/* 左手を前方グリップに置いて、銃をしっかり支える */}
+          <mesh position={[-0.16, -0.36, -0.48]} rotation={[-0.82, -0.1, 0.28]}>
+            <boxGeometry args={[0.14, 0.5, 0.14]} />
+            <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
+          </mesh>
+          <mesh position={[-0.02, -0.14, -0.77]} rotation={[-0.08, -0.16, 0.08]}>
+            <boxGeometry args={[0.17, 0.15, 0.16]} />
+            <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
+          </mesh>
+          <mesh
+            ref={flashCoreRef}
+            position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.06]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            visible={false}
+          >
+            <coneGeometry args={[0.22, 0.5, 10]} />
+            <meshBasicMaterial
+              color="#fff0a0"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh
+            ref={flashGlowRef}
+            position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.12]}
+            visible={false}
+          >
+            <sphereGeometry args={[0.18, 16, 10]} />
+            <meshBasicMaterial
+              color="#ff8b2d"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* 十字のマズルフレアで撃ち感を足す */}
+          <mesh
+            ref={flashCrossRef}
+            position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.05]}
+            rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+            visible={false}
+          >
+            <coneGeometry args={[0.18, 0.42, 8]} />
+            <meshBasicMaterial
+              color="#fff6c8"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+          <pointLight
+            ref={flashLightRef}
+            position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.1]}
+            color="#ffb13d"
+            intensity={0}
+            distance={5}
+          />
+        </group>
+
+        {/* スコープ接眼モデル：覗き込み時にカメラ手前へせり出す */}
+        <group ref={scopeOpticRef} visible={false} position={[0.02, 0.06, -0.55]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.09, 0.11, 0.28, 16, 1, true]} />
+            <meshStandardMaterial color="#1c2128" roughness={0.38} metalness={0.78} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, 0, 0.12]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.095, 0.014, 8, 24]} />
+            <meshStandardMaterial color="#3a424c" roughness={0.32} metalness={0.82} />
+          </mesh>
+          <mesh position={[0, 0, 0.14]}>
+            <circleGeometry args={[0.078, 28]} />
+            <meshBasicMaterial
+              color={accent}
+              transparent
+              opacity={0.12}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh position={[0, 0, -0.1]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.055, 0.07, 0.16, 12, 1, true]} />
+            <meshStandardMaterial color="#252b32" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
           </mesh>
         </group>
-        <mesh ref={heatBandRef} position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.1]}>
-          <torusGeometry args={[0.085, 0.006, 8, 24]} />
-          <meshBasicMaterial
-            color={muzzleGlowColor}
-            transparent
-            opacity={0}
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-        <pointLight
-          ref={heatLightRef}
-          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z + 0.05]}
-          color={muzzleGlowColor}
-          intensity={0}
-          distance={2.5}
-          decay={2}
-        />
-        {/* 右腕とグリップ: トリガー側を手で握っているように見せる */}
-        <mesh position={[0.24, -0.34, -0.12]} rotation={[-0.78, 0.12, -0.24]}>
-          <boxGeometry args={[0.15, 0.48, 0.15]} />
-          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
-        </mesh>
-        <mesh position={[0.12, -0.14, -0.38]} rotation={[-0.1, 0.08, -0.08]}>
-          <boxGeometry args={[0.18, 0.16, 0.16]} />
-          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
-        </mesh>
-        {/* 左手を前方グリップに置いて、銃をしっかり支える */}
-        <mesh position={[-0.16, -0.36, -0.48]} rotation={[-0.82, -0.1, 0.28]}>
-          <boxGeometry args={[0.14, 0.5, 0.14]} />
-          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} />
-        </mesh>
-        <mesh position={[-0.02, -0.14, -0.77]} rotation={[-0.08, -0.16, 0.08]}>
-          <boxGeometry args={[0.17, 0.15, 0.16]} />
-          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} />
-        </mesh>
-        <mesh
-          ref={flashCoreRef}
-          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.06]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          visible={false}
-        >
-          <coneGeometry args={[0.22, 0.5, 10]} />
-          <meshBasicMaterial
-            color="#fff0a0"
-            transparent
-            opacity={0}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-          />
-        </mesh>
-        <mesh
-          ref={flashGlowRef}
-          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.12]}
-          visible={false}
-        >
-          <sphereGeometry args={[0.18, 16, 10]} />
-          <meshBasicMaterial
-            color="#ff8b2d"
-            transparent
-            opacity={0}
-            depthWrite={false}
-            depthTest={false}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-        {/* 十字のマズルフレアで撃ち感を足す */}
-        <mesh
-          ref={flashCrossRef}
-          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.05]}
-          rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-          visible={false}
-        >
-          <coneGeometry args={[0.18, 0.42, 8]} />
-          <meshBasicMaterial
-            color="#fff6c8"
-            transparent
-            opacity={0}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-        <pointLight
-          ref={flashLightRef}
-          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.1]}
-          color="#ffb13d"
-          intensity={0}
-          distance={5}
-        />
       </group>
 
-      {scopeVisible && (
-        <Html fullscreen zIndexRange={[70, 0]}>
+      {scopeOverlayOn && (
+        <Html fullscreen zIndexRange={[80, 0]} style={{ pointerEvents: 'none' }}>
           <div
+            ref={bindOverlayRef('root')}
             style={{
               position: 'fixed',
               inset: 0,
               pointerEvents: 'none',
-              background: 'radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0.28) 36%, rgba(0,0,0,0.72) 100%)',
+              opacity: 0,
+              transition: 'none',
             }}
           >
+            {/* 周囲ブラックアウト（中央はスコープ穴） */}
             <div
+              ref={bindOverlayRef('blackout')}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'radial-gradient(circle at center, transparent 0%, transparent 20%, rgba(0,0,0,0.7) 40%, #000 100%)',
+              }}
+            />
+            {/* スコープ円枠 + ガラス */}
+            <div
+              ref={bindOverlayRef('aperture')}
               style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 'min(54vw, 54vh)',
-                height: 'min(54vw, 54vh)',
+                width: 'min(40vw, 40vh)',
+                height: 'min(40vw, 40vh)',
                 transform: 'translate(-50%, -50%)',
-                border: `2px solid ${stageVisualStyle ? `${stageVisualStyle.accent}cc` : 'rgba(210, 245, 255, 0.72)'}`,
+                border: `3px solid ${accent}cc`,
                 borderRadius: '50%',
-                boxShadow: stageVisualStyle
-                  ? `0 0 0 1px rgba(0,0,0,0.55), inset 0 0 28px ${stageVisualStyle.accent}55, 0 0 18px ${stageVisualStyle.accent}55`
-                  : '0 0 0 1px rgba(0,0,0,0.55), inset 0 0 28px rgba(95,180,210,0.22)',
+                boxShadow: '0 0 0 3px rgba(0,0,0,0.55)',
+                opacity: 0,
+                overflow: 'hidden',
               }}
-            />
+            >
+              <div
+                ref={bindOverlayRef('glass')}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  opacity: 0.08,
+                  pointerEvents: 'none',
+                }}
+              />
+              {/* 内側リング（接眼っぽさ） */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '4%',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(200, 240, 255, 0.22)',
+                  boxShadow: 'inset 0 0 24px rgba(0,0,0,0.35)',
+                }}
+              />
+            </div>
+
+            {/* HUD風照準（中央固定） */}
             <div
+              ref={bindOverlayRef('reticle')}
               style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 2,
-                height: 'min(22vw, 22vh)',
-                transform: 'translate(-50%, -50%)',
-                background: 'rgba(220, 250, 255, 0.62)',
+                width: 'min(48vw, 48vh)',
+                height: 'min(48vw, 48vh)',
+                transform: 'translate(-50%, -50%) scale(1.2)',
+                opacity: 0,
+                pointerEvents: 'none',
               }}
-            />
-            <div
-              style={{
+            >
+              {/* 縦線（ギャップ付き） */}
+              <div style={{
+                position: 'absolute', left: '50%', top: '8%', bottom: '58%',
+                width: 1.5, transform: 'translateX(-50%)',
+                background: `linear-gradient(to bottom, transparent, ${accent}dd)`,
+                boxShadow: `0 0 6px ${accent}88`,
+              }}
+              />
+              <div style={{
+                position: 'absolute', left: '50%', top: '58%', bottom: '8%',
+                width: 1.5, transform: 'translateX(-50%)',
+                background: `linear-gradient(to top, transparent, ${accent}dd)`,
+                boxShadow: `0 0 6px ${accent}88`,
+              }}
+              />
+              {/* 横線 */}
+              <div style={{
+                position: 'absolute', top: '50%', left: '8%', right: '58%',
+                height: 1.5, transform: 'translateY(-50%)',
+                background: `linear-gradient(to right, transparent, ${accent}dd)`,
+                boxShadow: `0 0 6px ${accent}88`,
+              }}
+              />
+              <div style={{
+                position: 'absolute', top: '50%', left: '58%', right: '8%',
+                height: 1.5, transform: 'translateY(-50%)',
+                background: `linear-gradient(to left, transparent, ${accent}dd)`,
+                boxShadow: `0 0 6px ${accent}88`,
+              }}
+              />
+              {/* ミルドット（距離目盛り） */}
+              {[0.38, 0.44, 0.5, 0.56, 0.62].map((t) => (
+                <div
+                  key={`h-${t}`}
+                  style={{
+                    position: 'absolute',
+                    left: `${t * 100}%`,
+                    top: '50%',
+                    width: 5,
+                    height: 1,
+                    transform: 'translate(-50%, -50%)',
+                    background: `${accent}aa`,
+                  }}
+                />
+              ))}
+              {[0.38, 0.44, 0.5, 0.56, 0.62].map((t) => (
+                <div
+                  key={`v-${t}`}
+                  style={{
+                    position: 'absolute',
+                    top: `${t * 100}%`,
+                    left: '50%',
+                    width: 1,
+                    height: 5,
+                    transform: 'translate(-50%, -50%)',
+                    background: `${accent}aa`,
+                  }}
+                />
+              ))}
+              {/* 中央ドット */}
+              <div style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 'min(22vw, 22vh)',
-                height: 2,
-                transform: 'translate(-50%, -50%)',
-                background: 'rgba(220, 250, 255, 0.62)',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 6,
-                height: 6,
+                width: 5,
+                height: 5,
                 transform: 'translate(-50%, -50%)',
                 borderRadius: '50%',
-                background: '#f7feff',
-                boxShadow: '0 0 10px rgba(160, 230, 255, 0.9)',
+                background: '#fff8e8',
+                boxShadow: `0 0 10px ${accent}, 0 0 3px #fff`,
               }}
-            />
+              />
+              {/* コーナーブラケット（HUD風の四隅） */}
+              <div style={{
+                position: 'absolute', top: '12%', left: '12%', width: 18, height: 18,
+                borderTop: `1.5px solid ${accent}99`, borderLeft: `1.5px solid ${accent}99`,
+              }}
+              />
+              <div style={{
+                position: 'absolute', top: '12%', right: '12%', width: 18, height: 18,
+                borderTop: `1.5px solid ${accent}99`, borderRight: `1.5px solid ${accent}99`,
+              }}
+              />
+              <div style={{
+                position: 'absolute', bottom: '12%', left: '12%', width: 18, height: 18,
+                borderBottom: `1.5px solid ${accent}99`, borderLeft: `1.5px solid ${accent}99`,
+              }}
+              />
+              <div style={{
+                position: 'absolute', bottom: '12%', right: '12%', width: 18, height: 18,
+                borderBottom: `1.5px solid ${accent}99`, borderRight: `1.5px solid ${accent}99`,
+              }}
+              />
+            </div>
+
+            <div
+              ref={bindOverlayRef('label')}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: 'calc(50% + min(30vw, 30vh))',
+                transform: 'translateX(-50%)',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontSize: 12,
+                letterSpacing: '0.14em',
+                color: `${accent}dd`,
+                textShadow: '0 0 8px rgba(0,0,0,0.9)',
+                opacity: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ADS
+            </div>
           </div>
         </Html>
       )}

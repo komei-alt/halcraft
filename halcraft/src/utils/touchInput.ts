@@ -25,6 +25,8 @@ export const mobileActions = {
   fireRocket: false,
   /** 徒歩機関銃（押している間true） */
   fireMachineGun: false,
+  /** 徒歩機関銃スコープ（押している間true） */
+  scopeMachineGun: false,
   /** 乗り物ガトリング（押している間true） */
   vehicleGun: false,
   /** 乗り物ロケット発射トリガー（1回消費で自動false） */
@@ -41,6 +43,7 @@ export function resetMobileActionTriggers(): void {
   mobileActions.placeBlock = false;
   mobileActions.fireRocket = false;
   mobileActions.fireMachineGun = false;
+  mobileActions.scopeMachineGun = false;
   mobileActions.vehicleGun = false;
   mobileActions.vehicleRocket = false;
   mobileActions.vehicleBomb = false;
