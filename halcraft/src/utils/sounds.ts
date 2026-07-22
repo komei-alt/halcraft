@@ -157,6 +157,83 @@ export function playHitSound(): void {
   noise.stop(now + 0.07);
 }
 
+/** 味方近接の振り出し（風切り）音 */
+export function playMeleeSwingSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('melee_swing', 120)) return;
+
+  const now = ctx.currentTime;
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(900, now);
+  filter.frequency.exponentialRampToValueAtTime(2200, now + 0.08);
+  filter.Q.setValueAtTime(0.7, now);
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(getSfxDestination());
+  noise.start(now);
+  noise.stop(now + 0.16);
+}
+
+/** 味方近接のヒット音（やや重め） */
+export function playMeleeHitSound(heavy = false): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('melee_hit', 70)) return;
+
+  const now = ctx.currentTime;
+  const base = heavy ? 130 : 190;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(base, now);
+  osc.frequency.exponentialRampToValueAtTime(38, now + (heavy ? 0.14 : 0.1));
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(heavy ? 0.58 : 0.46, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + (heavy ? 0.16 : 0.11));
+  osc.connect(oscGain);
+  oscGain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.16);
+
+  const click = ctx.createOscillator();
+  click.type = 'triangle';
+  click.frequency.setValueAtTime(heavy ? 420 : 560, now);
+  click.frequency.exponentialRampToValueAtTime(90, now + 0.06);
+  const clickGain = ctx.createGain();
+  clickGain.gain.setValueAtTime(0.2, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  click.connect(clickGain);
+  clickGain.connect(getSfxDestination());
+  click.start(now);
+  click.stop(now + 0.07);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'highpass';
+  nf.frequency.setValueAtTime(heavy ? 900 : 1400, now);
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(heavy ? 0.32 : 0.26, now);
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  noise.connect(nf);
+  nf.connect(ng);
+  ng.connect(getSfxDestination());
+  noise.start(now);
+  noise.stop(now + 0.08);
+
+  // 共通ヒット音も重ねて手応えを統一
+  playHitSound();
+}
+
 // ============================================
 // 2. 被ダメージ音
 // ============================================

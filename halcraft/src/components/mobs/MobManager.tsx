@@ -290,6 +290,7 @@ export function MobManager() {
           lastPos: { x: m.x, z: m.z },
           attackElapsed: 0,
           attackHitApplied: false,
+          swingSoundPlayed: false,
           attackTarget: null,
           pendingKbX: 0,
           pendingKbZ: 0,

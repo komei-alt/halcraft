@@ -14,6 +14,7 @@ import { BlockBreakEffect } from './components/BlockBreakEffect';
 import { BlockUseEffect } from './components/BlockUseEffect';
 import { DamagePopup } from './components/DamagePopup';
 import { HitImpactEffect } from './components/HitImpactEffect';
+import { AllyMeleeAttackFX } from './components/AllyMeleeAttackFX';
 import { CombatExplosionFX } from './components/CombatExplosionFX';
 import { MobDeathEffect } from './components/MobDeathEffect';
 import { RocketLauncher } from './components/RocketLauncher';
@@ -201,6 +202,7 @@ function GameCanvas() {
           <BlockUseEffect />
           <DamagePopup />
           <HitImpactEffect />
+          <AllyMeleeAttackFX />
           <CombatExplosionFX />
           <MobDeathEffect />
           <RocketLauncher />
