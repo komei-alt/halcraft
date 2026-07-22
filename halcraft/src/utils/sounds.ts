@@ -106,24 +106,37 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 
 export function playHitSound(): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('hit', 100)) return;
+  if (!ctx || !canPlay('hit', 80)) return;
 
   const now = ctx.currentTime;
 
-  // 低音パンチ（短いサイン波）
+  // 低音パンチ
   const osc = ctx.createOscillator();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(150, now);
-  osc.frequency.exponentialRampToValueAtTime(50, now + 0.08);
+  osc.frequency.setValueAtTime(170, now);
+  osc.frequency.exponentialRampToValueAtTime(42, now + 0.1);
 
   const oscGain = ctx.createGain();
-  oscGain.gain.setValueAtTime(0.4, now);
-  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  oscGain.gain.setValueAtTime(0.52, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
 
   osc.connect(oscGain);
   oscGain.connect(getSfxDestination());
   osc.start(now);
-  osc.stop(now + 0.1);
+  osc.stop(now + 0.12);
+
+  // 中域の「コツ」
+  const mid = ctx.createOscillator();
+  mid.type = 'triangle';
+  mid.frequency.setValueAtTime(320, now);
+  mid.frequency.exponentialRampToValueAtTime(90, now + 0.08);
+  const midGain = ctx.createGain();
+  midGain.gain.setValueAtTime(0.22, now);
+  midGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  mid.connect(midGain);
+  midGain.connect(getSfxDestination());
+  mid.start(now);
+  mid.stop(now + 0.09);
 
   // ノイズバースト（インパクト感）
   const noise = ctx.createBufferSource();
@@ -131,17 +144,17 @@ export function playHitSound(): void {
 
   const noiseFilter = ctx.createBiquadFilter();
   noiseFilter.type = 'highpass';
-  noiseFilter.frequency.setValueAtTime(2000, now);
+  noiseFilter.frequency.setValueAtTime(1600, now);
 
   const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.25, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  noiseGain.gain.setValueAtTime(0.34, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
   noiseGain.connect(getSfxDestination());
   noise.start(now);
-  noise.stop(now + 0.06);
+  noise.stop(now + 0.07);
 }
 
 // ============================================
@@ -293,36 +306,36 @@ export function playLandingSound(
 /** ジャンプ音（短く軽いフワッとした音） */
 export function playJumpSound(): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('jump', 160)) return;
+  if (!ctx || !canPlay('jump', 140)) return;
 
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
   osc.type = 'triangle';
-  osc.frequency.setValueAtTime(220, now);
-  osc.frequency.exponentialRampToValueAtTime(140, now + 0.09);
+  osc.frequency.setValueAtTime(240, now);
+  osc.frequency.exponentialRampToValueAtTime(130, now + 0.1);
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.12, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+  gain.gain.setValueAtTime(0.15, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
 
   osc.connect(gain);
   gain.connect(getSfxDestination());
   osc.start(now);
-  osc.stop(now + 0.12);
+  osc.stop(now + 0.13);
 
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
   const filter = ctx.createBiquadFilter();
   filter.type = 'highpass';
-  filter.frequency.setValueAtTime(900, now);
+  filter.frequency.setValueAtTime(1000, now);
   const nGain = ctx.createGain();
-  nGain.gain.setValueAtTime(0.05, now);
-  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  nGain.gain.setValueAtTime(0.065, now);
+  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
   noise.connect(filter);
   filter.connect(nGain);
   nGain.connect(getSfxDestination());
   noise.start(now);
-  noise.stop(now + 0.08);
+  noise.stop(now + 0.09);
 }
 
 export function playBiomeFootstepSound(

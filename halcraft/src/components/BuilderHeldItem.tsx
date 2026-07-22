@@ -327,6 +327,7 @@ export function BuilderHeldItem() {
   const switchPulse = useRef(1);
   const swingKick = useRef(0);
   const placeKick = useRef(0);
+  const prevAttackCharge = useRef(1);
   const offsetWorld = useRef(new THREE.Vector3());
   const toolOffsetWorld = useRef(new THREE.Vector3());
   const blockOffsetWorld = useRef(new THREE.Vector3());
@@ -352,8 +353,15 @@ export function BuilderHeldItem() {
   useFrame((_, delta) => {
     idleTimer.current += delta;
     switchPulse.current = Math.max(0, switchPulse.current - delta * 4.2);
-    swingKick.current = Math.max(0, swingKick.current - delta * 6.5);
+    swingKick.current = Math.max(0, swingKick.current - delta * 5.8);
     placeKick.current = Math.max(0, placeKick.current - delta * 7.5);
+
+    // 攻撃チャージが落ちた瞬間 = 攻撃発生（モバイルでも振る）
+    const attackCharge = usePlayerStore.getState().attackCharge;
+    if (attackCharge < prevAttackCharge.current - 0.08) {
+      swingKick.current = 1;
+    }
+    prevAttackCharge.current = attackCharge;
 
     const visible = phase === 'playing'
       && equippedItem === 'builder'
@@ -375,13 +383,15 @@ export function BuilderHeldItem() {
     if (toolRef.current) {
       const swing = Math.sin((1 - swingKick.current) * Math.PI) * swingKick.current;
       toolOffsetWorld.current.copy(TOOL_MODEL_OFFSET);
-      toolOffsetWorld.current.y -= swing * 0.08;
-      toolOffsetWorld.current.z -= swing * 0.1;
+      toolOffsetWorld.current.y -= swing * 0.12;
+      toolOffsetWorld.current.z -= swing * 0.14;
+      toolOffsetWorld.current.x += swing * 0.04;
       toolRef.current.position.copy(toolOffsetWorld.current);
       toolRef.current.quaternion.copy(toolQuat);
       toolRef.current.scale.setScalar(0.44);
-      toolRef.current.rotation.x += swing * getToolTypeSwing(toolDef?.type ?? null);
-      toolRef.current.rotation.z -= swing * 0.38;
+      toolRef.current.rotation.x += swing * getToolTypeSwing(toolDef?.type ?? null) * 1.2;
+      toolRef.current.rotation.z -= swing * 0.52;
+      toolRef.current.rotation.y += swing * 0.18;
     }
 
     if (toolTrailRef.current) {
@@ -389,9 +399,9 @@ export function BuilderHeldItem() {
       const swing = Math.sin((1 - swingKick.current) * Math.PI) * swingKick.current;
       const statusPulse = Math.max(0, 1 - toolDurabilityRatio) * 0.25;
       trailMaterial.color.copy(toolAccentColor);
-      trailMaterial.opacity = swing * 0.62 + switchPulse.current * 0.12 + statusPulse;
-      toolTrailRef.current.rotation.z = -0.72 + idleTimer.current * 0.08 + swing * 1.8;
-      toolTrailRef.current.scale.setScalar(0.74 + swing * 0.38 + switchPulse.current * 0.12);
+      trailMaterial.opacity = swing * 0.82 + switchPulse.current * 0.12 + statusPulse;
+      toolTrailRef.current.rotation.z = -0.72 + idleTimer.current * 0.08 + swing * 2.2;
+      toolTrailRef.current.scale.setScalar(0.8 + swing * 0.55 + switchPulse.current * 0.12);
     }
 
     if (toolStatusGlowRef.current) {

@@ -19,7 +19,7 @@ export function RocketCooldownIndicator() {
         left: '50%',
         top: '50%',
         transform: 'translate(-50%, 28px)',
-        width: isReadyPulse ? 76 : 52,
+        width: isReadyPulse ? 84 : 56,
         zIndex: 110,
         pointerEvents: 'none',
       }}
@@ -27,11 +27,12 @@ export function RocketCooldownIndicator() {
       <div
         style={{
           width: '100%',
-          height: 4,
-          background: 'rgba(0, 0, 0, 0.68)',
+          height: 5,
+          background: 'rgba(0, 0, 0, 0.74)',
           borderRadius: 999,
           overflow: 'hidden',
-          border: '1px solid rgba(255, 190, 120, 0.25)',
+          border: `1px solid ${isReadyPulse ? 'rgba(255, 242, 166, 0.55)' : 'rgba(255, 190, 120, 0.32)'}`,
+          boxShadow: isReadyPulse ? '0 0 10px rgba(255, 210, 120, 0.35)' : 'none',
         }}
       >
         <div
@@ -46,27 +47,28 @@ export function RocketCooldownIndicator() {
                 ? '#ff9c4a'
                 : '#ff5f3a',
             boxShadow: isReadyPulse
-              ? '0 0 12px rgba(255, 242, 166, 0.72)'
-              : '0 0 8px rgba(255, 150, 90, 0.45)',
-            transition: 'background 0.1s',
+              ? '0 0 14px rgba(255, 242, 166, 0.85)'
+              : '0 0 8px rgba(255, 150, 90, 0.5)',
+            transition: 'background 0.1s, width 0.06s linear',
           }}
         />
       </div>
       <div
         style={{
           textAlign: 'center',
-          fontSize: 8,
+          fontSize: 9,
           marginTop: 2,
-          opacity: 0.8,
+          opacity: isReadyPulse ? 0.98 : 0.85,
           lineHeight: 1,
-          letterSpacing: '0.14em',
-          color: isReadyPulse ? '#fff2a6' : 'rgba(255, 225, 200, 0.9)',
+          letterSpacing: '0.12em',
+          color: isReadyPulse ? '#fff2a6' : 'rgba(255, 225, 200, 0.92)',
           textTransform: 'uppercase',
-          fontWeight: 900,
-          textShadow: isReadyPulse ? '0 0 8px rgba(255, 210, 120, 0.8)' : 'none',
+          fontWeight: 950,
+          fontFamily: 'monospace',
+          textShadow: isReadyPulse ? '0 0 10px rgba(255, 210, 120, 0.9)' : '0 1px 2px rgba(0,0,0,0.8)',
         }}
       >
-        {isReadyPulse ? 'READY' : 'RKT'}
+        {isReadyPulse ? 'READY' : `RKT ${Math.round(rocketCharge * 100)}%`}
       </div>
     </div>
   );

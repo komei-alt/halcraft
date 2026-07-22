@@ -1325,6 +1325,9 @@ export function BlockInteraction() {
         false,
       );
       playHitSound();
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, 0.18)),
+      }));
       recordItemHit('builder', { label: '近接ヒット', amount: 7 });
       return true;
     }
@@ -1350,6 +1353,9 @@ export function BlockInteraction() {
         isCritical,
       );
       playHitSound();
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, isCritical ? 0.32 : 0.2)),
+      }));
       recordItemHit('builder', { critical: isCritical, label: isCritical ? '会心ヒット' : '近接ヒット' });
       return true;
     }
