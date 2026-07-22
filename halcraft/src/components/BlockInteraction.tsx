@@ -621,6 +621,7 @@ export function BlockInteraction() {
   const damageMob = useMobStore((s) => s.damageMob);
   const spawnMob = useMobStore((s) => s.spawnMob);
   const performAttack = usePlayerStore((s) => s.performAttack);
+  const startMeleeSwing = usePlayerStore((s) => s.startMeleeSwing);
   const sendBlockBreak = useMultiplayerStore((s) => s.sendBlockBreak);
   const sendBlockPlace = useMultiplayerStore((s) => s.sendBlockPlace);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
@@ -1310,6 +1311,8 @@ export function BlockInteraction() {
   } | null>(null);
   const meleeHitAppliedRef = useRef(false);
   const meleeSwingSoundPlayedRef = useRef(false);
+  /** 採掘中の振り直し間隔 */
+  const miningSwingTimerRef = useRef(0);
 
   const resolvePendingMeleeHit = useCallback(() => {
     const pending = pendingMeleeRef.current;
@@ -1409,8 +1412,14 @@ export function BlockInteraction() {
       return true;
     }
 
+    // 対象なし: 空振りスイング（採掘開始前の手応え）
+    if (startMeleeSwing({ noShake: true, lightShake: true })) {
+      pendingMeleeRef.current = null;
+      meleeHitAppliedRef.current = true;
+      meleeSwingSoundPlayedRef.current = false;
+    }
     return false;
-  }, [findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack]);
+  }, [findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack, startMeleeSwing]);
 
   // レイマーチングで照準先のブロックを検出
   useFrame((_, frameDelta) => {
@@ -1546,6 +1555,15 @@ export function BlockInteraction() {
       if (usePlayerStore.getState().isDead) { isBreakingRef.current = false; return; }
       if (useVehicleStore.getState().isInVehicle()) { isBreakingRef.current = false; return; }
       if (equippedItem !== 'builder') { isBreakingRef.current = false; return; }
+
+      // 掘り続けている間、スイングクールが空いたら振る（採掘の手応え）
+      miningSwingTimerRef.current += dt;
+      if (miningSwingTimerRef.current >= 0.42) {
+        if (startMeleeSwing({ noShake: true, lightShake: true })) {
+          meleeSwingSoundPlayedRef.current = false;
+          miningSwingTimerRef.current = 0;
+        }
+      }
 
       const bp = breakProgressRef.current;
       const blockId = getBlock(found.x, found.y, found.z);
@@ -1746,8 +1764,11 @@ export function BlockInteraction() {
     if (equippedItem !== 'builder') return;
 
     if (e.button === 0) {
-      // 左クリック: プレイヤー攻撃 → モブ攻撃 → ブロック段階破壊開始
-      if (!tryMeleeAttack()) {
+      // 左クリック: プレイヤー/モブ攻撃 or 空振り → ブロック破壊
+      // tryMeleeAttack は対象ありなら true。空振りでもスイングは開始済み
+      const hitEntity = tryMeleeAttack();
+      if (!hitEntity) {
+        miningSwingTimerRef.current = 0;
         // ビルドモードは即破壊
         if (isBuildMode) {
           const t = targetRef.current;
@@ -1800,7 +1821,7 @@ export function BlockInteraction() {
         lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
       }
     }
-  }, [breakBlock, camera, emitMiningBlockedFeedback, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
+  }, [breakBlock, camera, emitMiningBlockedFeedback, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, startMeleeSwing, tryMeleeAttack, tryPlaceSelectedBlock]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

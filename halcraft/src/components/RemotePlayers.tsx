@@ -131,6 +131,11 @@ function RemotePlayerModel({
         isMoving={isMoving}
         equippedItem={equippedItem}
         aimPitch={player.rotation[1]}
+        meleeSwingProgress={
+          player.meleeSwingTimer > 0
+            ? 1 - player.meleeSwingTimer / 0.38
+            : 0
+        }
         isDead={player.isDead}
         deathTime={player.deathTime}
       />
@@ -140,6 +145,11 @@ function RemotePlayerModel({
           equippedItem={equippedItem}
           isMoving={isMoving}
           viewPitch={player.rotation[1]}
+          meleeSwingProgress={
+            player.meleeSwingTimer > 0
+              ? 1 - player.meleeSwingTimer / 0.38
+              : 0
+          }
         />
       )}
     </group>

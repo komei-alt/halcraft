@@ -198,6 +198,12 @@ interface PlayerState {
   /** 攻撃を実行しダメージ倍率を返す（0=クールダウン中で攻撃不可） */
   performAttack: (options?: { noShake?: boolean }) => number;
 
+  /**
+   * 近接スイングだけ開始（空振り・採掘用）。
+   * クールダウン中は false。ダメージ判定は呼び出し側で行う。
+   */
+  startMeleeSwing: (options?: { noShake?: boolean; lightShake?: boolean }) => boolean;
+
   /** 攻撃クールダウンを毎フレーム更新 */
   updateAttackCooldown: (dt: number) => void;
 
@@ -373,6 +379,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
 
     return multiplier;
+  },
+
+  startMeleeSwing: (options) => {
+    const state = get();
+    if (state.isDead || state.attackCooldown > 0) return false;
+    const charge = state.attackCharge;
+    set({
+      attackCooldown: ATTACK_COOLDOWN,
+      attackCharge: 0,
+      meleeSwingTimer: MELEE_SWING_DURATION,
+      ...(options?.noShake
+        ? {}
+        : {
+            cameraShake: Math.max(
+              state.cameraShake,
+              options?.lightShake ? 0.1 + charge * 0.08 : 0.18 + charge * 0.2,
+            ),
+          }),
+    });
+    return true;
   },
 
   updateAttackCooldown: (dt) => {

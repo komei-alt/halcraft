@@ -26,6 +26,8 @@ interface VoxelAvatarProps {
   equippedItem?: EquippedItem;
   /** 視点の上下角度（リモートプレイヤーの武器構え同期用） */
   aimPitch?: number;
+  /** 近接スイング進行度 0-1（0=非スイング） */
+  meleeSwingProgress?: number;
   /** 死亡状態か */
   isDead?: boolean;
   /** 死亡開始時刻（Date.now()） */
@@ -323,6 +325,49 @@ function WardenAvatar({
   );
 }
 
+function remoteMeleePose(progress: number): {
+  pitch: number;
+  roll: number;
+  lift: number;
+  push: number;
+} {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const smooth = (t: number) => {
+    const x = THREE.MathUtils.clamp(t, 0, 1);
+    return x * x * (3 - 2 * x);
+  };
+  if (p <= 0.001) return { pitch: 0, roll: 0, lift: 0, push: 0 };
+  if (p < 0.28) {
+    const u = smooth(p / 0.28);
+    return { pitch: -1.1 * u, roll: -0.45 * u, lift: 0.12 * u, push: -0.08 * u };
+  }
+  if (p < 0.48) {
+    const u = smooth((p - 0.28) / 0.2);
+    return {
+      pitch: THREE.MathUtils.lerp(-1.1, 1.25, u),
+      roll: THREE.MathUtils.lerp(-0.45, 0.7, u),
+      lift: THREE.MathUtils.lerp(0.12, -0.1, u),
+      push: THREE.MathUtils.lerp(-0.08, 0.18, u),
+    };
+  }
+  if (p < 0.7) {
+    const u = smooth((p - 0.48) / 0.22);
+    return {
+      pitch: THREE.MathUtils.lerp(1.25, 0.9, u),
+      roll: THREE.MathUtils.lerp(0.7, 0.4, u),
+      lift: THREE.MathUtils.lerp(-0.1, -0.04, u),
+      push: THREE.MathUtils.lerp(0.18, 0.08, u),
+    };
+  }
+  const u = smooth((p - 0.7) / 0.3);
+  return {
+    pitch: THREE.MathUtils.lerp(0.9, 0, u),
+    roll: THREE.MathUtils.lerp(0.4, 0, u),
+    lift: THREE.MathUtils.lerp(-0.04, 0, u),
+    push: THREE.MathUtils.lerp(0.08, 0, u),
+  };
+}
+
 export function VoxelAvatar({
   skinId,
   color,
@@ -330,6 +375,7 @@ export function VoxelAvatar({
   pose = 'standing',
   equippedItem = 'builder',
   aimPitch = 0,
+  meleeSwingProgress = 0,
   isDead = false,
   deathTime = 0,
 }: VoxelAvatarProps) {
@@ -548,13 +594,30 @@ export function VoxelAvatar({
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'builder') {
         const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
-        rightArmRef.current.position.set(0.48, 0.68, -0.1);
-        rightArmRef.current.rotation.x = 0.3 + pitch * 0.14;
-        rightArmRef.current.rotation.z = -0.42;
-        leftArmRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.35 : 0;
-        leftArmRef.current.rotation.z = 0;
-        leftLegRef.current.rotation.x = isMoving ? -Math.sin(performance.now() * 0.006) * 0.45 : 0;
-        rightLegRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.45 : 0;
+        const swing = remoteMeleePose(meleeSwingProgress);
+        const swinging = meleeSwingProgress > 0.01;
+        rightArmRef.current.position.set(
+          0.48 + swing.push * 0.15,
+          0.68 + swing.lift,
+          -0.1 + swing.push * 0.6,
+        );
+        rightArmRef.current.rotation.x = 0.3 + pitch * 0.14 + swing.pitch;
+        rightArmRef.current.rotation.z = -0.42 + swing.roll;
+        rightArmRef.current.rotation.y = swing.roll * 0.35;
+        // スイング中は左腕をバランス用に前へ
+        leftArmRef.current.rotation.x = swinging
+          ? -0.35 - swing.pitch * 0.15
+          : isMoving ? Math.sin(performance.now() * 0.006) * 0.35 : 0;
+        leftArmRef.current.rotation.z = swinging ? 0.25 : 0;
+        // 踏み込み
+        bodyRef.current.rotation.y = swinging ? swing.roll * 0.2 : 0;
+        bodyRef.current.rotation.x = swinging ? swing.pitch * 0.08 : 0;
+        leftLegRef.current.rotation.x = swinging
+          ? 0.15
+          : isMoving ? -Math.sin(performance.now() * 0.006) * 0.45 : 0;
+        rightLegRef.current.rotation.x = swinging
+          ? -0.25 + swing.push * 0.4
+          : isMoving ? Math.sin(performance.now() * 0.006) * 0.45 : 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (isMoving) {

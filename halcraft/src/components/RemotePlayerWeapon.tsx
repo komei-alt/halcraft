@@ -53,6 +53,8 @@ const SABER_GLOW_MATERIAL = new THREE.MeshBasicMaterial({
 
 interface RemotePlayerWeaponProps {
   equippedItem: EquippedItem;
+  /** 近接スイング進行度 0-1 */
+  meleeSwingProgress?: number;
   /** 移動中かどうか（腕振りと同期） */
   isMoving: boolean;
   /** プレイヤー視点の上下角度 */
@@ -191,20 +193,106 @@ function MachineGunModel() {
  * リモートプレイヤーの右手に武器を配置するコンポーネント
  * VoxelAvatar の右腕（position=[0.42, 0.85, 0]）にアタッチされる
  */
-export function RemotePlayerWeapon({ equippedItem, isMoving, viewPitch }: RemotePlayerWeaponProps) {
+export function RemotePlayerWeapon({
+  equippedItem,
+  isMoving,
+  viewPitch,
+  meleeSwingProgress = 0,
+}: RemotePlayerWeaponProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const trailRef = useRef<THREE.Mesh>(null);
   const clampedPitch = THREE.MathUtils.clamp(viewPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
   const pose = getRemoteWeaponPose(equippedItem, clampedPitch);
 
   useFrame(() => {
     if (!groupRef.current) return;
-    const bob = isMoving ? Math.sin(performance.now() * 0.008) * 0.025 : 0;
-    groupRef.current.position.y = pose.anchor[1] + bob;
+    const bob = isMoving && meleeSwingProgress < 0.01
+      ? Math.sin(performance.now() * 0.008) * 0.025
+      : 0;
+    const p = THREE.MathUtils.clamp(meleeSwingProgress, 0, 1);
+    // ツールの振り（右腕に追従する追加オフセット）
+    let swingPitch = 0;
+    let swingRoll = 0;
+    let swingY = 0;
+    let swingZ = 0;
+    if (p > 0.01 && equippedItem === 'builder') {
+      const smooth = (t: number) => {
+        const x = THREE.MathUtils.clamp(t, 0, 1);
+        return x * x * (3 - 2 * x);
+      };
+      if (p < 0.28) {
+        const u = smooth(p / 0.28);
+        swingPitch = -1.0 * u;
+        swingRoll = -0.5 * u;
+        swingY = 0.12 * u;
+        swingZ = -0.06 * u;
+      } else if (p < 0.48) {
+        const u = smooth((p - 0.28) / 0.2);
+        swingPitch = THREE.MathUtils.lerp(-1.0, 1.2, u);
+        swingRoll = THREE.MathUtils.lerp(-0.5, 0.75, u);
+        swingY = THREE.MathUtils.lerp(0.12, -0.1, u);
+        swingZ = THREE.MathUtils.lerp(-0.06, 0.16, u);
+      } else if (p < 0.7) {
+        const u = smooth((p - 0.48) / 0.22);
+        swingPitch = THREE.MathUtils.lerp(1.2, 0.85, u);
+        swingRoll = THREE.MathUtils.lerp(0.75, 0.4, u);
+        swingY = THREE.MathUtils.lerp(-0.1, -0.04, u);
+        swingZ = THREE.MathUtils.lerp(0.16, 0.08, u);
+      } else {
+        const u = smooth((p - 0.7) / 0.3);
+        swingPitch = THREE.MathUtils.lerp(0.85, 0, u);
+        swingRoll = THREE.MathUtils.lerp(0.4, 0, u);
+        swingY = THREE.MathUtils.lerp(-0.04, 0, u);
+        swingZ = THREE.MathUtils.lerp(0.08, 0, u);
+      }
+    }
+
+    groupRef.current.position.set(
+      pose.anchor[0] + swingZ * 0.2,
+      pose.anchor[1] + bob + swingY,
+      pose.anchor[2] + swingZ,
+    );
+    groupRef.current.rotation.set(
+      pose.rotation[0] + swingPitch,
+      pose.rotation[1],
+      pose.rotation[2] + swingRoll,
+    );
+
+    if (trailRef.current) {
+      const mat = trailRef.current.material as THREE.MeshBasicMaterial;
+      const trail = p > 0.2 && p < 0.75
+        ? 1 - Math.abs(p - 0.42) / 0.32
+        : 0;
+      if (trail > 0.05) {
+        trailRef.current.visible = true;
+        mat.opacity = trail * 0.75;
+        trailRef.current.scale.setScalar(0.7 + trail * 0.6);
+        trailRef.current.rotation.z = -0.6 + swingRoll;
+      } else {
+        trailRef.current.visible = false;
+      }
+    }
   });
 
   return (
     <group ref={groupRef} position={pose.anchor} rotation={pose.rotation}>
-      {equippedItem === 'builder' && <PickaxeModel />}
+      {equippedItem === 'builder' && (
+        <>
+          <PickaxeModel />
+          <mesh ref={trailRef} position={[0.05, 0.2, -0.05]} visible={false}>
+            <torusGeometry args={[0.28, 0.014, 6, 28, Math.PI * 1.1]} />
+            <meshBasicMaterial
+              color="#88d8ff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </>
+      )}
       {equippedItem === 'rocket_launcher' && <RocketLauncherModel />}
       {equippedItem === 'machine_gun' && <MachineGunModel />}
       {equippedItem === 'lightsaber' && <LightsaberModel />}

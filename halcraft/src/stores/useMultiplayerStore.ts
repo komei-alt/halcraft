@@ -45,6 +45,8 @@ export interface RemotePlayer {
   deathTime: number;
   /** 装備中の武器 */
   equippedItem: EquippedItem;
+  /** 近接スイング残り時間（秒・受信側で減衰） */
+  meleeSwingTimer: number;
 }
 
 interface MultiplayerState {
@@ -159,7 +161,10 @@ interface MultiplayerState {
 let lastSentPos: [number, number, number] | null = null;
 let lastSentRot: [number, number] | null = null;
 let lastSentEquipped: EquippedItem | null = null;
+let lastSentMeleeSwing = false;
 const configuredSockets = new WeakSet<Socket>();
+/** 近接スイング同期用の長さ（クライアント MELEE_SWING_DURATION と揃える） */
+const REMOTE_MELEE_SWING_DURATION = 0.38;
 
 function getOfflineConnectionMessage(): string {
   return import.meta.env.DEV
@@ -200,6 +205,7 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     lastSentPos = null;
     lastSentRot = null;
     lastSentEquipped = null;
+    lastSentMeleeSwing = false;
     disconnectFromServer();
     useGameStore.getState().setMultiplayer(false);
     set({
@@ -217,7 +223,11 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     const socket = getSocket();
     if (!socket?.connected) return;
 
-    const equippedItem = usePlayerStore.getState().equippedItem;
+    const playerState = usePlayerStore.getState();
+    const equippedItem = playerState.equippedItem;
+    const isMeleeSwinging = (playerState.meleeSwingTimer ?? 0) > 0.01;
+    // スイング開始エッジだけ true を送る
+    const meleeSwingPulse = isMeleeSwinging && !lastSentMeleeSwing;
     const positionUnchanged = lastSentPos !== null
       && Math.abs(position[0] - lastSentPos[0]) < 0.01
       && Math.abs(position[1] - lastSentPos[1]) < 0.01
@@ -226,15 +236,28 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       && angleDistance(rotation[0], lastSentRot[0]) < 0.01
       && Math.abs(rotation[1] - lastSentRot[1]) < 0.01;
 
-    // 動いていない場合でも、視点角度か装備が変わったら相手の構えに反映する
-    if (lastSentPos && lastSentEquipped === equippedItem && positionUnchanged && rotationUnchanged) {
+    // 動いていない場合でも、視点角度・装備・スイング開始は相手に反映する
+    if (
+      lastSentPos
+      && lastSentEquipped === equippedItem
+      && positionUnchanged
+      && rotationUnchanged
+      && !meleeSwingPulse
+    ) {
+      lastSentMeleeSwing = isMeleeSwinging;
       return;
     }
 
-    socket.emit('player:move', { position, rotation, equippedItem });
+    socket.emit('player:move', {
+      position,
+      rotation,
+      equippedItem,
+      ...(meleeSwingPulse ? { meleeSwing: true } : {}),
+    });
     lastSentPos = [...position];
     lastSentRot = [...rotation];
     lastSentEquipped = equippedItem;
+    lastSentMeleeSwing = isMeleeSwinging;
   },
 
   sendBlockBreak: (x, y, z) => {
@@ -257,6 +280,12 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
     let changed = false;
 
     for (const [, player] of players) {
+      // 近接スイングタイマー減衰（三人称アニメ用）
+      if (player.meleeSwingTimer > 0) {
+        player.meleeSwingTimer = Math.max(0, player.meleeSwingTimer - dt);
+        changed = true;
+      }
+
       // 位置補間
       const dx = player.targetPosition[0] - player.position[0];
       const dy = player.targetPosition[1] - player.position[1];
@@ -465,6 +494,7 @@ function setupSocketListeners(
           isDead: false,
           deathTime: 0,
           equippedItem: p.equippedItem || 'builder',
+          meleeSwingTimer: 0,
         });
       }
     }
@@ -484,6 +514,7 @@ function setupSocketListeners(
       isDead: false,
       deathTime: 0,
       equippedItem: data.equippedItem || 'builder',
+      meleeSwingTimer: 0,
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);
@@ -497,15 +528,30 @@ function setupSocketListeners(
   });
 
   // プレイヤー移動
-  socket.on('player:moved', (data: { id: string; position: [number, number, number]; rotation: [number, number]; equippedItem?: EquippedItem }) => {
+  socket.on('player:moved', (data: {
+    id: string;
+    position: [number, number, number];
+    rotation: [number, number];
+    equippedItem?: EquippedItem;
+    meleeSwing?: boolean;
+  }) => {
     const players = get().remotePlayers;
     const player = players.get(data.id);
     if (player) {
       player.targetPosition = data.position;
       player.targetRotation = data.rotation;
+      let needsSet = false;
       // 装備変更は停止中でもすぐ再描画する（補間ループは移動時しか set しない）
       if (data.equippedItem && data.equippedItem !== player.equippedItem) {
         player.equippedItem = data.equippedItem;
+        needsSet = true;
+      }
+      // 近接スイング開始パルス
+      if (data.meleeSwing) {
+        player.meleeSwingTimer = REMOTE_MELEE_SWING_DURATION;
+        needsSet = true;
+      }
+      if (needsSet) {
         set({ remotePlayers: new Map(players) });
       }
     }
