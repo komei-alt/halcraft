@@ -38,9 +38,11 @@ const MOB_HIT_RADIUS = 0.85;
 const PLAYER_HIT_RADIUS = 0.48;
 const PLAYER_HIT_HEIGHT = 1.7;
 const HIP_MODEL_OFFSET = new THREE.Vector3(0.32, -0.32, -0.7);
-/** ADS 完了時：スコープを目元に寄せて覗き込む位置 */
-const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.0, -0.14, -0.38);
+/** ADS 完了時：画面中心（カメラ視線）に揃えて覗き込む位置 */
+const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.0, -0.02, -0.34);
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.17, -1.18);
+/** ADS 時の弾スポーン：カメラ中心から少し前（照準ドットと視線が重なる） */
+const SCOPED_SPAWN_FORWARD = 0.48;
 const MODEL_ROTATION = new THREE.Euler(0.02, Math.PI - 0.02, -0.03, 'YXZ');
 const HIP_SPREAD = 0.026;
 const SCOPED_SPREAD = 0.006;
@@ -268,17 +270,25 @@ export function PlayerMachineGun() {
       muzzleWorld.current.y -= 0.22;
     }
 
-    shootDir.current.copy(aimPoint.current).sub(muzzleWorld.current);
-    if (shootDir.current.lengthSq() < 0.01 || shootDir.current.dot(aimDir.current) < 0.15) {
-      shootDir.current.copy(aimDir.current);
-    } else {
-      shootDir.current.normalize();
-    }
-
     const scopedShot = isScopedAiming();
     const masteryBonus = getMachineGunMasteryBonus();
     // スコープ途中でも進捗に応じてブレが減る
     const scopeBlend = easeOutCubic(scopeProgress.current);
+
+    // 腰だめ：銃口→照準点 / ADS：画面中心（カメラ前方）と弾道を一致させる
+    if (scopeBlend >= 0.5) {
+      shootDir.current.copy(aimDir.current);
+    } else {
+      shootDir.current.copy(aimPoint.current).sub(muzzleWorld.current);
+      if (shootDir.current.lengthSq() < 0.01 || shootDir.current.dot(aimDir.current) < 0.15) {
+        shootDir.current.copy(aimDir.current);
+      } else {
+        shootDir.current.normalize();
+        // 覗き込み途中は銃口方向から視線方向へ滑らかに寄せる
+        shootDir.current.lerp(aimDir.current, scopeBlend).normalize();
+      }
+    }
+
     const spread = THREE.MathUtils.lerp(HIP_SPREAD, SCOPED_SPREAD, scopeBlend)
       * masteryBonus.machineGunSpreadMultiplier
       * techniqueBonus.machineGunSpreadMultiplier
@@ -289,7 +299,9 @@ export function PlayerMachineGun() {
     shootDir.current.z += (Math.random() - 0.5) * spread;
     shootDir.current.normalize();
 
-    const startPos = muzzleWorld.current.clone();
+    // ADS 時は弾もカメラ中心付近から出し、レティクルと弾道トレイルを重ねる
+    const centerSpawn = camera.position.clone().addScaledVector(aimDir.current, SCOPED_SPAWN_FORWARD);
+    const startPos = muzzleWorld.current.clone().lerp(centerSpawn, scopeBlend);
     const vel = shootDir.current.clone().multiplyScalar(BULLET_SPEED);
     setBullets((prev) => [...prev.slice(-28), {
       id: nextBulletId++,
@@ -377,11 +389,11 @@ export function PlayerMachineGun() {
       els.root.style.opacity = String(THREE.MathUtils.clamp(pBlackout * 1.05, 0, 1));
     }
     if (els.blackout) {
-      // 中央の透明穴は進捗で広がり（小さな接眼部→視界いっぱいのスコープ）
+      // 透明穴は必ず画面中心（50% 50%）。中心点照準と視線を一致させる
       const holePct = THREE.MathUtils.lerp(18, 42, pAperture);
       const midPct = holePct + THREE.MathUtils.lerp(6, 10, pAperture);
       els.blackout.style.background = [
-        `radial-gradient(circle at center,`,
+        `radial-gradient(circle at 50% 50%,`,
         `transparent 0%,`,
         `transparent ${holePct}%,`,
         `rgba(0,0,0,${0.55 * pBlackout}) ${midPct}%,`,
@@ -390,10 +402,13 @@ export function PlayerMachineGun() {
       ].join(' ');
     }
     if (els.aperture) {
-      // 覗き込み：小→大に広がり、中を拡大していく感じ
+      // 覗き込み：小→大に広がり、中心固定のまま拡大
       const size = THREE.MathUtils.lerp(28, 56, pAperture);
+      els.aperture.style.left = '50%';
+      els.aperture.style.top = '50%';
       els.aperture.style.width = `min(${size}vw, ${size}vh)`;
       els.aperture.style.height = `min(${size}vw, ${size}vh)`;
+      els.aperture.style.transform = 'translate(-50%, -50%)';
       els.aperture.style.opacity = String(THREE.MathUtils.clamp(pAperture * 1.2, 0, 1));
       els.aperture.style.borderColor = `${accent}${Math.round(180 + pHud * 60).toString(16).padStart(2, '0')}`;
       els.aperture.style.boxShadow = [
@@ -404,11 +419,16 @@ export function PlayerMachineGun() {
     }
     if (els.glass) {
       els.glass.style.opacity = String(0.06 + pHud * 0.1);
-      els.glass.style.background = `radial-gradient(circle at 42% 38%, ${accent}33 0%, transparent 55%, rgba(0,12,18,0.22) 100%)`;
+      // 反射も中心基準（ずれたハイライトで円が偏って見えないようにする）
+      els.glass.style.background = `radial-gradient(circle at 50% 46%, ${accent}28 0%, transparent 58%, rgba(0,12,18,0.2) 100%)`;
     }
     if (els.reticle) {
       els.reticle.style.opacity = String(THREE.MathUtils.clamp(pHud, 0, 1));
-      const scale = THREE.MathUtils.lerp(1.35, 1, pHud);
+      els.reticle.style.left = '50%';
+      els.reticle.style.top = '50%';
+      // スケールは中心ドットを動かさないよう transform-origin を中央に固定
+      const scale = THREE.MathUtils.lerp(1.12, 1, pHud);
+      els.reticle.style.transformOrigin = '50% 50%';
       els.reticle.style.transform = `translate(-50%, -50%) scale(${scale})`;
     }
     if (els.label) {
@@ -459,11 +479,11 @@ export function PlayerMachineGun() {
           gunBodyRef.current.scale.setScalar(THREE.MathUtils.lerp(1, 0.55, pRaise));
         }
         if (scopeOpticRef.current) {
-          // 覗き込み中に接眼リングがカメラ手前へせり出す
+          // 接眼リングも画面中心（ローカル 0,0）に固定し、円形視界のずれを防ぐ
           scopeOpticRef.current.visible = raw > 0.08;
           const opticZ = THREE.MathUtils.lerp(-0.55, -0.22, pRaise);
-          scopeOpticRef.current.position.set(0.02, 0.06, opticZ);
-          scopeOpticRef.current.scale.setScalar(THREE.MathUtils.lerp(0.55, 1.15, pAperture));
+          scopeOpticRef.current.position.set(0, 0, opticZ);
+          scopeOpticRef.current.scale.setScalar(THREE.MathUtils.lerp(0.55, 1.08, pAperture));
         }
       } else if (scopeOpticRef.current) {
         scopeOpticRef.current.visible = false;
@@ -753,8 +773,8 @@ export function PlayerMachineGun() {
           />
         </group>
 
-        {/* スコープ接眼モデル：覗き込み時にカメラ手前へせり出す */}
-        <group ref={scopeOpticRef} visible={false} position={[0.02, 0.06, -0.55]}>
+        {/* スコープ接眼モデル：画面中心に固定して覗き込み時にせり出す */}
+        <group ref={scopeOpticRef} visible={false} position={[0, 0, -0.55]}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.09, 0.11, 0.28, 16, 1, true]} />
             <meshStandardMaterial color="#1c2128" roughness={0.38} metalness={0.78} side={THREE.DoubleSide} />

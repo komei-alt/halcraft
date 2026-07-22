@@ -170,6 +170,10 @@ function createLavaMaterial(): THREE.ShaderMaterial {
     // 溶岩はほぼ不透明なので深度を書いて、背後の透過ブレンド破綻を防ぐ
     transparent: false,
     depthWrite: true,
+    // 地面ブロック上面との共面をわずかに手前へ押し出し、マグマ床のチラつきを抑える
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
     side: THREE.FrontSide,
     fog: true,
     uniforms: THREE.UniformsUtils.merge([

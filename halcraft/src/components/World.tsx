@@ -152,7 +152,9 @@ function getMaterialLayer(definition: BlockInfo): MaterialLayer {
 function isBlockTransparent(blockId: BlockId): boolean {
   if (blockId === BLOCK_IDS.AIR) return true;
   const definition = BLOCK_DEFS[blockId];
-  return !definition || definition.transparent || Boolean(definition.nonStandard) || Boolean(definition.isLiquid);
+  // 水は transparent:true のまま透過面を見せる。
+  // 溶岩は isLiquid でも不透明扱い：地面との共面チラつき（マグマ下の面が透ける）を防ぐ。
+  return !definition || definition.transparent || Boolean(definition.nonStandard);
 }
 
 function shouldRenderFace(blockId: BlockId, neighborId: BlockId): boolean {
