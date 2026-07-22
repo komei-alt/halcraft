@@ -84,6 +84,7 @@ export function PlayerMachineGun() {
   const barrelInstancesRef = useRef<THREE.InstancedMesh>(null);
   const flashCoreRef = useRef<THREE.Mesh>(null);
   const flashGlowRef = useRef<THREE.Mesh>(null);
+  const flashCrossRef = useRef<THREE.Mesh>(null);
   const heatBandRef = useRef<THREE.Mesh>(null);
   const heatLightRef = useRef<THREE.PointLight>(null);
   const flashLightRef = useRef<THREE.PointLight>(null);
@@ -249,9 +250,9 @@ export function PlayerMachineGun() {
       scoped: scopedShot,
     }]);
 
-    recoilKick.current = scopedShot ? 0.45 : 1;
-    heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.08 : 0.12));
-    flashTimer.current = combatFocus.active ? 0.11 : scopedShot ? 0.1 : 0.08;
+    recoilKick.current = scopedShot ? 0.55 : 1.15;
+    heatGlow.current = Math.min(1, heatGlow.current + (scopedShot ? 0.1 : 0.16));
+    flashTimer.current = combatFocus.active ? 0.13 : scopedShot ? 0.12 : 0.095;
     playMachineGunSound(startPos.distanceTo(camera.position));
     useMasteryStore.getState().recordItemUse('machine_gun');
     multi.sendGunFire(
@@ -263,8 +264,8 @@ export function PlayerMachineGun() {
 
   useFrame((_, delta) => {
     idleTimer.current += delta;
-    recoilKick.current = Math.max(0, recoilKick.current - delta * 12);
-    heatGlow.current = Math.max(0, heatGlow.current - delta * 0.9);
+    recoilKick.current = Math.max(0, recoilKick.current - delta * 14);
+    heatGlow.current = Math.max(0, heatGlow.current - delta * 0.85);
     const phasePlaying = useGameStore.getState().phase === 'playing';
     const visible = phasePlaying
       && equippedItem === 'machine_gun'
@@ -279,6 +280,7 @@ export function PlayerMachineGun() {
     if (!visible) {
       isMouseDown.current = false;
       isRightMouseDown.current = false;
+      mobileActions.fireMachineGun = false;
     }
 
     if (scopeVisibleRef.current !== scoped) {
@@ -305,12 +307,12 @@ export function PlayerMachineGun() {
         rightWorld.current.set(1, 0, 0).applyQuaternion(camera.quaternion);
         forwardWorld.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         offsetWorld.current
-          .addScaledVector(camera.up, Math.sin(idleTimer.current * 1.7) * bobStrength - recoilKick.current * 0.018)
+          .addScaledVector(camera.up, Math.sin(idleTimer.current * 1.7) * bobStrength - recoilKick.current * 0.024)
           .addScaledVector(
             rightWorld.current,
-            Math.sin(idleTimer.current * 1.05) * swayStrength + recoilKick.current * 0.011,
+            Math.sin(idleTimer.current * 1.05) * swayStrength + recoilKick.current * 0.016,
           )
-          .addScaledVector(forwardWorld.current, -recoilKick.current * 0.07);
+          .addScaledVector(forwardWorld.current, -recoilKick.current * 0.09);
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(new THREE.Quaternion().setFromEuler(MODEL_ROTATION));
       }
@@ -333,28 +335,35 @@ export function PlayerMachineGun() {
     }
 
     flashTimer.current = Math.max(0, flashTimer.current - delta);
-    const flashOpacity = Math.min(1, flashTimer.current * 22);
+    const flashOpacity = Math.min(1, flashTimer.current * 18);
     if (flashCoreRef.current) {
       const material = flashCoreRef.current.material as THREE.MeshBasicMaterial;
       flashCoreRef.current.visible = flashOpacity > 0.02;
       material.color.copy(muzzleCoreColor);
       material.opacity = flashOpacity;
-      flashCoreRef.current.scale.setScalar(0.95 + flashTimer.current * 10.5);
+      flashCoreRef.current.scale.setScalar(1.05 + flashTimer.current * 12);
     }
     if (flashGlowRef.current) {
       const material = flashGlowRef.current.material as THREE.MeshBasicMaterial;
       flashGlowRef.current.visible = flashOpacity > 0.02;
       material.color.copy(muzzleGlowColor);
-      material.opacity = flashOpacity * 0.82;
-      flashGlowRef.current.scale.setScalar(0.9 + flashTimer.current * 11);
+      material.opacity = flashOpacity * 0.88;
+      flashGlowRef.current.scale.setScalar(1.0 + flashTimer.current * 13);
+    }
+    if (flashCrossRef.current) {
+      const material = flashCrossRef.current.material as THREE.MeshBasicMaterial;
+      flashCrossRef.current.visible = flashOpacity > 0.02;
+      material.color.copy(muzzleCoreColor);
+      material.opacity = flashOpacity * 0.7;
+      flashCrossRef.current.scale.setScalar(0.9 + flashTimer.current * 11);
     }
     if (flashLightRef.current) {
       flashLightRef.current.color.copy(muzzleGlowColor);
       const combatFocusVisual = getCombatFocusModifier('machine_gun');
       flashLightRef.current.intensity = flashTimer.current > 0
-        ? (stageVisualStyle ? 6.2 : 4.8) * (combatFocusVisual.active ? 1.3 : 1)
+        ? (stageVisualStyle ? 7.2 : 5.6) * (combatFocusVisual.active ? 1.35 : 1)
         : 0;
-      flashLightRef.current.distance = 7;
+      flashLightRef.current.distance = 8.5;
     }
 
     if (firingInput) fire();
@@ -549,7 +558,7 @@ export function PlayerMachineGun() {
           position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.12]}
           visible={false}
         >
-          <sphereGeometry args={[0.16, 16, 10]} />
+          <sphereGeometry args={[0.18, 16, 10]} />
           <meshBasicMaterial
             color="#ff8b2d"
             transparent
@@ -558,6 +567,24 @@ export function PlayerMachineGun() {
             depthTest={false}
             blending={THREE.AdditiveBlending}
             toneMapped={false}
+          />
+        </mesh>
+        {/* 十字のマズルフレアで撃ち感を足す */}
+        <mesh
+          ref={flashCrossRef}
+          position={[MUZZLE_LOCAL.x, MUZZLE_LOCAL.y, MUZZLE_LOCAL.z - 0.05]}
+          rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+          visible={false}
+        >
+          <coneGeometry args={[0.18, 0.42, 8]} />
+          <meshBasicMaterial
+            color="#fff6c8"
+            transparent
+            opacity={0}
+            depthWrite={false}
+            depthTest={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
           />
         </mesh>
         <pointLight
@@ -658,47 +685,47 @@ function PlayerGunTracer({
   scoped: boolean;
 }) {
   const delta = end.clone().sub(start);
-  const length = Math.max(0.12, delta.length() * (scoped ? 1.55 : 1.35));
+  const length = Math.max(0.18, delta.length() * (scoped ? 1.75 : 1.5));
   const midpoint = start.clone().addScaledVector(delta, 0.5);
   const dir = delta.lengthSq() > 0.000001 ? delta.normalize() : new THREE.Vector3(0, 1, 0);
   const quaternion = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
     dir,
   );
-  const coreR = scoped ? 0.016 : 0.014;
-  const midR = scoped ? 0.028 : 0.022;
-  const glowR = scoped ? 0.055 : 0.042;
+  const coreR = scoped ? 0.018 : 0.015;
+  const midR = scoped ? 0.032 : 0.024;
+  const glowR = scoped ? 0.065 : 0.05;
 
   return (
     <group position={midpoint} quaternion={quaternion}>
       <mesh>
-        <cylinderGeometry args={[glowR, glowR * 0.45, length, 8]} />
+        <cylinderGeometry args={[glowR, glowR * 0.4, length, 8]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={scoped ? 0.34 : 0.24}
+          opacity={scoped ? 0.4 : 0.3}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
       <mesh>
-        <cylinderGeometry args={[midR, midR * 0.5, length, 8]} />
+        <cylinderGeometry args={[midR, midR * 0.45, length, 8]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={0.82}
+          opacity={0.88}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
         />
       </mesh>
       <mesh>
-        <cylinderGeometry args={[coreR, coreR * 0.4, length, 6]} />
+        <cylinderGeometry args={[coreR, coreR * 0.35, length, 6]} />
         <meshBasicMaterial
           color="#ffffff"
           transparent
-          opacity={0.95}
+          opacity={0.98}
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}

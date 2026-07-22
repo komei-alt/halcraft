@@ -13,6 +13,7 @@ interface DamagePopupData {
   y: number;
   z: number;
   life: number;
+  maxLife: number;
   isCritical: boolean;
   vx: number;
   vz: number;
@@ -21,11 +22,11 @@ interface DamagePopupData {
 }
 
 /** ポップアップの表示時間（秒） */
-const POPUP_LIFETIME = 0.8;
+const POPUP_LIFETIME = 0.95;
 /** 上昇速度 */
-const RISE_SPEED = 2.5;
+const RISE_SPEED = 2.9;
 /** 同時に表示可能な最大数 */
-const MAX_POPUPS = 16;
+const MAX_POPUPS = 20;
 
 // ポップアップ用テクスチャをキャンバスで生成
 function createDamageTexture(damage: number, isCritical: boolean): THREE.CanvasTexture {
@@ -102,17 +103,19 @@ export function DamagePopup() {
     if (popups.length >= MAX_POPUPS) {
       popups.shift();
     }
+    const maxLife = POPUP_LIFETIME * (isCritical ? 1.12 : 1);
     popups.push({
       damage,
-      x: x + (Math.random() - 0.5) * 0.5,
-      y: y + 1.5,
-      z: z + (Math.random() - 0.5) * 0.5,
-      life: POPUP_LIFETIME,
+      x: x + (Math.random() - 0.5) * 0.55,
+      y: y + 1.55,
+      z: z + (Math.random() - 0.5) * 0.55,
+      life: maxLife,
+      maxLife,
       isCritical,
-      vx: (Math.random() - 0.5) * 0.45,
-      vz: (Math.random() - 0.5) * 0.45,
-      spin: (Math.random() - 0.5) * (isCritical ? 0.45 : 0.25),
-      scale: 0.92 + Math.random() * 0.16,
+      vx: (Math.random() - 0.5) * (isCritical ? 0.65 : 0.4),
+      vz: (Math.random() - 0.5) * (isCritical ? 0.65 : 0.4),
+      spin: (Math.random() - 0.5) * (isCritical ? 0.55 : 0.28),
+      scale: (isCritical ? 1.05 : 0.98) + Math.random() * 0.14,
     });
   }, []);
 
@@ -143,20 +146,21 @@ export function DamagePopup() {
         popup.y += RISE_SPEED * dt;
         popup.x += popup.vx * dt;
         popup.z += popup.vz * dt;
-        const lifeRatio = popup.life / POPUP_LIFETIME;
+        const lifeRatio = popup.life / popup.maxLife;
 
         sprite.position.set(popup.x, popup.y, popup.z);
 
-        const popScale = lifeRatio > 0.7
-          ? 1 + (1 - (lifeRatio - 0.7) / 0.3) * 0.3
-          : lifeRatio < 0.3
-          ? lifeRatio / 0.3
-          : 1.0;
-        const baseScale = popup.isCritical ? 1.2 : 0.7;
+        // 出現時にポンッと大きくなってから収束
+        const popScale = lifeRatio > 0.78
+          ? 1 + (1 - (lifeRatio - 0.78) / 0.22) * (popup.isCritical ? 0.55 : 0.38)
+          : lifeRatio < 0.28
+            ? lifeRatio / 0.28
+            : 1.0;
+        const baseScale = popup.isCritical ? 1.35 : 0.82;
         sprite.scale.set(baseScale * popScale * popup.scale, baseScale * popScale * popup.scale, 1);
 
         const mat = sprite.material as THREE.SpriteMaterial;
-        mat.opacity = Math.min(1, lifeRatio * 2);
+        mat.opacity = Math.min(1, lifeRatio * 2.2);
         mat.rotation = popup.spin * (1 - lifeRatio);
 
         const cacheKey = `${popup.damage}_${popup.isCritical}`;

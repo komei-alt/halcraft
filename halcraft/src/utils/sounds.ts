@@ -591,28 +591,28 @@ export function playMobDeathSound(distance: number): void {
 
 export function playMachineGunSound(distance: number): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('machinegun', 60)) return; // 早い連射のため制限を緩くする
+  if (!ctx || !canPlay('machinegun', 48)) return; // 早い連射のため制限を緩くする
 
   // 距離による音量減衰（最大距離50ブロック）
   const maxDist = 50;
   if (distance > maxDist) return;
-  const volume = Math.max(0, 0.4 * (1 - distance / maxDist));
+  const volume = Math.max(0, 0.52 * (1 - distance / maxDist));
 
   const now = ctx.currentTime;
 
-  // 重低音のパンチ（短いサイン波・徐々に下がる）
+  // 重低音のパンチ
   const osc = ctx.createOscillator();
   osc.type = 'square';
-  osc.frequency.setValueAtTime(150, now);
-  osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+  osc.frequency.setValueAtTime(170, now);
+  osc.frequency.exponentialRampToValueAtTime(28, now + 0.09);
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(800, now);
-  filter.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+  filter.frequency.setValueAtTime(950, now);
+  filter.frequency.exponentialRampToValueAtTime(90, now + 0.09);
 
   const oscGain = ctx.createGain();
-  oscGain.gain.setValueAtTime(volume * 0.7, now);
+  oscGain.gain.setValueAtTime(volume * 0.78, now);
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
   osc.connect(filter);
@@ -621,24 +621,37 @@ export function playMachineGunSound(distance: number): void {
   osc.start(now);
   osc.stop(now + 0.1);
 
+  // 中域の金属クリック
+  const click = ctx.createOscillator();
+  click.type = 'triangle';
+  click.frequency.setValueAtTime(520, now);
+  click.frequency.exponentialRampToValueAtTime(180, now + 0.05);
+  const clickGain = ctx.createGain();
+  clickGain.gain.setValueAtTime(volume * 0.22, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+  click.connect(clickGain);
+  clickGain.connect(getSfxDestination());
+  click.start(now);
+  click.stop(now + 0.055);
+
   // マズルフラッシュの破裂感（ノイズバースト）
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
 
   const noiseFilter = ctx.createBiquadFilter();
   noiseFilter.type = 'bandpass';
-  noiseFilter.frequency.setValueAtTime(1200, now);
-  noiseFilter.Q.setValueAtTime(0.5, now);
+  noiseFilter.frequency.setValueAtTime(1400, now);
+  noiseFilter.Q.setValueAtTime(0.55, now);
 
   const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(volume * 0.8, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  noiseGain.gain.setValueAtTime(volume * 0.92, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
 
   noise.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
   noiseGain.connect(getSfxDestination());
   noise.start(now);
-  noise.stop(now + 0.08);
+  noise.stop(now + 0.075);
 }
 
 // ============================================
@@ -647,11 +660,11 @@ export function playMachineGunSound(distance: number): void {
 
 export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay(`impact_${type}`, 50)) return;
+  if (!ctx || !canPlay(`impact_${type}`, 40)) return;
 
-  const maxDist = 40;
+  const maxDist = 42;
   if (distance > maxDist) return;
-  const volume = Math.max(0, 0.3 * (1 - distance / maxDist));
+  const volume = Math.max(0, 0.42 * (1 - distance / maxDist));
 
   const now = ctx.currentTime;
 
@@ -662,41 +675,65 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
 
     const noiseFilter = ctx.createBiquadFilter();
     noiseFilter.type = 'highpass';
-    noiseFilter.frequency.setValueAtTime(2000, now);
+    noiseFilter.frequency.setValueAtTime(1800, now);
 
     const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(volume * 0.6, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    noiseGain.gain.setValueAtTime(volume * 0.72, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(getSfxDestination());
     noise.start(now);
-    noise.stop(now + 0.1);
+    noise.stop(now + 0.11);
+
+    const tick = ctx.createOscillator();
+    tick.type = 'triangle';
+    tick.frequency.setValueAtTime(420, now);
+    tick.frequency.exponentialRampToValueAtTime(90, now + 0.06);
+    const tickGain = ctx.createGain();
+    tickGain.gain.setValueAtTime(volume * 0.28, now);
+    tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    tick.connect(tickGain);
+    tickGain.connect(getSfxDestination());
+    tick.start(now);
+    tick.stop(now + 0.07);
   } else {
-    // モブ（少し水気のある衝撃音）
+    // モブ着弾 — 鈍い肉質の衝撃 + 鋭いアタック
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(300, now);
-    osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.12);
 
     const oscGain = ctx.createGain();
-    oscGain.gain.setValueAtTime(volume * 0.8, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    oscGain.gain.setValueAtTime(volume * 0.95, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
 
     osc.connect(oscGain);
     oscGain.connect(getSfxDestination());
     osc.start(now);
-    osc.stop(now + 0.1);
-    
+    osc.stop(now + 0.13);
+
+    const thump = ctx.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(110, now);
+    thump.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(volume * 0.45, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    thump.connect(thumpGain);
+    thumpGain.connect(getSfxDestination());
+    thump.start(now);
+    thump.stop(now + 0.11);
+
     // 付帯ノイズ
     const noise = ctx.createBufferSource();
     noise.buffer = getNoiseBuffer(ctx);
     const noiseFilter = ctx.createBiquadFilter();
     noiseFilter.type = 'highpass';
-    noiseFilter.frequency.setValueAtTime(1000, now);
+    noiseFilter.frequency.setValueAtTime(900, now);
     const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(volume * 0.4, now);
+    noiseGain.gain.setValueAtTime(volume * 0.55, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);

@@ -685,18 +685,20 @@ export function Player() {
           // --- 既存の乗り物搭乗ロジック ---
           const candidates: Array<{ type: VehicleType; dist: number }> = [];
 
-          // 搭乗判定は水平距離を主に見る（高さのズレで乗れなくなるのを防ぐ）
+          // 搭乗判定は水平距離を主に見る（高さのズレ・スマホの位置ずれで乗れなくなるのを防ぐ）
           const boardDist = (
             vx: number, vy: number, vz: number, maxDist: number,
           ): number | null => {
             const ddx = pos.x - vx;
             const ddz = pos.z - vz;
             const horizontal = Math.sqrt(ddx * ddx + ddz * ddz);
-            if (horizontal > maxDist) return null;
+            // スマホは少し甘めに取る
+            const rangeBoost = isTouch.current ? 1.15 : 1;
+            if (horizontal > maxDist * rangeBoost) return null;
             const ddy = (pos.y + 0.9) - vy;
             // 垂直に大きく離れている場合のみ除外（建物の上/下など）
-            if (Math.abs(ddy) > maxDist + 2.5) return null;
-            return horizontal + Math.abs(ddy) * 0.25;
+            if (Math.abs(ddy) > maxDist + 4) return null;
+            return horizontal + Math.abs(ddy) * 0.18;
           };
 
           if (heli.spawned && vehicleState.findAvailableSeat() !== null) {
