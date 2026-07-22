@@ -7,7 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
-import { usePlayerStore, type EquippedItem } from '../stores/usePlayerStore';
+import { usePlayerStore, MELEE_HIT_AT, MELEE_SWING_DURATION, type EquippedItem } from '../stores/usePlayerStore';
 import { useInventoryStore } from '../stores/useInventoryStore';
 import { useDroppedItemStore } from '../stores/useDroppedItemStore';
 import { useMobStore } from '../stores/useMobStore';
@@ -42,7 +42,8 @@ import { isDesktopGameplayInputActive } from '../utils/gameCanvas';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 import { spawnBlockBreakEffect, spawnBlockUseEffect, spawnDamagePopup, spawnHitImpactEffect } from '../utils/effectTriggers';
 import {
-  playHitSound,
+  playMeleeSwingSound,
+  playMeleeHitSound,
   playBlockBreakSound,
   playBlockPlaceSound,
   playInventoryEmptySound,
@@ -1301,70 +1302,115 @@ export function BlockInteraction() {
     dropItem(blockId, x, y, z);
   }, [dropItem, isBuildMode]);
 
+  /** 近接: スイング開始時に保留し、ヒットフレームでダメージ確定 */
+  const pendingMeleeRef = useRef<{
+    kind: 'mob' | 'player';
+    targetId: string;
+    multiplier: number;
+  } | null>(null);
+  const meleeHitAppliedRef = useRef(false);
+  const meleeSwingSoundPlayedRef = useRef(false);
+
+  const resolvePendingMeleeHit = useCallback(() => {
+    const pending = pendingMeleeRef.current;
+    if (!pending || meleeHitAppliedRef.current) return;
+    meleeHitAppliedRef.current = true;
+
+    attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const multiplier = pending.multiplier;
+    const isCritical = multiplier >= 0.9;
+
+    if (pending.kind === 'player') {
+      const remote = useMultiplayerStore.getState().remotePlayers.get(pending.targetId);
+      if (!remote || remote.isDead) {
+        pendingMeleeRef.current = null;
+        return;
+      }
+      const actualDamage = Math.max(1, Math.round(PVP_DAMAGE * multiplier));
+      useMultiplayerStore.getState().sendPlayerAttack(
+        pending.targetId,
+        actualDamage,
+        attackDir.current.x,
+        attackDir.current.z,
+      );
+      spawnHitImpactEffect(
+        remote.position[0],
+        remote.position[1] + 1.0,
+        remote.position[2],
+        attackDir.current.x,
+        attackDir.current.y,
+        attackDir.current.z,
+        false,
+      );
+      playMeleeHitSound(false);
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, 0.22)),
+      }));
+      recordItemHit('builder', { label: '近接ヒット', amount: 7 });
+      pendingMeleeRef.current = null;
+      return;
+    }
+
+    const mob = useMobStore.getState().mobs.find((m) => m.id === pending.targetId);
+    if (!mob) {
+      pendingMeleeRef.current = null;
+      return;
+    }
+    const hitY = getMobHitboxMaxY(mob.y, getMobHitbox(mob.type)) - 0.2;
+    const actualDamage = Math.max(1, Math.round(ATTACK_DAMAGE * multiplier));
+    damageMob(mob.id, actualDamage, attackDir.current.x * 0.35, attackDir.current.z * 0.35);
+    spawnDamagePopup(actualDamage, mob.x, hitY - 1.0, mob.z, isCritical);
+    spawnHitImpactEffect(
+      mob.x,
+      hitY,
+      mob.z,
+      attackDir.current.x,
+      attackDir.current.y,
+      attackDir.current.z,
+      isCritical,
+    );
+    playMeleeHitSound(isCritical);
+    usePlayerStore.setState((s) => ({
+      cameraShake: Math.min(1, Math.max(s.cameraShake, isCritical ? 0.36 : 0.24)),
+    }));
+    recordItemHit('builder', { critical: isCritical, label: isCritical ? '会心ヒット' : '近接ヒット' });
+    pendingMeleeRef.current = null;
+  }, [camera, damageMob, recordItemHit]);
+
   const tryMeleeAttack = useCallback((): boolean => {
     const maxAttackDistance = getAttackDistanceLimit();
     if (maxAttackDistance <= 0) return false;
 
     const targetPlayer = findTargetPlayer(maxAttackDistance);
     if (targetPlayer) {
-      const multiplier = performAttack();
+      const multiplier = performAttack({ noShake: true });
       if (multiplier <= 0) return true;
-
-      attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-      const actualDamage = Math.max(1, Math.round(PVP_DAMAGE * multiplier));
-      useMultiplayerStore.getState().sendPlayerAttack(
-        targetPlayer.id,
-        actualDamage,
-        attackDir.current.x,
-        attackDir.current.z,
-      );
-      spawnHitImpactEffect(
-        targetPlayer.x,
-        targetPlayer.y,
-        targetPlayer.z,
-        attackDir.current.x,
-        attackDir.current.y,
-        attackDir.current.z,
-        false,
-      );
-      playHitSound();
-      usePlayerStore.setState((s) => ({
-        cameraShake: Math.min(1, Math.max(s.cameraShake, 0.18)),
-      }));
-      recordItemHit('builder', { label: '近接ヒット', amount: 7 });
+      pendingMeleeRef.current = {
+        kind: 'player',
+        targetId: targetPlayer.id,
+        multiplier,
+      };
+      meleeHitAppliedRef.current = false;
+      meleeSwingSoundPlayedRef.current = false;
       return true;
     }
 
     const targetMob = findTargetMobData(maxAttackDistance);
     if (targetMob) {
-      const multiplier = performAttack();
+      const multiplier = performAttack({ noShake: true });
       if (multiplier <= 0) return true;
-
-      attackDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-      const actualDamage = Math.max(1, Math.round(ATTACK_DAMAGE * multiplier));
-      const isCritical = multiplier >= 0.9;
-      // 近接も弱い押しだけ（銃撃ほど止めない）
-      damageMob(targetMob.id, actualDamage, attackDir.current.x * 0.35, attackDir.current.z * 0.35);
-      spawnDamagePopup(actualDamage, targetMob.x, targetMob.hitY - 1.0, targetMob.z, isCritical);
-      spawnHitImpactEffect(
-        targetMob.x,
-        targetMob.hitY,
-        targetMob.z,
-        attackDir.current.x,
-        attackDir.current.y,
-        attackDir.current.z,
-        isCritical,
-      );
-      playHitSound();
-      usePlayerStore.setState((s) => ({
-        cameraShake: Math.min(1, Math.max(s.cameraShake, isCritical ? 0.32 : 0.2)),
-      }));
-      recordItemHit('builder', { critical: isCritical, label: isCritical ? '会心ヒット' : '近接ヒット' });
+      pendingMeleeRef.current = {
+        kind: 'mob',
+        targetId: targetMob.id,
+        multiplier,
+      };
+      meleeHitAppliedRef.current = false;
+      meleeSwingSoundPlayedRef.current = false;
       return true;
     }
 
     return false;
-  }, [camera, damageMob, findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack, recordItemHit]);
+  }, [findTargetMobData, findTargetPlayer, getAttackDistanceLimit, performAttack]);
 
   // レイマーチングで照準先のブロックを検出
   useFrame((_, frameDelta) => {
@@ -1383,6 +1429,24 @@ export function BlockInteraction() {
     }
 
     const dt = Math.min(frameDelta, 0.1);
+
+    // --- 近接ヒットフレーム解決（スイング進行と同期） ---
+    const meleeTimer = usePlayerStore.getState().meleeSwingTimer ?? 0;
+    if (meleeTimer > 0 || pendingMeleeRef.current) {
+      const elapsed = Math.max(0, MELEE_SWING_DURATION - meleeTimer);
+      if (!meleeSwingSoundPlayedRef.current && elapsed >= 0.08) {
+        meleeSwingSoundPlayedRef.current = true;
+        playMeleeSwingSound();
+      }
+      if (pendingMeleeRef.current && !meleeHitAppliedRef.current && elapsed >= MELEE_HIT_AT) {
+        resolvePendingMeleeHit();
+      }
+      if (meleeTimer <= 0 && pendingMeleeRef.current) {
+        // タイマー切れでも未ヒットなら保険で確定
+        resolvePendingMeleeHit();
+      }
+    }
+
     rayDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     rayOrigin.current.copy(camera.position);
     const dir = rayDir.current;

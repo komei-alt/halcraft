@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
-import { usePlayerStore } from '../stores/usePlayerStore';
+import { usePlayerStore, MELEE_SWING_DURATION } from '../stores/usePlayerStore';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId, type BlockInfo } from '../types/blocks';
 import { TOOL_DEFS, type ToolDef, type ToolType } from '../types/tools';
@@ -293,10 +293,84 @@ function ToolModel({ toolDef }: { toolDef: ToolDef | null }) {
 }
 
 function getToolTypeSwing(type: ToolType | null): number {
-  if (type === 'sword') return 0.54;
-  if (type === 'axe') return 0.46;
-  if (type === 'shovel') return 0.36;
-  return 0.42;
+  if (type === 'sword') return 1.15;
+  if (type === 'axe') return 1.05;
+  if (type === 'shovel') return 0.85;
+  return 0.95;
+}
+
+/** smoothstep */
+function smooth01(t: number): number {
+  const x = THREE.MathUtils.clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * 近接スイングの部位ポーズ（progress 0-1）
+ * 0–0.28 溜め / 0.28–0.48 振り下ろし / 0.48–0.7 インパクト / 0.7–1 戻し
+ */
+function meleeSwingPose(progress: number, toolPower: number): {
+  pitch: number;
+  yaw: number;
+  roll: number;
+  lift: number;
+  push: number;
+  side: number;
+  trail: number;
+  armPitch: number;
+} {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const pow = toolPower;
+  if (p < 0.28) {
+    const u = smooth01(p / 0.28);
+    return {
+      pitch: -0.95 * u * pow,
+      yaw: 0.22 * u,
+      roll: -0.55 * u,
+      lift: 0.1 * u,
+      push: -0.06 * u,
+      side: 0.05 * u,
+      trail: 0.25 * u,
+      armPitch: -0.45 * u,
+    };
+  }
+  if (p < 0.48) {
+    const u = smooth01((p - 0.28) / 0.2);
+    return {
+      pitch: THREE.MathUtils.lerp(-0.95, 1.15, u) * pow,
+      yaw: THREE.MathUtils.lerp(0.22, -0.18, u),
+      roll: THREE.MathUtils.lerp(-0.55, 0.75, u),
+      lift: THREE.MathUtils.lerp(0.1, -0.14, u),
+      push: THREE.MathUtils.lerp(-0.06, 0.22, u),
+      side: THREE.MathUtils.lerp(0.05, -0.08, u),
+      trail: THREE.MathUtils.lerp(0.25, 1, u),
+      armPitch: THREE.MathUtils.lerp(-0.45, 0.85, u),
+    };
+  }
+  if (p < 0.7) {
+    const u = smooth01((p - 0.48) / 0.22);
+    return {
+      pitch: THREE.MathUtils.lerp(1.15, 0.95, u) * pow,
+      yaw: THREE.MathUtils.lerp(-0.18, -0.1, u),
+      roll: THREE.MathUtils.lerp(0.75, 0.55, u),
+      lift: THREE.MathUtils.lerp(-0.14, -0.08, u),
+      push: THREE.MathUtils.lerp(0.22, 0.12, u),
+      side: THREE.MathUtils.lerp(-0.08, -0.04, u),
+      trail: THREE.MathUtils.lerp(1, 0.55, u),
+      armPitch: THREE.MathUtils.lerp(0.85, 0.55, u),
+    };
+  }
+  const u = smooth01((p - 0.7) / 0.3);
+  return {
+    pitch: THREE.MathUtils.lerp(0.95, 0, u) * pow,
+    yaw: THREE.MathUtils.lerp(-0.1, 0, u),
+    roll: THREE.MathUtils.lerp(0.55, 0, u),
+    lift: THREE.MathUtils.lerp(-0.08, 0, u),
+    push: THREE.MathUtils.lerp(0.12, 0, u),
+    side: THREE.MathUtils.lerp(-0.04, 0, u),
+    trail: THREE.MathUtils.lerp(0.55, 0, u),
+    armPitch: THREE.MathUtils.lerp(0.55, 0, u),
+  };
 }
 
 export function BuilderHeldItem() {
@@ -325,9 +399,10 @@ export function BuilderHeldItem() {
   const toolChipRef = useRef<THREE.Mesh>(null);
   const idleTimer = useRef(0);
   const switchPulse = useRef(1);
-  const swingKick = useRef(0);
   const placeKick = useRef(0);
-  const prevAttackCharge = useRef(1);
+  const toolArmRef = useRef<THREE.Group>(null);
+  const slashArcRef = useRef<THREE.Mesh>(null);
+  const impactGlowRef = useRef<THREE.Mesh>(null);
   const offsetWorld = useRef(new THREE.Vector3());
   const toolOffsetWorld = useRef(new THREE.Vector3());
   const blockOffsetWorld = useRef(new THREE.Vector3());
@@ -343,7 +418,6 @@ export function BuilderHeldItem() {
     const handleMouseDown = (event: MouseEvent) => {
       if (usePlayerStore.getState().equippedItem !== 'builder') return;
       if (!isDesktopGameplayInputActive()) return;
-      if (event.button === 0) swingKick.current = 1;
       if (event.button === 2) placeKick.current = 1;
     };
     document.addEventListener('mousedown', handleMouseDown);
@@ -353,15 +427,16 @@ export function BuilderHeldItem() {
   useFrame((_, delta) => {
     idleTimer.current += delta;
     switchPulse.current = Math.max(0, switchPulse.current - delta * 4.2);
-    swingKick.current = Math.max(0, swingKick.current - delta * 5.8);
     placeKick.current = Math.max(0, placeKick.current - delta * 7.5);
 
-    // 攻撃チャージが落ちた瞬間 = 攻撃発生（モバイルでも振る）
-    const attackCharge = usePlayerStore.getState().attackCharge;
-    if (attackCharge < prevAttackCharge.current - 0.08) {
-      swingKick.current = 1;
-    }
-    prevAttackCharge.current = attackCharge;
+    const playerState = usePlayerStore.getState();
+    const swingTimer = playerState.meleeSwingTimer ?? 0;
+    const swingProgress = swingTimer > 0.001
+      ? THREE.MathUtils.clamp(1 - swingTimer / MELEE_SWING_DURATION, 0, 1)
+      : 0;
+    const toolPower = getToolTypeSwing(toolDef?.type ?? null);
+    const pose = meleeSwingPose(swingProgress, toolPower);
+    const isSwinging = swingProgress > 0.001 && swingProgress < 0.999;
 
     const visible = phase === 'playing'
       && equippedItem === 'builder'
@@ -375,33 +450,79 @@ export function BuilderHeldItem() {
     const idleBob = Math.sin(idleTimer.current * 1.7) * 0.01;
     const idleSway = Math.sin(idleTimer.current * 1.08) * 0.008;
     const switchLift = switchPulse.current * 0.045;
-    offsetWorld.current.set(idleSway, idleBob - switchLift, 0);
+    // スイング中はカメラ揺れに合わせた手元の押し込み
+    const swingCamKick = isSwinging ? pose.push * 0.15 : 0;
+    offsetWorld.current.set(
+      idleSway + pose.side * 0.08,
+      idleBob - switchLift + pose.lift * 0.12,
+      swingCamKick,
+    );
     offsetWorld.current.applyQuaternion(camera.quaternion);
     rootRef.current.position.copy(camera.position).add(offsetWorld.current);
     rootRef.current.quaternion.copy(camera.quaternion).multiply(localQuat);
 
     if (toolRef.current) {
-      const swing = Math.sin((1 - swingKick.current) * Math.PI) * swingKick.current;
       toolOffsetWorld.current.copy(TOOL_MODEL_OFFSET);
-      toolOffsetWorld.current.y -= swing * 0.12;
-      toolOffsetWorld.current.z -= swing * 0.14;
-      toolOffsetWorld.current.x += swing * 0.04;
+      toolOffsetWorld.current.y += pose.lift;
+      toolOffsetWorld.current.z += pose.push;
+      toolOffsetWorld.current.x += pose.side;
       toolRef.current.position.copy(toolOffsetWorld.current);
       toolRef.current.quaternion.copy(toolQuat);
       toolRef.current.scale.setScalar(0.44);
-      toolRef.current.rotation.x += swing * getToolTypeSwing(toolDef?.type ?? null) * 1.2;
-      toolRef.current.rotation.z -= swing * 0.52;
-      toolRef.current.rotation.y += swing * 0.18;
+      // ベース回転の上にスイングを加算
+      toolRef.current.rotation.x += pose.pitch;
+      toolRef.current.rotation.y += pose.yaw;
+      toolRef.current.rotation.z += pose.roll;
+    }
+
+    if (toolArmRef.current) {
+      toolArmRef.current.rotation.x = pose.armPitch * 0.55;
+      toolArmRef.current.rotation.z = pose.roll * 0.25;
+      toolArmRef.current.position.y = pose.lift * 0.15;
     }
 
     if (toolTrailRef.current) {
       const trailMaterial = toolTrailRef.current.material as THREE.MeshBasicMaterial;
-      const swing = Math.sin((1 - swingKick.current) * Math.PI) * swingKick.current;
       const statusPulse = Math.max(0, 1 - toolDurabilityRatio) * 0.25;
       trailMaterial.color.copy(toolAccentColor);
-      trailMaterial.opacity = swing * 0.82 + switchPulse.current * 0.12 + statusPulse;
-      toolTrailRef.current.rotation.z = -0.72 + idleTimer.current * 0.08 + swing * 2.2;
-      toolTrailRef.current.scale.setScalar(0.8 + swing * 0.55 + switchPulse.current * 0.12);
+      trailMaterial.opacity = pose.trail * 0.92 + switchPulse.current * 0.12 + statusPulse;
+      toolTrailRef.current.rotation.z = -0.72 + idleTimer.current * 0.08 + pose.roll * 1.4 + pose.pitch * 0.6;
+      toolTrailRef.current.scale.setScalar(0.8 + pose.trail * 0.75 + switchPulse.current * 0.12);
+      toolTrailRef.current.visible = pose.trail > 0.05 || statusPulse > 0.05;
+    }
+
+    // 斬撃アーク（振り下ろし中のみ）
+    if (slashArcRef.current) {
+      const mat = slashArcRef.current.material as THREE.MeshBasicMaterial;
+      const strike = swingProgress > 0.25 && swingProgress < 0.72
+        ? smooth01(1 - Math.abs(swingProgress - 0.42) / 0.28)
+        : 0;
+      if (strike > 0.02) {
+        slashArcRef.current.visible = true;
+        mat.color.copy(toolAccentColor);
+        mat.opacity = strike * 0.85;
+        slashArcRef.current.rotation.z = -0.4 + pose.roll * 1.2;
+        slashArcRef.current.rotation.x = pose.pitch * 0.35;
+        slashArcRef.current.scale.setScalar(0.9 + strike * 0.55);
+      } else {
+        slashArcRef.current.visible = false;
+      }
+    }
+
+    // ヒット瞬間の手元フラッシュ
+    if (impactGlowRef.current) {
+      const mat = impactGlowRef.current.material as THREE.MeshBasicMaterial;
+      const hitFlash = swingProgress > 0.34 && swingProgress < 0.55
+        ? smooth01(1 - Math.abs(swingProgress - 0.42) / 0.12)
+        : 0;
+      if (hitFlash > 0.02) {
+        impactGlowRef.current.visible = true;
+        mat.color.copy(toolAccentColor).lerp(new THREE.Color(0xffffff), 0.45);
+        mat.opacity = hitFlash * 0.7;
+        impactGlowRef.current.scale.setScalar(0.6 + hitFlash * 0.9);
+      } else {
+        impactGlowRef.current.visible = false;
+      }
     }
 
     if (toolStatusGlowRef.current) {
@@ -532,6 +653,37 @@ export function BuilderHeldItem() {
             toneMapped={false}
           />
         </mesh>
+        <mesh
+          ref={slashArcRef}
+          position={[0.02, 0.12, -0.08]}
+          rotation={[0.4, 0.2, -0.5]}
+          renderOrder={37}
+          visible={false}
+        >
+          <torusGeometry args={[0.48, 0.018, 8, 48, Math.PI * 1.05]} />
+          <meshBasicMaterial
+            color={toolAccentColor}
+            transparent
+            opacity={0}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh ref={impactGlowRef} position={[0.04, 0.28, -0.06]} renderOrder={37} visible={false}>
+          <sphereGeometry args={[0.28, 14, 10]} />
+          <meshBasicMaterial
+            color={0xffffff}
+            transparent
+            opacity={0}
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
         <mesh ref={toolStatusGlowRef} position={[0, 0.18, -0.045]} renderOrder={33}>
           <sphereGeometry args={[0.34, 18, 10]} />
           <meshBasicMaterial
@@ -556,14 +708,16 @@ export function BuilderHeldItem() {
             toneMapped={false}
           />
         </mesh>
-        <mesh position={[0.08, -0.42, 0.04]} rotation={[-0.08, 0.04, -0.2]} renderOrder={34}>
-          <boxGeometry args={[0.16, 0.42, 0.15]} />
-          <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} depthTest={false} depthWrite={false} />
-        </mesh>
-        <mesh position={[0.02, -0.2, 0.02]} rotation={[0.08, 0.02, -0.08]} renderOrder={34}>
-          <boxGeometry args={[0.16, 0.13, 0.14]} />
-          <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} depthTest={false} depthWrite={false} />
-        </mesh>
+        <group ref={toolArmRef}>
+          <mesh position={[0.08, -0.42, 0.04]} rotation={[-0.08, 0.04, -0.2]} renderOrder={34}>
+            <boxGeometry args={[0.16, 0.42, 0.15]} />
+            <meshStandardMaterial color={FIRST_PERSON_SLEEVE_COLOR} roughness={0.78} depthTest={false} depthWrite={false} />
+          </mesh>
+          <mesh position={[0.02, -0.2, 0.02]} rotation={[0.08, 0.02, -0.08]} renderOrder={34}>
+            <boxGeometry args={[0.16, 0.13, 0.14]} />
+            <meshStandardMaterial color={FIRST_PERSON_SKIN_COLOR} roughness={0.72} depthTest={false} depthWrite={false} />
+          </mesh>
+        </group>
       </group>
     </group>
   );

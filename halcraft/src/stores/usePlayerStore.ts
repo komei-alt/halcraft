@@ -46,8 +46,12 @@ const FALL_DAMAGE_THRESHOLD = 3;
 /** 落下1ブロックあたりのダメージ量 */
 const FALL_DAMAGE_PER_BLOCK = 1;
 
-/** 攻撃クールダウン時間（秒） */
-const ATTACK_COOLDOWN = 0.4;
+/** 攻撃クールダウン時間（秒） — スイングより少し長くして余韻を出す */
+const ATTACK_COOLDOWN = 0.45;
+/** 近接スイング全体の長さ（秒） */
+export const MELEE_SWING_DURATION = 0.38;
+/** スイング開始からダメージ確定までの秒（ヒットフレーム） */
+export const MELEE_HIT_AT = 0.14;
 /** ロケットランチャーのクールダウン時間（秒） */
 const ROCKET_COOLDOWN = 2.8;
 /** ロケット再装填完了を知らせるHUDパルス時間（ミリ秒） */
@@ -111,6 +115,12 @@ interface PlayerState {
 
   /** 攻撃チャージ率（0-1、1=フルチャージ） */
   attackCharge: number;
+
+  /**
+   * 近接スイング残り時間（秒）。
+   * 0=非スイング。1人称振り・ヒットフレームと同期する。
+   */
+  meleeSwingTimer: number;
 
   /** ロケットランチャーのクールダウン残り時間（秒） */
   rocketCooldown: number;
@@ -263,6 +273,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaceMode: false,
   attackCooldown: 0,
   attackCharge: 1,
+  meleeSwingTimer: 0,
   rocketCooldown: 0,
   rocketCooldownDuration: ROCKET_COOLDOWN,
   rocketCharge: 1,
@@ -353,11 +364,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const charge = state.attackCharge;
     const multiplier = 0.2 + charge * 0.8;
 
-    // クールダウン開始（モブ/プレイヤー攻撃時はシェイク不要）
+    // クールダウン＋スイング開始（ダメージはヒットフレーム側で確定）
     set({
       attackCooldown: ATTACK_COOLDOWN,
       attackCharge: 0,
-      ...(options?.noShake ? {} : { cameraShake: Math.max(state.cameraShake, 0.3 + charge * 0.4) }),
+      meleeSwingTimer: MELEE_SWING_DURATION,
+      ...(options?.noShake ? {} : { cameraShake: Math.max(state.cameraShake, 0.22 + charge * 0.28) }),
     });
 
     return multiplier;
@@ -367,6 +379,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     const newCooldown = Math.max(0, state.attackCooldown - dt);
     const newCharge = newCooldown <= 0 ? 1 : Math.min(1, 1 - newCooldown / ATTACK_COOLDOWN);
+    const newSwing = Math.max(0, (state.meleeSwingTimer ?? 0) - dt);
     const newRocketCooldown = Math.max(0, state.rocketCooldown - dt);
     const rocketDuration = Math.max(0.1, state.rocketCooldownDuration || ROCKET_COOLDOWN);
     const newRocketCharge = newRocketCooldown <= 0 ? 1 : Math.min(1, 1 - newRocketCooldown / rocketDuration);
@@ -380,6 +393,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // 変更がある場合のみ更新
     if (
       newCooldown !== state.attackCooldown ||
+      newSwing !== state.meleeSwingTimer ||
       newRocketCooldown !== state.rocketCooldown ||
       newShake !== state.cameraShake ||
       rocketJustReady
@@ -387,6 +401,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({
         attackCooldown: newCooldown,
         attackCharge: newCharge,
+        meleeSwingTimer: newSwing,
         rocketCooldown: newRocketCooldown,
         rocketCharge: newRocketCharge,
         rocketReadyPulseUntil,
@@ -545,6 +560,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       cameraShake: 0,
       attackCooldown: 0,
       attackCharge: 1,
+      meleeSwingTimer: 0,
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCooldownDuration: ROCKET_COOLDOWN,
