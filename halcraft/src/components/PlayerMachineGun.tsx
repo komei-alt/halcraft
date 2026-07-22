@@ -389,50 +389,52 @@ export function PlayerMachineGun() {
       els.root.style.opacity = String(THREE.MathUtils.clamp(pBlackout * 1.05, 0, 1));
     }
     if (els.blackout) {
-      // 透明穴は必ず画面中心（50% 50%）。中心点照準と視線を一致させる
-      const holePct = THREE.MathUtils.lerp(18, 42, pAperture);
-      const midPct = holePct + THREE.MathUtils.lerp(6, 10, pAperture);
+      // 中央は大きく透明（視界を塞がない）。外側だけ薄いビネット。
+      const holePct = THREE.MathUtils.lerp(28, 48, pAperture);
+      const midPct = holePct + THREE.MathUtils.lerp(8, 14, pAperture);
       els.blackout.style.background = [
         `radial-gradient(circle at 50% 50%,`,
         `transparent 0%,`,
         `transparent ${holePct}%,`,
-        `rgba(0,0,0,${0.55 * pBlackout}) ${midPct}%,`,
-        `rgba(0,0,0,${0.92 * pBlackout}) 72%,`,
-        `rgba(0,0,0,${0.98 * pBlackout}) 100%)`,
+        `rgba(0,8,16,${0.35 * pBlackout}) ${midPct}%,`,
+        `rgba(0,0,0,${0.72 * pBlackout}) 78%,`,
+        `rgba(0,0,0,${0.88 * pBlackout}) 100%)`,
       ].join(' ');
     }
     if (els.aperture) {
-      // 覗き込み：小→大に広がり、中心固定のまま拡大
-      const size = THREE.MathUtils.lerp(28, 56, pAperture);
+      // 細い円枠のみ。鉄の筒ではなく透明スコープの縁として見せる
+      const size = THREE.MathUtils.lerp(36, 58, pAperture);
       els.aperture.style.left = '50%';
       els.aperture.style.top = '50%';
       els.aperture.style.width = `min(${size}vw, ${size}vh)`;
       els.aperture.style.height = `min(${size}vw, ${size}vh)`;
       els.aperture.style.transform = 'translate(-50%, -50%)';
-      els.aperture.style.opacity = String(THREE.MathUtils.clamp(pAperture * 1.2, 0, 1));
-      els.aperture.style.borderColor = `${accent}${Math.round(180 + pHud * 60).toString(16).padStart(2, '0')}`;
+      els.aperture.style.opacity = String(THREE.MathUtils.clamp(pAperture * 1.15, 0, 1));
+      els.aperture.style.border = `2px solid ${accent}${Math.round(140 + pHud * 70).toString(16).padStart(2, '0')}`;
       els.aperture.style.boxShadow = [
-        `0 0 0 ${Math.round(2 + pAperture * 4)}px rgba(0,0,0,${0.55 * pBlackout})`,
-        `inset 0 0 ${Math.round(20 + pHud * 36)}px ${accent}55`,
-        `0 0 ${Math.round(12 + pHud * 22)}px ${accent}66`,
+        `0 0 0 1px rgba(0,0,0,${0.35 * pBlackout})`,
+        `inset 0 0 0 1px rgba(255,255,255,${0.12 + pHud * 0.08})`,
+        `0 0 ${Math.round(10 + pHud * 16)}px ${accent}44`,
       ].join(', ');
     }
     if (els.glass) {
-      els.glass.style.opacity = String(0.06 + pHud * 0.1);
-      // 反射も中心基準（ずれたハイライトで円が偏って見えないようにする）
-      els.glass.style.background = `radial-gradient(circle at 50% 46%, ${accent}28 0%, transparent 58%, rgba(0,12,18,0.2) 100%)`;
+      // ごく薄いレンズ反射だけ。視界を濁らせない
+      els.glass.style.opacity = String(0.04 + pHud * 0.05);
+      els.glass.style.background = `radial-gradient(circle at 50% 42%, ${accent}18 0%, transparent 52%, rgba(0,10,18,0.08) 100%)`;
     }
     if (els.reticle) {
+      // 円内に標準的なHUD照準（クロス＋中央点）
       els.reticle.style.opacity = String(THREE.MathUtils.clamp(pHud, 0, 1));
       els.reticle.style.left = '50%';
       els.reticle.style.top = '50%';
-      // スケールは中心ドットを動かさないよう transform-origin を中央に固定
-      const scale = THREE.MathUtils.lerp(1.12, 1, pHud);
+      const reticleSize = THREE.MathUtils.lerp(40, 52, pAperture);
+      els.reticle.style.width = `min(${reticleSize}vw, ${reticleSize}vh)`;
+      els.reticle.style.height = `min(${reticleSize}vw, ${reticleSize}vh)`;
       els.reticle.style.transformOrigin = '50% 50%';
-      els.reticle.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      els.reticle.style.transform = 'translate(-50%, -50%) scale(1)';
     }
     if (els.label) {
-      els.label.style.opacity = String(THREE.MathUtils.clamp(pHud * 0.95, 0, 1));
+      els.label.style.opacity = String(THREE.MathUtils.clamp(pHud * 0.75, 0, 1));
       const zoomX = (baseFov.current ?? 70) / SCOPED_FOV;
       const shownZoom = THREE.MathUtils.lerp(1, zoomX, pZoom);
       els.label.textContent = `ADS  ×${shownZoom.toFixed(1)}`;
@@ -472,18 +474,15 @@ export function PlayerMachineGun() {
         weaponRef.current.position.copy(camera.position).add(offsetWorld.current);
         weaponRef.current.quaternion.copy(camera.quaternion).multiply(new THREE.Quaternion().setFromEuler(MODEL_ROTATION));
 
-        // ADS中は銃本体を徐々に隠し、スコープ接眼部だけが視界を占有
+        // ADS中は銃本体・3D接眼とも完全に隠す（黒い鉄塊で視界を塞がない）
+        // 照準は 2D の円形スコープHUDのみで行う
         if (gunBodyRef.current) {
-          const bodyFade = 1 - pRaise * 0.92;
-          gunBodyRef.current.visible = bodyFade > 0.08;
-          gunBodyRef.current.scale.setScalar(THREE.MathUtils.lerp(1, 0.55, pRaise));
+          const bodyFade = 1 - pRaise;
+          gunBodyRef.current.visible = bodyFade > 0.12;
+          gunBodyRef.current.scale.setScalar(THREE.MathUtils.lerp(1, 0.35, pRaise));
         }
         if (scopeOpticRef.current) {
-          // 接眼リングも画面中心（ローカル 0,0）に固定し、円形視界のずれを防ぐ
-          scopeOpticRef.current.visible = raw > 0.08;
-          const opticZ = THREE.MathUtils.lerp(-0.55, -0.22, pRaise);
-          scopeOpticRef.current.position.set(0, 0, opticZ);
-          scopeOpticRef.current.scale.setScalar(THREE.MathUtils.lerp(0.55, 1.08, pAperture));
+          scopeOpticRef.current.visible = false;
         }
       } else if (scopeOpticRef.current) {
         scopeOpticRef.current.visible = false;
@@ -773,32 +772,8 @@ export function PlayerMachineGun() {
           />
         </group>
 
-        {/* スコープ接眼モデル：画面中心に固定して覗き込み時にせり出す */}
-        <group ref={scopeOpticRef} visible={false} position={[0, 0, -0.55]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.09, 0.11, 0.28, 16, 1, true]} />
-            <meshStandardMaterial color="#1c2128" roughness={0.38} metalness={0.78} side={THREE.DoubleSide} />
-          </mesh>
-          <mesh position={[0, 0, 0.12]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.095, 0.014, 8, 24]} />
-            <meshStandardMaterial color="#3a424c" roughness={0.32} metalness={0.82} />
-          </mesh>
-          <mesh position={[0, 0, 0.14]}>
-            <circleGeometry args={[0.078, 28]} />
-            <meshBasicMaterial
-              color={accent}
-              transparent
-              opacity={0.12}
-              depthWrite={false}
-              side={THREE.DoubleSide}
-              toneMapped={false}
-            />
-          </mesh>
-          <mesh position={[0, 0, -0.1]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.055, 0.07, 0.16, 12, 1, true]} />
-            <meshStandardMaterial color="#252b32" roughness={0.4} metalness={0.7} side={THREE.DoubleSide} />
-          </mesh>
-        </group>
+        {/* 3D接眼は使わない（黒い鉄塊が視界を塞ぐため）。ADSは2D円形HUDのみ */}
+        <group ref={scopeOpticRef} visible={false} />
       </group>
 
       {scopeOverlayOn && (
@@ -818,30 +793,31 @@ export function PlayerMachineGun() {
               transition: 'none',
             }}
           >
-            {/* 周囲ブラックアウト（中央はスコープ穴） */}
+            {/* 周囲ビネット（中央は大きく透明） */}
             <div
               ref={bindOverlayRef('blackout')}
               style={{
                 position: 'absolute',
                 inset: 0,
-                background: 'radial-gradient(circle at center, transparent 0%, transparent 20%, rgba(0,0,0,0.7) 40%, #000 100%)',
+                background: 'radial-gradient(circle at 50% 50%, transparent 0%, transparent 42%, rgba(0,8,16,0.35) 58%, rgba(0,0,0,0.85) 100%)',
               }}
             />
-            {/* スコープ円枠 + ガラス */}
+            {/* 円形スコープ枠（細い縁だけ） */}
             <div
               ref={bindOverlayRef('aperture')}
               style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 'min(40vw, 40vh)',
-                height: 'min(40vw, 40vh)',
+                width: 'min(52vw, 52vh)',
+                height: 'min(52vw, 52vh)',
                 transform: 'translate(-50%, -50%)',
-                border: `3px solid ${accent}cc`,
+                border: `2px solid ${accent}bb`,
                 borderRadius: '50%',
-                boxShadow: '0 0 0 3px rgba(0,0,0,0.55)',
+                boxShadow: '0 0 0 1px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12)',
                 opacity: 0,
                 overflow: 'hidden',
+                background: 'transparent',
               }}
             >
               <div
@@ -850,23 +826,23 @@ export function PlayerMachineGun() {
                   position: 'absolute',
                   inset: 0,
                   borderRadius: '50%',
-                  opacity: 0.08,
+                  opacity: 0.05,
                   pointerEvents: 'none',
                 }}
               />
-              {/* 内側リング（接眼っぽさ） */}
+              {/* 薄い内側リング */}
               <div
                 style={{
                   position: 'absolute',
-                  inset: '4%',
+                  inset: '3%',
                   borderRadius: '50%',
-                  border: '1px solid rgba(200, 240, 255, 0.22)',
-                  boxShadow: 'inset 0 0 24px rgba(0,0,0,0.35)',
+                  border: '1px solid rgba(220, 245, 255, 0.18)',
+                  boxShadow: 'none',
                 }}
               />
             </div>
 
-            {/* HUD風照準（中央固定） */}
+            {/* 標準HUD照準（円内・画面中心） */}
             <div
               ref={bindOverlayRef('reticle')}
               style={{
@@ -875,102 +851,85 @@ export function PlayerMachineGun() {
                 top: '50%',
                 width: 'min(48vw, 48vh)',
                 height: 'min(48vw, 48vh)',
-                transform: 'translate(-50%, -50%) scale(1.2)',
+                transform: 'translate(-50%, -50%)',
                 opacity: 0,
                 pointerEvents: 'none',
               }}
             >
-              {/* 縦線（ギャップ付き） */}
+              {/* 縦線：中央ギャップ付き（標準クロスヘア） */}
               <div style={{
-                position: 'absolute', left: '50%', top: '8%', bottom: '58%',
-                width: 1.5, transform: 'translateX(-50%)',
-                background: `linear-gradient(to bottom, transparent, ${accent}dd)`,
-                boxShadow: `0 0 6px ${accent}88`,
+                position: 'absolute', left: '50%', top: '18%', height: '24%',
+                width: 2, transform: 'translateX(-50%)',
+                background: `${accent}ee`,
+                boxShadow: `0 0 4px ${accent}aa`,
+                borderRadius: 1,
               }}
               />
               <div style={{
-                position: 'absolute', left: '50%', top: '58%', bottom: '8%',
-                width: 1.5, transform: 'translateX(-50%)',
-                background: `linear-gradient(to top, transparent, ${accent}dd)`,
-                boxShadow: `0 0 6px ${accent}88`,
+                position: 'absolute', left: '50%', bottom: '18%', height: '24%',
+                width: 2, transform: 'translateX(-50%)',
+                background: `${accent}ee`,
+                boxShadow: `0 0 4px ${accent}aa`,
+                borderRadius: 1,
               }}
               />
-              {/* 横線 */}
+              {/* 横線：中央ギャップ付き */}
               <div style={{
-                position: 'absolute', top: '50%', left: '8%', right: '58%',
-                height: 1.5, transform: 'translateY(-50%)',
-                background: `linear-gradient(to right, transparent, ${accent}dd)`,
-                boxShadow: `0 0 6px ${accent}88`,
+                position: 'absolute', top: '50%', left: '18%', width: '24%',
+                height: 2, transform: 'translateY(-50%)',
+                background: `${accent}ee`,
+                boxShadow: `0 0 4px ${accent}aa`,
+                borderRadius: 1,
               }}
               />
               <div style={{
-                position: 'absolute', top: '50%', left: '58%', right: '8%',
-                height: 1.5, transform: 'translateY(-50%)',
-                background: `linear-gradient(to left, transparent, ${accent}dd)`,
-                boxShadow: `0 0 6px ${accent}88`,
+                position: 'absolute', top: '50%', right: '18%', width: '24%',
+                height: 2, transform: 'translateY(-50%)',
+                background: `${accent}ee`,
+                boxShadow: `0 0 4px ${accent}aa`,
+                borderRadius: 1,
               }}
               />
-              {/* ミルドット（距離目盛り） */}
-              {[0.38, 0.44, 0.5, 0.56, 0.62].map((t) => (
+              {/* 細い距離目盛り（控えめ） */}
+              {[0.42, 0.5, 0.58].map((t) => (
                 <div
                   key={`h-${t}`}
                   style={{
                     position: 'absolute',
                     left: `${t * 100}%`,
                     top: '50%',
-                    width: 5,
-                    height: 1,
+                    width: 4,
+                    height: 1.5,
                     transform: 'translate(-50%, -50%)',
-                    background: `${accent}aa`,
+                    background: `${accent}99`,
                   }}
                 />
               ))}
-              {[0.38, 0.44, 0.5, 0.56, 0.62].map((t) => (
+              {[0.42, 0.5, 0.58].map((t) => (
                 <div
                   key={`v-${t}`}
                   style={{
                     position: 'absolute',
                     top: `${t * 100}%`,
                     left: '50%',
-                    width: 1,
-                    height: 5,
+                    width: 1.5,
+                    height: 4,
                     transform: 'translate(-50%, -50%)',
-                    background: `${accent}aa`,
+                    background: `${accent}99`,
                   }}
                 />
               ))}
-              {/* 中央ドット */}
+              {/* 中央照準点 */}
               <div style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 5,
-                height: 5,
+                width: 4,
+                height: 4,
                 transform: 'translate(-50%, -50%)',
                 borderRadius: '50%',
-                background: '#fff8e8',
-                boxShadow: `0 0 10px ${accent}, 0 0 3px #fff`,
-              }}
-              />
-              {/* コーナーブラケット（HUD風の四隅） */}
-              <div style={{
-                position: 'absolute', top: '12%', left: '12%', width: 18, height: 18,
-                borderTop: `1.5px solid ${accent}99`, borderLeft: `1.5px solid ${accent}99`,
-              }}
-              />
-              <div style={{
-                position: 'absolute', top: '12%', right: '12%', width: 18, height: 18,
-                borderTop: `1.5px solid ${accent}99`, borderRight: `1.5px solid ${accent}99`,
-              }}
-              />
-              <div style={{
-                position: 'absolute', bottom: '12%', left: '12%', width: 18, height: 18,
-                borderBottom: `1.5px solid ${accent}99`, borderLeft: `1.5px solid ${accent}99`,
-              }}
-              />
-              <div style={{
-                position: 'absolute', bottom: '12%', right: '12%', width: 18, height: 18,
-                borderBottom: `1.5px solid ${accent}99`, borderRight: `1.5px solid ${accent}99`,
+                background: '#fffef5',
+                boxShadow: `0 0 8px ${accent}, 0 0 2px #fff`,
               }}
               />
             </div>
@@ -980,13 +939,13 @@ export function PlayerMachineGun() {
               style={{
                 position: 'absolute',
                 left: '50%',
-                top: 'calc(50% + min(30vw, 30vh))',
+                top: 'calc(50% + min(32vw, 32vh))',
                 transform: 'translateX(-50%)',
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 12,
-                letterSpacing: '0.14em',
-                color: `${accent}dd`,
-                textShadow: '0 0 8px rgba(0,0,0,0.9)',
+                fontSize: 11,
+                letterSpacing: '0.16em',
+                color: `${accent}bb`,
+                textShadow: '0 0 6px rgba(0,0,0,0.85)',
                 opacity: 0,
                 whiteSpace: 'nowrap',
               }}
