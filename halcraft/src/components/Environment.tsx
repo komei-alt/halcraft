@@ -306,9 +306,11 @@ function getAtmosphereTuning(quality: AtmosphereQuality): AtmosphereTuning {
 }
 
 function getAtmosphericDensity(fogFar: number, targetTransmittance: number): number {
-  const safeFar = Math.max(80, fogFar);
+  const safeFar = Math.max(80, Number.isFinite(fogFar) ? fogFar : 250);
   const safeTransmittance = THREE.MathUtils.clamp(targetTransmittance, 0.08, 0.92);
-  return Math.sqrt(-Math.log(safeTransmittance)) / safeFar;
+  const density = Math.sqrt(-Math.log(safeTransmittance)) / safeFar;
+  // density が過大だと画面全体が霧色（水色）で塗りつぶされて操作不能に見える
+  return THREE.MathUtils.clamp(density, 0.0002, 0.012);
 }
 
 function applySceneAtmosphere(
@@ -325,14 +327,17 @@ function applySceneAtmosphere(
     return base;
   }
 
-  const fogNear = Math.max(18, cachedFogNear * base.nearScale);
-  const fogFar = Math.max(fogNear + 32, cachedFogFar * base.farScale);
+  const nearBase = Number.isFinite(cachedFogNear) ? cachedFogNear : 100;
+  const farBase = Number.isFinite(cachedFogFar) ? cachedFogFar : 250;
+  const fogNear = Math.max(18, nearBase * base.nearScale);
+  const fogFar = Math.max(fogNear + 32, farBase * base.farScale);
 
   if (base.mode === 'linear') {
     const fog = ensureLinearFog(scene);
     fog.color.copy(fogColor);
     fog.near = fogNear;
-    fog.far = fogFar;
+    // near >= far や NaN で視界が霧一色になるのを防ぐ
+    fog.far = Math.max(fogNear + 24, fogFar);
     return base;
   }
 

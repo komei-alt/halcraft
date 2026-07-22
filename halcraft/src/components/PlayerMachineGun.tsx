@@ -802,7 +802,12 @@ export function PlayerMachineGun() {
       </group>
 
       {scopeOverlayOn && (
-        <Html fullscreen zIndexRange={[80, 0]} style={{ pointerEvents: 'none' }}>
+        <Html
+          fullscreen
+          zIndexRange={[80, 0]}
+          style={{ pointerEvents: 'none' }}
+          wrapperClass="machine-gun-scope-html"
+        >
           <div
             ref={bindOverlayRef('root')}
             style={{

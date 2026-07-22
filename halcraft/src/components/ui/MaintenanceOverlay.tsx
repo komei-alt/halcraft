@@ -1,13 +1,18 @@
 // メンテナンスオーバーレイ
 // サーバーとの接続が切れた時（デプロイ中など）に表示する
 // 復帰を検知したら再起動を促すメッセージを表示
+//
+// 重要: 一瞬のネットワーク揺らぎで全画面を塞がない。
+// HEAD 失敗や offline イベントの誤検知で操作不能になるのを防ぐ。
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 /** ヘルスチェックの間隔（ミリ秒） */
-const CHECK_INTERVAL = 3000;
-/** オフライン判定前の連続失敗回数 */
-const FAIL_THRESHOLD = 2;
+const CHECK_INTERVAL = 4000;
+/** オフライン判定前の連続失敗回数（約 20 秒） */
+const FAIL_THRESHOLD = 5;
+/** この時間未満の切断は誤検知としてリロードせず閉じる */
+const FALSE_POSITIVE_MAX_MS = 25_000;
 /** ヘルスチェック用の軽量URLパス */
 const HEALTH_URL = '/manifest.json';
 /** サーバー復帰後の追加待機秒数（コンテナ完全起動を待つ） */
@@ -19,45 +24,81 @@ export function MaintenanceOverlay() {
   const [countdown, setCountdown] = useState(RECOVERY_WAIT_SECONDS);
   const failCount = useRef(0);
   const wasOffline = useRef(false);
+  const offlineSinceMs = useRef(0);
+  const isRecoveringRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const markRecovering = useCallback((next: boolean) => {
+    isRecoveringRef.current = next;
+    setIsRecovering(next);
+  }, []);
+
+  const dismissFalsePositive = useCallback(() => {
+    failCount.current = 0;
+    wasOffline.current = false;
+    offlineSinceMs.current = 0;
+    markRecovering(false);
+    setIsOffline(false);
+  }, [markRecovering]);
+
   const checkHealth = useCallback(async () => {
+    // ブラウザ自身が offline の間はサーバ障害と断定しない
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return;
+    }
+
     try {
-      // キャッシュバスター付きでフェッチ（Cloudflareキャッシュ回避）
+      // GET を使う（HEAD は CDN/SW/プロキシで落ちやすい）
       const url = `${HEALTH_URL}?_t=${Date.now()}`;
       const res = await fetch(url, {
-        method: 'HEAD',
+        method: 'GET',
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
       });
-      if (res.ok) {
+
+      if (!res.ok) {
+        failCount.current += 1;
+      } else {
         failCount.current = 0;
-        if (wasOffline.current && !isRecovering) {
-          // サーバー復帰検知 → カウントダウン開始
-          setIsRecovering(true);
-        }
-        if (!wasOffline.current) {
+
+        if (wasOffline.current) {
+          const offlineDuration = offlineSinceMs.current > 0
+            ? Date.now() - offlineSinceMs.current
+            : 0;
+
+          // 短時間の失敗は誤検知。リロードせずゲームを続行
+          if (offlineDuration < FALSE_POSITIVE_MAX_MS) {
+            dismissFalsePositive();
+            return;
+          }
+
+          // 長時間落ちていた場合のみデプロイ復帰扱い
+          if (!isRecoveringRef.current) {
+            markRecovering(true);
+          }
+        } else {
           setIsOffline(false);
         }
-      } else {
-        failCount.current++;
+        return;
       }
     } catch {
-      failCount.current++;
+      failCount.current += 1;
     }
 
     if (failCount.current >= FAIL_THRESHOLD) {
+      if (!wasOffline.current) {
+        offlineSinceMs.current = Date.now();
+      }
       wasOffline.current = true;
       setIsOffline(true);
     }
-  }, [isRecovering]);
+  }, [dismissFalsePositive, markRecovering]);
 
   // 復帰カウントダウン — setInterval コールバックで外部タイマーと同期するパターン
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isRecovering) return;
 
-    // isRecovering になった瞬間にカウントダウンを初期値にリセット
     let current = RECOVERY_WAIT_SECONDS;
     setCountdown(current);
 
@@ -65,7 +106,6 @@ export function MaintenanceOverlay() {
       current -= 1;
       if (current <= 0) {
         clearInterval(timer);
-        // カウントダウン終了 → リロード
         window.location.reload();
         return;
       }
@@ -77,27 +117,32 @@ export function MaintenanceOverlay() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    // ブラウザのオンライン/オフラインイベント
     const handleOffline = () => {
-      failCount.current = FAIL_THRESHOLD;
-      wasOffline.current = true;
-      setIsOffline(true);
+      // 一瞬の offline イベントだけでは全画面を出さない（Wi-Fi 切替などで頻発）
+      failCount.current = Math.max(failCount.current, FAIL_THRESHOLD - 1);
     };
     const handleOnline = () => {
-      // オンラインに戻ったらヘルスチェックで確認
-      checkHealth();
+      // オンライン復帰後に実ヘルスで確認
+      void checkHealth();
     };
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
 
-    // 定期的なヘルスチェック
-    intervalRef.current = setInterval(checkHealth, CHECK_INTERVAL);
+    intervalRef.current = setInterval(() => {
+      void checkHealth();
+    }, CHECK_INTERVAL);
+
+    // 初回も軽く確認（起動直後の誤検知を避けるため少し遅らせる）
+    const bootTimer = window.setTimeout(() => {
+      void checkHealth();
+    }, 2500);
 
     return () => {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.clearTimeout(bootTimer);
     };
   }, [checkHealth]);
 
@@ -106,7 +151,6 @@ export function MaintenanceOverlay() {
   return (
     <div style={overlayStyle}>
       <div style={contentStyle}>
-        {/* 回転するブロックアイコン */}
         <div style={blockContainerStyle}>
           <div style={isRecovering ? blockStyleDone : blockStyle}>
             <div style={{ ...blockFaceStyle, ...(isRecovering ? blockFrontDoneStyle : blockFrontStyle) }} />
@@ -127,6 +171,7 @@ export function MaintenanceOverlay() {
               {countdown} 秒後に自動リロード…
             </p>
             <button
+              type="button"
               onClick={() => window.location.reload()}
               style={reloadButtonStyle}
               onMouseEnter={(e) => {
@@ -144,28 +189,37 @@ export function MaintenanceOverlay() {
         ) : (
           <>
             <h1 style={titleStyle}>
-              🔧 アップデート中！
+              🔧 接続を確認中…
             </h1>
             <p style={messageStyle}>
-              ハルが作ったゲームを
+              サーバーにうまくつながらないみたい
               <br />
-              新しくしています…
+              少し待ってみてね
             </p>
             <p style={subMessageStyle}>
-              もうすぐ遊べるよ！
+              つながらない時だけこの画面になるよ
             </p>
 
-            {/* ドットローディング */}
             <div style={dotsContainerStyle}>
               <span style={{ ...dotStyle, animationDelay: '0s' }}>●</span>
               <span style={{ ...dotStyle, animationDelay: '0.3s' }}>●</span>
               <span style={{ ...dotStyle, animationDelay: '0.6s' }}>●</span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                dismissFalsePositive();
+                void checkHealth();
+              }}
+              style={dismissButtonStyle}
+            >
+              ゲームに戻る
+            </button>
           </>
         )}
       </div>
 
-      {/* CSS アニメーション */}
       <style>{animationCSS}</style>
     </div>
   );
@@ -235,7 +289,6 @@ const blockRightStyle: React.CSSProperties = {
   transform: 'rotateY(90deg) translateZ(30px)',
 };
 
-// 復帰時は青色に変更
 const blockFrontDoneStyle: React.CSSProperties = {
   background: 'linear-gradient(135deg, #3498db, #5dade2)',
   transform: 'translateZ(30px)',
@@ -301,6 +354,19 @@ const reloadButtonStyle: React.CSSProperties = {
   animation: 'fadeInUp 0.5s ease-out 0.4s both',
 };
 
+const dismissButtonStyle: React.CSSProperties = {
+  marginTop: 28,
+  padding: '12px 28px',
+  fontSize: 15,
+  fontWeight: 700,
+  color: '#dce9ff',
+  background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(160,196,255,0.35)',
+  borderRadius: 10,
+  cursor: 'pointer',
+  fontFamily: "'Rounded Mplus 1c', 'Noto Sans JP', sans-serif",
+};
+
 const dotsContainerStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
@@ -335,5 +401,4 @@ const animationCSS = `
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  @import url('https://fonts.googleapis.com/css2?family=Rounded+Mplus+1c:wght@700&display=swap');
 `;

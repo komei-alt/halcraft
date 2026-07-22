@@ -22,6 +22,12 @@ canvas {
   image-rendering: pixelated;
 }
 
+/* drei Html fullscreen が入力を奪わないようにする（スコープHUD等） */
+.machine-gun-scope-html,
+.machine-gun-scope-html * {
+  pointer-events: none !important;
+}
+
 /* === モバイル対応 === */
 
 /* iOS Safe Area 対応 */

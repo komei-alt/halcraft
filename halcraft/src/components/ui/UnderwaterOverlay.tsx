@@ -1,12 +1,16 @@
 // 水中エフェクトオーバーレイ
 // プレイヤーが水中に沈んでいるとき、画面全体に青いフィルターをかける
 
+import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 
 export function UnderwaterOverlay() {
+  const phase = useGameStore((s) => s.phase);
   const isSubmerged = usePlayerStore((s) => s.isSubmerged);
+  const isDead = usePlayerStore((s) => s.isDead);
 
-  if (!isSubmerged) return null;
+  // プレイ中かつ生存時だけ表示（ポーズ/死亡/メニューで固着しない）
+  if (phase !== 'playing' || isDead || !isSubmerged) return null;
 
   return (
     <div

@@ -294,6 +294,14 @@ export function Player() {
         document.addEventListener('mousemove', handleMouseMove);
       } else {
         document.removeEventListener('mousemove', handleMouseMove);
+        // Lock 解除時に移動キーが押しっぱなしで残ると、再開後に暴走する
+        keys.current.forward = false;
+        keys.current.backward = false;
+        keys.current.left = false;
+        keys.current.right = false;
+        keys.current.jump = false;
+        keys.current.sprint = false;
+        doubleTapSprint.current = false;
       }
     };
 
@@ -466,6 +474,14 @@ export function Player() {
 
   // 毎フレーム物理シミュレーション
   useFrame((_, delta) => {
+    // 死亡中・非プレイ中は水中フラグを必ず下ろす（水色オーバーレイ固着防止）
+    if (isDead || useGameStore.getState().phase !== 'playing') {
+      const liquid = usePlayerStore.getState();
+      if (liquid.isSubmerged || liquid.isInWater) {
+        usePlayerStore.setState({ isSubmerged: false, isInWater: false });
+      }
+    }
+
     // 死亡中は動けない
     if (isDead) return;
 
