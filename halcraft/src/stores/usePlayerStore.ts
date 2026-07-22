@@ -394,16 +394,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   assignHotbarSlot: (slot, blockId) => {
     if (slot < 0 || slot >= HOTBAR_SLOT_COUNT) return;
     const current = get();
+    const nextEquipped = slot === current.selectedSlot
+      ? getHotbarItemEquippedItem(blockId)
+      : current.equippedItem;
     set((state) => {
       const newSlots = [...state.hotbarSlots];
       newSlots[slot] = blockId;
       return {
         hotbarSlots: newSlots,
-        ...(slot === state.selectedSlot ? { equippedItem: 'builder' as EquippedItem } : {}),
+        ...(slot === state.selectedSlot ? { equippedItem: nextEquipped } : {}),
       };
     });
-    if (slot === current.selectedSlot && current.equippedItem !== 'builder') {
-      playEquippedItemSwitchFeedback('builder');
+    if (slot === current.selectedSlot && current.equippedItem !== nextEquipped) {
+      playEquippedItemSwitchFeedback(nextEquipped);
     }
   },
 
@@ -643,41 +646,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   respawn: () => {
     const isBuild = useGameStore.getState().isBuildMode;
     const spawnY = getTerrainHeight(PLAYER_SPAWN.x, PLAYER_SPAWN.z) + 1.1;
-    set((state) => ({
-      hp: 20,
-      isDead: false,
-      isDamageFlash: false,
-      damageDirection: null,
-      knockbackVx: 0,
-      knockbackVz: 0,
-      cameraShake: 0,
-      attackCooldown: 0,
-      attackCharge: 1,
-      meleeSwingTimer: 0,
-      saberSwingTimer: 0,
-      gunRecoilTimer: 0,
-      rocketRecoilTimer: 0,
-      pendingWeaponAction: null,
-      glovePushReady: 1,
-      glovePulling: false,
-      machineGunScopeProgress: 0,
-      bombArmedCount: 0,
-      bombMaxCount: 3,
-      equippedItem: 'builder',
-      rocketCooldown: 0,
-      rocketCooldownDuration: ROCKET_COOLDOWN,
-      rocketCharge: 1,
-      rocketReadyPulseUntil: 0,
-      invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
-      hunger: 20,
-      hungerExhaustion: 0,
-      airSupply: 15,
-      isSubmerged: false,
-      isInWater: false,
-      // Player がこのカウンタ変化を見てスポーン地点へテレポートする
-      spawnToken: state.spawnToken + 1,
-      worldPosition: { x: PLAYER_SPAWN.x, y: spawnY, z: PLAYER_SPAWN.z },
-    }));
+    set((state) => {
+      // ホットバー選択枠（selectedSlot）と実装備（equippedItem）を必ず同期する。
+      // 以前は equippedItem だけ builder に戻しており、UI は銃のまま・手は空、という不整合が起きていた。
+      const safeSlot = state.selectedSlot >= 0 && state.selectedSlot < state.hotbarSlots.length
+        ? state.selectedSlot
+        : 0;
+      const syncedEquipped = getHotbarItemEquippedItem(state.hotbarSlots[safeSlot]);
+      return {
+        hp: 20,
+        isDead: false,
+        isDamageFlash: false,
+        damageDirection: null,
+        knockbackVx: 0,
+        knockbackVz: 0,
+        cameraShake: 0,
+        attackCooldown: 0,
+        attackCharge: 1,
+        meleeSwingTimer: 0,
+        saberSwingTimer: 0,
+        gunRecoilTimer: 0,
+        rocketRecoilTimer: 0,
+        pendingWeaponAction: null,
+        glovePushReady: 1,
+        glovePulling: false,
+        machineGunScopeProgress: 0,
+        bombArmedCount: 0,
+        bombMaxCount: 3,
+        selectedSlot: safeSlot,
+        equippedItem: syncedEquipped,
+        rocketCooldown: 0,
+        rocketCooldownDuration: ROCKET_COOLDOWN,
+        rocketCharge: 1,
+        rocketReadyPulseUntil: 0,
+        invincibleUntil: isBuild ? Number.POSITIVE_INFINITY : Date.now() + 5000,
+        hunger: 20,
+        hungerExhaustion: 0,
+        airSupply: 15,
+        isSubmerged: false,
+        isInWater: false,
+        // Player がこのカウンタ変化を見てスポーン地点へテレポートする
+        spawnToken: state.spawnToken + 1,
+        worldPosition: { x: PLAYER_SPAWN.x, y: spawnY, z: PLAYER_SPAWN.z },
+      };
+    });
     // サーバーへ復活通知
     const socket = getSocket();
     socket?.emit('player:respawned');
