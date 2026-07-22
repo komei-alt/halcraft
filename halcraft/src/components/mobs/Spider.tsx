@@ -3,6 +3,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Billboard } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 
@@ -50,15 +51,15 @@ interface SpiderProps {
 }
 
 export function Spider({ mob, animTime }: SpiderProps) {
+  const rootRef = useRef<THREE.Group>(null);
+  const bodyGroupRef = useRef<THREE.Group>(null);
   const upperLegsRef = useRef<THREE.InstancedMesh>(null);
   const lowerLegsRef = useRef<THREE.InstancedMesh>(null);
   const eyesRef = useRef<THREE.InstancedMesh>(null);
   const fangsRef = useRef<THREE.InstancedMesh>(null);
+  const animClock = useRef(0);
   const isDamaged = mob.hitTimer > 0;
-  const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
-  const walkCycle = animTime * (isMoving ? 10 : 1.5);
   const hitPulse = Math.min(1, mob.hitTimer / 0.22);
-  const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 28) * (0.12 + hitPulse * 0.1) : 0;
 
   // 個体ごとのマテリアル（被ダメ時も参照を固定して InstancedMesh を再マウントしない）
   const materials = useMemo(() => ({
@@ -103,42 +104,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
     }
   }, [isDamaged, materials]);
 
-  useLayoutEffect(() => {
-    const upperLegs = upperLegsRef.current;
-    const lowerLegs = lowerLegsRef.current;
-    if (!upperLegs || !lowerLegs) return;
-
-    const part = new THREE.Object3D();
-    LEG_DEFS.forEach((leg, index) => {
-      const phase = leg.pair * Math.PI * 0.5 + (leg.side < 0 ? Math.PI : 0);
-      const gait = Math.sin(walkCycle + phase);
-      const lift = isMoving ? Math.max(0, gait) * 0.07 : Math.sin(walkCycle + phase) * 0.012;
-      const stride = isMoving ? Math.cos(walkCycle + phase) * 0.06 : 0;
-      const splay = (leg.pair - 1.5) * 0.16;
-
-      part.position.set(leg.side * 0.48, 0.25 + lift, leg.z + stride * 0.45);
-      part.rotation.set(0, -leg.side * splay, -leg.side * (0.2 + gait * 0.08));
-      part.scale.set(0.45, 0.065, 0.075);
-      part.updateMatrix();
-      upperLegs.setMatrixAt(index, part.matrix);
-
-      part.position.set(leg.side * 0.8, 0.1 + lift * 0.3, leg.z + stride);
-      part.rotation.set(0, -leg.side * splay * 1.15, -leg.side * (0.52 - gait * 0.09));
-      part.scale.set(0.36, 0.052, 0.065);
-      part.updateMatrix();
-      lowerLegs.setMatrixAt(index, part.matrix);
-    });
-
-    upperLegs.count = LEG_DEFS.length;
-    lowerLegs.count = LEG_DEFS.length;
-    upperLegs.instanceMatrix.needsUpdate = true;
-    lowerLegs.instanceMatrix.needsUpdate = true;
-    upperLegs.computeBoundingSphere();
-    lowerLegs.computeBoundingSphere();
-    upperLegs.visible = true;
-    lowerLegs.visible = true;
-  }, [isMoving, walkCycle]);
-
+  // 目・牙は一度だけ配置
   useLayoutEffect(() => {
     const eyes = eyesRef.current;
     const fangs = fangsRef.current;
@@ -166,11 +132,76 @@ export function Spider({ mob, animTime }: SpiderProps) {
     fangs.computeBoundingSphere();
   }, []);
 
+  useFrame((_, delta) => {
+    animClock.current += delta;
+    const t = animClock.current;
+    const speed = Math.hypot(mob.vx, mob.vz);
+    const isMoving = speed > 0.12;
+    const walkCycle = t * (isMoving ? 11 : 1.8);
+    const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 28) * (0.12 + hitPulse * 0.1) : 0;
+    const bodyBob = isMoving ? Math.abs(Math.sin(walkCycle * 2)) * 0.035 : Math.sin(t * 2) * 0.008;
+
+    if (rootRef.current) {
+      rootRef.current.position.set(mob.x, mob.y, mob.z);
+      rootRef.current.rotation.y = mob.rotation;
+    }
+    if (bodyGroupRef.current) {
+      bodyGroupRef.current.rotation.set(hitTilt, 0, hitTilt * 0.3);
+      bodyGroupRef.current.position.y = bodyBob;
+    }
+
+    const upperLegs = upperLegsRef.current;
+    const lowerLegs = lowerLegsRef.current;
+    if (!upperLegs || !lowerLegs) return;
+
+    const part = new THREE.Object3D();
+    const speedBoost = isMoving ? 1 : 0.35;
+    LEG_DEFS.forEach((leg, index) => {
+      const phase = leg.pair * (Math.PI / 2) + (leg.side < 0 ? Math.PI * 0.15 : 0);
+      const gait = Math.sin(walkCycle + phase);
+      const gait2 = Math.cos(walkCycle + phase);
+      const lift = isMoving
+        ? Math.max(0, gait) * 0.12 * speedBoost
+        : Math.sin(walkCycle * 0.6 + phase) * 0.014;
+      const stride = isMoving ? gait2 * 0.11 * speedBoost : gait2 * 0.012;
+      const splay = (leg.pair - 1.5) * 0.18;
+      const curl = isMoving ? Math.max(0, -gait) * 0.16 : 0.04;
+
+      part.position.set(leg.side * 0.48, 0.25 + lift, leg.z + stride * 0.55);
+      part.rotation.set(curl * 0.35, -leg.side * splay, -leg.side * (0.22 + gait * 0.14));
+      part.scale.set(0.45, 0.065, 0.075);
+      part.updateMatrix();
+      upperLegs.setMatrixAt(index, part.matrix);
+
+      part.position.set(
+        leg.side * (0.82 + lift * 0.15),
+        0.08 + lift * 0.45,
+        leg.z + stride * 1.05,
+      );
+      part.rotation.set(curl * 0.65, -leg.side * splay * 1.2, -leg.side * (0.55 - gait * 0.16));
+      part.scale.set(0.36, 0.052, 0.065);
+      part.updateMatrix();
+      lowerLegs.setMatrixAt(index, part.matrix);
+    });
+
+    upperLegs.count = LEG_DEFS.length;
+    lowerLegs.count = LEG_DEFS.length;
+    upperLegs.instanceMatrix.needsUpdate = true;
+    lowerLegs.instanceMatrix.needsUpdate = true;
+    upperLegs.visible = true;
+    lowerLegs.visible = true;
+  });
+
+  // animTime 初回同期
+  useEffect(() => {
+    if (animClock.current < 0.001) animClock.current = animTime;
+  }, [animTime]);
+
   const hpRatio = mob.hp / mob.maxHp;
   const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
 
   return (
-    <group position={[mob.x, mob.y, mob.z]} rotation={[0, mob.rotation, 0]}>
+    <group ref={rootRef} position={[mob.x, mob.y, mob.z]} rotation={[0, mob.rotation, 0]}>
       {mob.traitAccent && (
         <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.5, 0.64, 24]} />
@@ -184,7 +215,7 @@ export function Spider({ mob, animTime }: SpiderProps) {
         </mesh>
       )}
 
-      <group rotation={[hitTilt, 0, hitTilt * 0.3]}>
+      <group ref={bodyGroupRef}>
         {/* 多面体の腹部と頭胸部で、低ポリのまま丸い輪郭を作る */}
         <mesh
           geometry={BODY_GEOMETRY}

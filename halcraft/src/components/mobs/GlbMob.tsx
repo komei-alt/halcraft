@@ -1,12 +1,18 @@
 // GLB モブ描画の共通コンポーネント
-// 2026-04-29 追加モデルを既存AIの見た目として使う
+// 静的GLBにプロシージャル・リグを載せ、歩行・待機・被ダメを駆動する
 // 自動接地: modelPosition.y を手動指定する必要なし（computeGroundOffset で自動計算）
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Billboard, useGLTF } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MobData } from '../../stores/useMobStore';
 import { computeGroundOffset } from '../../utils/autoGround';
+import {
+  buildProceduralMobRig,
+  type MobRigStyle,
+  type ProceduralMobRig,
+} from '../../utils/mobProceduralRig';
 
 export interface GlbMobModelConfig {
   path: string;
@@ -26,6 +32,11 @@ export interface GlbMobModelConfig {
   bobSpeed?: number;
   /** true にすると自動接地を無効化し、modelPosition.y をそのまま使う */
   disableAutoGround?: boolean;
+  /**
+   * プロシージャル・リグの体型。
+   * 省略時は humanoid。'none' でリグ無効（従来の剛体＋簡易ボブのみ）。
+   */
+  rigStyle?: MobRigStyle | 'none';
 }
 
 interface GlbMobProps {
@@ -70,6 +81,18 @@ function hasMaterialEmissive(material: THREE.Material): material is EmissiveMate
   return 'emissive' in material && material.emissive instanceof THREE.Color;
 }
 
+function collectOriginalColorsFromTraverse(
+  traverse: (fn: (mat: THREE.Material) => void) => void,
+): Map<THREE.Material, THREE.Color> {
+  const colors = new Map<THREE.Material, THREE.Color>();
+  traverse((mat) => {
+    if (hasMaterialColor(mat) && !colors.has(mat)) {
+      colors.set(mat, mat.color.clone());
+    }
+  });
+  return colors;
+}
+
 function collectOriginalColors(scene: THREE.Group): Map<string, THREE.Color> {
   const colors = new Map<string, THREE.Color>();
   scene.traverse((child) => {
@@ -83,6 +106,25 @@ function collectOriginalColors(scene: THREE.Group): Map<string, THREE.Color> {
     }
   });
   return colors;
+}
+
+function tintMaterials(
+  traverse: (fn: (mat: THREE.Material) => void) => void,
+  originalByMat: Map<THREE.Material, THREE.Color>,
+  tint: THREE.Color | null,
+  glowColor: THREE.Color,
+  glowIntensity: number,
+): void {
+  traverse((mat) => {
+    if (hasMaterialColor(mat)) {
+      const original = originalByMat.get(mat);
+      mat.color.copy(tint ?? original ?? mat.color);
+    }
+    if (hasMaterialEmissive(mat)) {
+      mat.emissive.copy(glowColor);
+      mat.emissiveIntensity = glowIntensity;
+    }
+  });
 }
 
 function tintScene(
@@ -111,18 +153,49 @@ function tintScene(
 
 export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const { scene } = useGLTF(config.path);
+  const groupRef = useRef<THREE.Group>(null);
+  const modelAnchorRef = useRef<THREE.Group>(null);
+  const rigRef = useRef<ProceduralMobRig | null>(null);
+  const animClock = useRef(0);
+  const rigStyle = config.rigStyle ?? 'humanoid';
 
-  const clonedScene = useMemo(() => cloneSceneWithMaterials(scene), [scene]);
-  const originalColors = useMemo(() => collectOriginalColors(clonedScene), [clonedScene]);
+  // 静的クローン（フォールバック用）とリグ
+  const { fallbackScene, rig, originalColorsFallback, originalColorsRig } = useMemo(() => {
+    const fallback = cloneSceneWithMaterials(scene);
+    let built: ProceduralMobRig | null = null;
+    if (rigStyle !== 'none') {
+      try {
+        built = buildProceduralMobRig(scene, rigStyle);
+      } catch {
+        built = null;
+      }
+    }
+    const fallbackColors = collectOriginalColors(fallback);
+    const rigColors = built
+      ? collectOriginalColorsFromTraverse(built.traverseMaterials)
+      : new Map<THREE.Material, THREE.Color>();
+    return {
+      fallbackScene: fallback,
+      rig: built,
+      originalColorsFallback: fallbackColors,
+      originalColorsRig: rigColors,
+    };
+  }, [scene, rigStyle]);
 
-  // 自動接地: GLBバウンディングボックスからY底面を0に揃える
-  // scale はグループに掛けるので、オフセットは「スケール込み」で計算済みの値を使う
+  useEffect(() => {
+    rigRef.current = rig;
+    return () => {
+      rig?.dispose();
+      if (rigRef.current === rig) rigRef.current = null;
+    };
+  }, [rig]);
+
+  // 自動接地
   const groundedPosition = useMemo((): [number, number, number] => {
     if (config.disableAutoGround) {
       return config.modelPosition;
     }
     const autoY = computeGroundOffset(scene, config.scale, config.path);
-    // modelPosition.y は微調整用に加算（足が沈むモデル向け）。大きく浮かせないよう上限を掛ける
     const fineTuneY = Math.min(0.08, Math.max(-0.05, config.modelPosition[1]));
     return [config.modelPosition[0], autoY + fineTuneY, config.modelPosition[2]];
   }, [scene, config.scale, config.path, config.modelPosition, config.disableAutoGround]);
@@ -135,7 +208,6 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
     return null;
   }, [config.angryTint, config.damagedTint, isAngry, isDamaged]);
   const traitAccent = mob.traitAccent;
-  // hitTimer 0.22〜0.28 を想定。ノックバック無しでも赤フラッシュがはっきり見える
   const hitPulse = THREE.MathUtils.clamp(mob.hitTimer / 0.22, 0, 1);
   const glowColor = useMemo(() => {
     if (tint) return tint.clone().multiplyScalar(0.72);
@@ -144,32 +216,91 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   }, [tint, traitAccent]);
   const glowIntensity = 0.18 + hitPulse * 0.72 + (isAngry ? 0.16 : 0) + (traitAccent ? 0.07 : 0);
 
+  // 被ダメ・怒りの色
   useEffect(() => {
-    tintScene(clonedScene, originalColors, tint, glowColor, glowIntensity);
-  }, [clonedScene, glowColor, glowIntensity, originalColors, tint]);
+    if (rig) {
+      tintMaterials(rig.traverseMaterials, originalColorsRig, tint, glowColor, glowIntensity);
+    } else {
+      tintScene(fallbackScene, originalColorsFallback, tint, glowColor, glowIntensity);
+    }
+  }, [
+    rig,
+    fallbackScene,
+    originalColorsFallback,
+    originalColorsRig,
+    tint,
+    glowColor,
+    glowIntensity,
+  ]);
+
+  // 毎フレーム: 位置補間なしで最新 mob 座標 + リグ更新
+  useFrame((_, delta) => {
+    animClock.current += delta;
+    const t = animClock.current;
+    const speed = Math.hypot(mob.vx, mob.vz);
+    const moving = speed > 0.12;
+
+    if (groupRef.current) {
+      groupRef.current.position.set(mob.x, mob.y, mob.z);
+      groupRef.current.rotation.y = mob.rotation;
+    }
+
+    // ルートの軽いボブはリグ側の骨盤で行うため控えめ
+    const bobAmp = config.bobAmount ?? 0.03;
+    const bobSpeed = config.bobSpeed ?? 5;
+    const rootBob = moving && !rig
+      ? Math.sin(t * bobSpeed) * bobAmp
+      : moving
+        ? Math.sin(t * bobSpeed) * bobAmp * 0.35
+        : 0;
+
+    if (modelAnchorRef.current) {
+      const hitLean = -hitPulse * 0.18;
+      const hitRoll = Math.sin(t * 40) * hitPulse * 0.08;
+      const strideLean = !rig && moving ? Math.sin(t * bobSpeed) * Math.min(0.1, speed * 0.04) : 0;
+      const sideLean = !rig && moving ? Math.cos(t * bobSpeed * 0.5) * Math.min(0.06, speed * 0.02) : 0;
+      const squashY = 1 - hitPulse * 0.08;
+      const squashXZ = 1 + hitPulse * 0.06;
+      modelAnchorRef.current.position.set(
+        groundedPosition[0],
+        groundedPosition[1] + rootBob,
+        groundedPosition[2],
+      );
+      modelAnchorRef.current.rotation.set(hitLean + strideLean, 0, hitRoll + sideLean);
+      modelAnchorRef.current.scale.set(
+        config.scale * squashXZ,
+        config.scale * squashY,
+        config.scale * squashXZ,
+      );
+    }
+
+    rigRef.current?.update({
+      time: t,
+      moving,
+      speed,
+      hitTimer: mob.hitTimer,
+      angry: isAngry,
+      ally: mob.isAlly,
+    });
+  });
+
+  // animTime を外部同期のフォールバックに使う（初回）
+  useEffect(() => {
+    if (animClock.current < 0.001) animClock.current = animTime;
+  }, [animTime]);
 
   const hpRatio = mob.hp / mob.maxHp;
   const hpColor = hpRatio > 0.5 ? 0x44cc44 : hpRatio > 0.25 ? 0xcccc44 : 0xcc4444;
-  const isMoving = Math.abs(mob.vx) > 0.1 || Math.abs(mob.vz) > 0.1;
-  const speed = Math.min(1.8, Math.sqrt(mob.vx * mob.vx + mob.vz * mob.vz));
-  const bob = isMoving
-    ? Math.sin(animTime * (config.bobSpeed ?? 4)) * (config.bobAmount ?? 0.04)
-    : 0;
-  const movePhase = animTime * (config.bobSpeed ?? 4);
-  const strideLean = isMoving ? Math.sin(movePhase) * Math.min(0.12, speed * 0.045) : 0;
-  const sideLean = isMoving ? Math.cos(movePhase * 0.5) * Math.min(0.07, speed * 0.025) : 0;
-  const hitLean = -hitPulse * 0.28;
-  const hitRoll = Math.sin(animTime * 42) * hitPulse * 0.12;
-  const squashY = 1 - hitPulse * 0.1 + (isMoving ? Math.abs(Math.sin(movePhase)) * 0.015 : 0);
-  const squashXZ = 1 + hitPulse * 0.08;
+  const speed = Math.min(1.8, Math.hypot(mob.vx, mob.vz));
   const shadowScale = Math.max(0.34, config.hpBarWidth * 0.72) * (1 + speed * 0.08 + hitPulse * 0.08);
   const angryPulse = isAngry ? 0.5 + Math.sin(animTime * 8) * 0.18 : 0;
   const traitPulse = traitAccent ? 0.42 + Math.sin(animTime * 3.2) * 0.08 : 0;
   const auraColor = traitAccent ?? (isAngry ? '#ff6644' : '#ffffff');
+  const modelRotation = config.modelRotation ?? [0, 0, 0];
 
   return (
-    <group position={[mob.x, mob.y + bob, mob.z]} rotation={[0, mob.rotation, 0]}>
-      <mesh position={[0, 0.03 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[shadowScale * 1.18, shadowScale, 1]}>
+    <group ref={groupRef} position={[mob.x, mob.y, mob.z]} rotation={[0, mob.rotation, 0]}>
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[shadowScale * 1.18, shadowScale, 1]}>
         <circleGeometry args={[1, 28]} />
         <meshBasicMaterial
           color={0x111111}
@@ -183,7 +314,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       </mesh>
       {traitAccent && (
         <mesh
-          position={[0, 0.04 - bob, 0]}
+          position={[0, 0.04, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
           scale={[1 + traitPulse * 0.08, 1 + traitPulse * 0.08, 1]}
         >
@@ -201,7 +332,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       )}
 
       {isAngry && (
-        <mesh position={[0, 0.06 - bob, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1 + angryPulse * 0.16, 1 + angryPulse * 0.16, 1]}>
+        <mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[1 + angryPulse * 0.16, 1 + angryPulse * 0.16, 1]}>
           <ringGeometry args={[0.54, 0.68, 36]} />
           <meshBasicMaterial
             color={auraColor}
@@ -215,15 +346,17 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
         </mesh>
       )}
 
-      <group
-        position={groundedPosition}
-        rotation={[hitLean + strideLean, 0, hitRoll + sideLean]}
-        scale={[config.scale * squashXZ, config.scale * squashY, config.scale * squashXZ]}
-      >
-        <primitive
-          object={clonedScene}
-          rotation={config.modelRotation ?? [0, 0, 0]}
-        />
+      <group ref={modelAnchorRef} position={groundedPosition} scale={config.scale}>
+        {rig ? (
+          <group rotation={modelRotation}>
+            <primitive object={rig.root} />
+          </group>
+        ) : (
+          <primitive
+            object={fallbackScene}
+            rotation={modelRotation}
+          />
+        )}
       </group>
 
       {mob.hp < mob.maxHp && (

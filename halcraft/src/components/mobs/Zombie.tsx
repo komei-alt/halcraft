@@ -18,6 +18,7 @@ const ZOMBIE_MODEL: GlbMobModelConfig = {
   damagedTint: new THREE.Color(0xff4444),
   bobAmount: 0.03,
   bobSpeed: 5,
+  rigStyle: 'zombie',
 };
 
 interface ZombieProps {

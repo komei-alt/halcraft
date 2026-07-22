@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-07-22',
     items: [
+      { type: 'feature', text: 'ゾンビや敵が手足を動かして歩くようになったよ！当たったときもしっかりひるむよ！' },
+      { type: 'improve', text: 'クモの足の動きが本物みたいにクネクネ動くようになったよ！' },
       { type: 'improve', text: '体力が少ないときハートが点滅して、危ないのがわかりやすくなったよ！' },
       { type: 'improve', text: 'ダメージを受けたときの赤い画面と矢印がはっきりするようになったよ！' },
       { type: 'improve', text: 'ホットバーの選択とヘリの速度・高度表示が見やすくなったよ！' },

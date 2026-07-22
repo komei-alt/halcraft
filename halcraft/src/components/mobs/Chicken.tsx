@@ -15,6 +15,7 @@ const CHICKEN_MODEL: GlbMobModelConfig = {
   damagedTint: new THREE.Color(0xff7777),
   bobAmount: 0.035,
   bobSpeed: 8,
+  rigStyle: 'chicken',
 };
 
 interface ChickenProps {
