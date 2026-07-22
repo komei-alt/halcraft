@@ -259,6 +259,7 @@ export function MobManager() {
     for (const mob of currentMobs) {
       const m = { ...mob };
       m.hitTimer = Math.max(0, m.hitTimer - dt);
+      m.attackTimer = Math.max(0, (m.attackTimer ?? 0) - dt);
 
       // ─── ニワトリ ───
       if (m.type === 'chicken') {
@@ -287,6 +288,11 @@ export function MobManager() {
           attackCooldown: 0,
           stuckTimer: 0,
           lastPos: { x: m.x, z: m.z },
+          attackElapsed: 0,
+          attackHitApplied: false,
+          attackTarget: null,
+          pendingKbX: 0,
+          pendingKbZ: 0,
         }));
         state.attackCooldown = Math.max(0, state.attackCooldown - dt);
         updateAllyMobAI(m, aiCtx, state, takeDamage);

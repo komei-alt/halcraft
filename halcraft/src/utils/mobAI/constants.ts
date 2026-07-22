@@ -51,7 +51,11 @@ export const PROTOTYPE_FOLLOW_MAX = 15;
 export const PROTOTYPE_DETECT_RANGE = 20;
 export const PROTOTYPE_ATTACK_RANGE = 2.5;
 export const PROTOTYPE_ATTACK_DAMAGE = 2;
-export const PROTOTYPE_ATTACK_COOLDOWN = 0.6;
+export const PROTOTYPE_ATTACK_COOLDOWN = 0.75;
+/** 攻撃モーション全体の長さ（秒）。クールダウンより短くする */
+export const PROTOTYPE_ATTACK_ANIM_DURATION = 0.52;
+/** 振り下ろしヒットのタイミング（アニメ開始からの秒） */
+export const PROTOTYPE_ATTACK_HIT_AT = 0.22;
 export const PROTOTYPE_HEIGHT = 3.6;
 export const PROTOTYPE_RADIUS = 0.45;
 export const PROTOTYPE_JUMP_VEL = 10;

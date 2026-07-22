@@ -16,6 +16,10 @@ export interface MobRigAnimState {
   speed: number;
   /** 被ダメ残り時間（秒） */
   hitTimer: number;
+  /** 攻撃モーション残り時間（秒）。0 で非攻撃 */
+  attackTimer?: number;
+  /** 攻撃モーション全体の長さ（秒）。progress 計算用 */
+  attackDuration?: number;
   /** 怒り状態 */
   angry: boolean;
   /** 味方か（アニメのトーンを少し変える） */
@@ -124,15 +128,88 @@ function getStyleParams(style: MobRigStyle): StyleParams {
     case 'humanoid':
     default:
       return {
-        walkAmp: 0.5,
-        armAmp: 0.48,
-        idleAmp: 0.045,
-        kneeAmp: 0.5,
-        armForward: 0.12,
-        walkFreq: 5.8,
+        walkAmp: 0.58,
+        armAmp: 0.55,
+        idleAmp: 0.05,
+        kneeAmp: 0.58,
+        armForward: 0.1,
+        walkFreq: 6.2,
         heavy: 1,
       };
   }
+}
+
+/** smoothstep 0→1 */
+function smooth01(t: number): number {
+  const x = THREE.MathUtils.clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * 攻撃モーションの位相（0-1 progress から各部位の係数を返す）
+ * 0.00–0.28: 溜め / 0.28–0.48: 振り下ろし / 0.48–0.68: インパクト / 0.68–1.00: 戻し
+ */
+function attackPose(progress: number): {
+  torsoPitch: number;
+  torsoYaw: number;
+  headPitch: number;
+  armRaise: number;
+  armSwing: number;
+  elbow: number;
+  hipTwist: number;
+  lunge: number;
+} {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  if (p < 0.28) {
+    const u = smooth01(p / 0.28);
+    return {
+      torsoPitch: -0.18 * u,
+      torsoYaw: -0.22 * u,
+      headPitch: 0.1 * u,
+      armRaise: 1.35 * u,
+      armSwing: -0.55 * u,
+      elbow: 0.55 * u,
+      hipTwist: -0.12 * u,
+      lunge: -0.04 * u,
+    };
+  }
+  if (p < 0.48) {
+    const u = smooth01((p - 0.28) / 0.2);
+    return {
+      torsoPitch: THREE.MathUtils.lerp(-0.18, 0.32, u),
+      torsoYaw: THREE.MathUtils.lerp(-0.22, 0.28, u),
+      headPitch: THREE.MathUtils.lerp(0.1, -0.12, u),
+      armRaise: THREE.MathUtils.lerp(1.35, -0.15, u),
+      armSwing: THREE.MathUtils.lerp(-0.55, 1.45, u),
+      elbow: THREE.MathUtils.lerp(0.55, 0.15, u),
+      hipTwist: THREE.MathUtils.lerp(-0.12, 0.18, u),
+      lunge: THREE.MathUtils.lerp(-0.04, 0.12, u),
+    };
+  }
+  if (p < 0.68) {
+    const u = smooth01((p - 0.48) / 0.2);
+    return {
+      torsoPitch: THREE.MathUtils.lerp(0.32, 0.22, u),
+      torsoYaw: THREE.MathUtils.lerp(0.28, 0.18, u),
+      headPitch: THREE.MathUtils.lerp(-0.12, -0.05, u),
+      armRaise: THREE.MathUtils.lerp(-0.15, -0.05, u),
+      armSwing: THREE.MathUtils.lerp(1.45, 1.2, u),
+      elbow: THREE.MathUtils.lerp(0.15, 0.35, u),
+      hipTwist: THREE.MathUtils.lerp(0.18, 0.1, u),
+      lunge: THREE.MathUtils.lerp(0.12, 0.06, u),
+    };
+  }
+  const u = smooth01((p - 0.68) / 0.32);
+  return {
+    torsoPitch: THREE.MathUtils.lerp(0.22, 0, u),
+    torsoYaw: THREE.MathUtils.lerp(0.18, 0, u),
+    headPitch: THREE.MathUtils.lerp(-0.05, 0, u),
+    armRaise: THREE.MathUtils.lerp(-0.05, 0, u),
+    armSwing: THREE.MathUtils.lerp(1.2, 0, u),
+    elbow: THREE.MathUtils.lerp(0.35, 0.1, u),
+    hipTwist: THREE.MathUtils.lerp(0.1, 0, u),
+    lunge: THREE.MathUtils.lerp(0.06, 0, u),
+  };
 }
 
 function cloneMaterial(mat: THREE.Material): THREE.Material {
@@ -365,13 +442,19 @@ export function buildProceduralMobRig(
   const meshes = findMeshes(sourceScene);
   if (meshes.length === 0) return null;
 
-  // 巨大メッシュはパフォーマンスのため最大1メッシュに絞る（darwin 等）
+  // 頂点数でソート。マルチパーツ（プロトタイプ等）は全パーツをスキニングする
   meshes.sort((a, b) => {
     const ac = a.geometry.getAttribute('position')?.count ?? 0;
     const bc = b.geometry.getAttribute('position')?.count ?? 0;
     return bc - ac;
   });
-  const targetMeshes = meshes.slice(0, style === 'brute' || style === 'zombie' || style === 'humanoid' ? 2 : 1);
+  // humanoid/brute: 最大32パーツ（手足が別メッシュでも動く）
+  // zombie: 大きめ2メッシュ / chicken: 1メッシュ
+  const meshCap =
+    style === 'humanoid' || style === 'brute' ? 32
+      : style === 'zombie' ? 4
+        : 1;
+  const targetMeshes = meshes.slice(0, meshCap);
 
   const box = combinedBox(targetMeshes);
   if (box.isEmpty()) return null;
@@ -438,13 +521,21 @@ export function buildProceduralMobRig(
 
   const update = (state: MobRigAnimState) => {
     const p = styleParams;
-    const moving = state.moving && state.speed > 0.05;
-    const speedNorm = THREE.MathUtils.clamp(state.speed / 3.2, 0.35, 1.35);
-    const freq = p.walkFreq * (moving ? speedNorm : 0.35);
+    const attackTimer = state.attackTimer ?? 0;
+    const attackDuration = Math.max(0.2, state.attackDuration ?? 0.52);
+    const attacking = attackTimer > 0.01;
+    const attackProgress = attacking
+      ? THREE.MathUtils.clamp(1 - attackTimer / attackDuration, 0, 1)
+      : 0;
+    // 攻撃中は歩行をほぼ止める
+    const moving = !attacking && state.moving && state.speed > 0.05;
+    const speedNorm = THREE.MathUtils.clamp(state.speed / 3.2, 0.35, 1.45);
+    const freq = p.walkFreq * (moving ? speedNorm : 0.28);
     const t = state.time * freq;
     const hit = THREE.MathUtils.clamp(state.hitTimer / 0.24, 0, 1);
     const angry = state.angry ? 1 : 0;
-    const amp = (moving ? 1 : 0.22) * p.walkAmp * (0.85 + speedNorm * 0.2);
+    const allyBoost = state.ally ? 1.12 : 1;
+    const amp = (moving ? 1 : 0.18) * p.walkAmp * (0.85 + speedNorm * 0.22) * allyBoost;
 
     // リセット
     for (const name of BONE_NAMES) {
@@ -456,71 +547,163 @@ export function buildProceduralMobRig(
     }
 
     // --- アイドル呼吸 ---
-    const breath = Math.sin(state.time * 2.1) * p.idleAmp * (moving ? 0.35 : 1);
+    const breath = Math.sin(state.time * 2.1) * p.idleAmp * (moving ? 0.3 : attacking ? 0.15 : 1);
     setBoneEuler('spine', breath * 0.4, 0, 0);
     setBoneEuler('chest', breath * 0.6 + angry * 0.05, 0, 0);
-    setBoneEuler('head', Math.sin(state.time * 1.3) * p.idleAmp * 0.8, Math.sin(state.time * 0.7) * p.idleAmp * 1.2, 0);
+    setBoneEuler(
+      'head',
+      Math.sin(state.time * 1.3) * p.idleAmp * 0.8,
+      Math.sin(state.time * 0.7) * p.idleAmp * 1.2,
+      0,
+    );
 
-    // --- 歩行 ---
+    // --- 歩行（脚・膝・足・骨盤・腕・胴の連動） ---
     const legSwing = Math.sin(t) * amp;
     const legSwingR = Math.sin(t + Math.PI) * amp;
-    const kneeL = Math.max(0, -Math.sin(t)) * p.kneeAmp * (moving ? 1 : 0.15);
-    const kneeR = Math.max(0, -Math.sin(t + Math.PI)) * p.kneeAmp * (moving ? 1 : 0.15);
+    const kneeL = (
+      Math.max(0, -Math.sin(t)) * p.kneeAmp
+      + Math.max(0, Math.sin(t)) * p.kneeAmp * 0.12
+    ) * (moving ? 1 : 0.12);
+    const kneeR = (
+      Math.max(0, -Math.sin(t + Math.PI)) * p.kneeAmp
+      + Math.max(0, Math.sin(t + Math.PI)) * p.kneeAmp * 0.12
+    ) * (moving ? 1 : 0.12);
+    const strideLean = moving ? Math.min(0.14, state.speed * 0.035) : 0;
 
-    setBoneEuler('L_upperLeg', legSwing, 0, 0.04);
-    setBoneEuler('R_upperLeg', legSwingR, 0, -0.04);
+    setBoneEuler('L_upperLeg', legSwing + strideLean * 0.15, 0, 0.045);
+    setBoneEuler('R_upperLeg', legSwingR + strideLean * 0.15, 0, -0.045);
     setBoneEuler('L_lowerLeg', kneeL, 0, 0);
     setBoneEuler('R_lowerLeg', kneeR, 0, 0);
-    setBoneEuler('L_foot', -kneeL * 0.45 - Math.max(0, legSwing) * 0.2, 0, 0);
-    setBoneEuler('R_foot', -kneeR * 0.45 - Math.max(0, legSwingR) * 0.2, 0, 0);
+    setBoneEuler(
+      'L_foot',
+      -kneeL * 0.5 - Math.max(0, legSwing) * 0.28 + Math.max(0, -legSwing) * 0.12,
+      0,
+      0,
+    );
+    setBoneEuler(
+      'R_foot',
+      -kneeR * 0.5 - Math.max(0, legSwingR) * 0.28 + Math.max(0, -legSwingR) * 0.12,
+      0,
+      0,
+    );
 
-    // 骨盤の上下・ねじり
-    const hipBob = moving ? Math.abs(Math.sin(t * 2)) * 0.035 * p.heavy : breath * 0.02;
-    boneMap.hips.position.y += hipBob * bodyHeight * 0.08;
-    setBoneEuler('hips', 0, Math.sin(t) * amp * 0.12, Math.sin(t) * amp * 0.08);
-    setBoneEuler('spine', breath * 0.4 + Math.sin(t) * amp * 0.08, Math.sin(t) * amp * 0.1, 0);
+    const hipBob = moving
+      ? Math.abs(Math.sin(t * 2)) * 0.042 * p.heavy
+      : breath * 0.02;
+    boneMap.hips.position.y += hipBob * bodyHeight * 0.09;
+    if (moving) {
+      boneMap.hips.position.z += Math.sin(t * 2) * bodyHeight * 0.004 * p.heavy;
+    }
+    setBoneEuler(
+      'hips',
+      strideLean * 0.35,
+      Math.sin(t) * amp * 0.16,
+      Math.sin(t) * amp * 0.11,
+    );
+    setBoneEuler(
+      'spine',
+      breath * 0.4 + Math.sin(t) * amp * 0.1 + strideLean * 0.5,
+      Math.sin(t) * amp * 0.14,
+      Math.sin(t * 0.5) * amp * 0.04,
+    );
+    setBoneEuler(
+      'chest',
+      breath * 0.55 + strideLean * 0.25 + angry * 0.05,
+      -Math.sin(t) * amp * 0.08,
+      0,
+    );
 
     // 腕
     if (style === 'zombie') {
-      // 前に突き出した腕 + わずかな揺れ
       const zArm = p.armForward + Math.sin(t) * p.armAmp * 0.35;
       setBoneEuler('L_upperArm', -zArm, 0.15, 0.35 + Math.sin(t + 0.4) * 0.08);
       setBoneEuler('R_upperArm', -zArm, -0.15, -0.35 + Math.sin(t + 0.4 + Math.PI) * 0.08);
       setBoneEuler('L_lowerArm', -0.35 - Math.sin(t) * 0.1, 0, 0.1);
       setBoneEuler('R_lowerArm', -0.35 - Math.sin(t + Math.PI) * 0.1, 0, -0.1);
     } else if (style === 'chicken') {
-      // 羽ばたき
       const flap = moving ? Math.sin(t * 1.6) * p.armAmp : Math.sin(state.time * 3) * 0.25;
       setBoneEuler('L_upperArm', 0.2, 0, 0.9 + flap);
       setBoneEuler('R_upperArm', 0.2, 0, -0.9 - flap);
       setBoneEuler('L_lowerArm', 0.4 + flap * 0.3, 0, 0.2);
       setBoneEuler('R_lowerArm', 0.4 + flap * 0.3, 0, -0.2);
-      // 頭のコツコツ
       setBoneEuler('head', Math.sin(t * 2) * 0.25, Math.sin(state.time * 2.5) * 0.15, 0);
     } else {
-      // 通常の腕振り（脚と逆相）
-      const armL = -legSwingR * p.armAmp * 1.6;
-      const armR = -legSwing * p.armAmp * 1.6;
-      setBoneEuler('L_upperArm', armL, 0.05, 0.2 + angry * 0.15);
-      setBoneEuler('R_upperArm', armR, -0.05, -0.2 - angry * 0.15);
-      setBoneEuler('L_lowerArm', Math.max(0.1, -armL * 0.5), 0, 0.05);
-      setBoneEuler('R_lowerArm', Math.max(0.1, -armR * 0.5), 0, -0.05);
+      const armL = -legSwingR * p.armAmp * 1.85;
+      const armR = -legSwing * p.armAmp * 1.85;
+      const shoulderOpen = 0.18 + angry * 0.12;
+      setBoneEuler('L_upperArm', armL, 0.06, shoulderOpen);
+      setBoneEuler('R_upperArm', armR, -0.06, -shoulderOpen);
+      setBoneEuler('L_lowerArm', Math.max(0.12, -armL * 0.55 + 0.15), 0, 0.06);
+      setBoneEuler('R_lowerArm', Math.max(0.12, -armR * 0.55 + 0.15), 0, -0.06);
+    }
+
+    // --- 攻撃モーション（右腕スイング中心、全身連動） ---
+    if (attacking) {
+      const atk = attackPose(attackProgress);
+      const power = state.ally ? 1.15 : style === 'brute' ? 1.25 : 1;
+
+      setBoneEuler('hips', atk.torsoPitch * 0.35 * power, atk.hipTwist * power, atk.torsoYaw * 0.4);
+      boneMap.hips.position.z += atk.lunge * bodyHeight * 0.35;
+      boneMap.hips.position.y += Math.abs(atk.lunge) * bodyHeight * 0.04;
+
+      setBoneEuler(
+        'spine',
+        atk.torsoPitch * 0.55 * power,
+        atk.torsoYaw * 0.65 * power,
+        atk.hipTwist * 0.3,
+      );
+      setBoneEuler(
+        'chest',
+        atk.torsoPitch * 0.7 * power,
+        atk.torsoYaw * power,
+        -atk.armSwing * 0.08,
+      );
+      setBoneEuler('neck', atk.headPitch * 0.4, atk.torsoYaw * 0.2, 0);
+      setBoneEuler('head', atk.headPitch, atk.torsoYaw * 0.35, 0);
+
+      setBoneEuler(
+        'R_upperArm',
+        -atk.armSwing * 1.05 * power - atk.armRaise * 0.15,
+        -0.35 - atk.armSwing * 0.25,
+        -0.55 - atk.armRaise * 0.85 * power,
+      );
+      setBoneEuler(
+        'R_lowerArm',
+        atk.elbow * 1.1 + Math.max(0, -atk.armSwing) * 0.4,
+        0.1,
+        -0.15,
+      );
+
+      setBoneEuler(
+        'L_upperArm',
+        -0.35 - atk.torsoPitch * 0.4,
+        0.25,
+        0.55 + atk.armRaise * 0.2,
+      );
+      setBoneEuler('L_lowerArm', 0.7 + atk.elbow * 0.2, 0, 0.15);
+
+      setBoneEuler('R_upperLeg', -atk.lunge * 2.2, 0.05, -0.04);
+      setBoneEuler('L_upperLeg', atk.lunge * 1.4, -0.04, 0.05);
+      setBoneEuler('R_lowerLeg', Math.max(0.05, atk.lunge * 1.5), 0, 0);
+      setBoneEuler('L_lowerLeg', Math.max(0.08, -atk.lunge * 0.8 + 0.15), 0, 0);
     }
 
     // 怒り: 肩を上げて前傾
-    if (angry > 0) {
+    if (angry > 0 && !attacking) {
       setBoneEuler('chest', 0.12, 0, 0);
       setBoneEuler('head', -0.08, Math.sin(state.time * 6) * 0.08, 0);
     }
 
-    // 被ダメリアクション
+    // 被ダメリアクション（攻撃中は弱め）
     if (hit > 0.01) {
-      const flinch = hit * hit;
+      const flinch = hit * hit * (attacking ? 0.35 : 1);
       setBoneEuler('spine', -0.35 * flinch, Math.sin(state.time * 40) * 0.12 * hit, 0);
       setBoneEuler('chest', -0.25 * flinch, 0, Math.sin(state.time * 38) * 0.1 * hit);
       setBoneEuler('head', 0.4 * flinch, Math.sin(state.time * 30) * 0.2 * hit, 0);
-      setBoneEuler('L_upperArm', -0.5 * flinch, 0, 0.4 * flinch);
-      setBoneEuler('R_upperArm', -0.5 * flinch, 0, -0.4 * flinch);
+      if (!attacking) {
+        setBoneEuler('L_upperArm', -0.5 * flinch, 0, 0.4 * flinch);
+        setBoneEuler('R_upperArm', -0.5 * flinch, 0, -0.4 * flinch);
+      }
     }
 
     root.updateMatrixWorld(true);

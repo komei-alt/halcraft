@@ -37,6 +37,8 @@ export interface GlbMobModelConfig {
    * 省略時は humanoid。'none' でリグ無効（従来の剛体＋簡易ボブのみ）。
    */
   rigStyle?: MobRigStyle | 'none';
+  /** 攻撃モーション全体の長さ（秒）。省略時はリグ側デフォルト */
+  attackDuration?: number;
 }
 
 interface GlbMobProps {
@@ -279,6 +281,8 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       moving,
       speed,
       hitTimer: mob.hitTimer,
+      attackTimer: mob.attackTimer ?? 0,
+      attackDuration: config.attackDuration,
       angry: isAngry,
       ally: mob.isAlly,
     });

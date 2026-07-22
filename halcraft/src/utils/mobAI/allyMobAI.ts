@@ -9,6 +9,7 @@ import {
   PROTOTYPE_SPEED, PROTOTYPE_FOLLOW_MIN, PROTOTYPE_FOLLOW_MAX,
   PROTOTYPE_DETECT_RANGE, PROTOTYPE_ATTACK_RANGE,
   PROTOTYPE_ATTACK_DAMAGE, PROTOTYPE_ATTACK_COOLDOWN,
+  PROTOTYPE_ATTACK_ANIM_DURATION, PROTOTYPE_ATTACK_HIT_AT,
   PROTOTYPE_HEIGHT, PROTOTYPE_RADIUS,
   PROTOTYPE_JUMP_VEL, PROTOTYPE_STUCK_TIME, PROTOTYPE_STUCK_DIST,
   applyMobGravityAndYCollision,
@@ -20,13 +21,62 @@ export interface AllyMobState {
   attackCooldown: number;
   stuckTimer: number;
   lastPos: { x: number; z: number };
+  /** 攻撃開始からの経過（秒）。ヒットフレーム判定用 */
+  attackElapsed: number;
+  /** 今の攻撃でダメージを既に与えたか */
+  attackHitApplied: boolean;
+  /** 攻撃対象（プレイヤー or 敵 id） */
+  attackTarget: 'player' | string | null;
+  /** プレイヤー攻撃時のノックバック方向 */
+  pendingKbX: number;
+  pendingKbZ: number;
 }
 
-/** 味方がプレイヤーを攻撃する結果 */
-export interface AllyAttackResult {
-  damage: number;
-  kbDirX: number;
-  kbDirZ: number;
+function startAttack(
+  m: MobData,
+  state: AllyMobState,
+  target: 'player' | string,
+  kbX = 0,
+  kbZ = 0,
+): void {
+  state.attackCooldown = PROTOTYPE_ATTACK_COOLDOWN;
+  state.attackElapsed = 0;
+  state.attackHitApplied = false;
+  state.attackTarget = target;
+  state.pendingKbX = kbX;
+  state.pendingKbZ = kbZ;
+  m.attackTimer = PROTOTYPE_ATTACK_ANIM_DURATION;
+  // 攻撃中は足を止める
+  m.vx = 0;
+  m.vz = 0;
+}
+
+/**
+ * 攻撃モーション中のヒットフレームでダメージを確定する
+ */
+function resolveAttackHit(
+  state: AllyMobState,
+  takeDamage: (damage: number, kbX: number, kbZ: number) => boolean,
+): void {
+  if (state.attackHitApplied) return;
+  if (state.attackElapsed < PROTOTYPE_ATTACK_HIT_AT) return;
+  state.attackHitApplied = true;
+
+  if (state.attackTarget === 'player') {
+    if (takeDamage(PROTOTYPE_ATTACK_DAMAGE, state.pendingKbX, state.pendingKbZ)) {
+      playHurtSound();
+    }
+    return;
+  }
+
+  if (typeof state.attackTarget === 'string') {
+    useMobStore.getState().damageMob(
+      state.attackTarget,
+      PROTOTYPE_ATTACK_DAMAGE,
+      state.pendingKbX,
+      state.pendingKbZ,
+    );
+  }
 }
 
 /**
@@ -39,6 +89,17 @@ export function updateAllyMobAI(
   takeDamage: (damage: number, kbX: number, kbZ: number) => boolean,
 ): boolean {
   const { dt, playerX, playerZ, checkCollision, allMobs } = ctx;
+
+  // 攻撃アニメ進行（ヒットフレーム解決）
+  if (m.attackTimer > 0) {
+    state.attackElapsed += dt;
+    resolveAttackHit(state, takeDamage);
+  } else if (state.attackTarget !== null) {
+    // アニメ終了で状態クリア
+    state.attackTarget = null;
+    state.attackElapsed = 0;
+    state.attackHitApplied = false;
+  }
 
   // --- 怒りタイマー ---
   if (m.angryAtPlayer && m.angryTimer > 0) {
@@ -68,8 +129,8 @@ export function updateAllyMobAI(
   state.lastPos.x = m.x;
   state.lastPos.z = m.z;
 
-  // テレポート（怒り中はテレポートしない）
-  if (!m.angryAtPlayer) {
+  // テレポート（怒り中・攻撃中はテレポートしない）
+  if (!m.angryAtPlayer && m.attackTimer <= 0) {
     const shouldTeleport = distP > PROTOTYPE_FOLLOW_MAX || state.stuckTimer > PROTOTYPE_STUCK_TIME;
     if (shouldTeleport) {
       const angle = Math.atan2(dzP, dxP) + (Math.random() - 0.5) * 1.0;
@@ -84,32 +145,35 @@ export function updateAllyMobAI(
     }
   }
 
+  // 攻撃モーション中は移動AIをスキップ（向きは維持）
+  const isAttacking = m.attackTimer > 0;
+
   // === 怒り状態: プレイヤーを攻撃するAI ===
   if (m.angryAtPlayer) {
     if (distP > 0.1) {
       m.rotation = Math.atan2(dxP, dzP);
     }
 
-    if (distP > PROTOTYPE_ATTACK_RANGE) {
-      const nx = dxP / distP;
-      const nz = dzP / distP;
-      const chaseSpeed = PROTOTYPE_SPEED * 1.8;
-      m.vx = nx * chaseSpeed;
-      m.vz = nz * chaseSpeed;
+    if (!isAttacking) {
+      if (distP > PROTOTYPE_ATTACK_RANGE) {
+        const nx = dxP / distP;
+        const nz = dzP / distP;
+        const chaseSpeed = PROTOTYPE_SPEED * 1.8;
+        m.vx = nx * chaseSpeed;
+        m.vz = nz * chaseSpeed;
+      } else {
+        m.vx = 0;
+        m.vz = 0;
+
+        if (state.attackCooldown <= 0 && distP > 0.01) {
+          startAttack(m, state, 'player', playerX - m.x, playerZ - m.z);
+        }
+      }
     } else {
       m.vx = 0;
       m.vz = 0;
-
-      if (state.attackCooldown <= 0 && distP > 0.01) {
-        const kbDirX = playerX - m.x;
-        const kbDirZ = playerZ - m.z;
-        if (takeDamage(PROTOTYPE_ATTACK_DAMAGE, kbDirX, kbDirZ)) {
-          playHurtSound();
-        }
-        state.attackCooldown = PROTOTYPE_ATTACK_COOLDOWN;
-      }
     }
-  } else {
+  } else if (!isAttacking) {
     // === 通常状態: 敵を討伐 or プレイヤーに追従 ===
     let targetEnemy: MobData | null = null;
     let closestDist = PROTOTYPE_DETECT_RANGE;
@@ -157,8 +221,7 @@ export function updateAllyMobAI(
           // 味方近接も弱い押しだけ
           const kbX = (tdx / tDist) * 0.35;
           const kbZ = (tdz / tDist) * 0.35;
-          useMobStore.getState().damageMob(targetEnemy.id, PROTOTYPE_ATTACK_DAMAGE, kbX, kbZ);
-          state.attackCooldown = PROTOTYPE_ATTACK_COOLDOWN;
+          startAttack(m, state, targetEnemy.id, kbX, kbZ);
         }
       }
     } else if (distP > PROTOTYPE_FOLLOW_MIN) {
@@ -174,6 +237,10 @@ export function updateAllyMobAI(
         m.rotation = Math.atan2(dxP, dzP);
       }
     }
+  } else {
+    // 攻撃中は停止
+    m.vx = 0;
+    m.vz = 0;
   }
 
   // 物理

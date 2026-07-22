@@ -20,6 +20,7 @@ const IRON_GOLEM_MODEL: GlbMobModelConfig = {
   bobAmount: 0.025,
   bobSpeed: 3,
   rigStyle: 'brute',
+  attackDuration: 0.52,
 };
 
 interface IronGolemProps {

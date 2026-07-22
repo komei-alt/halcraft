@@ -33,6 +33,8 @@ export interface MobData {
   rotation: number;
   /** ダメージ受けたフレーム（ノックバック用） */
   hitTimer: number;
+  /** 攻撃モーション残り時間（秒）。0 で待機/歩行 */
+  attackTimer: number;
   /** 消滅タイマー（夜明けで燃える演出用） */
   burnTimer: number;
   /** 味方フラグ */
@@ -303,6 +305,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       vx: 0, vy: 0, vz: 0,
       rotation: Math.random() * Math.PI * 2,
       hitTimer: 0,
+      attackTimer: 0,
       burnTimer: 0,
       isAlly: type === 'prototype' || type === 'chicken' || type === 'iron_golem',
       angryAtPlayer: false,
@@ -563,6 +566,7 @@ export const useMobStore = create<MobState>((set, get) => ({
       vz: 0,
       rotation: sm.rotation,
       hitTimer: sm.hitTimer,
+      attackTimer: 0,
       burnTimer: 0,
       isAlly: sm.isAlly,
       angryAtPlayer: false,
