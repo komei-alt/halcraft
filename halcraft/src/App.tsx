@@ -18,6 +18,8 @@ import { AllyMeleeAttackFX } from './components/AllyMeleeAttackFX';
 import { CombatExplosionFX } from './components/CombatExplosionFX';
 import { MobDeathEffect } from './components/MobDeathEffect';
 import { RocketLauncher } from './components/RocketLauncher';
+import { GravityGlove } from './components/GravityGlove';
+import { BombSlinger } from './components/BombSlinger';
 import { DroppedItems } from './components/DroppedItems';
 import { BlockLights } from './components/BlockLights';
 import { TorchRenderer } from './components/TorchRenderer';
@@ -208,6 +210,8 @@ function GameCanvas() {
           <RocketLauncher />
           <PlayerMachineGun />
           <Lightsaber />
+          <GravityGlove />
+          <BombSlinger />
           <DroppedItems />
           <MobManager />
           <Helicopter />

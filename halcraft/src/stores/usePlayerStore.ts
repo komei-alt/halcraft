@@ -53,13 +53,15 @@ export const MELEE_SWING_DURATION = 0.38;
 /** スイング開始からダメージ確定までの秒（ヒットフレーム） */
 export const MELEE_HIT_AT = 0.14;
 /** 三人称同期用の武器アクション種別 */
-export type WeaponActionKind = 'melee' | 'saber' | 'gun' | 'rocket';
+export type WeaponActionKind = 'melee' | 'saber' | 'gun' | 'rocket' | 'glove' | 'bomb';
 /** 各武器アクションの三人称再生時間 */
 export const WEAPON_ACTION_DURATION: Record<WeaponActionKind, number> = {
   melee: MELEE_SWING_DURATION,
   saber: 0.48,
   gun: 0.14,
   rocket: 0.52,
+  glove: 0.42,
+  bomb: 0.4,
 };
 /** ロケットランチャーのクールダウン時間（秒） */
 const ROCKET_COOLDOWN = 2.8;

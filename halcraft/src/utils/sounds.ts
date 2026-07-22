@@ -234,6 +234,126 @@ export function playMeleeHitSound(heavy = false): void {
   playHitSound();
 }
 
+/** 引力グローブ: 引き寄せループ開始風の短い吸引音 */
+export function playGravityPullSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('gravity_pull', 70)) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(180, now);
+  osc.frequency.exponentialRampToValueAtTime(520, now + 0.18);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.16, now + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.2);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'bandpass';
+  nf.frequency.setValueAtTime(900, now);
+  nf.frequency.exponentialRampToValueAtTime(1800, now + 0.15);
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.12, now);
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  noise.connect(nf);
+  nf.connect(ng);
+  ng.connect(getSfxDestination());
+  noise.start(now);
+  noise.stop(now + 0.16);
+}
+
+/** 引力グローブ: 押し飛ばし */
+export function playGravityPushSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('gravity_push', 90)) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(90, now);
+  osc.frequency.exponentialRampToValueAtTime(40, now + 0.22);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.42, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.24);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(ctx);
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'lowpass';
+  nf.frequency.setValueAtTime(2400, now);
+  nf.frequency.exponentialRampToValueAtTime(400, now + 0.2);
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.28, now);
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  noise.connect(nf);
+  nf.connect(ng);
+  ng.connect(getSfxDestination());
+  noise.start(now);
+  noise.stop(now + 0.22);
+}
+
+/** ボム投擲 */
+export function playBombThrowSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bomb_throw', 80)) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(280, now);
+  osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.14);
+}
+
+/** ボム吸着 */
+export function playBombStickSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bomb_stick', 60)) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(420, now);
+  osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.14, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.1);
+}
+
+/** ボム起爆カウントっぽいクリック */
+export function playBombTickSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('bomb_tick', 40)) return;
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(880, now);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.06, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  osc.connect(gain);
+  gain.connect(getSfxDestination());
+  osc.start(now);
+  osc.stop(now + 0.04);
+}
+
 // ============================================
 // 2. 被ダメージ音
 // ============================================
@@ -1701,7 +1821,13 @@ export function playMiningBlockedSound(): void {
   knock.stop(now + 0.17);
 }
 
-type ItemSwitchSoundKind = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+type ItemSwitchSoundKind =
+  | 'builder'
+  | 'rocket_launcher'
+  | 'machine_gun'
+  | 'lightsaber'
+  | 'gravity_glove'
+  | 'bomb_slinger';
 type StageCombatCueSoundKind = 'match' | 'surge';
 
 /** 装備切替SE — アイテムごとの役割が耳でも分かる短い合図 */
@@ -1718,8 +1844,10 @@ export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
     rocket_launcher: { notes: [180, 360, 540], wave: 'sawtooth', color: 'blast' },
     machine_gun: { notes: [520, 660, 520], wave: 'square', color: 'burst' },
     lightsaber: { notes: [440, 880], wave: 'triangle', color: 'sweep' },
+    gravity_glove: { notes: [280, 420, 620], wave: 'sine', color: 'sweep' },
+    bomb_slinger: { notes: [200, 160, 320], wave: 'square', color: 'blast' },
   };
-  const current = config[kind];
+  const current = config[kind] ?? config.builder;
 
   current.notes.forEach((note, index) => {
     const t = now + index * 0.035;

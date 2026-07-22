@@ -98,6 +98,8 @@ const WEAPON_CRAFTING_META: Record<WeaponItem, { icon: string; label: string; ac
   rocket_launcher: { icon: '🚀', label: 'ロケット', accent: '#ffc06d' },
   machine_gun: { icon: '🔫', label: '機関銃', accent: '#ffe28a' },
   lightsaber: { icon: '⚔️', label: '剣', accent: '#c8b0ff' },
+  gravity_glove: { icon: '🧤', label: '引力グローブ', accent: '#9d8cff' },
+  bomb_slinger: { icon: '💣', label: 'ボムスリンガー', accent: '#ff8a6a' },
 };
 
 // === コンポーネント ===

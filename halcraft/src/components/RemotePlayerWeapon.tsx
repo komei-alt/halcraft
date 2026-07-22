@@ -61,6 +61,8 @@ interface RemotePlayerWeaponProps {
   gunRecoilProgress?: number;
   /** ロケットリコイル 1=キック直後 → 0 */
   rocketRecoilProgress?: number;
+  gloveActionProgress?: number;
+  bombActionProgress?: number;
   /** 移動中かどうか（腕振りと同期） */
   isMoving: boolean;
   /** プレイヤー視点の上下角度 */
@@ -94,12 +96,52 @@ function getRemoteWeaponPose(equippedItem: EquippedItem, pitch: number): RemoteW
         anchor: [0.34, 1.02, -0.28],
         rotation: [-0.42 + pitch * 0.64, 0, -0.14],
       };
+    case 'gravity_glove':
+      return {
+        anchor: [0.4, 1.05, -0.22],
+        rotation: [0.9 + pitch * 0.35, 0, -0.1],
+      };
+    case 'bomb_slinger':
+      return {
+        anchor: [0.48, 0.82, -0.12],
+        rotation: [0.2 + pitch * 0.2, 0.05, -0.2],
+      };
     default:
       return {
         anchor: [0.42, 0.92, -0.18],
         rotation: [pitch * 0.35, 0, 0],
       };
   }
+}
+
+function GloveModel() {
+  return (
+    <group position={[0.05, 0, -0.05]} scale={0.9}>
+      <mesh>
+        <boxGeometry args={[0.22, 0.16, 0.26]} />
+        <meshStandardMaterial color="#5a4a9a" roughness={0.55} metalness={0.2} />
+      </mesh>
+      <mesh position={[0, 0.02, -0.12]}>
+        <sphereGeometry args={[0.12, 10, 8]} />
+        <meshStandardMaterial color="#7b6ad4" roughness={0.4} metalness={0.3} emissive="#9d8cff" emissiveIntensity={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+function BombSlingerModel() {
+  return (
+    <group position={[0.02, 0, -0.04]} scale={0.95}>
+      <mesh>
+        <boxGeometry args={[0.18, 0.14, 0.3]} />
+        <meshStandardMaterial color="#5a3a2a" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0.06, 0.04]}>
+        <sphereGeometry args={[0.09, 10, 8]} />
+        <meshStandardMaterial color="#ff6a40" roughness={0.45} emissive="#ff4422" emissiveIntensity={0.4} />
+      </mesh>
+    </group>
+  );
 }
 
 /**
@@ -256,6 +298,8 @@ export function RemotePlayerWeapon({
   saberSwingProgress = 0,
   gunRecoilProgress = 0,
   rocketRecoilProgress = 0,
+  gloveActionProgress = 0,
+  bombActionProgress = 0,
 }: RemotePlayerWeaponProps) {
   const groupRef = useRef<THREE.Group>(null);
   const trailRef = useRef<THREE.Mesh>(null);
@@ -302,6 +346,18 @@ export function RemotePlayerWeapon({
       swingY = kick * 0.06;
       swingZ = kick * 0.28;
       trailAmt = kick * 0.85;
+    } else if (equippedItem === 'gravity_glove' && gloveActionProgress > 0.05) {
+      const g = gloveActionProgress;
+      swingPitch = g * 0.35;
+      swingZ = -g * 0.12;
+      trailAmt = g * 0.7;
+    } else if (equippedItem === 'bomb_slinger' && bombActionProgress > 0.01) {
+      const s = swingOffsets(bombActionProgress, 0.9);
+      swingPitch = s.pitch;
+      swingRoll = s.roll;
+      swingY = s.y;
+      swingZ = s.z;
+      trailAmt = s.trail * 0.5;
     }
 
     groupRef.current.position.set(
@@ -334,7 +390,9 @@ export function RemotePlayerWeapon({
         ? gunRecoilProgress
         : equippedItem === 'rocket_launcher'
           ? rocketRecoilProgress
-          : 0;
+          : equippedItem === 'gravity_glove'
+            ? gloveActionProgress
+            : 0;
       if (flash > 0.08) {
         muzzleFlashRef.current.visible = true;
         mat.opacity = flash * (equippedItem === 'rocket_launcher' ? 0.95 : 0.8);
@@ -416,6 +474,23 @@ export function RemotePlayerWeapon({
           </mesh>
         </>
       )}
+      {equippedItem === 'gravity_glove' && (
+        <>
+          <GloveModel />
+          <mesh ref={muzzleFlashRef} position={[0.05, 0.02, -0.28]} visible={false}>
+            <sphereGeometry args={[0.2, 10, 8]} />
+            <meshBasicMaterial
+              color="#c8b8ff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        </>
+      )}
+      {equippedItem === 'bomb_slinger' && <BombSlingerModel />}
     </group>
   );
 }

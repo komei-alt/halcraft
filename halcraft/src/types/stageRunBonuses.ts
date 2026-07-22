@@ -66,6 +66,8 @@ const ITEM_LABELS: Record<EquippedItem, string> = {
   rocket_launcher: 'ロケット',
   machine_gun: '機関銃',
   lightsaber: 'ライトセイバー',
+  gravity_glove: '引力グローブ',
+  bomb_slinger: 'ボムスリンガー',
 };
 
 const BONUS_PRESETS: Record<string, StageRunBonusPreset> = {

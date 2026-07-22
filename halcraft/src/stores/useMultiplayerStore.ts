@@ -58,6 +58,10 @@ export interface RemotePlayer {
   gunRecoilTimer: number;
   /** ロケットリコイル残り */
   rocketRecoilTimer: number;
+  /** 引力グローブアクション残り */
+  gloveActionTimer: number;
+  /** ボム投擲アクション残り */
+  bombActionTimer: number;
 }
 
 interface MultiplayerState {
@@ -307,6 +311,14 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
         player.rocketRecoilTimer = Math.max(0, player.rocketRecoilTimer - dt);
         changed = true;
       }
+      if (player.gloveActionTimer > 0) {
+        player.gloveActionTimer = Math.max(0, player.gloveActionTimer - dt);
+        changed = true;
+      }
+      if (player.bombActionTimer > 0) {
+        player.bombActionTimer = Math.max(0, player.bombActionTimer - dt);
+        changed = true;
+      }
 
       // 位置補間
       const dx = player.targetPosition[0] - player.position[0];
@@ -520,6 +532,8 @@ function setupSocketListeners(
           saberSwingTimer: 0,
           gunRecoilTimer: 0,
           rocketRecoilTimer: 0,
+          gloveActionTimer: 0,
+          bombActionTimer: 0,
         });
       }
     }
@@ -543,6 +557,8 @@ function setupSocketListeners(
       saberSwingTimer: 0,
       gunRecoilTimer: 0,
       rocketRecoilTimer: 0,
+      gloveActionTimer: 0,
+      bombActionTimer: 0,
     });
     set({ remotePlayers: players });
     console.log(`[Multiplayer] ${data.name} が参加`);
@@ -583,6 +599,8 @@ function setupSocketListeners(
         if (action === 'saber') player.saberSwingTimer = duration;
         if (action === 'gun') player.gunRecoilTimer = duration;
         if (action === 'rocket') player.rocketRecoilTimer = duration;
+        if (action === 'glove') player.gloveActionTimer = duration;
+        if (action === 'bomb') player.bombActionTimer = duration;
         needsSet = true;
       }
       if (needsSet) {

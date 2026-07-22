@@ -2,7 +2,12 @@
 
 import { HOTBAR_BLOCKS, type BlockId } from './blocks';
 
-export type WeaponItem = 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+export type WeaponItem =
+  | 'rocket_launcher'
+  | 'machine_gun'
+  | 'lightsaber'
+  | 'gravity_glove'
+  | 'bomb_slinger';
 export type EquippedItem = 'builder' | WeaponItem;
 export type HotbarSlotItem = BlockId | WeaponItem;
 
@@ -10,6 +15,8 @@ export const HOTBAR_WEAPON_ITEMS: readonly WeaponItem[] = [
   'rocket_launcher',
   'machine_gun',
   'lightsaber',
+  'gravity_glove',
+  'bomb_slinger',
 ];
 
 export const HOTBAR_SLOT_COUNT = 9;

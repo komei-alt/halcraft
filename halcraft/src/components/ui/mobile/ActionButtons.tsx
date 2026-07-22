@@ -102,6 +102,13 @@ const TONES: Record<string, ButtonTone> = {
     accent: '#c8b0ff',
     glow: 'rgba(170, 130, 255, 0.3)',
   },
+  gravity: {
+    background: 'rgba(140, 120, 255, 0.22)',
+    border: '2px solid rgba(170, 150, 255, 0.45)',
+    color: 'rgba(245, 240, 255, 0.9)',
+    accent: '#b8a8ff',
+    glow: 'rgba(150, 130, 255, 0.34)',
+  },
   bomb: {
     background: 'rgba(255, 80, 50, 0.25)',
     border: '2px solid rgba(255, 120, 80, 0.5)',
@@ -205,6 +212,12 @@ function getActionTone(item: EquippedItem, matched: boolean, focused: boolean): 
       };
     }
     return matched ? { ...TONES.lightsaber, border: '2px solid rgba(210, 185, 255, 0.72)' } : TONES.lightsaber;
+  }
+  if (item === 'gravity_glove') {
+    return matched ? { ...TONES.gravity, border: '2px solid rgba(200, 185, 255, 0.75)' } : TONES.gravity;
+  }
+  if (item === 'bomb_slinger') {
+    return matched ? { ...TONES.bomb, border: '2px solid rgba(255, 180, 120, 0.75)' } : TONES.bomb;
   }
   return TONES.builder;
 }
@@ -544,6 +557,30 @@ function WalkingActions({
           pulse={combatFocusActive || combatMatched}
           tone={combatFocusActive ? actionTone : TONES.lightsaber}
         />
+      ) : equippedItem === 'gravity_glove' ? (
+        <ActionButton
+          ariaLabel="引力グローブ（押しっぱなしで引き寄せ）"
+          badge="PULL"
+          bottom={PRIMARY_ATTACK_BOTTOM}
+          icon="🧤"
+          onTouchCancel={onMachineGunEnd}
+          onTouchEnd={onMachineGunEnd}
+          onTouchStart={onMachineGunStart}
+          placement="left-attack"
+          pulse={combatMatched}
+          tone={actionTone}
+        />
+      ) : equippedItem === 'bomb_slinger' ? (
+        <ActionButton
+          ariaLabel="ボムを投げる"
+          badge="THROW"
+          bottom={PRIMARY_ATTACK_BOTTOM}
+          icon="💣"
+          onTouchStart={onLightsaber}
+          placement="left-attack"
+          pulse={combatMatched}
+          tone={TONES.bomb}
+        />
       ) : (
         <ActionButton
           ariaLabel={isPlaceMode ? `ブロック設置 ${selectedBlockName}` : 'ブロック破壊'}
@@ -554,6 +591,20 @@ function WalkingActions({
           onTouchStart={onTogglePlace}
           pulse={Boolean(isPlaceMode && buildBadge)}
           tone={isPlaceMode && buildBadge ? TONES.buildScore : isPlaceMode ? TONES.builder : TONES.breakMode}
+        />
+      )}
+
+      {/* 引力押し / ボム起爆の第二アクション */}
+      {(equippedItem === 'gravity_glove' || equippedItem === 'bomb_slinger') && (
+        <ActionButton
+          ariaLabel={equippedItem === 'gravity_glove' ? '押し飛ばし' : '一斉起爆'}
+          badge={equippedItem === 'gravity_glove' ? 'PUSH' : 'BOOM'}
+          bottom={getBottom(0)}
+          icon={equippedItem === 'gravity_glove' ? '💥' : '🧨'}
+          onTouchStart={() => {
+            mobileActions.placeBlock = true;
+          }}
+          tone={equippedItem === 'gravity_glove' ? TONES.gravity : TONES.bomb}
         />
       )}
 

@@ -59,6 +59,20 @@ const ITEM_TONES: Record<EquippedItem, ItemPulseTone> = {
     offsetY: -0.2,
     baseScale: 1.1,
   },
+  gravity_glove: {
+    color: 0x9d8cff,
+    secondary: 0xe8d6ff,
+    offsetX: 0.46,
+    offsetY: -0.28,
+    baseScale: 1.08,
+  },
+  bomb_slinger: {
+    color: 0xff8a6a,
+    secondary: 0xffe0a0,
+    offsetX: 0.48,
+    offsetY: -0.36,
+    baseScale: 1.06,
+  },
 };
 
 const MAX_PARTICLES = 36;

@@ -142,6 +142,34 @@ export const MASTERY_DEFS: Record<EquippedItem, MasteryDefinition> = {
       { level: 10, title: '銀河の守り手' },
     ],
   },
+  gravity_glove: {
+    icon: '🧤',
+    label: '引力グローブ',
+    shortLabel: 'PULL',
+    accent: '#9d8cff',
+    glow: 'rgba(140, 120, 255, 0.3)',
+    actionLabel: '引き寄せて押し飛ばす',
+    titles: [
+      { level: 1, title: '引力ビギナー' },
+      { level: 3, title: '引き寄せ名人' },
+      { level: 6, title: '重力使い' },
+      { level: 10, title: '空間をねじる手' },
+    ],
+  },
+  bomb_slinger: {
+    icon: '💣',
+    label: 'ボムスリンガー',
+    shortLabel: 'BOMB',
+    accent: '#ff8a6a',
+    glow: 'rgba(255, 120, 80, 0.3)',
+    actionLabel: '仕掛けて一気に爆発',
+    titles: [
+      { level: 1, title: 'ボム投げ見習い' },
+      { level: 3, title: '時限仕掛け人' },
+      { level: 6, title: '爆破プランナー' },
+      { level: 10, title: 'ドカンの達人' },
+    ],
+  },
 };
 
 function getNowMs(): number {
@@ -173,6 +201,8 @@ function createInitialMasteryItems(): MasteryItems {
     rocket_launcher: createInitialMasteryItem(),
     machine_gun: createInitialMasteryItem(),
     lightsaber: createInitialMasteryItem(),
+    gravity_glove: createInitialMasteryItem(),
+    bomb_slinger: createInitialMasteryItem(),
   };
 }
 

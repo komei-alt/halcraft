@@ -42,6 +42,8 @@ export const STAGE_COMBAT_WEAPON_LABELS: Record<EquippedItem, string> = {
   rocket_launcher: 'ロケット',
   machine_gun: '機関銃',
   lightsaber: 'ライトセイバー',
+  gravity_glove: '引力グローブ',
+  bomb_slinger: 'ボムスリンガー',
 };
 
 export const STAGE_COMBAT_STYLES: Record<string, StageCombatStyle> = {

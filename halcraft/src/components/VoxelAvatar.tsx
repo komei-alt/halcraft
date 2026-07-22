@@ -34,6 +34,10 @@ interface VoxelAvatarProps {
   gunRecoilProgress?: number;
   /** ロケットリコイル進行度 0-1（1=キック直後） */
   rocketRecoilProgress?: number;
+  /** 引力グローブアクション 0-1 */
+  gloveActionProgress?: number;
+  /** ボム投擲アクション 0-1 */
+  bombActionProgress?: number;
   /** 死亡状態か */
   isDead?: boolean;
   /** 死亡開始時刻（Date.now()） */
@@ -385,6 +389,8 @@ export function VoxelAvatar({
   saberSwingProgress = 0,
   gunRecoilProgress = 0,
   rocketRecoilProgress = 0,
+  gloveActionProgress = 0,
+  bombActionProgress = 0,
   isDead = false,
   deathTime = 0,
 }: VoxelAvatarProps) {
@@ -629,6 +635,39 @@ export function VoxelAvatar({
         bodyRef.current.rotation.x = swinging ? swing.pitch * 0.12 : 0;
         leftLegRef.current.rotation.x = swinging ? 0.2 : 0;
         rightLegRef.current.rotation.x = swinging ? -0.28 : 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'gravity_glove') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        const g = THREE.MathUtils.clamp(gloveActionProgress, 0, 1);
+        const active = g > 0.05;
+        rightArmRef.current.position.set(0.4, 0.95 + g * 0.08, -0.2 - g * 0.15);
+        leftArmRef.current.position.set(-0.22, 0.9, -0.12);
+        rightArmRef.current.rotation.x = 1.35 + pitch * 0.3 + g * 0.25;
+        leftArmRef.current.rotation.x = 0.4 + g * 0.2;
+        rightArmRef.current.rotation.z = -0.15;
+        leftArmRef.current.rotation.z = 0.2;
+        bodyRef.current.rotation.x = active ? -0.08 : 0;
+        leftLegRef.current.rotation.x = 0;
+        rightLegRef.current.rotation.x = 0;
+        leftLegRef.current.rotation.z = 0;
+        rightLegRef.current.rotation.z = 0;
+      } else if (equippedItem === 'bomb_slinger') {
+        const pitch = THREE.MathUtils.clamp(aimPitch, -MAX_REMOTE_AIM_PITCH, MAX_REMOTE_AIM_PITCH);
+        const b = THREE.MathUtils.clamp(bombActionProgress, 0, 1);
+        const throwPose = remoteMeleePose(b);
+        rightArmRef.current.position.set(
+          0.45 + throwPose.push * 0.1,
+          0.85 + throwPose.lift,
+          -0.08 + throwPose.push * 0.5,
+        );
+        leftArmRef.current.position.set(-0.35, 0.75, 0);
+        rightArmRef.current.rotation.x = 0.5 + pitch * 0.15 + throwPose.pitch;
+        leftArmRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.3 : 0;
+        rightArmRef.current.rotation.z = -0.35 + throwPose.roll;
+        leftArmRef.current.rotation.z = 0;
+        leftLegRef.current.rotation.x = isMoving ? -Math.sin(performance.now() * 0.006) * 0.4 : 0;
+        rightLegRef.current.rotation.x = isMoving ? Math.sin(performance.now() * 0.006) * 0.4 : 0;
         leftLegRef.current.rotation.z = 0;
         rightLegRef.current.rotation.z = 0;
       } else if (equippedItem === 'builder') {

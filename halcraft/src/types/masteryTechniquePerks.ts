@@ -49,6 +49,8 @@ const TECHNIQUE_THRESHOLDS: Record<EquippedItem, readonly [number, number, numbe
   rocket_launcher: [45, 65, 85],
   machine_gun: [5, 8, 12],
   lightsaber: [5, 8, 12],
+  gravity_glove: [4, 7, 10],
+  bomb_slinger: [3, 5, 8],
 };
 
 function clampMultiplier(value: number, min: number, max: number): number {
@@ -76,6 +78,8 @@ export function formatMasteryTechniqueValue(item: EquippedItem, value: number): 
   if (item === 'rocket_launcher') return `BLAST ${value}`;
   if (item === 'machine_gun') return `BURST x${value}`;
   if (item === 'lightsaber') return `COMBO x${value}`;
+  if (item === 'gravity_glove') return `PULL x${value}`;
+  if (item === 'bomb_slinger') return `BOMB x${value}`;
   return `CHAIN x${value}`;
 }
 
@@ -149,6 +153,26 @@ export function getMasteryTechniqueBonus(
     };
   }
 
+  if (item === 'gravity_glove') {
+    return {
+      ...BASE_TECHNIQUE_BONUS,
+      tier,
+      tierLabel,
+      title: '引力連鎖特典',
+      detail: '引き寄せ連鎖が押しとリーチを強くする',
+    };
+  }
+
+  if (item === 'bomb_slinger') {
+    return {
+      ...BASE_TECHNIQUE_BONUS,
+      tier,
+      tierLabel,
+      title: '仕掛けBEST特典',
+      detail: '同時起爆の記録が爆発を強くする',
+    };
+  }
+
   return {
     ...BASE_TECHNIQUE_BONUS,
     tier,
@@ -179,6 +203,14 @@ export function formatMasteryTechniqueBonus(item: EquippedItem, bonus: MasteryTe
     const spread = Math.round((1 - bonus.machineGunSpreadMultiplier) * 100);
     const damage = bonus.machineGunDamageBonus > 0 ? ` / 弾 +${bonus.machineGunDamageBonus}` : '';
     return `連射 ${cooldown}%短縮 / ブレ ${spread}%軽減${damage}`;
+  }
+
+  if (item === 'gravity_glove') {
+    return `引力TECH ${bonus.tier} / 押しと引き寄せ強化`;
+  }
+
+  if (item === 'bomb_slinger') {
+    return `ボムTECH ${bonus.tier} / 同時起爆が育つ`;
   }
 
   const damage = Math.round((bonus.lightsaberDamageMultiplier - 1) * 100);

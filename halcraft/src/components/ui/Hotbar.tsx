@@ -120,6 +120,18 @@ const WEAPON_HOTBAR_META: Record<WeaponItem, WeaponHotbarMeta> = {
     accent: '#c8b0ff',
     glow: 'rgba(170, 130, 255, 0.3)',
   },
+  gravity_glove: {
+    icon: '🧤',
+    label: '引力',
+    accent: '#9d8cff',
+    glow: 'rgba(140, 120, 255, 0.32)',
+  },
+  bomb_slinger: {
+    icon: '💣',
+    label: 'ボム',
+    accent: '#ff8a6a',
+    glow: 'rgba(255, 120, 80, 0.32)',
+  },
 };
 
 function clampRatio(value: number): number {
@@ -284,6 +296,22 @@ function getItemReadinessBadge(args: {
     };
   }
 
+  if (args.item === 'gravity_glove') {
+    return {
+      label: 'PULL',
+      ratio: 1,
+      accent: args.tactic?.accent ?? '#9d8cff',
+    };
+  }
+
+  if (args.item === 'bomb_slinger') {
+    return {
+      label: 'BOMB',
+      ratio: 1,
+      accent: args.tactic?.accent ?? '#ff8a6a',
+    };
+  }
+
   if (args.tactic?.matched) {
     return {
       label: args.tactic.label,
@@ -358,6 +386,36 @@ function getWeaponTacticPanel(args: {
       statusLabel,
       ratio,
       accent,
+    };
+  }
+
+  if (args.item === 'gravity_glove') {
+    return {
+      icon: '🧤',
+      title: '引力グローブ',
+      role: '引き寄せ/押し',
+      detail: '長押しで引き寄せ、右クリックで押し飛ばし',
+      masteryLabel,
+      masteryDetail,
+      masteryRatio,
+      statusLabel,
+      ratio,
+      accent: accent === '#c8b0ff' ? '#9d8cff' : accent,
+    };
+  }
+
+  if (args.item === 'bomb_slinger') {
+    return {
+      icon: '💣',
+      title: 'ボムスリンガー',
+      role: '仕掛け爆破',
+      detail: '左で投げる・右で一斉起爆（最大複数）',
+      masteryLabel,
+      masteryDetail,
+      masteryRatio,
+      statusLabel,
+      ratio,
+      accent: accent === '#c8b0ff' ? '#ff8a6a' : accent,
     };
   }
 

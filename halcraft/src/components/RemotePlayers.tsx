@@ -151,6 +151,16 @@ function RemotePlayerModel({
             ? player.rocketRecoilTimer / 0.52
             : 0
         }
+        gloveActionProgress={
+          player.gloveActionTimer > 0
+            ? player.gloveActionTimer / 0.42
+            : 0
+        }
+        bombActionProgress={
+          player.bombActionTimer > 0
+            ? 1 - player.bombActionTimer / 0.4
+            : 0
+        }
         isDead={player.isDead}
         deathTime={player.deathTime}
       />
@@ -178,6 +188,16 @@ function RemotePlayerModel({
           rocketRecoilProgress={
             player.rocketRecoilTimer > 0
               ? player.rocketRecoilTimer / 0.52
+              : 0
+          }
+          gloveActionProgress={
+            player.gloveActionTimer > 0
+              ? player.gloveActionTimer / 0.42
+              : 0
+          }
+          bombActionProgress={
+            player.bombActionTimer > 0
+              ? 1 - player.bombActionTimer / 0.4
               : 0
           }
         />

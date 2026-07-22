@@ -53,6 +53,20 @@ const CROSSHAIR_PROFILES: Record<EquippedItem, CrosshairProfile> = {
     line: 13,
     gap: 5,
   },
+  gravity_glove: {
+    color: '#b8a8ff',
+    glow: 'rgba(150, 130, 255, 0.58)',
+    code: 'PULL',
+    line: 11,
+    gap: 7,
+  },
+  bomb_slinger: {
+    color: '#ff8a6a',
+    glow: 'rgba(255, 120, 70, 0.55)',
+    code: 'BOMB',
+    line: 12,
+    gap: 6,
+  },
 };
 
 function getChargeForItem(item: EquippedItem, rocketCharge: number, attackCharge: number): number {

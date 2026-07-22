@@ -10,6 +10,10 @@ export interface MasteryBonus {
   machineGunSpreadMultiplier: number;
   lightsaberDamageMultiplier: number;
   lightsaberReachBonus: number;
+  gravityPullRangeBonus: number;
+  gravityPushForceMultiplier: number;
+  bombMaxCountBonus: number;
+  bombBlastMultiplier: number;
 }
 
 const BASE_BONUS: MasteryBonus = {
@@ -20,6 +24,10 @@ const BASE_BONUS: MasteryBonus = {
   machineGunSpreadMultiplier: 1,
   lightsaberDamageMultiplier: 1,
   lightsaberReachBonus: 0,
+  gravityPullRangeBonus: 0,
+  gravityPushForceMultiplier: 1,
+  bombMaxCountBonus: 0,
+  bombBlastMultiplier: 1,
 };
 
 function getPerkStep(level: number): number {
@@ -60,6 +68,22 @@ export function getMasteryBonus(item: EquippedItem, level: number): MasteryBonus
     };
   }
 
+  if (item === 'gravity_glove') {
+    return {
+      ...BASE_BONUS,
+      gravityPullRangeBonus: level >= 10 ? 1.2 : level >= 6 ? 0.8 : level >= 3 ? 0.4 : 0,
+      gravityPushForceMultiplier: 1 + step * 0.06,
+    };
+  }
+
+  if (item === 'bomb_slinger') {
+    return {
+      ...BASE_BONUS,
+      bombMaxCountBonus: level >= 10 ? 2 : level >= 6 ? 1 : 0,
+      bombBlastMultiplier: 1 + step * 0.05,
+    };
+  }
+
   return {
     ...BASE_BONUS,
     lightsaberDamageMultiplier: 1 + step * 0.04,
@@ -85,6 +109,18 @@ export function getMasteryPerkSummary(item: EquippedItem, level: number): string
     const spread = Math.round((1 - bonus.machineGunSpreadMultiplier) * 100);
     const damage = bonus.machineGunDamageBonus > 0 ? ` / 弾 +${bonus.machineGunDamageBonus}` : '';
     return `弾ブレ ${spread}%軽減${damage}`;
+  }
+
+  if (item === 'gravity_glove') {
+    const range = bonus.gravityPullRangeBonus > 0 ? `リーチ +${bonus.gravityPullRangeBonus.toFixed(1)}` : '引き寄せ';
+    const push = Math.round((bonus.gravityPushForceMultiplier - 1) * 100);
+    return `${range} / 押し ${push}%UP`;
+  }
+
+  if (item === 'bomb_slinger') {
+    const max = 3 + bonus.bombMaxCountBonus;
+    const blast = Math.round((bonus.bombBlastMultiplier - 1) * 100);
+    return `同時 ${max}個 / 爆発 +${blast}%`;
   }
 
   const damage = Math.round((bonus.lightsaberDamageMultiplier - 1) * 100);

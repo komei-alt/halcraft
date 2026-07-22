@@ -3,7 +3,13 @@
 
 import { BLOCK_IDS, type BlockId } from './blocks';
 
-export type StageConditionWeapon = 'builder' | 'rocket_launcher' | 'machine_gun' | 'lightsaber';
+export type StageConditionWeapon =
+  | 'builder'
+  | 'rocket_launcher'
+  | 'machine_gun'
+  | 'lightsaber'
+  | 'gravity_glove'
+  | 'bomb_slinger';
 
 export type StageConditionEffect =
   | {

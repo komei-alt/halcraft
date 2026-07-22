@@ -99,6 +99,30 @@ const CONTENT_BY_ITEM: Record<EquippedItem, PopoverContent> = {
     accent: '#c8b0ff',
     glow: 'rgba(170, 130, 255, 0.3)',
   },
+  gravity_glove: {
+    icon: '🧤',
+    title: '引力グローブ',
+    subtitle: '敵を引き寄せたり押し飛ばしたりする操作武器です',
+    controls: [
+      '左クリック押しっぱなし: 引き寄せ',
+      '右クリック: 衝撃波で押し飛ばし',
+      '1-9 / ホイール: 持ち替え',
+    ],
+    accent: '#9d8cff',
+    glow: 'rgba(140, 120, 255, 0.32)',
+  },
+  bomb_slinger: {
+    icon: '💣',
+    title: 'ボムスリンガー',
+    subtitle: '粘着ボムを仕掛けて一斉に爆発させる武器です',
+    controls: [
+      '左クリック: ボムを投げる（壁・敵に吸着）',
+      '右クリック: 設置中ボムを一斉起爆',
+      '1-9 / ホイール: 持ち替え',
+    ],
+    accent: '#ff8a6a',
+    glow: 'rgba(255, 120, 80, 0.32)',
+  },
 };
 
 function getMobileContent(item: EquippedItem): PopoverContent {
