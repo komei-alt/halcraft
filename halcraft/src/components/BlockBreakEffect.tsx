@@ -75,11 +75,11 @@ interface BreakEffect {
   rings: BreakRing[];
 }
 
-const PARTICLE_LIFETIME = 0.8;
-const SHARD_LIFETIME = 0.92;
-const DUST_PER_BREAK = 18;
-const SHARDS_PER_BREAK = 11;
-const RINGS_PER_BREAK = 2;
+const PARTICLE_LIFETIME = 0.9;
+const SHARD_LIFETIME = 1.05;
+const DUST_PER_BREAK = 24;
+const SHARDS_PER_BREAK = 14;
+const RINGS_PER_BREAK = 3;
 const PARTICLE_GRAVITY = -15;
 const SHARD_GRAVITY = -18;
 const MAX_EFFECTS = 18;

@@ -1324,57 +1324,37 @@ export function playTntExplosionSound(distance: number): void {
 
 export function playBlockBreakSound(): void {
   const ctx = getAudioContext();
-  if (!ctx || !canPlay('blockBreak', 60)) return;
+  if (!ctx || !canPlay('blockBreak', 48)) return;
 
   const now = ctx.currentTime;
 
-  // クランチノイズ（短い破砕音）
+  // クランチノイズ（破砕）
   const noise = ctx.createBufferSource();
   noise.buffer = getNoiseBuffer(ctx);
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'bandpass';
-  filter.frequency.setValueAtTime(1200 + Math.random() * 600, now);
-  filter.Q.setValueAtTime(1.5, now);
+  filter.frequency.setValueAtTime(1100 + Math.random() * 700, now);
+  filter.Q.setValueAtTime(1.4, now);
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.18, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  gain.gain.setValueAtTime(0.26, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
   noise.connect(filter);
   filter.connect(gain);
   gain.connect(getSfxDestination());
   noise.start(now);
-  noise.stop(now + 0.08);
+  noise.stop(now + 0.1);
 
   // 低音パンチ
   const thud = ctx.createOscillator();
   thud.type = 'sine';
-  thud.frequency.setValueAtTime(100 + Math.random() * 30, now);
+  thud.frequency.setValueAtTime(95 + Math.random() * 35, now);
+  thud.frequency.exponentialRampToValueAtTime(55, now + 0.08);
 
   const thudGain = ctx.createGain();
-  thudGain.gain.setValueAtTime(0.1, now);
-  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-  thud.connect(thudGain);
-  thudGain.connect(getSfxDestination());
-  thud.start(now);
-  thud.stop(now + 0.06);
-}
-
-/** ブロック設置SE — 置いた手応えが残る短い低音 */
-export function playBlockPlaceSound(): void {
-  const ctx = getAudioContext();
-  if (!ctx || !canPlay('blockPlace', 55)) return;
-  const now = ctx.currentTime;
-
-  const thud = ctx.createOscillator();
-  thud.type = 'triangle';
-  thud.frequency.setValueAtTime(180 + Math.random() * 35, now);
-  thud.frequency.exponentialRampToValueAtTime(95, now + 0.07);
-
-  const thudGain = ctx.createGain();
-  thudGain.gain.setValueAtTime(0.11, now);
+  thudGain.gain.setValueAtTime(0.16, now);
   thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
 
   thud.connect(thudGain);
@@ -1382,23 +1362,72 @@ export function playBlockPlaceSound(): void {
   thud.start(now);
   thud.stop(now + 0.09);
 
+  // 細かい破片のパチパチ
+  const grit = ctx.createBufferSource();
+  grit.buffer = getNoiseBuffer(ctx);
+  const gritFilter = ctx.createBiquadFilter();
+  gritFilter.type = 'highpass';
+  gritFilter.frequency.setValueAtTime(2800, now);
+  const gritGain = ctx.createGain();
+  gritGain.gain.setValueAtTime(0.09, now);
+  gritGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  grit.connect(gritFilter);
+  gritFilter.connect(gritGain);
+  gritGain.connect(getSfxDestination());
+  grit.start(now);
+  grit.stop(now + 0.07);
+}
+
+/** ブロック設置SE — 置いた手応えが残る短い低音 */
+export function playBlockPlaceSound(): void {
+  const ctx = getAudioContext();
+  if (!ctx || !canPlay('blockPlace', 45)) return;
+  const now = ctx.currentTime;
+
+  const thud = ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(195 + Math.random() * 40, now);
+  thud.frequency.exponentialRampToValueAtTime(88, now + 0.085);
+
+  const thudGain = ctx.createGain();
+  thudGain.gain.setValueAtTime(0.16, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+  thud.connect(thudGain);
+  thudGain.connect(getSfxDestination());
+  thud.start(now);
+  thud.stop(now + 0.1);
+
   const tick = ctx.createBufferSource();
   tick.buffer = getNoiseBuffer(ctx);
 
   const tickFilter = ctx.createBiquadFilter();
   tickFilter.type = 'bandpass';
-  tickFilter.frequency.setValueAtTime(700 + Math.random() * 280, now);
-  tickFilter.Q.setValueAtTime(1.2, now);
+  tickFilter.frequency.setValueAtTime(820 + Math.random() * 320, now);
+  tickFilter.Q.setValueAtTime(1.35, now);
 
   const tickGain = ctx.createGain();
-  tickGain.gain.setValueAtTime(0.06, now);
-  tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+  tickGain.gain.setValueAtTime(0.09, now);
+  tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
 
   tick.connect(tickFilter);
   tickFilter.connect(tickGain);
   tickGain.connect(getSfxDestination());
   tick.start(now);
-  tick.stop(now + 0.045);
+  tick.stop(now + 0.055);
+
+  // 置くときの短い木/石のクリック
+  const click = ctx.createOscillator();
+  click.type = 'square';
+  click.frequency.setValueAtTime(240 + Math.random() * 40, now);
+  click.frequency.exponentialRampToValueAtTime(120, now + 0.04);
+  const clickGain = ctx.createGain();
+  clickGain.gain.setValueAtTime(0.05, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+  click.connect(clickGain);
+  clickGain.connect(getSfxDestination());
+  click.start(now);
+  click.stop(now + 0.05);
 }
 
 /** 特殊ブロック使用SE — 置いたブロックの役割ごとに音色を変える */

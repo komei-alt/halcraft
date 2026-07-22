@@ -128,12 +128,22 @@ export function ToolHUD() {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
-          padding: '5px 9px',
-          borderRadius: 7,
-          border: `1px solid ${lowDurability ? '#ff8f8f88' : `${displayColor}66`}`,
-          background: 'rgba(9, 12, 18, 0.56)',
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: `1px solid ${
+            targetFresh && targetProgress > 0
+              ? `${targetAccent}99`
+              : lowDurability
+                ? '#ff8f8f88'
+                : `${displayColor}66`
+          }`,
+          background: targetFresh && targetProgress > 0
+            ? 'rgba(12, 16, 22, 0.72)'
+            : 'rgba(9, 12, 18, 0.6)',
           boxShadow: lowDurability
             ? '0 0 14px rgba(255, 100, 100, 0.28)'
+            : targetFresh && targetProgress > 0
+              ? `0 0 16px ${targetAccent}44`
             : `0 0 12px ${displayColor}24`,
           backdropFilter: 'blur(9px)',
           WebkitBackdropFilter: 'blur(9px)',
@@ -206,10 +216,11 @@ export function ToolHUD() {
       >
         {def && (
           <div style={{
-            height: 4,
-            background: 'rgba(0,0,0,0.48)',
+            height: 5,
+            background: 'rgba(0,0,0,0.52)',
             borderRadius: 999,
             overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.08)',
           }}>
             <div style={{
               width: `${durabilityRatio * 100}%`,
@@ -217,15 +228,17 @@ export function ToolHUD() {
               background: barColor,
               transition: 'width 0.2s ease, background 0.2s ease',
               borderRadius: 999,
+              boxShadow: lowDurability ? '0 0 6px rgba(255,80,80,0.5)' : 'none',
             }} />
           </div>
         )}
         {targetFresh && (
           <div style={{
-            height: 4,
-            background: 'rgba(0,0,0,0.48)',
+            height: 5,
+            background: 'rgba(0,0,0,0.52)',
             borderRadius: 999,
             overflow: 'hidden',
+            border: `1px solid ${targetAccent}44`,
           }}>
             <div style={{
               width: targetFresh.canBreak

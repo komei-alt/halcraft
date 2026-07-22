@@ -508,16 +508,16 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
     const wave = (Math.sin(timeRef.current * 9.2) + 1) * 0.5;
     const intensity = Math.max(0.08, progress);
     if (crackMaterialRef.current) {
-      crackMaterialRef.current.opacity = 0.18 + intensity * 0.62 + wave * 0.08;
+      crackMaterialRef.current.opacity = 0.22 + intensity * 0.7 + wave * 0.1;
     }
     if (edgeMaterialRef.current) {
-      edgeMaterialRef.current.opacity = 0.2 + intensity * 0.5 + wave * 0.1;
+      edgeMaterialRef.current.opacity = 0.26 + intensity * 0.58 + wave * 0.12;
     }
     if (haloMaterialRef.current) {
-      haloMaterialRef.current.opacity = 0.06 + intensity * 0.18 + wave * 0.035;
+      haloMaterialRef.current.opacity = 0.08 + intensity * 0.24 + wave * 0.05;
     }
     if (ringMaterialRef.current) {
-      ringMaterialRef.current.opacity = 0.18 + intensity * 0.42 + wave * 0.1;
+      ringMaterialRef.current.opacity = 0.24 + intensity * 0.52 + wave * 0.12;
     }
     if (ringGroupRef.current) {
       ringGroupRef.current.rotation.y = timeRef.current * 0.42;
@@ -527,8 +527,8 @@ function BlockBreakProgressOverlay({ breakProgress }: { breakProgress: BreakProg
 
   if (!breakProgress || progress <= 0) return null;
 
-  const scale = 0.74 + progress * 0.3;
-  const ringScale = 0.84 + progress * 0.5;
+  const scale = 0.72 + progress * 0.36;
+  const ringScale = 0.8 + progress * 0.62;
   return (
     <group
       position={[
@@ -1266,6 +1266,9 @@ export function BlockInteraction() {
     setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
     sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
     playBlockPlaceSound();
+    usePlayerStore.setState((s) => ({
+      cameraShake: Math.min(1, Math.max(s.cameraShake, 0.08)),
+    }));
     const modeFlowPlacement = recordBlockPlaceMastery(selectedBlock);
     const specialPlacement = applySpecialPlacement(selectedBlock, t.placeX, t.placeY, t.placeZ);
     emitBlockUseFeedback(selectedBlock, t.placeX, t.placeY, t.placeZ, {
@@ -1528,6 +1531,9 @@ export function BlockInteraction() {
             grantBrokenBlock(blockId, found.x, found.y, found.z);
             sendBlockBreak(found.x, found.y, found.z);
             playBlockBreakSound();
+            usePlayerStore.setState((s) => ({
+              cameraShake: Math.min(1, Math.max(s.cameraShake, 0.14)),
+            }));
             recordBlockBreakMastery(blockId);
             // ツール耐久値消費
             if (!isBuildMode) {
@@ -1636,6 +1642,9 @@ export function BlockInteraction() {
               grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
+              usePlayerStore.setState((s) => ({
+                cameraShake: Math.min(1, Math.max(s.cameraShake, 0.13)),
+              }));
               recordBlockBreakMastery(blockId);
               if (BLOCK_DEFS[blockId]?.explosive) {
                 const cp = camera.position;
@@ -1692,6 +1701,9 @@ export function BlockInteraction() {
               grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
               playBlockBreakSound();
+              usePlayerStore.setState((s) => ({
+                cameraShake: Math.min(1, Math.max(s.cameraShake, 0.13)),
+              }));
               recordBlockBreakMastery(blockId);
               if (BLOCK_DEFS[blockId]?.explosive) {
                 const cp = camera.position;

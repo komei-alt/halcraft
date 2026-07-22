@@ -427,30 +427,30 @@ export function BuilderHeldItem() {
     if (blockRef.current) {
       const place = Math.sin((1 - placeKick.current) * Math.PI) * placeKick.current;
       blockOffsetWorld.current.copy(BLOCK_MODEL_OFFSET);
-      blockOffsetWorld.current.z -= place * 0.1;
-      blockOffsetWorld.current.y += switchPulse.current * 0.025;
+      blockOffsetWorld.current.z -= place * 0.16;
+      blockOffsetWorld.current.y += switchPulse.current * 0.025 + place * 0.04;
       blockRef.current.position.copy(blockOffsetWorld.current);
       blockRef.current.quaternion.copy(blockQuat);
-      blockRef.current.rotation.y += idleTimer.current * 0.35 + place * 0.8;
+      blockRef.current.rotation.y += idleTimer.current * 0.35 + place * 1.15;
       blockRef.current.rotation.x += Math.sin(idleTimer.current * 1.3) * 0.045;
-      blockRef.current.scale.setScalar(0.15 + switchPulse.current * 0.026 + place * 0.02);
+      blockRef.current.scale.setScalar(0.15 + switchPulse.current * 0.026 + place * 0.04);
     }
 
     if (blockGlowRef.current) {
       const material = blockGlowRef.current.material as THREE.MeshBasicMaterial;
-      const pulse = switchPulse.current + placeKick.current * 0.8;
+      const pulse = switchPulse.current + placeKick.current * 1.1;
       material.color.copy(accentColor);
-      material.opacity = 0.06 + pulse * 0.16;
-      blockGlowRef.current.scale.setScalar(0.78 + pulse * 0.18);
+      material.opacity = 0.08 + pulse * 0.22;
+      blockGlowRef.current.scale.setScalar(0.8 + pulse * 0.24);
     }
 
     if (blockRingRef.current) {
       const material = blockRingRef.current.material as THREE.MeshBasicMaterial;
-      const pulse = switchPulse.current + placeKick.current * 0.9;
+      const pulse = switchPulse.current + placeKick.current * 1.15;
       material.color.copy(accentColor);
-      material.opacity = 0.14 + pulse * 0.32;
-      blockRingRef.current.rotation.z += delta * (1.2 + pulse * 5.5);
-      blockRingRef.current.scale.setScalar(1 + pulse * 0.18);
+      material.opacity = 0.18 + pulse * 0.42;
+      blockRingRef.current.rotation.z += delta * (1.2 + pulse * 6.5);
+      blockRingRef.current.scale.setScalar(1 + pulse * 0.24);
     }
 
     if (blockSheenRef.current) {
