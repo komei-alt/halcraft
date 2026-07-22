@@ -25,13 +25,14 @@ import {
 } from '../utils/sounds';
 import { consumeBreakBlock, consumePlaceBlock } from '../utils/touchInput';
 
-const THROW_COOLDOWN = 0.45;
+const THROW_COOLDOWN = 0.4;
 const BOMB_FUSE = 5.2;
-const BOMB_SPEED = 18;
+const BOMB_SPEED = 19;
 const BOMB_GRAVITY = -18;
-const BLAST_RADIUS = 3.4;
+const BLAST_RADIUS = 3.6;
 const BLAST_DAMAGE = 5;
 const BASE_MAX_BOMBS = 3;
+const TRAJ_POINTS = 14;
 const HOLDER_OFFSET = new THREE.Vector3(0.38, -0.42, -0.95);
 
 interface StickyBomb {
@@ -61,16 +62,36 @@ export function BombSlinger() {
 
   const rootRef = useRef<THREE.Group>(null);
   const chamberGlowRef = useRef<THREE.Mesh>(null);
+  const ammoDotsRef = useRef<(THREE.Mesh | null)[]>([]);
+  const trajRef = useRef<THREE.Points>(null);
   const bombsRef = useRef<StickyBomb[]>([]);
   const [, setBombVersion] = useState(0);
   const throwCd = useRef(0);
   const throwKick = useRef(0);
   const idleT = useRef(0);
+  const lastHudSync = useRef(0);
   const isTouch = useRef(isTouchDevice());
   const lastTickSecond = useRef(new Map<number, number>());
+  const stickFlash = useRef(new Map<number, number>());
 
   const aimDir = useRef(new THREE.Vector3());
   const offsetWorld = useRef(new THREE.Vector3());
+  const trajGeo = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAJ_POINTS * 3), 3));
+    geo.setDrawRange(0, 0);
+    return geo;
+  }, []);
+  const trajMat = useMemo(() => new THREE.PointsMaterial({
+    color: 0xffaa66,
+    size: 0.1,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  }), []);
 
   const accent = useMemo(() => new THREE.Color(0xff8a6a), []);
   const accentHot = useMemo(() => new THREE.Color(0xffe0a0), []);
@@ -137,39 +158,53 @@ export function BombSlinger() {
   }, [camera, getBlastMult]);
 
   const detonateAll = useCallback(() => {
-    const bombs = bombsRef.current;
-    if (bombs.length === 0) return;
+    const bombs = [...bombsRef.current];
+    if (bombs.length === 0) {
+      // 空振りフィードバック
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, 0.06)),
+      }));
+      return;
+    }
     const count = bombs.length;
-    for (const b of bombs) detonateBomb(b);
     bombsRef.current = [];
     lastTickSecond.current.clear();
+    stickFlash.current.clear();
     setBombVersion((v) => v + 1);
     usePlayerStore.getState().triggerWeaponAction('bomb');
+    // 連鎖爆発（見やすさのためわずかにずらす）
+    bombs.forEach((b, i) => {
+      window.setTimeout(() => detonateBomb(b), i * 70);
+    });
     useMasteryStore.getState().recordItemUse('bomb_slinger', {
       label: `一斉起爆 x${count}`,
       amount: 6 + count * 3,
     });
     useMasteryStore.getState().recordItemHit('bomb_slinger', {
-      label: '同時起爆',
+      label: count >= 3 ? '連鎖起爆' : '同時起爆',
       amount: 8 + count * 2,
       critical: count >= 3,
     });
+    usePlayerStore.setState({ bombArmedCount: 0 });
   }, [detonateBomb]);
 
   const throwBomb = useCallback(() => {
     if (throwCd.current > 0) return;
     const max = getMaxBombs();
     if (bombsRef.current.length >= max) {
-      // 古い1個を爆発させて枠を空ける
+      // 満杯時: 最古を派手に爆発させて枠を空ける
       const oldest = bombsRef.current.shift();
-      if (oldest) detonateBomb(oldest);
+      if (oldest) {
+        detonateBomb(oldest);
+        stickFlash.current.delete(oldest.id);
+      }
     }
 
     throwCd.current = THROW_COOLDOWN;
     throwKick.current = 1;
     aimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const start = camera.position.clone().addScaledVector(aimDir.current, 0.9);
-    start.y -= 0.15;
+    const start = camera.position.clone().addScaledVector(aimDir.current, 0.95);
+    start.y -= 0.12;
 
     const bomb: StickyBomb = {
       id: nextBombId++,
@@ -177,7 +212,7 @@ export function BombSlinger() {
       y: start.y,
       z: start.z,
       vx: aimDir.current.x * BOMB_SPEED,
-      vy: aimDir.current.y * BOMB_SPEED + 2.2,
+      vy: aimDir.current.y * BOMB_SPEED + 2.5,
       vz: aimDir.current.z * BOMB_SPEED,
       age: 0,
       fuse: BOMB_FUSE,
@@ -191,6 +226,11 @@ export function BombSlinger() {
     playBombThrowSound();
     usePlayerStore.getState().triggerWeaponAction('bomb');
     useMasteryStore.getState().recordItemUse('bomb_slinger', { label: 'ボム投擲', amount: 3 });
+    usePlayerStore.setState({
+      bombArmedCount: bombsRef.current.length,
+      bombMaxCount: max,
+      cameraShake: Math.min(1, Math.max(usePlayerStore.getState().cameraShake, 0.1)),
+    });
   }, [camera, detonateBomb, getMaxBombs]);
 
   useEffect(() => {
@@ -245,13 +285,70 @@ export function BombSlinger() {
         rootRef.current.quaternion.copy(camera.quaternion);
         rootRef.current.rotation.x -= throwKick.current * 0.55;
       }
+      const max = getMaxBombs();
+      const count = bombsRef.current.length;
       if (chamberGlowRef.current) {
         const mat = chamberGlowRef.current.material as THREE.MeshBasicMaterial;
-        const full = bombsRef.current.length >= getMaxBombs();
+        const full = count >= max;
         mat.color.copy(full ? accentHot : accent);
-        mat.opacity = 0.25 + bombsRef.current.length * 0.12 + throwKick.current * 0.3;
-        chamberGlowRef.current.scale.setScalar(0.5 + bombsRef.current.length * 0.08);
+        mat.opacity = 0.28 + count * 0.14 + throwKick.current * 0.35;
+        chamberGlowRef.current.scale.setScalar(0.52 + count * 0.1);
       }
+      // 弾薬ドット（手元）
+      for (let i = 0; i < 5; i++) {
+        const dot = ammoDotsRef.current[i];
+        if (!dot) continue;
+        const active = i < max;
+        const filled = i < count;
+        dot.visible = active;
+        if (!active) continue;
+        const mat = dot.material as THREE.MeshBasicMaterial;
+        mat.color.set(filled ? 0xff7744 : 0x443322);
+        mat.opacity = filled ? 0.95 : 0.35;
+        dot.scale.setScalar(filled ? 1.1 : 0.75);
+      }
+
+      // 投擲軌道プレビュー
+      if (trajRef.current) {
+        aimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        let px = camera.position.x + aimDir.current.x * 0.95;
+        let py = camera.position.y + aimDir.current.y * 0.95 - 0.12;
+        let pz = camera.position.z + aimDir.current.z * 0.95;
+        let vx = aimDir.current.x * BOMB_SPEED;
+        let vy = aimDir.current.y * BOMB_SPEED + 2.5;
+        let vz = aimDir.current.z * BOMB_SPEED;
+        const posAttr = trajGeo.getAttribute('position') as THREE.BufferAttribute;
+        const arr = posAttr.array as Float32Array;
+        const step = 0.07;
+        let drawn = 0;
+        for (let i = 0; i < TRAJ_POINTS; i++) {
+          arr[i * 3] = px;
+          arr[i * 3 + 1] = py;
+          arr[i * 3 + 2] = pz;
+          drawn++;
+          vy += BOMB_GRAVITY * step;
+          px += vx * step;
+          py += vy * step;
+          pz += vz * step;
+          const block = useWorldStore.getState().getBlock(Math.floor(px), Math.floor(py), Math.floor(pz));
+          if (block !== 0 && block !== 7) break;
+        }
+        posAttr.needsUpdate = true;
+        trajGeo.setDrawRange(0, drawn);
+        trajRef.current.visible = throwCd.current < 0.15;
+        trajMat.opacity = 0.35 + (1 - throwCd.current / THROW_COOLDOWN) * 0.4;
+      }
+
+      lastHudSync.current += dt;
+      if (lastHudSync.current > 0.1) {
+        lastHudSync.current = 0;
+        usePlayerStore.setState({
+          bombArmedCount: count,
+          bombMaxCount: max,
+        });
+      }
+    } else if (trajRef.current) {
+      trajRef.current.visible = false;
     }
 
     // ボム物理
@@ -292,11 +389,11 @@ export function BombSlinger() {
           b.vx = 0;
           b.vy = 0;
           b.vz = 0;
-          // 面に少し浮かせる
           b.x = nx;
           b.y = ny;
           b.z = nz;
           playBombStickSound();
+          stickFlash.current.set(b.id, 1);
           changed = true;
         } else {
           // モブ吸着
@@ -319,6 +416,7 @@ export function BombSlinger() {
               b.y = ny;
               b.z = nz;
               playBombStickSound();
+              stickFlash.current.set(b.id, 1);
               stuckMob = true;
               changed = true;
               break;
@@ -340,14 +438,29 @@ export function BombSlinger() {
         playBombTickSound();
       }
 
+      // 吸着フラッシュ減衰
+      const sf = stickFlash.current.get(b.id);
+      if (sf !== undefined) {
+        const next = sf - dt * 2.8;
+        if (next <= 0) stickFlash.current.delete(b.id);
+        else stickFlash.current.set(b.id, next);
+      }
+
       if (b.fuse <= 0 || b.y < -30) {
         if (b.fuse <= 0) detonateBomb(b);
         bombsRef.current.splice(i, 1);
         lastTickSecond.current.delete(b.id);
+        stickFlash.current.delete(b.id);
         changed = true;
       }
     }
-    if (changed) setBombVersion((v) => v + 1);
+    if (changed) {
+      setBombVersion((v) => v + 1);
+      usePlayerStore.setState({
+        bombArmedCount: bombsRef.current.length,
+        bombMaxCount: getMaxBombs(),
+      });
+    }
   });
 
   const bombs = bombsRef.current;
@@ -355,7 +468,6 @@ export function BombSlinger() {
   return (
     <>
       <group ref={rootRef} visible={false}>
-        {/* スリンガー本体 */}
         <mesh position={[0, 0, 0]} renderOrder={40}>
           <boxGeometry args={[0.22, 0.18, 0.38]} />
           <meshStandardMaterial color="#5a3a2a" roughness={0.7} depthTest={false} />
@@ -380,20 +492,45 @@ export function BombSlinger() {
             blending={THREE.AdditiveBlending}
           />
         </mesh>
+        {/* 弾薬スロット（最大5） */}
+        {[0, 1, 2, 3, 4].map((i) => (
+          <mesh
+            key={i}
+            ref={(el) => { ammoDotsRef.current[i] = el; }}
+            position={[-0.12 + i * 0.06, -0.12, 0.08]}
+            renderOrder={42}
+            visible={false}
+          >
+            <sphereGeometry args={[0.025, 8, 6]} />
+            <meshBasicMaterial
+              color={0xff7744}
+              transparent
+              opacity={0.9}
+              depthTest={false}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
       </group>
+
+      {/* 投擲軌道プレビュー */}
+      <points ref={trajRef} geometry={trajGeo} material={trajMat} frustumCulled={false} visible={false} />
 
       {/* ワールド上のボム */}
       {bombs.map((b) => {
         const urgent = b.fuse < 1.5;
+        const fuseRatio = THREE.MathUtils.clamp(b.fuse / BOMB_FUSE, 0, 1);
         const blink = urgent ? 0.55 + Math.sin(b.blink * 22) * 0.45 : 0.7 + Math.sin(b.blink * 6) * 0.3;
+        const stick = stickFlash.current.get(b.id) ?? 0;
         return (
           <group key={b.id} position={[b.x, b.y, b.z]}>
-            <mesh castShadow>
+            <mesh castShadow scale={1 + stick * 0.35}>
               <sphereGeometry args={[0.22, 14, 12]} />
               <meshStandardMaterial
                 color={urgent ? '#ff4422' : '#2a2a2a'}
-                emissive={urgent ? '#ff2200' : '#ff6622'}
-                emissiveIntensity={blink * (urgent ? 1.4 : 0.55)}
+                emissive={urgent ? '#ff2200' : stick > 0 ? '#ffaa44' : '#ff6622'}
+                emissiveIntensity={blink * (urgent ? 1.5 : 0.55) + stick * 1.2}
                 roughness={0.55}
               />
             </mesh>
@@ -412,19 +549,58 @@ export function BombSlinger() {
                 depthWrite={false}
               />
             </mesh>
-            {/* 地面／壁の点滅リング */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-              <ringGeometry args={[0.28, 0.4, 24]} />
+            {/* 導火線の残り時間リング */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+              <ringGeometry args={[0.32, 0.4, 32]} />
               <meshBasicMaterial
-                color={urgent ? '#ff5533' : '#ff8844'}
+                color={urgent ? '#ff3311' : '#ff8844'}
                 transparent
-                opacity={0.25 + blink * 0.35}
+                opacity={0.2 + (1 - fuseRatio) * 0.55}
                 side={THREE.DoubleSide}
                 depthWrite={false}
                 toneMapped={false}
                 blending={THREE.AdditiveBlending}
               />
             </mesh>
+            {/* 導火線プログレス（内円が縮む） */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} scale={[fuseRatio, fuseRatio, 1]}>
+              <ringGeometry args={[0.18, 0.28, 28]} />
+              <meshBasicMaterial
+                color="#ffe080"
+                transparent
+                opacity={0.35 + blink * 0.25}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+                toneMapped={false}
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
+              <ringGeometry args={[0.28, 0.42, 24]} />
+              <meshBasicMaterial
+                color={urgent ? '#ff5533' : '#ff8844'}
+                transparent
+                opacity={0.25 + blink * 0.35 + stick * 0.4}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+                toneMapped={false}
+                blending={THREE.AdditiveBlending}
+              />
+            </mesh>
+            {/* 吸着瞬間のフラッシュ */}
+            {stick > 0.02 && (
+              <mesh scale={0.5 + (1 - stick) * 1.8}>
+                <sphereGeometry args={[0.3, 12, 10]} />
+                <meshBasicMaterial
+                  color="#fff0c0"
+                  transparent
+                  opacity={stick * 0.7}
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                />
+              </mesh>
+            )}
           </group>
         );
       })}

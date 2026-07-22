@@ -268,6 +268,10 @@ function getItemReadinessBadge(args: {
   item: EquippedItem;
   rocketCharge: number;
   attackCharge: number;
+  glovePushReady: number;
+  glovePulling: boolean;
+  bombArmedCount: number;
+  bombMaxCount: number;
   tactic: ItemTacticBadge | null;
 }): ItemReadinessBadge | null {
   if (args.item === 'rocket_launcher') {
@@ -297,17 +301,20 @@ function getItemReadinessBadge(args: {
   }
 
   if (args.item === 'gravity_glove') {
+    const ratio = clampRatio(args.glovePushReady);
     return {
-      label: 'PULL',
-      ratio: 1,
+      label: args.glovePulling ? 'PULL…' : ratio >= 1 ? 'PUSH' : `${Math.round(ratio * 100)}%`,
+      ratio: args.glovePulling ? 1 : ratio,
       accent: args.tactic?.accent ?? '#9d8cff',
     };
   }
 
   if (args.item === 'bomb_slinger') {
+    const max = Math.max(1, args.bombMaxCount);
+    const ratio = clampRatio(args.bombArmedCount / max);
     return {
-      label: 'BOMB',
-      ratio: 1,
+      label: `${args.bombArmedCount}/${max}`,
+      ratio: ratio <= 0 ? 0.08 : ratio,
       accent: args.tactic?.accent ?? '#ff8a6a',
     };
   }
@@ -480,6 +487,10 @@ export function Hotbar() {
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
+  const glovePushReady = usePlayerStore((s) => s.glovePushReady);
+  const glovePulling = usePlayerStore((s) => s.glovePulling);
+  const bombArmedCount = usePlayerStore((s) => s.bombArmedCount);
+  const bombMaxCount = usePlayerStore((s) => s.bombMaxCount);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
   const items = useInventoryStore((s) => s.items);
   const currentStageId = useGameStore((s) => s.currentStageId);
@@ -515,6 +526,10 @@ export function Hotbar() {
     item: equippedItem,
     rocketCharge,
     attackCharge,
+    glovePushReady,
+    glovePulling,
+    bombArmedCount,
+    bombMaxCount,
     tactic: selectedItemTactic,
   });
   const selectedWeaponPanel = getWeaponTacticPanel({
@@ -1153,6 +1168,10 @@ export function Hotbar() {
                 item: weaponId,
                 rocketCharge,
                 attackCharge,
+                glovePushReady,
+                glovePulling,
+                bombArmedCount,
+                bombMaxCount,
                 tactic,
               })
             : null;

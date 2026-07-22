@@ -69,9 +69,18 @@ const CROSSHAIR_PROFILES: Record<EquippedItem, CrosshairProfile> = {
   },
 };
 
-function getChargeForItem(item: EquippedItem, rocketCharge: number, attackCharge: number): number {
+function getChargeForItem(
+  item: EquippedItem,
+  rocketCharge: number,
+  attackCharge: number,
+  glovePushReady: number,
+  bombArmedCount: number,
+  bombMaxCount: number,
+): number {
   if (item === 'rocket_launcher') return rocketCharge;
   if (item === 'lightsaber') return attackCharge;
+  if (item === 'gravity_glove') return glovePushReady;
+  if (item === 'bomb_slinger') return bombMaxCount > 0 ? bombArmedCount / bombMaxCount : 0;
   return 1;
 }
 
@@ -88,6 +97,10 @@ export function Crosshair() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const attackCharge = usePlayerStore((s) => s.attackCharge);
+  const glovePushReady = usePlayerStore((s) => s.glovePushReady);
+  const glovePulling = usePlayerStore((s) => s.glovePulling);
+  const bombArmedCount = usePlayerStore((s) => s.bombArmedCount);
+  const bombMaxCount = usePlayerStore((s) => s.bombMaxCount);
   const worldPosition = usePlayerStore((s) => s.worldPosition);
   const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const inventoryItems = useInventoryStore((s) => s.items);
@@ -117,7 +130,19 @@ export function Crosshair() {
   if (phase !== 'playing' || activeVehicle !== null) return null;
 
   const profile = CROSSHAIR_PROFILES[equippedItem];
-  const charge = Math.max(0, Math.min(1, getChargeForItem(equippedItem, rocketCharge, attackCharge)));
+  const charge = Math.max(0, Math.min(1, getChargeForItem(
+    equippedItem,
+    rocketCharge,
+    attackCharge,
+    glovePushReady,
+    bombArmedCount,
+    bombMaxCount,
+  )));
+  const profileCode = equippedItem === 'gravity_glove' && glovePulling
+    ? 'PULL…'
+    : equippedItem === 'bomb_slinger'
+      ? `${bombArmedCount}/${Math.max(1, bombMaxCount)}`
+      : profile.code;
   const recommendedStageStyle = getStageCombatStyle(currentStageId);
   const stageStyle = getStageCombatStyleForItem(currentStageId, equippedItem);
   const isBuilder = equippedItem === 'builder';
@@ -214,12 +239,16 @@ export function Crosshair() {
     },
   ];
   const label = combatFocusActive
-    ? `${profile.code} FOCUS${Math.max(1, combatFocusRank)}`
+    ? `${profileCode} FOCUS${Math.max(1, combatFocusRank)}`
     : stageStyle
-      ? `${profile.code} MAP`
-      : isRocketReloading
-      ? `${profile.code} ${Math.round(charge * 100)}%`
-      : profile.code;
+      ? `${profileCode} MAP`
+      : equippedItem === 'gravity_glove' && glovePushReady < 0.99
+        ? `PUSH ${Math.round(glovePushReady * 100)}%`
+        : equippedItem === 'bomb_slinger'
+          ? profileCode
+          : isRocketReloading
+            ? `${profileCode} ${Math.round(charge * 100)}%`
+            : profileCode;
 
   return (
     <div

@@ -19,15 +19,15 @@ import { getMobHitbox, getMobHitboxMaxY } from '../utils/mobHitboxes';
 import { playGravityPullSound, playGravityPushSound } from '../utils/sounds';
 import { consumeBreakBlock, consumePlaceBlock, mobileActions } from '../utils/touchInput';
 
-const PULL_BASE_RANGE = 9.5;
-const PULL_CONE_DOT = 0.42;
-const PULL_FORCE = 11;
-const PULL_TICK = 0.09;
-const PUSH_COOLDOWN = 1.35;
-const PUSH_RANGE = 7.5;
-const PUSH_FORCE = 8.5;
+const PULL_BASE_RANGE = 10.5;
+const PULL_CONE_DOT = 0.38;
+const PULL_FORCE = 14;
+const PULL_TICK = 0.08;
+const PUSH_COOLDOWN = 1.25;
+const PUSH_RANGE = 8.2;
+const PUSH_FORCE = 10;
 const PUSH_DAMAGE = 2;
-const PULL_DAMAGE_TICK = 0; // 引き寄せはダメージなし
+const MAX_LINK_BEAMS = 8;
 
 const GLOVE_OFFSET = new THREE.Vector3(0.42, -0.38, -0.85);
 
@@ -42,7 +42,10 @@ export function GravityGlove() {
   const ringRef = useRef<THREE.Mesh>(null);
   const beamRef = useRef<THREE.Mesh>(null);
   const shockRef = useRef<THREE.Mesh>(null);
+  const groundRingRef = useRef<THREE.Mesh>(null);
+  const rangeRingRef = useRef<THREE.Mesh>(null);
   const particlesRef = useRef<THREE.Points>(null);
+  const linkMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const isPulling = useRef(false);
   const pullTick = useRef(0);
@@ -51,12 +54,15 @@ export function GravityGlove() {
   const pullPulse = useRef(0);
   const pullStreak = useRef(0);
   const idleT = useRef(0);
+  const lastHudSync = useRef(0);
   const isTouch = useRef(isTouchDevice());
+  const linkedTargets = useRef<Array<{ x: number; y: number; z: number }>>([]);
 
   const aimDir = useRef(new THREE.Vector3());
   const offsetWorld = useRef(new THREE.Vector3());
   const tmp = useRef(new THREE.Vector3());
   const tmp2 = useRef(new THREE.Vector3());
+  const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const particleGeo = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -101,9 +107,12 @@ export function GravityGlove() {
     const range = getRange();
     const mobs = useMobStore.getState().mobs;
     let hitCount = 0;
+    linkedTargets.current = [];
 
     for (const mob of mobs) {
       if (mob.type === 'chicken') continue;
+      // 味方は怒っていない限り引き寄せない
+      if (mob.isAlly && !mob.angryAtPlayer) continue;
       const hitbox = getMobHitbox(mob.type);
       const cy = mob.y + hitbox.height * 0.5;
       tmp.current.set(mob.x - origin.x, cy - origin.y, mob.z - origin.z);
@@ -112,27 +121,31 @@ export function GravityGlove() {
       tmp2.current.copy(tmp.current).normalize();
       if (tmp2.current.dot(aimDir.current) < PULL_CONE_DOT) continue;
 
-      // プレイヤー方向へ速度を上書き（弱い吸引）
-      const pull = PULL_FORCE * (0.55 + (1 - dist / range) * 0.7);
+      const pull = PULL_FORCE * (0.65 + (1 - dist / range) * 0.75);
       const nx = -tmp2.current.x;
       const nz = -tmp2.current.z;
       const resistance = mob.type === 'boss_giant' ? 0.22 : mob.isAlly ? 0.35 : 1;
-      mob.vx = THREE.MathUtils.lerp(mob.vx, nx * pull * resistance, 0.45);
-      mob.vz = THREE.MathUtils.lerp(mob.vz, nz * pull * resistance, 0.45);
-      mob.vy = Math.min(mob.vy + 0.8 * resistance, 4);
+      mob.vx = THREE.MathUtils.lerp(mob.vx, nx * pull * resistance, 0.55);
+      mob.vz = THREE.MathUtils.lerp(mob.vz, nz * pull * resistance, 0.55);
+      mob.vy = Math.min(mob.vy + 1.1 * resistance, 5);
+      // 軽くひるませて「掴まれている」感
+      mob.hitTimer = Math.max(mob.hitTimer, 0.08);
       hitCount++;
+      if (linkedTargets.current.length < MAX_LINK_BEAMS) {
+        linkedTargets.current.push({ x: mob.x, y: cy, z: mob.z });
+      }
 
-      // 吸引パーティクル（敵位置から手元へ）
-      if (particles.current.length < 90) {
+      // 吸引パーティクル（敵→手元）
+      for (let k = 0; k < 2 && particles.current.length < 95; k++) {
         particles.current.push({
-          x: mob.x,
-          y: cy,
-          z: mob.z,
-          vx: nx * 6 + (Math.random() - 0.5),
-          vy: 1 + Math.random() * 2,
-          vz: nz * 6 + (Math.random() - 0.5),
-          life: 0.28 + Math.random() * 0.12,
-          total: 0.35,
+          x: mob.x + (Math.random() - 0.5) * 0.3,
+          y: cy + (Math.random() - 0.5) * 0.4,
+          z: mob.z + (Math.random() - 0.5) * 0.3,
+          vx: nx * (7 + Math.random() * 4),
+          vy: 0.5 + Math.random() * 2.5,
+          vz: nz * (7 + Math.random() * 4),
+          life: 0.32 + Math.random() * 0.14,
+          total: 0.4,
         });
       }
     }
@@ -140,11 +153,14 @@ export function GravityGlove() {
     if (hitCount > 0) {
       pullStreak.current += 1;
       useMasteryStore.getState().recordItemHit('gravity_glove', {
-        label: '引き寄せ',
-        amount: 3 + Math.min(6, hitCount),
+        label: hitCount >= 3 ? `まとめて引き寄せ x${hitCount}` : '引き寄せ',
+        amount: 3 + Math.min(8, hitCount),
       });
-      // ストアに速度を反映
       useMobStore.setState({ mobs: [...mobs] });
+      // 軽い手応えシェイク
+      usePlayerStore.setState((s) => ({
+        cameraShake: Math.min(1, Math.max(s.cameraShake, 0.06 + hitCount * 0.015)),
+      }));
     }
   }, [camera, getRange]);
 
@@ -153,69 +169,74 @@ export function GravityGlove() {
     pushCd.current = PUSH_COOLDOWN;
     pushFlash.current = 1;
     pullPulse.current = 0;
+    isPulling.current = false;
     usePlayerStore.getState().triggerWeaponAction('glove');
     playGravityPushSound();
 
     aimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
     const origin = camera.position;
     const force = getPushForce();
+    // 引き寄せ中に掴んでいた敵は押しが強め
+    const focusBoost = linkedTargets.current.length > 0 ? 1.18 : 1;
     const mobs = useMobStore.getState().mobs;
     let hitCount = 0;
     const multi = useMultiplayerStore.getState();
 
     for (const mob of mobs) {
       if (mob.type === 'chicken') continue;
+      if (mob.isAlly && !mob.angryAtPlayer) continue;
       const hitbox = getMobHitbox(mob.type);
       const cy = mob.y + hitbox.height * 0.45;
       tmp.current.set(mob.x - origin.x, cy - origin.y, mob.z - origin.z);
       const dist = tmp.current.length();
       if (dist > PUSH_RANGE || dist < 0.2) continue;
       tmp2.current.copy(tmp.current).normalize();
-      if (tmp2.current.dot(aimDir.current) < 0.25) continue;
+      if (tmp2.current.dot(aimDir.current) < 0.22) continue;
 
       const falloff = 1 - dist / PUSH_RANGE;
-      const kb = force * falloff * (mob.type === 'boss_giant' ? 0.2 : 1);
-      const dmg = Math.max(1, Math.round(PUSH_DAMAGE * (0.6 + falloff * 0.8)));
+      const kb = force * falloff * focusBoost * (mob.type === 'boss_giant' ? 0.2 : 1);
+      const dmg = Math.max(1, Math.round(PUSH_DAMAGE * (0.65 + falloff * 0.9) * focusBoost));
       useMobStore.getState().damageMob(
         mob.id,
         dmg,
-        tmp2.current.x * kb * 0.35,
-        tmp2.current.z * kb * 0.35,
+        tmp2.current.x * kb * 0.4,
+        tmp2.current.z * kb * 0.4,
       );
       if (multi.connected) {
-        multi.sendMobDamage(mob.id, dmg, tmp2.current.x * kb * 0.35, tmp2.current.z * kb * 0.35);
+        multi.sendMobDamage(mob.id, dmg, tmp2.current.x * kb * 0.4, tmp2.current.z * kb * 0.4);
       }
       spawnHitImpactEffect(
         mob.x,
         getMobHitboxMaxY(mob.y, hitbox) - 0.3,
         mob.z,
         tmp2.current.x,
-        0.2,
+        0.25,
         tmp2.current.z,
-        falloff > 0.7,
+        falloff > 0.65,
       );
       hitCount++;
     }
 
-    // 衝撃波パーティクル
-    for (let i = 0; i < 36; i++) {
-      const ang = (i / 36) * Math.PI * 2;
+    for (let i = 0; i < 48; i++) {
+      const ang = (i / 48) * Math.PI * 2;
       const side = new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang));
-      const dir = aimDir.current.clone().multiplyScalar(0.6).add(side.multiplyScalar(0.55)).normalize();
+      const dir = aimDir.current.clone().multiplyScalar(0.55).add(side.multiplyScalar(0.7)).normalize();
       particles.current.push({
-        x: origin.x + aimDir.current.x * 1.2,
-        y: origin.y - 0.2,
-        z: origin.z + aimDir.current.z * 1.2,
-        vx: dir.x * (6 + Math.random() * 5),
-        vy: 1 + Math.random() * 3,
-        vz: dir.z * (6 + Math.random() * 5),
-        life: 0.35 + Math.random() * 0.2,
-        total: 0.45,
+        x: origin.x + aimDir.current.x * 1.1,
+        y: origin.y - 0.35,
+        z: origin.z + aimDir.current.z * 1.1,
+        vx: dir.x * (7 + Math.random() * 6),
+        vy: 1.2 + Math.random() * 4,
+        vz: dir.z * (7 + Math.random() * 6),
+        life: 0.4 + Math.random() * 0.22,
+        total: 0.5,
       });
     }
 
     usePlayerStore.setState((s) => ({
-      cameraShake: Math.min(1, Math.max(s.cameraShake, 0.28 + hitCount * 0.03)),
+      cameraShake: Math.min(1, Math.max(s.cameraShake, 0.32 + hitCount * 0.04)),
+      glovePushReady: 0,
+      glovePulling: false,
     }));
     useMasteryStore.getState().recordItemUse('gravity_glove', {
       label: hitCount > 0 ? `押し飛ばし x${hitCount}` : '押し飛ばし',
@@ -223,11 +244,12 @@ export function GravityGlove() {
     });
     if (hitCount > 0) {
       useMasteryStore.getState().recordItemHit('gravity_glove', {
-        label: '衝撃波ヒット',
+        label: hitCount >= 3 ? 'まとめて押し' : '衝撃波ヒット',
         amount: 6 + hitCount * 2,
         critical: hitCount >= 3,
       });
     }
+    linkedTargets.current = [];
   }, [camera, getPushForce]);
 
   useEffect(() => {
@@ -275,11 +297,29 @@ export function GravityGlove() {
       && !isDead
       && !useVehicleStore.getState().isInVehicle();
 
+    // HUD 同期（押し準備率）
+    lastHudSync.current += dt;
+    if (lastHudSync.current > 0.08) {
+      lastHudSync.current = 0;
+      const ready = 1 - pushCd.current / PUSH_COOLDOWN;
+      usePlayerStore.setState({
+        glovePushReady: THREE.MathUtils.clamp(ready, 0, 1),
+        glovePulling: visible && isPulling.current,
+      });
+    }
+
     if (rootRef.current) {
       rootRef.current.visible = visible;
     }
     if (!visible) {
       isPulling.current = false;
+      linkedTargets.current = [];
+      if (linkMeshRef.current) {
+        linkMeshRef.current.count = 0;
+        linkMeshRef.current.visible = false;
+      }
+      if (rangeRingRef.current) rangeRingRef.current.visible = false;
+      if (groundRingRef.current) groundRingRef.current.visible = false;
       return;
     }
 
@@ -365,6 +405,70 @@ export function GravityGlove() {
       shockRef.current.scale.set(s, s, 1);
     }
 
+    // 足元の押し衝撃波（ワールド）
+    if (groundRingRef.current) {
+      const f = pushFlash.current;
+      const mat = groundRingRef.current.material as THREE.MeshBasicMaterial;
+      if (f > 0.02) {
+        groundRingRef.current.visible = true;
+        const feet = camera.position.clone();
+        feet.y -= 1.45;
+        feet.addScaledVector(aimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize(), 0.8);
+        groundRingRef.current.position.copy(feet);
+        const s = 0.6 + (1 - f) * 4.2;
+        groundRingRef.current.scale.set(s, s, 1);
+        mat.opacity = f * 0.7;
+      } else {
+        groundRingRef.current.visible = false;
+      }
+    }
+
+    // 引き寄せ射程リング（足元前方）
+    if (rangeRingRef.current) {
+      const p = pullPulse.current;
+      const mat = rangeRingRef.current.material as THREE.MeshBasicMaterial;
+      if (p > 0.05) {
+        rangeRingRef.current.visible = true;
+        aimDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        const feet = camera.position.clone();
+        feet.y -= 1.5;
+        feet.addScaledVector(aimDir.current, 1.2);
+        rangeRingRef.current.position.copy(feet);
+        const rangeScale = getRange() * 0.22 * (0.85 + p * 0.25);
+        rangeRingRef.current.scale.set(rangeScale, rangeScale, 1);
+        mat.opacity = 0.12 + p * 0.28;
+        rangeRingRef.current.rotation.z += dt * 1.2;
+      } else {
+        rangeRingRef.current.visible = false;
+      }
+    }
+
+    // 敵への吸引リンクビーム
+    if (linkMeshRef.current) {
+      const palm = rootRef.current?.position ?? camera.position;
+      let count = 0;
+      for (const t of linkedTargets.current) {
+        if (count >= MAX_LINK_BEAMS) break;
+        tmp.current.set(t.x - palm.x, t.y - palm.y, t.z - palm.z);
+        const len = tmp.current.length();
+        if (len < 0.1) continue;
+        dummy.position.set(
+          (palm.x + t.x) * 0.5,
+          (palm.y + t.y) * 0.5,
+          (palm.z + t.z) * 0.5,
+        );
+        dummy.scale.set(0.06 + pullPulse.current * 0.04, len, 0.06 + pullPulse.current * 0.04);
+        dummy.lookAt(t.x, t.y, t.z);
+        dummy.rotateX(Math.PI / 2);
+        dummy.updateMatrix();
+        linkMeshRef.current.setMatrixAt(count, dummy.matrix);
+        count++;
+      }
+      linkMeshRef.current.count = count;
+      linkMeshRef.current.instanceMatrix.needsUpdate = true;
+      linkMeshRef.current.visible = count > 0 && pullPulse.current > 0.08;
+    }
+
     // パーティクル更新
     for (let i = particles.current.length - 1; i >= 0; i--) {
       const p = particles.current[i];
@@ -408,8 +512,6 @@ export function GravityGlove() {
     colAttr.needsUpdate = true;
     particleGeo.setDrawRange(0, pi);
     if (particlesRef.current) particlesRef.current.visible = pi > 0;
-
-    void PULL_DAMAGE_TICK;
   });
 
   return (
@@ -424,14 +526,12 @@ export function GravityGlove() {
           <sphereGeometry args={[0.14, 14, 12]} />
           <meshStandardMaterial color="#7b6ad4" roughness={0.4} metalness={0.35} depthTest={false} />
         </mesh>
-        {/* 指 */}
         {[-0.08, -0.02, 0.04, 0.1].map((x, i) => (
           <mesh key={i} position={[x, 0.06, -0.22]} rotation={[0.4, 0, 0]} renderOrder={40}>
             <boxGeometry args={[0.05, 0.06, 0.14]} />
             <meshStandardMaterial color="#6a58b8" roughness={0.5} depthTest={false} />
           </mesh>
         ))}
-        {/* 掌エネルギー */}
         <mesh ref={palmGlowRef} position={[0.02, 0.04, -0.2]} renderOrder={41}>
           <sphereGeometry args={[0.16, 16, 12]} />
           <meshBasicMaterial
@@ -456,7 +556,6 @@ export function GravityGlove() {
             blending={THREE.AdditiveBlending}
           />
         </mesh>
-        {/* 吸引ビーム */}
         <mesh ref={beamRef} position={[0.02, 0.04, -0.8]} renderOrder={40} visible={false}>
           <cylinderGeometry args={[0.08, 0.22, 1, 10, 1, true]} />
           <meshBasicMaterial
@@ -470,7 +569,6 @@ export function GravityGlove() {
             blending={THREE.AdditiveBlending}
           />
         </mesh>
-        {/* 押し衝撃波リング */}
         <mesh ref={shockRef} position={[0.02, 0.04, -0.55]} rotation={[0, 0, 0]} renderOrder={42} visible={false}>
           <ringGeometry args={[0.35, 0.55, 40]} />
           <meshBasicMaterial
@@ -485,6 +583,50 @@ export function GravityGlove() {
           />
         </mesh>
       </group>
+      {/* 足元押し衝撃波 */}
+      <mesh ref={groundRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.7, 1.0, 48]} />
+        <meshBasicMaterial
+          color={0xc8b8ff}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 引き寄せ射程の目安 */}
+      <mesh ref={rangeRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.85, 1.0, 48]} />
+        <meshBasicMaterial
+          color={0x9d8cff}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {/* 敵との吸引リンク */}
+      <instancedMesh
+        ref={linkMeshRef}
+        args={[undefined, undefined, MAX_LINK_BEAMS]}
+        frustumCulled={false}
+        visible={false}
+      >
+        <cylinderGeometry args={[1, 1, 1, 6, 1, true]} />
+        <meshBasicMaterial
+          color={0xb8a0ff}
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </instancedMesh>
       <points ref={particlesRef} geometry={particleGeo} material={particleMat} frustumCulled={false} visible={false} />
     </>
   );

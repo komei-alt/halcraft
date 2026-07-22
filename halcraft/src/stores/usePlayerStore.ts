@@ -144,6 +144,15 @@ interface PlayerState {
    */
   pendingWeaponAction: WeaponActionKind | null;
 
+  /** 引力グローブ: 押し飛ばしの準備率 0-1（1=即押し可） */
+  glovePushReady: number;
+  /** 引力グローブ: 現在引き寄せ中か */
+  glovePulling: boolean;
+  /** ボムスリンガー: 設置中ボム数 */
+  bombArmedCount: number;
+  /** ボムスリンガー: 同時設置上限 */
+  bombMaxCount: number;
+
   /** ロケットランチャーのクールダウン残り時間（秒） */
   rocketCooldown: number;
 
@@ -309,6 +318,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   gunRecoilTimer: 0,
   rocketRecoilTimer: 0,
   pendingWeaponAction: null,
+  glovePushReady: 1,
+  glovePulling: false,
+  bombArmedCount: 0,
+  bombMaxCount: 3,
   rocketCooldown: 0,
   rocketCooldownDuration: ROCKET_COOLDOWN,
   rocketCharge: 1,
@@ -642,6 +655,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       gunRecoilTimer: 0,
       rocketRecoilTimer: 0,
       pendingWeaponAction: null,
+      glovePushReady: 1,
+      glovePulling: false,
+      bombArmedCount: 0,
+      bombMaxCount: 3,
       equippedItem: 'builder',
       rocketCooldown: 0,
       rocketCooldownDuration: ROCKET_COOLDOWN,
