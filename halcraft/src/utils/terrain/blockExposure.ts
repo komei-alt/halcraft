@@ -6,14 +6,14 @@ import type { ChunkData } from './types';
 
 /**
  * 隣接ブロックが「透過的」かどうかを判定するヘルパー
- * 空気・透明ブロック・非標準形状ブロック（松明等）を透過扱いにする
+ * 空気・透明ブロック・非標準形状・流体を透過扱いにする
  */
 export function isBlockTransparent(blockId: BlockId): boolean {
   if (blockId === BLOCK_IDS.AIR) return true;
   const def = BLOCK_DEFS[blockId];
   if (!def) return true;
-  // 透明ブロック（ガラス等）や非標準形状（松明等）は透過扱い
-  return def.transparent || !!def.nonStandard;
+  // 透明・非標準形状・流体は透過扱い（溶岩隣の地形面を落とさない）
+  return def.transparent || !!def.nonStandard || !!def.isLiquid;
 }
 
 /** 6方向のオフセット（配列生成を避けるため定数化） */

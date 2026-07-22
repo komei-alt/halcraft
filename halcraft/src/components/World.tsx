@@ -152,13 +152,22 @@ function getMaterialLayer(definition: BlockInfo): MaterialLayer {
 function isBlockTransparent(blockId: BlockId): boolean {
   if (blockId === BLOCK_IDS.AIR) return true;
   const definition = BLOCK_DEFS[blockId];
-  // 水は transparent:true のまま透過面を見せる。
-  // 溶岩は isLiquid でも不透明扱い：地面との共面チラつき（マグマ下の面が透ける）を防ぐ。
-  return !definition || definition.transparent || Boolean(definition.nonStandard);
+  // ガラス・非標準形状・流体は「透過」扱い。
+  // 溶岩を不透明にすると隣接する地形の側面が落ち、ブロックが透けて
+  // 下/横のマグマが見える描画バグになるため、流体は透過として残す。
+  // 共面チラつきは LavaRenderer 側の縮小 + polygonOffset で抑える。
+  return !definition
+    || definition.transparent
+    || Boolean(definition.nonStandard)
+    || Boolean(definition.isLiquid);
 }
 
 function shouldRenderFace(blockId: BlockId, neighborId: BlockId): boolean {
   if (neighborId === BLOCK_IDS.AIR) return true;
+  // 溶岩は World メッシュに乗らない（LavaRenderer 専用）。
+  // 地形↔溶岩の境界面は必ず地形側を残し、透けを防ぐ。
+  if (neighborId === BLOCK_IDS.LAVA && !BLOCK_DEFS[blockId]?.isLiquid) return true;
+  if (blockId === BLOCK_IDS.LAVA) return false;
   const selfTransparent = isBlockTransparent(blockId);
   const neighborTransparent = isBlockTransparent(neighborId);
   if (!selfTransparent && neighborTransparent) return true;

@@ -45,6 +45,14 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-23',
+    items: [
+      { type: 'fix', text: 'マップで地面が透けて下のマグマが見えてしまう描画バグを直したよ！' },
+      { type: 'fix', text: 'ヘリのガトリングガンの弾が照準と違う方向に飛ぶのを直したよ！' },
+      { type: 'improve', text: 'ヘリのガトリングが目の前をふさがなくなって、撃ちやすくなったよ！' },
+    ],
+  },
+  {
     date: '2026-07-22',
     items: [
       { type: 'fix', text: '地面がマグマだらけになる不具合を直したよ！スコープの照準もちゃんと見えて弾がまっすぐ飛ぶようになったよ！' },

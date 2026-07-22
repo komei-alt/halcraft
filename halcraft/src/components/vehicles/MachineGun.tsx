@@ -44,8 +44,8 @@ const IMPACT_PARTICLE_COUNT = 14;
 const IMPACT_LIFETIME = 0.62;
 /** ヒットフラッシュの表示時間（秒） */
 const HIT_FLASH_LIFETIME = 0.2;
-/** 重力（弾道にわずかな落下を加える） */
-const BULLET_GRAVITY = 3.0;
+/** 重力（照準一致を優先し控えめに。遠距離だけわずかに落ちる） */
+const BULLET_GRAVITY = 1.2;
 /** プレイヤーヒット半径 */
 const PLAYER_HIT_RADIUS = 0.5;
 /** プレイヤーヒット高さ */
@@ -74,8 +74,14 @@ const BARREL_FORWARD_LOCAL = new THREE.Vector3(0, 0, 1);
 const GUN_MAX_YAW = Math.PI * 0.7;
 /** 銃の上下制限（ラジアン） */
 const GUN_MAX_PITCH = Math.PI * 0.35;
-/** 散布（銃口方向との同期を優先し、基本は0） */
+/** 散布（照準一致を優先し、基本は0） */
 const GUN_SPREAD = 0;
+/** 自席射撃時: カメラ前方からの弾スポーン距離（照準とトレイルを重ねる） */
+const CAMERA_SPAWN_FORWARD = 0.72;
+/** 自席時の銃モデル縮小（視界を塞がない） */
+const MY_GUN_BODY_SCALE = 0.42;
+/** 自席時に銃をカメラ下へ少し下げるオフセット（ローカル） */
+const MY_GUN_VIEW_OFFSET = new THREE.Vector3(0, -0.22, -0.08);
 
 /** ワーク用（毎フレーム再利用） */
 const _worldAimDir = new THREE.Vector3();
@@ -394,21 +400,19 @@ export function MachineGun() {
     const yawRef = side === 'left' ? yawLeftRef : yawRightRef;
     const pitchRef = side === 'left' ? pitchLeftRef : pitchRightRef;
 
-    // 発射直前に銃をカメラ照準へ即時スナップ → 銃身方向と弾道を一致させる
+    // 見た目用に銃はカメラへスナップ（他視点・フラッシュ位置）
     if (pivot) {
       snapGunPivotToCamera(pivot, camera, yawRef, pitchRef);
     }
 
-    let startPos: THREE.Vector3;
+    // 自席射撃は徒歩機関銃と同様：カメラ視線＝弾道（銃口オフセット由来のズレを捨てる）
+    shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    let startPos = camera.position.clone().addScaledVector(shootDir.current, CAMERA_SPAWN_FORWARD);
+
+    // マズルフラッシュ位置だけ銃口を使う（弾道には使わない）
     if (gunGroup) {
-      const pose = getMuzzleWorldPose(gunGroup);
-      startPos = pose.position;
-      // 弾道 = 銃身のワールド前方（カメラ前方ではない）
-      shootDir.current.copy(pose.direction);
-    } else {
-      // フォールバック: カメラ前方
-      startPos = camera.position.clone();
-      shootDir.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+      // 銃モデルが生きていればフラッシュ位置の参考にポーズを更新
+      getMuzzleWorldPose(gunGroup);
     }
 
     // ごく小さい散布（見た目の同期を崩さない範囲）
@@ -417,6 +421,7 @@ export function MachineGun() {
       shootDir.current.y += (Math.random() - 0.5) * GUN_SPREAD;
       shootDir.current.z += (Math.random() - 0.5) * GUN_SPREAD;
       shootDir.current.normalize();
+      startPos = camera.position.clone().addScaledVector(shootDir.current, CAMERA_SPAWN_FORWARD);
     }
 
     // 弾丸を生成
@@ -791,12 +796,14 @@ function DoorMountedGun({
       <group rotation={[0, Math.PI, 0]}>
         {/* 銃マウント位置 */}
         <group position={[mountPos.x, mountPos.y, mountPos.z]}>
-          {/* 固定マウントベース（ドアフレーム） */}
-          <mesh
-            geometry={DOOR_MOUNT_GEOMETRY}
-            material={mountMat}
-            receiveShadow
-          />
+          {/* 固定マウントベース（自席は視界を塞ぐので非表示） */}
+          {!isMyGun && (
+            <mesh
+              geometry={DOOR_MOUNT_GEOMETRY}
+              material={mountMat}
+              receiveShadow
+            />
+          )}
           {/* 旋回ピボット（ここで回転する） — gunGroupRef を割り当て */}
           <GunPivot
             pivotRef={pivotRef}
@@ -883,23 +890,36 @@ function GunPivot({
     }
   }, 1);
 
+  // 自席の銃は小さく下へ寄せて視界を塞がない（他席・他視点はフルモデル）
+  const bodyScale = isMyGun ? MY_GUN_BODY_SCALE : 1;
+  const viewOffset = isMyGun ? MY_GUN_VIEW_OFFSET : null;
+
   return (
     <group ref={pivotRef}>
       {/* 銃本体のグループ（ワールドマトリクス取得用） */}
-      <group ref={gunGroupRef}>
-        <mesh
-          geometry={GUN_TRUNNION_GEOMETRY}
-          material={mountMat}
-          receiveShadow
-        />
-        <mesh
-          geometry={GUN_RECEIVER_GEOMETRY}
-          material={bodyMat}
-          castShadow
-          receiveShadow
-        />
-        <mesh geometry={GUN_SENSOR_GEOMETRY} material={sensorMat} />
-        <group ref={barrelClusterRef} position={[0, 0.035, 0.49]}>
+      <group
+        ref={gunGroupRef}
+        position={viewOffset ? [viewOffset.x, viewOffset.y, viewOffset.z] : undefined}
+        scale={bodyScale}
+      >
+        {/* 自席では重いレシーバー・架台を隠し、細い銃身とフラッシュだけ残す */}
+        {!isMyGun && (
+          <>
+            <mesh
+              geometry={GUN_TRUNNION_GEOMETRY}
+              material={mountMat}
+              receiveShadow
+            />
+            <mesh
+              geometry={GUN_RECEIVER_GEOMETRY}
+              material={bodyMat}
+              castShadow
+              receiveShadow
+            />
+            <mesh geometry={GUN_SENSOR_GEOMETRY} material={sensorMat} />
+          </>
+        )}
+        <group ref={barrelClusterRef} position={[0, 0.035, isMyGun ? 0.2 : 0.49]}>
           <mesh
             geometry={GUN_BARREL_CLUSTER_GEOMETRY}
             material={barrelMat}
@@ -909,8 +929,9 @@ function GunPivot({
         <mesh
           ref={flashRef}
           geometry={MUZZLE_FLASH_GEOMETRY}
-          position={[0, 0.035, 1.12]}
+          position={[0, 0.035, isMyGun ? 0.85 : 1.12]}
           material={flashMat}
+          scale={isMyGun ? 0.7 : 1}
         />
       </group>
     </group>

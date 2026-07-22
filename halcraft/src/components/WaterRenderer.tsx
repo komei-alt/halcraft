@@ -242,6 +242,8 @@ interface LiquidRendererProps {
   createMaterial: () => THREE.ShaderMaterial;
   renderOrder: number;
   visibleChunkPadding?: number;
+  /** 地形面との共面チラつきを避けるためのわずかな縮小（溶岩向け） */
+  instanceScale?: number;
 }
 
 /** 流体ブロックの InstancedMesh 描画 */
@@ -250,6 +252,7 @@ function LiquidRenderer({
   createMaterial,
   renderOrder,
   visibleChunkPadding = 1,
+  instanceScale = 1,
 }: LiquidRendererProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummyRef = useRef(new THREE.Object3D());
@@ -303,6 +306,7 @@ function LiquidRenderer({
   useLayoutEffect(() => {
     if (!meshRef.current || count === 0) return;
     const dummy = dummyRef.current;
+    const scale = instanceScale;
     for (let i = 0; i < count; i++) {
       const off = i * 3;
       dummy.position.set(
@@ -310,12 +314,14 @@ function LiquidRenderer({
         liquidPositions[off + 1] + 0.5,
         liquidPositions[off + 2] + 0.5,
       );
+      // 溶岩はわずかに小さくして、地形ブロックの描画面が深度で勝つようにする
+      dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
     meshRef.current.visible = true;
-  }, [liquidPositions, count]);
+  }, [liquidPositions, count, instanceScale]);
 
   // マテリアル破棄
   useEffect(() => () => {
@@ -386,8 +392,10 @@ export function LavaRenderer() {
     <LiquidRenderer
       blockId={BLOCK_IDS.LAVA}
       createMaterial={createLavaMaterial}
-      renderOrder={101}
+      renderOrder={1}
       visibleChunkPadding={2}
+      // 地形面よりわずかに内側へ縮め、隣接面の共面チラつきと透けを防ぐ
+      instanceScale={0.988}
     />
   );
 }
