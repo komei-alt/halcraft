@@ -19,6 +19,7 @@ const ZOMBIE_MODEL: GlbMobModelConfig = {
   bobAmount: 0.03,
   bobSpeed: 5,
   rigStyle: 'zombie',
+  attackDuration: 0.48,
 };
 
 interface ZombieProps {

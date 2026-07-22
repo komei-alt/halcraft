@@ -19,6 +19,7 @@ const DARWIN_MODEL: GlbMobModelConfig = {
   bobAmount: 0.04,
   bobSpeed: 4.5,
   rigStyle: 'humanoid',
+  attackDuration: 0.48,
 };
 
 interface DarwinProps {

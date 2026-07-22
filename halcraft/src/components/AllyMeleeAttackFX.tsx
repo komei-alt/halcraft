@@ -1,26 +1,33 @@
-// 味方近接攻撃（プロトタイプ / アイアンゴーレム）のアニメ同期 VFX
+// モブ近接攻撃のアニメ同期 VFX（味方・敵共通）
 // attackTimer の進行に合わせて: 溜め光 → 斬撃アーク → 振り下ろし残光
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useMobStore } from '../stores/useMobStore';
-import { PROTOTYPE_ATTACK_ANIM_DURATION } from '../utils/mobAI/constants';
+import { useMobStore, type MobType } from '../stores/useMobStore';
 import {
-  registerAllyMeleeHitSpawner,
-  type AllyMeleeHitOptions,
+  BOSS_ATTACK_ANIM_DURATION,
+  PROTOTYPE_ATTACK_ANIM_DURATION,
+  SPIDER_ATTACK_ANIM_DURATION,
+  ZOMBIE_ATTACK_ANIM_DURATION,
+} from '../utils/mobAI/constants';
+import { meleeAccentForType, meleeScaleForType } from '../utils/mobMeleeFeedback';
+import {
+  registerMobMeleeHitSpawner,
+  type MobMeleeHitOptions,
 } from '../utils/effectTriggers';
 
 interface AttackVisual {
   mobId: string;
+  type: MobType;
   x: number;
   y: number;
   z: number;
   rotation: number;
   progress: number;
-  /** プロトタイプは青白、ゴーレムは橙 */
   accent: THREE.Color;
   scale: number;
+  handHeight: number;
 }
 
 interface HitBurst {
@@ -35,7 +42,7 @@ interface HitBurst {
   totalLife: number;
   accent: THREE.Color;
   scale: number;
-  style: 'ally' | 'heavy';
+  style: NonNullable<MobMeleeHitOptions['style']>;
 }
 
 interface TrailSpark {
@@ -96,9 +103,44 @@ export function AllyMeleeAttackFX() {
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
-  const protoAccent = useMemo(() => new THREE.Color(0x7ec8ff), []);
-  const golemAccent = useMemo(() => new THREE.Color(0xffb04a), []);
   const white = useMemo(() => new THREE.Color(0xffffff), []);
+  const accentCache = useMemo(() => new Map<string, THREE.Color>(), []);
+
+  function colorFor(hex: string): THREE.Color {
+    let c = accentCache.get(hex);
+    if (!c) {
+      c = new THREE.Color(hex);
+      accentCache.set(hex, c);
+    }
+    return c;
+  }
+
+  function durationFor(type: MobType): number {
+    switch (type) {
+      case 'spider':
+        return SPIDER_ATTACK_ANIM_DURATION;
+      case 'boss_giant':
+        return BOSS_ATTACK_ANIM_DURATION;
+      case 'zombie':
+      case 'darwin':
+        return ZOMBIE_ATTACK_ANIM_DURATION;
+      default:
+        return PROTOTYPE_ATTACK_ANIM_DURATION;
+    }
+  }
+
+  function handHeightFor(type: MobType): number {
+    switch (type) {
+      case 'spider':
+        return 0.45;
+      case 'boss_giant':
+        return 2.6;
+      case 'darwin':
+        return 1.9;
+      default:
+        return 1.55;
+    }
+  }
 
   const slashGeo = useMemo(() => new THREE.PlaneGeometry(1.35, 0.14), []);
   const sphereGeo = useMemo(() => new THREE.SphereGeometry(0.22, 14, 12), []);
@@ -176,18 +218,19 @@ export function AllyMeleeAttackFX() {
       dirX: number,
       dirY: number,
       dirZ: number,
-      options?: AllyMeleeHitOptions,
+      options?: MobMeleeHitOptions,
     ) => {
+      const style = options?.style ?? 'ally';
       const accent = new THREE.Color(options?.accent ?? '#7ec8ff');
       burstsRef.current.push({
         id: burstId++,
         x, y, z,
         dirX, dirY, dirZ,
-        life: options?.style === 'heavy' ? 0.38 : 0.28,
-        totalLife: options?.style === 'heavy' ? 0.38 : 0.28,
+        life: style === 'heavy' ? 0.42 : style === 'lunge' ? 0.24 : 0.28,
+        totalLife: style === 'heavy' ? 0.42 : style === 'lunge' ? 0.24 : 0.28,
         accent,
         scale: options?.scale ?? 1,
-        style: options?.style ?? 'ally',
+        style,
       });
       if (burstsRef.current.length > MAX_BURSTS) {
         burstsRef.current.splice(0, burstsRef.current.length - MAX_BURSTS);
@@ -201,7 +244,7 @@ export function AllyMeleeAttackFX() {
       if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
       side.normalize();
       const up = new THREE.Vector3().crossVectors(side, dir).normalize();
-      const count = options?.style === 'heavy' ? 28 : 18;
+      const count = style === 'heavy' ? 32 : style === 'lunge' ? 14 : 20;
       for (let i = 0; i < count; i++) {
         const spread = (Math.random() - 0.5) * 2.2;
         const lift = Math.random() * 1.4;
@@ -224,8 +267,8 @@ export function AllyMeleeAttackFX() {
         trailsRef.current.splice(0, trailsRef.current.length - MAX_TRAILS);
       }
     };
-    registerAllyMeleeHitSpawner(spawn);
-    return () => registerAllyMeleeHitSpawner(() => {});
+    registerMobMeleeHitSpawner(spawn);
+    return () => registerMobMeleeHitSpawner(() => {});
   }, [white]);
 
   useFrame((_, delta) => {
@@ -234,22 +277,34 @@ export function AllyMeleeAttackFX() {
     const attacks: AttackVisual[] = [];
 
     for (const m of mobs) {
-      if (!(m.type === 'prototype' || m.type === 'iron_golem')) continue;
+      if (
+        m.type !== 'prototype'
+        && m.type !== 'iron_golem'
+        && m.type !== 'zombie'
+        && m.type !== 'darwin'
+        && m.type !== 'spider'
+        && m.type !== 'boss_giant'
+      ) continue;
       const attackTimer = m.attackTimer ?? 0;
       if (attackTimer <= 0.01) continue;
 
-      const duration = PROTOTYPE_ATTACK_ANIM_DURATION;
+      const duration = durationFor(m.type);
       const progress = THREE.MathUtils.clamp(1 - attackTimer / duration, 0, 1);
-      const isGolem = m.type === 'iron_golem';
+      const accentHex = meleeAccentForType(m.type);
+      const accent = colorFor(accentHex);
+      const scale = meleeScaleForType(m.type) * (m.type === 'prototype' ? 0.95 : 1);
+      const baseHand = handHeightFor(m.type);
       attacks.push({
         mobId: m.id,
+        type: m.type,
         x: m.x,
         y: m.y,
         z: m.z,
         rotation: m.rotation,
         progress,
-        accent: isGolem ? golemAccent : protoAccent,
-        scale: isGolem ? 1.25 : 1,
+        accent,
+        scale,
+        handHeight: baseHand,
       });
 
       // スイング中に軌跡スパークを連続生成
@@ -258,10 +313,10 @@ export function AllyMeleeAttackFX() {
         const angle = slashAngle(progress);
         const forward = new THREE.Vector3(Math.sin(m.rotation), 0, Math.cos(m.rotation));
         const right = new THREE.Vector3(Math.cos(m.rotation), 0, -Math.sin(m.rotation));
-        const handReach = 0.95 * (isGolem ? 1.2 : 1);
-        const handHeight = 1.55 + Math.sin(angle) * 0.85;
+        const handReach = 0.95 * scale;
+        const handHeight = baseHand + Math.sin(angle) * (0.55 + scale * 0.25);
         const handForward = 0.35 + Math.cos(angle) * handReach * 0.55;
-        const handSide = 0.35 + Math.sin(angle * 0.5) * 0.25;
+        const handSide = (m.type === 'spider' ? 0.1 : 0.35) + Math.sin(angle * 0.5) * 0.25;
         const px = m.x + forward.x * handForward + right.x * handSide;
         const py = m.y + handHeight;
         const pz = m.z + forward.z * handForward + right.z * handSide;
@@ -275,7 +330,7 @@ export function AllyMeleeAttackFX() {
           vz: (Math.random() - 0.5) * 1.2 + right.z * 0.8,
           life,
           totalLife: life,
-          color: (isGolem ? golemAccent : protoAccent).clone().lerp(white, 0.35 + Math.random() * 0.3),
+          color: accent.clone().lerp(white, 0.35 + Math.random() * 0.3),
         });
       }
     }
@@ -312,9 +367,10 @@ export function AllyMeleeAttackFX() {
 
       const forward = new THREE.Vector3(Math.sin(atk.rotation), 0, Math.cos(atk.rotation));
       const right = new THREE.Vector3(Math.cos(atk.rotation), 0, -Math.sin(atk.rotation));
-      const handX = atk.x + forward.x * 0.45 + right.x * 0.55;
-      const handY = atk.y + 1.85 + Math.sin(atk.progress * 8) * 0.04;
-      const handZ = atk.z + forward.z * 0.45 + right.z * 0.55;
+      const sideBias = atk.type === 'spider' ? 0.05 : 0.55;
+      const handX = atk.x + forward.x * 0.45 + right.x * sideBias;
+      const handY = atk.y + atk.handHeight + 0.3 + Math.sin(atk.progress * 8) * 0.04;
+      const handZ = atk.z + forward.z * 0.45 + right.z * sideBias;
       const pulse = 0.85 + Math.sin(performance.now() * 0.02) * 0.15;
       const s = (0.55 + atk.progress * 0.9) * pulse * atk.scale;
 
@@ -357,7 +413,7 @@ export function AllyMeleeAttackFX() {
       const right = new THREE.Vector3(Math.cos(atk.rotation), 0, -Math.sin(atk.rotation));
       const pivot = new THREE.Vector3(
         atk.x + forward.x * 0.25 + right.x * 0.2,
-        atk.y + 1.55,
+        atk.y + atk.handHeight,
         atk.z + forward.z * 0.25 + right.z * 0.2,
       );
 

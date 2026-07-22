@@ -298,16 +298,50 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     group.quaternion.slerp(targetQuaternionRef.current, 0.3);
 
     const speed = Math.hypot(mob.vx, mob.vz);
-    if (speed > 0.1) {
+    const attackTimer = mob.attackTimer ?? 0;
+    const isAttacking = attackTimer > 0.01;
+    const atkProgress = isAttacking
+      ? THREE.MathUtils.clamp(1 - attackTimer / 0.72, 0, 1)
+      : 0;
+
+    // 攻撃: 溜め後傾 → 振り下ろし前傾 → 着地
+    let windupPitch = 0;
+    let slamDrop = 0;
+    let slamScaleY = 1;
+    let slamScaleXZ = 1;
+    if (isAttacking) {
+      if (atkProgress < 0.4) {
+        const u = atkProgress / 0.4;
+        windupPitch = -0.28 * u;
+        slamScaleY = 1 + 0.08 * u;
+        slamScaleXZ = 1 - 0.04 * u;
+      } else if (atkProgress < 0.55) {
+        const u = (atkProgress - 0.4) / 0.15;
+        windupPitch = THREE.MathUtils.lerp(-0.28, 0.42, u);
+        slamDrop = u * 0.22;
+        slamScaleY = THREE.MathUtils.lerp(1.08, 0.88, u);
+        slamScaleXZ = THREE.MathUtils.lerp(0.96, 1.12, u);
+      } else {
+        const u = (atkProgress - 0.55) / 0.45;
+        windupPitch = THREE.MathUtils.lerp(0.42, 0, u);
+        slamDrop = THREE.MathUtils.lerp(0.22, 0, u);
+        slamScaleY = THREE.MathUtils.lerp(0.88, 1, u);
+        slamScaleXZ = THREE.MathUtils.lerp(1.12, 1, u);
+      }
+    }
+
+    if (speed > 0.1 && !isAttacking) {
       group.position.y += Math.sin(animTime * 5) * 0.1;
     }
 
     // 被ダメ時はスケールで一瞬ひるむ（マテリアル再生成なし・箱化バグ回避）
     if (modelGroupRef.current) {
-      const squash = 1 - hitPulse * 0.08;
-      const widen = 1 + hitPulse * 0.07;
+      const squash = (1 - hitPulse * 0.08) * slamScaleY;
+      const widen = (1 + hitPulse * 0.07) * slamScaleXZ;
       const base = BOSS_MODEL_SCALE;
       modelGroupRef.current.scale.set(base * widen, base * squash, base * widen);
+      modelGroupRef.current.rotation.x = windupPitch;
+      modelGroupRef.current.position.y = BOSS_MODEL_Y_OFFSET - slamDrop;
     }
   });
 
@@ -320,6 +354,7 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
         ref={modelGroupRef}
         position={[0, BOSS_MODEL_Y_OFFSET, 0]}
         scale={[BOSS_MODEL_SCALE, BOSS_MODEL_SCALE, BOSS_MODEL_SCALE]}
+        // rotation/position は攻撃アニメで useFrame 更新
       >
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.8, 0]}>
           <ringGeometry args={[0.92, 1.32, 44]} />

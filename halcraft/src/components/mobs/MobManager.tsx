@@ -270,7 +270,15 @@ export function MobManager() {
 
       // ─── クモ ───
       if (m.type === 'spider') {
-        const state = getMobState(spiderStates.current, m.id, () => ({ attackCooldown: 0 }));
+        const state = getMobState(spiderStates.current, m.id, () => ({
+          attackCooldown: 0,
+          attackElapsed: 0,
+          attackHitApplied: false,
+          swingSoundPlayed: false,
+          pendingDamage: 0,
+          pendingKbX: 0,
+          pendingKbZ: 0,
+        }));
         state.attackCooldown = Math.max(0, state.attackCooldown - dt);
         const { alive, attack } = updateSpiderAI(m, aiCtx, state);
         if (attack) {
@@ -306,6 +314,12 @@ export function MobManager() {
         const state = getMobState(bossStates.current, m.id, () => ({
           attackCooldown: 0,
           summonCooldown: 0,
+          attackElapsed: 0,
+          attackHitApplied: false,
+          swingSoundPlayed: false,
+          pendingDamage: 0,
+          pendingKbX: 0,
+          pendingKbZ: 0,
         }));
         state.attackCooldown = Math.max(0, state.attackCooldown - dt);
         const { alive, attack } = updateBossAI(m, aiCtx, state, breakBlock);
@@ -323,6 +337,16 @@ export function MobManager() {
         attackCooldown: 0,
         flankTimer: 0,
         blockAttackCooldown: 0,
+        attackElapsed: 0,
+        attackHitApplied: false,
+        swingSoundPlayed: false,
+        pendingDamage: 0,
+        pendingKbX: 0,
+        pendingKbZ: 0,
+        pendingIsCore: false,
+        pendingCoreX: 0,
+        pendingCoreY: 0,
+        pendingCoreZ: 0,
       }));
       state.attackCooldown = Math.max(0, state.attackCooldown - dt);
       state.flankTimer += dt;

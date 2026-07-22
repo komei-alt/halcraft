@@ -16,7 +16,11 @@ export const ZOMBIE_SPEED = 2.5;
 export const ZOMBIE_STOP_RANGE = 1.0;
 export const ZOMBIE_ATTACK_RANGE = 1.5;
 export const ZOMBIE_ATTACK_DAMAGE = 2;
-export const ZOMBIE_ATTACK_COOLDOWN = 1.0;
+export const ZOMBIE_ATTACK_COOLDOWN = 1.05;
+/** ゾンビ／ダーウィン攻撃モーション長 */
+export const ZOMBIE_ATTACK_ANIM_DURATION = 0.48;
+/** ゾンビ攻撃ヒットタイミング（開始からの秒） */
+export const ZOMBIE_ATTACK_HIT_AT = 0.2;
 export const MOB_HEIGHT = 1.8;
 export const MOB_RADIUS = 0.3;
 export const ZOMBIE_SEPARATION_RADIUS = 1.2;
@@ -39,7 +43,9 @@ export const SPIDER_SPEED = 3.5;
 export const SPIDER_STOP_RANGE = 0.8;
 export const SPIDER_ATTACK_RANGE = 1.3;
 export const SPIDER_ATTACK_DAMAGE = 3;
-export const SPIDER_ATTACK_COOLDOWN = 0.8;
+export const SPIDER_ATTACK_COOLDOWN = 0.85;
+export const SPIDER_ATTACK_ANIM_DURATION = 0.4;
+export const SPIDER_ATTACK_HIT_AT = 0.15;
 export const SPIDER_HEIGHT = 0.6;
 export const SPIDER_RADIUS = 0.4;
 
@@ -61,6 +67,10 @@ export const PROTOTYPE_RADIUS = 0.45;
 export const PROTOTYPE_JUMP_VEL = 10;
 export const PROTOTYPE_STUCK_TIME = 2.0;
 export const PROTOTYPE_STUCK_DIST = 0.5;
+
+// ─── ボス近接（AI本体にもあるが VFX 共有用） ──────────────
+export const BOSS_ATTACK_ANIM_DURATION = 0.72;
+export const BOSS_ATTACK_HIT_AT = 0.32;
 
 // ─── 共通インターフェース ──────────────────────────────
 

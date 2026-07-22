@@ -4,8 +4,12 @@
 import type { MobData } from '../../stores/useMobStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { getTerrainHeight } from '../terrain';
-import { playHurtSound, playMeleeHitSound, playMeleeSwingSound } from '../sounds';
-import { spawnAllyMeleeHit, spawnDamagePopup, spawnHitImpactEffect } from '../effectTriggers';
+import { playHurtSound } from '../sounds';
+import { spawnDamagePopup } from '../effectTriggers';
+import {
+  triggerMeleeSwingSound,
+  triggerMobMeleeHitFeedback,
+} from '../mobMeleeFeedback';
 import {
   PROTOTYPE_SPEED, PROTOTYPE_FOLLOW_MIN, PROTOTYPE_FOLLOW_MAX,
   PROTOTYPE_DETECT_RANGE, PROTOTYPE_ATTACK_RANGE,
@@ -66,7 +70,7 @@ function maybePlaySwingSound(state: AllyMobState): void {
   if (state.swingSoundPlayed) return;
   if (state.attackElapsed < 0.14) return;
   state.swingSoundPlayed = true;
-  playMeleeSwingSound();
+  triggerMeleeSwingSound();
 }
 
 /**
@@ -128,25 +132,9 @@ function resolveAttackHit(
 
   const pose = resolveHitPose(m, state, ctx);
   const heavy = isHeavyAlly(m);
-  const accent = heavy ? '#ffb04a' : '#7ec8ff';
 
-  // ヒット VFX（専用 + 共通インパクト）
-  spawnAllyMeleeHit(pose.x, pose.y, pose.z, pose.dirX, pose.dirY, pose.dirZ, {
-    accent,
-    scale: heavy ? 1.35 : 1.05,
-    style: heavy ? 'heavy' : 'ally',
-  });
-  spawnHitImpactEffect(
-    pose.x,
-    pose.y,
-    pose.z,
-    pose.dirX,
-    Math.max(0.15, pose.dirY),
-    pose.dirZ,
-    heavy,
-  );
+  triggerMobMeleeHitFeedback(m.type, pose.x, pose.y, pose.z, pose.dirX, pose.dirY, pose.dirZ);
   spawnDamagePopup(PROTOTYPE_ATTACK_DAMAGE, pose.x, pose.y + 0.25, pose.z, heavy);
-  playMeleeHitSound(heavy);
 
   if (state.attackTarget === 'player') {
     if (takeDamage(PROTOTYPE_ATTACK_DAMAGE, state.pendingKbX, state.pendingKbZ)) {

@@ -3,8 +3,13 @@
 
 import type { MobData } from '../../stores/useMobStore';
 import {
+  triggerMeleeSwingSound,
+  triggerMobMeleeHitFeedback,
+} from '../mobMeleeFeedback';
+import {
   ZOMBIE_SPEED, ZOMBIE_STOP_RANGE, ZOMBIE_ATTACK_RANGE,
   ZOMBIE_ATTACK_DAMAGE, ZOMBIE_ATTACK_COOLDOWN,
+  ZOMBIE_ATTACK_ANIM_DURATION, ZOMBIE_ATTACK_HIT_AT,
   MOB_HEIGHT, MOB_RADIUS,
   ZOMBIE_SEPARATION_RADIUS, ZOMBIE_SEPARATION_FORCE,
   ZOMBIE_FLANK_ANGLE,
@@ -17,6 +22,16 @@ export interface ZombieState {
   attackCooldown: number;
   flankTimer: number;
   blockAttackCooldown?: number;
+  attackElapsed: number;
+  attackHitApplied: boolean;
+  swingSoundPlayed: boolean;
+  pendingDamage: number;
+  pendingKbX: number;
+  pendingKbZ: number;
+  pendingIsCore: boolean;
+  pendingCoreX: number;
+  pendingCoreY: number;
+  pendingCoreZ: number;
 }
 
 /** 攻撃結果 */
@@ -34,6 +49,30 @@ export interface ZombieBlockAttackResult {
   damage: number;
 }
 
+function startZombieAttack(
+  m: MobData,
+  state: ZombieState,
+  damage: number,
+  kbX: number,
+  kbZ: number,
+  core?: { x: number; y: number; z: number },
+): void {
+  state.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
+  state.attackElapsed = 0;
+  state.attackHitApplied = false;
+  state.swingSoundPlayed = false;
+  state.pendingDamage = damage;
+  state.pendingKbX = kbX;
+  state.pendingKbZ = kbZ;
+  state.pendingIsCore = !!core;
+  state.pendingCoreX = core?.x ?? 0;
+  state.pendingCoreY = core?.y ?? 0;
+  state.pendingCoreZ = core?.z ?? 0;
+  m.attackTimer = ZOMBIE_ATTACK_ANIM_DURATION;
+  m.vx = 0;
+  m.vz = 0;
+}
+
 /**
  * ゾンビ1体のAI更新
  */
@@ -44,16 +83,20 @@ export function updateZombieAI(
 ): { alive: boolean; attack: ZombieAttackResult | null; blockAttack: ZombieBlockAttackResult | null } {
   const { dt, playerX, playerZ, playerY, checkCollision, allMobs, corePosition, getBlock } = ctx;
 
+  // 既存 state 互換（古いセーブ/初期化不足対策）
+  if (state.attackElapsed === undefined) state.attackElapsed = 0;
+  if (state.attackHitApplied === undefined) state.attackHitApplied = false;
+  if (state.swingSoundPlayed === undefined) state.swingSoundPlayed = false;
+  if (state.pendingDamage === undefined) state.pendingDamage = 0;
+
   let targetX = playerX;
   let targetZ = playerZ;
   let targetY = playerY;
   let targetingCore = false;
 
-  // コアが存在し、プレイヤーより近い場合はコアを狙う
   const pDist = Math.sqrt((playerX - m.x)**2 + (playerZ - m.z)**2);
   if (corePosition) {
     const cDist = Math.sqrt((corePosition.x - m.x)**2 + (corePosition.z - m.z)**2);
-    // コアの方が近い、またはプレイヤーが離れすぎている場合はコア優先
     if (cDist < pDist || pDist > 20) {
       targetX = corePosition.x;
       targetZ = corePosition.z;
@@ -67,6 +110,54 @@ export function updateZombieAI(
   const distXZ = Math.sqrt(dx * dx + dz * dz);
   const speedMultiplier = m.speedMultiplier ?? 1;
   const attackMultiplier = m.attackMultiplier ?? 1;
+  const isAttacking = (m.attackTimer ?? 0) > 0;
+
+  // 攻撃アニメ進行
+  let attack: ZombieAttackResult | null = null;
+  let blockAttack: ZombieBlockAttackResult | null = null;
+
+  if (isAttacking) {
+    state.attackElapsed += dt;
+    if (!state.swingSoundPlayed && state.attackElapsed >= 0.12) {
+      state.swingSoundPlayed = true;
+      triggerMeleeSwingSound();
+    }
+    if (!state.attackHitApplied && state.attackElapsed >= ZOMBIE_ATTACK_HIT_AT) {
+      state.attackHitApplied = true;
+      if (state.pendingIsCore) {
+        blockAttack = {
+          x: state.pendingCoreX,
+          y: state.pendingCoreY,
+          z: state.pendingCoreZ,
+          damage: state.pendingDamage,
+        };
+        triggerMobMeleeHitFeedback(
+          m.type,
+          state.pendingCoreX,
+          state.pendingCoreY + 0.6,
+          state.pendingCoreZ,
+          Math.sin(m.rotation),
+          0.2,
+          Math.cos(m.rotation),
+        );
+      } else {
+        const hx = playerX;
+        const hy = playerY + 1.1;
+        const hz = playerZ;
+        let dirX = hx - m.x;
+        let dirZ = hz - m.z;
+        let dirY = hy - (m.y + 1.1);
+        const len = Math.hypot(dirX, dirY, dirZ) || 1;
+        dirX /= len; dirY /= len; dirZ /= len;
+        triggerMobMeleeHitFeedback(m.type, hx, hy, hz, dirX, dirY, dirZ);
+        attack = {
+          damage: state.pendingDamage,
+          kbDirX: state.pendingKbX,
+          kbDirZ: state.pendingKbZ,
+        };
+      }
+    }
+  }
 
   // ゾンビ同士の分離
   let sepX = 0;
@@ -83,8 +174,13 @@ export function updateZombieAI(
     }
   }
 
-  if (distXZ > ZOMBIE_STOP_RANGE) {
-    // 回り込み行動
+  if (isAttacking) {
+    m.vx = 0;
+    m.vz = 0;
+    if (distXZ > 0.1) {
+      m.rotation = Math.atan2(dx, dz);
+    }
+  } else if (distXZ > ZOMBIE_STOP_RANGE) {
     let moveAngle = Math.atan2(dx, dz);
     const mobHash = parseInt(m.id.replace('mob_', ''), 10) || 0;
     const flankDir = (mobHash % 2 === 0) ? 1 : -1;
@@ -96,7 +192,6 @@ export function updateZombieAI(
 
     m.rotation = Math.atan2(dx, dz);
 
-    // 被弾中も接近を止めない（軽いノックバックは速度に混ぜて減衰）
     const nx = Math.sin(moveAngle);
     const nz = Math.cos(moveAngle);
     const chaseVx = (nx * ZOMBIE_SPEED * speedMultiplier) + sepX;
@@ -116,10 +211,8 @@ export function updateZombieAI(
     }
   }
 
-  // 物理
   applyMobGravityAndYCollision(m, dt, checkCollision, MOB_RADIUS, MOB_HEIGHT, ctx.getBlock);
 
-  // X衝突
   const newX = m.x + m.vx * dt;
   if (checkCollision(newX, m.y, m.z, MOB_RADIUS, MOB_HEIGHT)) {
     if (!checkCollision(newX, m.y + 1, m.z, MOB_RADIUS, MOB_HEIGHT)) {
@@ -132,7 +225,6 @@ export function updateZombieAI(
     m.x = newX;
   }
 
-  // Z衝突
   const newZ = m.z + m.vz * dt;
   if (checkCollision(m.x, m.y, newZ, MOB_RADIUS, MOB_HEIGHT)) {
     if (!checkCollision(m.x, m.y + 1, newZ, MOB_RADIUS, MOB_HEIGHT)) {
@@ -145,51 +237,42 @@ export function updateZombieAI(
     m.z = newZ;
   }
 
-  // 攻撃対象への距離計算
-  let attack: ZombieAttackResult | null = null;
-  let blockAttack: ZombieBlockAttackResult | null = null;
+  // 攻撃開始判定
   const targetDy = m.y - targetY;
   const yClose = Math.abs(targetDy) < MOB_HEIGHT + 0.5;
 
-  if (distXZ < ZOMBIE_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
+  if (!isAttacking && distXZ < ZOMBIE_ATTACK_RANGE && yClose && state.attackCooldown <= 0) {
+    const damage = Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier));
     if (targetingCore && corePosition) {
-      blockAttack = {
-        x: corePosition.x,
-        y: corePosition.y,
-        z: corePosition.z,
-        damage: Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier)),
-      };
+      startZombieAttack(m, state, damage, 0, 0, corePosition);
     } else {
-      attack = {
-        damage: Math.max(1, Math.round(ZOMBIE_ATTACK_DAMAGE * attackMultiplier)),
-        kbDirX: playerX - m.x,
-        kbDirZ: playerZ - m.z,
-      };
+      startZombieAttack(m, state, damage, playerX - m.x, playerZ - m.z);
     }
-    state.attackCooldown = ZOMBIE_ATTACK_COOLDOWN;
   }
 
-  // 障害物ブロックへの攻撃判定（もし移動が詰まってかつ目の前にブロックがあれば）
   if (!state.blockAttackCooldown) state.blockAttackCooldown = 0;
   state.blockAttackCooldown = Math.max(0, state.blockAttackCooldown - dt);
 
-  // ZOMBIEが止まってしまっている && ノックバック中ではない
-  if (!blockAttack && distXZ > ZOMBIE_STOP_RANGE && Math.abs(m.vx) < 0.1 && Math.abs(m.vz) < 0.1 && m.hitTimer <= 0) {
-    // 進行方向のブロックを取得
+  if (
+    !blockAttack
+    && !isAttacking
+    && distXZ > ZOMBIE_STOP_RANGE
+    && Math.abs(m.vx) < 0.1
+    && Math.abs(m.vz) < 0.1
+    && m.hitTimer <= 0
+  ) {
     const lookAngle = m.rotation;
-    // 目の前 1.0 ブロック先の座標
     const bx = Math.floor(m.x + Math.sin(lookAngle) * 1.0);
     const bz = Math.floor(m.z + Math.cos(lookAngle) * 1.0);
-    const by = Math.floor(m.y + 0.5); // 目の高さ
-    const byFoot = Math.floor(m.y); // 足元
+    const by = Math.floor(m.y + 0.5);
+    const byFoot = Math.floor(m.y);
 
     if (getBlock && state.blockAttackCooldown <= 0) {
-      // 目の高さか足元に空気以外のブロックがあれば攻撃
       const blockIdObj = getBlock(bx, by, bz);
       const blockIdFoot = getBlock(bx, byFoot, bz);
-      if (blockIdObj !== 0 && blockIdObj !== 7) { // 0=AIR, 7=BEDROCK
+      if (blockIdObj !== 0 && blockIdObj !== 7) {
         blockAttack = { x: bx, y: by, z: bz, damage: 1 };
-        state.blockAttackCooldown = 1.0; // 1秒に1回ダメージ
+        state.blockAttackCooldown = 1.0;
       } else if (blockIdFoot !== 0 && blockIdFoot !== 7) {
         blockAttack = { x: bx, y: byFoot, z: bz, damage: 1 };
         state.blockAttackCooldown = 1.0;

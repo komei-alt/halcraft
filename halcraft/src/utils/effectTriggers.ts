@@ -132,26 +132,42 @@ export function registerCombatExplosionSpawner(fn: typeof _spawnCombatExplosionF
   _spawnCombatExplosionFn = fn;
 }
 
-// ========== AllyMeleeAttackFX（味方近接のヒット瞬間） ==========
-export interface AllyMeleeHitOptions {
+// ========== MobMeleeAttackFX（味方・敵の近接ヒット瞬間） ==========
+export interface MobMeleeHitOptions {
   /** アクセント色（CSS/hex） */
   accent?: string;
   /** 見た目スケール */
   scale?: number;
-  /** ally=プロトタイプ, heavy=ゴーレム */
-  style?: 'ally' | 'heavy';
+  /** ally=味方 / heavy=ゴーレム・ボス / claw=ゾンビ / lunge=クモ */
+  style?: 'ally' | 'heavy' | 'claw' | 'lunge';
 }
 
-let _spawnAllyMeleeHitFn: (
+/** @deprecated MobMeleeHitOptions を使う */
+export type AllyMeleeHitOptions = MobMeleeHitOptions;
+
+let _spawnMobMeleeHitFn: (
   x: number,
   y: number,
   z: number,
   dirX: number,
   dirY: number,
   dirZ: number,
-  options?: AllyMeleeHitOptions,
+  options?: MobMeleeHitOptions,
 ) => void = () => {};
 
+export function spawnMobMeleeHit(
+  x: number,
+  y: number,
+  z: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number,
+  options?: MobMeleeHitOptions,
+): void {
+  _spawnMobMeleeHitFn(x, y, z, dirX, dirY, dirZ, options);
+}
+
+/** 後方互換エイリアス */
 export function spawnAllyMeleeHit(
   x: number,
   y: number,
@@ -159,11 +175,16 @@ export function spawnAllyMeleeHit(
   dirX: number,
   dirY: number,
   dirZ: number,
-  options?: AllyMeleeHitOptions,
+  options?: MobMeleeHitOptions,
 ): void {
-  _spawnAllyMeleeHitFn(x, y, z, dirX, dirY, dirZ, options);
+  spawnMobMeleeHit(x, y, z, dirX, dirY, dirZ, options);
 }
 
-export function registerAllyMeleeHitSpawner(fn: typeof _spawnAllyMeleeHitFn): void {
-  _spawnAllyMeleeHitFn = fn;
+export function registerMobMeleeHitSpawner(fn: typeof _spawnMobMeleeHitFn): void {
+  _spawnMobMeleeHitFn = fn;
+}
+
+/** 後方互換エイリアス */
+export function registerAllyMeleeHitSpawner(fn: typeof _spawnMobMeleeHitFn): void {
+  registerMobMeleeHitSpawner(fn);
 }

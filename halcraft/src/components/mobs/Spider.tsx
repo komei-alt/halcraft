@@ -136,7 +136,36 @@ export function Spider({ mob, animTime }: SpiderProps) {
     animClock.current += delta;
     const t = animClock.current;
     const speed = Math.hypot(mob.vx, mob.vz);
-    const isMoving = speed > 0.12;
+    const attackTimer = mob.attackTimer ?? 0;
+    const isAttacking = attackTimer > 0.01;
+    // 攻撃 progress: 0→1
+    const atkProgress = isAttacking
+      ? THREE.MathUtils.clamp(1 - attackTimer / 0.4, 0, 1)
+      : 0;
+    // 0-0.35 溜め後退 / 0.35-0.55 突進 / 0.55-1 戻し
+    let lunge = 0;
+    let crouch = 0;
+    let fangOpen = 0;
+    if (isAttacking) {
+      if (atkProgress < 0.35) {
+        const u = atkProgress / 0.35;
+        lunge = -0.18 * u;
+        crouch = 0.12 * u;
+        fangOpen = 0.35 * u;
+      } else if (atkProgress < 0.55) {
+        const u = (atkProgress - 0.35) / 0.2;
+        lunge = THREE.MathUtils.lerp(-0.18, 0.42, u);
+        crouch = THREE.MathUtils.lerp(0.12, -0.06, u);
+        fangOpen = THREE.MathUtils.lerp(0.35, 0.95, u);
+      } else {
+        const u = (atkProgress - 0.55) / 0.45;
+        lunge = THREE.MathUtils.lerp(0.42, 0, u);
+        crouch = THREE.MathUtils.lerp(-0.06, 0, u);
+        fangOpen = THREE.MathUtils.lerp(0.95, 0, u);
+      }
+    }
+
+    const isMoving = !isAttacking && speed > 0.12;
     const walkCycle = t * (isMoving ? 11 : 1.8);
     const hitTilt = isDamaged ? Math.sin(mob.hitTimer * 28) * (0.12 + hitPulse * 0.1) : 0;
     const bodyBob = isMoving ? Math.abs(Math.sin(walkCycle * 2)) * 0.035 : Math.sin(t * 2) * 0.008;
@@ -146,8 +175,26 @@ export function Spider({ mob, animTime }: SpiderProps) {
       rootRef.current.rotation.y = mob.rotation;
     }
     if (bodyGroupRef.current) {
-      bodyGroupRef.current.rotation.set(hitTilt, 0, hitTilt * 0.3);
-      bodyGroupRef.current.position.y = bodyBob;
+      bodyGroupRef.current.rotation.set(
+        hitTilt + crouch * 0.9 - lunge * 0.25,
+        0,
+        hitTilt * 0.3,
+      );
+      bodyGroupRef.current.position.set(0, bodyBob + crouch * 0.08, lunge);
+    }
+
+    // 牙を攻撃に合わせて開く
+    const fangs = fangsRef.current;
+    if (fangs) {
+      const partFang = new THREE.Object3D();
+      [-1, 1].forEach((side, index) => {
+        partFang.position.set(side * (0.105 + fangOpen * 0.04), 0.16 - fangOpen * 0.02, 0.53 + fangOpen * 0.06);
+        partFang.rotation.set(Math.PI - 0.22 - fangOpen * 0.55, 0, side * (0.12 + fangOpen * 0.35));
+        partFang.scale.set(0.065, 0.16 + fangOpen * 0.04, 0.065);
+        partFang.updateMatrix();
+        fangs.setMatrixAt(index, partFang.matrix);
+      });
+      fangs.instanceMatrix.needsUpdate = true;
     }
 
     const upperLegs = upperLegsRef.current;
@@ -160,6 +207,10 @@ export function Spider({ mob, animTime }: SpiderProps) {
       const phase = leg.pair * (Math.PI / 2) + (leg.side < 0 ? Math.PI * 0.15 : 0);
       const gait = Math.sin(walkCycle + phase);
       const gait2 = Math.cos(walkCycle + phase);
+      // 前脚は攻撃時に前方へ突き出す
+      const frontLeg = leg.pair <= 1;
+      const atkLegLift = isAttacking && frontLeg ? 0.1 + fangOpen * 0.12 : 0;
+      const atkStride = isAttacking && frontLeg ? lunge * 0.35 : 0;
       const lift = isMoving
         ? Math.max(0, gait) * 0.12 * speedBoost
         : Math.sin(walkCycle * 0.6 + phase) * 0.014;
@@ -167,18 +218,30 @@ export function Spider({ mob, animTime }: SpiderProps) {
       const splay = (leg.pair - 1.5) * 0.18;
       const curl = isMoving ? Math.max(0, -gait) * 0.16 : 0.04;
 
-      part.position.set(leg.side * 0.48, 0.25 + lift, leg.z + stride * 0.55);
-      part.rotation.set(curl * 0.35, -leg.side * splay, -leg.side * (0.22 + gait * 0.14));
+      part.position.set(
+        leg.side * 0.48,
+        0.25 + lift + atkLegLift,
+        leg.z + stride * 0.55 + atkStride,
+      );
+      part.rotation.set(
+        curl * 0.35 - (frontLeg ? fangOpen * 0.4 : 0),
+        -leg.side * splay,
+        -leg.side * (0.22 + gait * 0.14),
+      );
       part.scale.set(0.45, 0.065, 0.075);
       part.updateMatrix();
       upperLegs.setMatrixAt(index, part.matrix);
 
       part.position.set(
         leg.side * (0.82 + lift * 0.15),
-        0.08 + lift * 0.45,
-        leg.z + stride * 1.05,
+        0.08 + lift * 0.45 + atkLegLift * 0.4,
+        leg.z + stride * 1.05 + atkStride * 1.2,
       );
-      part.rotation.set(curl * 0.65, -leg.side * splay * 1.2, -leg.side * (0.55 - gait * 0.16));
+      part.rotation.set(
+        curl * 0.65 - (frontLeg ? fangOpen * 0.5 : 0),
+        -leg.side * splay * 1.2,
+        -leg.side * (0.55 - gait * 0.16),
+      );
       part.scale.set(0.36, 0.052, 0.065);
       part.updateMatrix();
       lowerLegs.setMatrixAt(index, part.matrix);
