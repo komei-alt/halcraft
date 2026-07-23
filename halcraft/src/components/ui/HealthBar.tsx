@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 
 /** 回復中かどうかを判定（定期ポーリングで更新） */
 function useIsRegenerating(): boolean {
@@ -120,6 +121,7 @@ export function HealthBar() {
   const maxHp = usePlayerStore((s) => s.maxHp);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const isRegenerating = useIsRegenerating();
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
   if (isBuildMode) return null;
 
@@ -128,17 +130,19 @@ export function HealthBar() {
   const fullHearts = Math.floor(hp / 2);
   const hasHalf = hp % 2 === 1;
   const lowHp = hp > 0 && hp <= maxHp * 0.3;
+  // 搭乗中はホットバーが無いので左上へ寄せて中央照準を邪魔しない
+  const inVehicle = activeVehicle !== null;
 
   return (
     <div
       id="health-bar"
       style={{
         position: 'fixed',
-        bottom: 76,
-        // ホットバー中央から左側にハートを並べ、空腹ゲージと重ねない
-        right: 'calc(50% + 10px)',
+        ...(inVehicle
+          ? { top: 14, left: 14, right: 'auto', bottom: 'auto' }
+          : { bottom: 76, right: 'calc(50% + 10px)' }),
         display: 'flex',
-        justifyContent: 'flex-end',
+        justifyContent: inVehicle ? 'flex-start' : 'flex-end',
         gap: 1,
         zIndex: 100,
         filter: lowHp

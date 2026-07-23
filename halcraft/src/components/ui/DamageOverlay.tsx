@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
+import { activateDesktopGameplayInput } from '../../utils/gameCanvas';
 
 /** ダメージ方向インジケーター（攻撃元の方向に赤い矢印） */
 function DamageDirectionIndicator({ direction }: { direction: number | null }) {
@@ -104,12 +105,11 @@ export function DamageOverlay() {
 
   const handleRespawn = () => {
     respawn();
-    // リスポーン時にポインターロックを再取得（デスクトップのみ）
+    // リスポーン後に操作入力を確実に復帰（水色画面ロック防止と同じ経路）
     if (!isTouchDevice()) {
-      setTimeout(() => {
-        const canvas = document.querySelector('canvas');
-        if (canvas) canvas.requestPointerLock();
-      }, 100);
+      window.setTimeout(() => {
+        activateDesktopGameplayInput();
+      }, 80);
     }
   };
 

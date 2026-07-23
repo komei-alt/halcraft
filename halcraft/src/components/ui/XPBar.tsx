@@ -3,14 +3,17 @@
 
 import { useExperienceStore } from '../../stores/useExperienceStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 
 export function XPBar() {
   const level = useExperienceStore((s) => s.level);
   const progress = useExperienceStore((s) => s.getProgress());
   const phase = useGameStore((s) => s.phase);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
-  if (phase !== 'playing' || isBuildMode) return null;
+  // 搭乗中はホットバー周辺HUDを畳む
+  if (phase !== 'playing' || isBuildMode || activeVehicle !== null) return null;
 
   return (
     <div

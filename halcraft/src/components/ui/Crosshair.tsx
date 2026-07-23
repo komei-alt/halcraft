@@ -128,9 +128,9 @@ export function Crosshair() {
   const modeRule = useMemo(() => getStageModeRule(currentStageId), [currentStageId]);
 
   // プレイ中以外・乗り物搭乗中は専用照準/UIに任せる
-  // 機関銃ADS中はスコープHUDに照準を任せる
+  // 機関銃ADS中はスコープHUDに照準を任せる（二重照準を早めに避ける）
   if (phase !== 'playing' || activeVehicle !== null) return null;
-  if (equippedItem === 'machine_gun' && machineGunScopeProgress > 0.28) return null;
+  if (equippedItem === 'machine_gun' && machineGunScopeProgress > 0.12) return null;
 
   const profile = CROSSHAIR_PROFILES[equippedItem];
   const charge = Math.max(0, Math.min(1, getChargeForItem(

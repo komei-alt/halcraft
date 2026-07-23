@@ -570,9 +570,9 @@ export function VehicleWeapons() {
 
     const startPos = getTankCannonMuzzle();
     const barrelDir = getTankCannonDirection();
-    // カメラ照準点へ寄せつつ、砲身方向から大きく外れたら砲身優先
+    // 画面中心の照準に寄せる（極端な後ろ向きだけ砲身フォールバック）
     shootDir.current.copy(
-      getBarrelAlignedAimDirection(startPos, barrelDir, camera, ROCKET_AIM_DISTANCE, 0.25),
+      getBarrelAlignedAimDirection(startPos, barrelDir, camera, ROCKET_AIM_DISTANCE, 0.12),
     );
 
     const vel = shootDir.current.clone().multiplyScalar(ROCKET_SPEED);

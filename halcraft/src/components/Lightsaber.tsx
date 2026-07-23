@@ -66,7 +66,8 @@ const JUST_COMBO_WINDOW_RATIO = 0.62;
 const JUST_COMBO_DAMAGE_BONUS = 0.12;
 
 /** FPS表示オフセット */
-const IDLE_OFFSET = new THREE.Vector3(0.34, -0.32, -0.88);
+/** 待機時は右下へ寄せて画面中央を塞がない */
+const IDLE_OFFSET = new THREE.Vector3(0.42, -0.4, -0.92);
 const FIRST_PERSON_SKIN_COLOR = '#f0b686';
 const FIRST_PERSON_SLEEVE_COLOR = '#3f78d4';
 const BLADE_LENGTH = 1.55;
