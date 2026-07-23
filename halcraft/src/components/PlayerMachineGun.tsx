@@ -37,9 +37,10 @@ const BULLET_RANGE = 34;
 const MOB_HIT_RADIUS = 0.85;
 const PLAYER_HIT_RADIUS = 0.48;
 const PLAYER_HIT_HEIGHT = 1.7;
-const HIP_MODEL_OFFSET = new THREE.Vector3(0.32, -0.32, -0.7);
+/** 腰だめ時：画面中央を塞がないよう右下へ */
+const HIP_MODEL_OFFSET = new THREE.Vector3(0.38, -0.38, -0.72);
 /** ADS 完了時：画面中心（カメラ視線）に揃えて覗き込む位置 */
-const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.0, -0.02, -0.34);
+const SCOPED_MODEL_OFFSET = new THREE.Vector3(0.0, -0.04, -0.36);
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.17, -1.18);
 /** ADS 時の弾スポーン：カメラ中心から少し前（照準ドットと視線が重なる） */
 const SCOPED_SPAWN_FORWARD = 0.48;

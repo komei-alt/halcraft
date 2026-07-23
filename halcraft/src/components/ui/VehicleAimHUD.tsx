@@ -14,17 +14,56 @@ const panelBase: CSSProperties = {
 };
 
 function Tick({ axis }: { axis: 'horizontal' | 'vertical' }) {
+  // 中央にギャップを空け、ドットと重ならない十字にする
+  if (axis === 'horizontal') {
+    return (
+      <>
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 22,
+          height: 2,
+          transform: 'translate(calc(-100% - 10px), -50%)',
+          background: 'rgba(255, 245, 190, 0.9)',
+          boxShadow: '0 0 5px rgba(255, 170, 60, 0.65), 0 0 1px rgba(0,0,0,0.9)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 22,
+          height: 2,
+          transform: 'translate(10px, -50%)',
+          background: 'rgba(255, 245, 190, 0.9)',
+          boxShadow: '0 0 5px rgba(255, 170, 60, 0.65), 0 0 1px rgba(0,0,0,0.9)',
+        }} />
+      </>
+    );
+  }
   return (
-    <div style={{
-      position: 'absolute',
-      left: '50%',
-      top: '50%',
-      width: axis === 'horizontal' ? 58 : 2,
-      height: axis === 'horizontal' ? 2 : 58,
-      transform: 'translate(-50%, -50%)',
-      background: 'rgba(255, 245, 190, 0.78)',
-      boxShadow: '0 0 5px rgba(255, 170, 60, 0.6), 0 0 1px rgba(0,0,0,0.9)',
-    }} />
+    <>
+      <div style={{
+        position: 'absolute',
+        left: '50%',
+        top: '50%',
+        width: 2,
+        height: 22,
+        transform: 'translate(-50%, calc(-100% - 10px))',
+        background: 'rgba(255, 245, 190, 0.9)',
+        boxShadow: '0 0 5px rgba(255, 170, 60, 0.65), 0 0 1px rgba(0,0,0,0.9)',
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: '50%',
+        top: '50%',
+        width: 2,
+        height: 22,
+        transform: 'translate(-50%, 10px)',
+        background: 'rgba(255, 245, 190, 0.9)',
+        boxShadow: '0 0 5px rgba(255, 170, 60, 0.65), 0 0 1px rgba(0,0,0,0.9)',
+      }} />
+    </>
   );
 }
 
@@ -83,16 +122,28 @@ export function VehicleAimHUD() {
       }}>
         <Tick axis="horizontal" />
         <Tick axis="vertical" />
+        {/* 中心ドット（弾道の基準点） */}
         <div style={{
           position: 'absolute',
           left: '50%',
           top: '50%',
-          width: 12,
-          height: 12,
+          width: 6,
+          height: 6,
           transform: 'translate(-50%, -50%)',
           borderRadius: '50%',
-          border: '2px solid rgba(255, 250, 220, 0.9)',
-          boxShadow: '0 0 8px rgba(255, 230, 130, 0.55)',
+          background: '#fffef8',
+          boxShadow: '0 0 8px rgba(255, 230, 130, 0.75)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 14,
+          height: 14,
+          transform: 'translate(-50%, -50%)',
+          borderRadius: '50%',
+          border: '1.5px solid rgba(255, 250, 220, 0.75)',
+          boxShadow: '0 0 8px rgba(255, 230, 130, 0.4)',
         }} />
         {isTank && (
           <div style={{

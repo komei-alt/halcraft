@@ -68,7 +68,9 @@ export function NameTag({ name, speaking = false }: NameTagProps) {
       new THREE.SpriteMaterial({
         map: texture,
         transparent: true,
-        depthTest: false,
+        // 壁越しに名前が見える壁抜けを防ぐ（近い相手だけ読める）
+        depthTest: true,
+        depthWrite: false,
       }),
     [texture],
   );
@@ -80,6 +82,7 @@ export function NameTag({ name, speaking = false }: NameTagProps) {
       material={spriteMat}
       position={[0, 2.2, 0]}
       scale={[scale * aspectRatio, scale, 1]}
+      renderOrder={12}
     />
   );
 }

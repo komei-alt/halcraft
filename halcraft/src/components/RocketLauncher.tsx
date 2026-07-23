@@ -64,8 +64,8 @@ const TRAIL_INTERVAL = 0.018;
 const TRAIL_PUFF_LIFETIME = 1.05;
 const MAX_TRAIL_PUFFS = 120;
 
-/** 武器のローカル配置 */
-const SHOULDER_OFFSET = new THREE.Vector3(0.32, -0.16, -0.42);
+/** 武器のローカル配置（画面中央を塞がないようやや下・右へ） */
+const SHOULDER_OFFSET = new THREE.Vector3(0.38, -0.22, -0.48);
 const MUZZLE_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, -1.56);
 const BACKBLAST_LOCAL_OFFSET = new THREE.Vector3(0.18, 0.02, 0.16);
 const MODEL_FORWARD = new THREE.Vector3(0, 0, -1);

@@ -562,11 +562,15 @@ export function StageScenicPropFX() {
         map={texture}
         transparent
         opacity={config.opacity}
-        alphaTest={0.035}
+        // 薄い端の壁抜け・地面透けを抑える
+        alphaTest={0.12}
         depthWrite={false}
         depthTest
         side={THREE.DoubleSide}
         toneMapped={false}
+        polygonOffset
+        polygonOffsetFactor={1}
+        polygonOffsetUnits={1}
       />
     </instancedMesh>
   );

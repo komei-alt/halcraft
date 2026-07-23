@@ -40,8 +40,11 @@ import { checkProjectileHitVehicle } from '../../utils/vehicleCombat';
 
 const BULLET_SPEED = 130;
 const BULLET_MAX_AGE = 0.95;
-const BULLET_GRAVITY = 2.2;
+/** 照準一致を優先し、落下は控えめ */
+const BULLET_GRAVITY = 1.0;
 const BULLET_MIN_AIM_DISTANCE = 1.2;
+/** 自機射撃時、画面中心とのトレイル一致用スポーン前送り */
+const CAMERA_SPAWN_FORWARD = 0.85;
 const MOB_HIT_RADIUS = 1.2;
 const PLAYER_HIT_RADIUS = 0.5;
 const PLAYER_HIT_HEIGHT = 1.7;
@@ -275,22 +278,27 @@ function getAirplaneGatlingDirection(): THREE.Vector3 {
 }
 
 /**
- * 銃口から照準点へ向けつつ、砲身／銃身方向から大きく外れない方向を返す
- * （カメラと銃口の視差で弾が銃身から曲がって見えるのを防ぐ）
+ * 銃口から照準点へ向けつつ、砲身方向から大きく外れない方向を返す。
+ * 戦車主砲など砲身が見える武器向け。ガトリングはカメラ視線優先。
  */
 function getBarrelAlignedAimDirection(
   startPos: THREE.Vector3,
   barrelDir: THREE.Vector3,
   camera: THREE.Camera,
   range: number,
-  minDot = 0.35,
+  minDot = 0.2,
 ): THREE.Vector3 {
   const cameraAim = getCameraAimDirection(camera, startPos, range);
-  // 銃身方向との整合性。離れすぎたら銃身優先
+  // 極端に後ろを向いているときだけ砲身にフォールバック
   if (cameraAim.dot(barrelDir) < minDot) {
     return barrelDir.clone();
   }
   return cameraAim;
+}
+
+/** 画面中心＝弾道（VehicleAimHUD のレティクルと一致させる） */
+function getCameraForward(camera: THREE.Camera): THREE.Vector3 {
+  return new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 }
 
 /** playing 中かつ生存中のみ乗り物武器を使える */
@@ -320,20 +328,28 @@ export function VehicleWeapons() {
     if (!isRemote && now - lastGunFire.current < GUN_CONSTANTS.FIRE_COOLDOWN) return;
     if (!isRemote) lastGunFire.current = now;
 
-    const startPos = remotePos ?? getVehicleMuzzle(type, mount);
+    const muzzlePos = remotePos ?? getVehicleMuzzle(type, mount);
     let dir: THREE.Vector3;
+    let startPos: THREE.Vector3;
     if (remoteDir) {
       dir = remoteDir.clone().normalize();
+      startPos = muzzlePos.clone();
     } else {
-      // 銃口位置から照準するが、銃身／機首方向から大きく外れない
+      // 画面中心の照準HUDと弾道を一致（ヘリ機関銃・徒歩銃と同じ方針）
+      dir = getCameraForward(camera);
+      startPos = camera.position.clone().addScaledVector(dir, CAMERA_SPAWN_FORWARD);
+      // 極端にカメラが後ろを向いている時だけ銃身フォールバック
       const barrelDir = type === 'tank'
         ? getTankGatlingDirection()
         : getAirplaneGatlingDirection();
-      dir = getBarrelAlignedAimDirection(startPos, barrelDir, camera, GUN_CONSTANTS.RANGE);
+      if (dir.dot(barrelDir) < 0.15) {
+        dir = barrelDir.clone();
+        startPos = muzzlePos.clone();
+      }
     }
 
     if (!isRemote) {
-      const spread = 0.01;
+      const spread = 0.006;
       dir.x += (Math.random() - 0.5) * spread;
       dir.y += (Math.random() - 0.5) * spread;
       dir.z += (Math.random() - 0.5) * spread;
@@ -350,10 +366,10 @@ export function VehicleWeapons() {
       type,
     }]);
 
-    // 銃口フラッシュ（手応え）
+    // 銃口フラッシュは銃口位置（見た目）
     setMuzzleFlashes((prev) => [...prev.slice(-12), {
       id: nextProjectileId++,
-      pos: startPos.clone(),
+      pos: muzzlePos.clone(),
       dir: dir.clone(),
       life: 0.06,
       maxLife: 0.06,

@@ -447,9 +447,10 @@ export function StageGroundLightFX() {
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.blending}
+        // 手前押しが強すぎると地面が透けて見える
         polygonOffset
-        polygonOffsetFactor={-2}
-        polygonOffsetUnits={-2}
+        polygonOffsetFactor={-0.5}
+        polygonOffsetUnits={-0.5}
       />
     </instancedMesh>
   );

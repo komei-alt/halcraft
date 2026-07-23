@@ -283,6 +283,9 @@ export function StageSurfaceDetailFX() {
         side={THREE.DoubleSide}
         toneMapped={false}
         blending={config.kind === 'sandPebble' ? THREE.NormalBlending : THREE.AdditiveBlending}
+        polygonOffset
+        polygonOffsetFactor={1}
+        polygonOffsetUnits={1}
       />
     </instancedMesh>
   );

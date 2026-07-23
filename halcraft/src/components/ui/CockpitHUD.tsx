@@ -25,6 +25,9 @@ export function CockpitHUD() {
   const altitude = helicopter.y;
   const heading = (((-helicopter.rotationY * 180) / Math.PI) % 360 + 360) % 360;
 
+  // 銃手席は射撃視界を優先し、ガラス・ビネットをほぼ出さない
+  const cabinFxStrength = isGunner ? 0.28 : 1;
+
   return (
     <div style={{
       position: 'fixed',
@@ -32,7 +35,9 @@ export function CockpitHUD() {
       pointerEvents: 'none',
       zIndex: 90,
     }}>
-      {/* === ガラスの反射・汚れエフェクト === */}
+      {/* === ガラスの反射・汚れエフェクト（銃手は薄く） === */}
+      {!isGunner && (
+        <>
       {/* ガラスのエッジグロー（窓の端に薄いハイライト） */}
       <div style={{
         position: 'absolute',
@@ -66,19 +71,23 @@ export function CockpitHUD() {
           transparent 71%
         )`,
       }} />
+        </>
+      )}
 
-      {/* === 窓枠ビネット（エッジを暗くしてフレーム感を出す） === */}
+      {/* === 窓枠ビネット（銃手はごく薄く、パイロットは従来） === */}
       <div style={{
         position: 'absolute',
         inset: 0,
         boxShadow: `
-          inset 0 0 120px 30px rgba(0, 0, 0, 0.4),
-          inset 0 60px 80px -40px rgba(0, 0, 0, 0.3),
-          inset 0 -40px 60px -20px rgba(0, 0, 0, 0.35)
+          inset 0 0 ${Math.round(120 * cabinFxStrength)}px ${Math.round(30 * cabinFxStrength)}px rgba(0, 0, 0, ${0.4 * cabinFxStrength}),
+          inset 0 ${Math.round(60 * cabinFxStrength)}px ${Math.round(80 * cabinFxStrength)}px -${Math.round(40 * cabinFxStrength)}px rgba(0, 0, 0, ${0.3 * cabinFxStrength}),
+          inset 0 -${Math.round(40 * cabinFxStrength)}px ${Math.round(60 * cabinFxStrength)}px -${Math.round(20 * cabinFxStrength)}px rgba(0, 0, 0, ${0.35 * cabinFxStrength})
         `,
       }} />
 
-      {/* ダッシュボード下部のグラデーション（コックピット奥行き感） */}
+      {/* ダッシュボード下部（銃手は射界確保のため非表示） */}
+      {!isGunner && (
+        <>
       <div style={{
         position: 'absolute',
         bottom: 0,
@@ -97,6 +106,8 @@ export function CockpitHUD() {
         height: '8%',
         background: 'linear-gradient(to bottom, rgba(10, 10, 15, 0.6) 0%, transparent 100%)',
       }} />
+        </>
+      )}
 
       {/* === HUD インストルメント（パイロット・副操縦士のみ表示） === */}
 
@@ -428,54 +439,91 @@ export function CockpitHUD() {
         </span>
       </div>
 
-      {/* === 機関銃手用照準HUD === */}
+      {/* === 機関銃手用照準HUD（画面中心＝弾道） === */}
       {isGunner && (
         <>
-          {/* 中央射撃照準（クロスヘアとは別の大きな照準） */}
           <div style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: '80px',
-            height: '80px',
-            border: '1px solid rgba(255, 68, 68, 0.4)',
+            width: 96,
+            height: 96,
+            border: '2px solid rgba(255, 214, 120, 0.82)',
             borderRadius: '50%',
+            boxShadow: '0 0 12px rgba(255, 170, 60, 0.35), inset 0 0 14px rgba(255, 170, 60, 0.12)',
             pointerEvents: 'none',
           }}>
-            {/* 十字線 */}
+            {/* 十字（中央ギャップ） */}
             <div style={{
               position: 'absolute',
               top: '50%',
-              left: '10px',
-              right: '10px',
-              height: '1px',
-              background: 'rgba(255, 68, 68, 0.5)',
+              left: 12,
+              width: 28,
+              height: 2,
+              transform: 'translateY(-50%)',
+              background: 'rgba(255, 245, 190, 0.9)',
+              boxShadow: '0 0 4px rgba(255, 170, 60, 0.7)',
+            }} />
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              right: 12,
+              width: 28,
+              height: 2,
+              transform: 'translateY(-50%)',
+              background: 'rgba(255, 245, 190, 0.9)',
+              boxShadow: '0 0 4px rgba(255, 170, 60, 0.7)',
             }} />
             <div style={{
               position: 'absolute',
               left: '50%',
-              top: '10px',
-              bottom: '10px',
-              width: '1px',
-              background: 'rgba(255, 68, 68, 0.5)',
+              top: 12,
+              width: 2,
+              height: 28,
+              transform: 'translateX(-50%)',
+              background: 'rgba(255, 245, 190, 0.9)',
+              boxShadow: '0 0 4px rgba(255, 170, 60, 0.7)',
+            }} />
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 12,
+              width: 2,
+              height: 28,
+              transform: 'translateX(-50%)',
+              background: 'rgba(255, 245, 190, 0.9)',
+              boxShadow: '0 0 4px rgba(255, 170, 60, 0.7)',
+            }} />
+            {/* 中央ドット */}
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: 6,
+              height: 6,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              background: '#fffef8',
+              boxShadow: '0 0 8px rgba(255, 220, 120, 0.9)',
             }} />
           </div>
-          {/* GUN STATUS */}
           <div style={{
             position: 'absolute',
-            bottom: '80px',
+            bottom: '12%',
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.5)',
-            borderRadius: '4px',
-            padding: '4px 12px',
-            border: '1px solid rgba(255, 68, 68, 0.3)',
+            background: 'rgba(0, 0, 0, 0.48)',
+            borderRadius: 6,
+            padding: '5px 12px',
+            border: '1px solid rgba(255, 200, 100, 0.35)',
             fontFamily: 'monospace',
-            fontSize: '10px',
-            color: '#ff6644',
+            fontSize: 11,
+            color: '#ffd27a',
+            textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+            whiteSpace: 'nowrap',
           }}>
-            🔫 {mySeat === 'gunner_left' ? 'LEFT' : 'RIGHT'} GUN • 左クリックで射撃
+            🔫 {mySeat === 'gunner_left' ? 'LEFT' : 'RIGHT'} GUN • 画面中央に撃つ
           </div>
         </>
       )}
