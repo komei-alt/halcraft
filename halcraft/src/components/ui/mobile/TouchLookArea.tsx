@@ -3,7 +3,7 @@
 // ジョイスティック & ボタン領域と干渉しないように制御
 
 import { useRef, useEffect, useCallback } from 'react';
-import { touchLook, mobileActions } from '../../../utils/touchInput';
+import { touchLook, mobileActions, resetMobileActionTriggers } from '../../../utils/touchInput';
 import { usePlayerStore } from '../../../stores/usePlayerStore';
 
 /** タッチ感度 */
@@ -125,8 +125,40 @@ export function TouchLookArea() {
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
       document.removeEventListener('touchcancel', handleTouchEnd);
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      activeTouches.current.clear();
     };
   }, [handleTouchMove, handleTouchEnd]);
+
+  // タブ離脱で長押し設置が残らないようにする
+  useEffect(() => {
+    const clearStuck = () => {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      activeTouches.current.clear();
+      // 押しっぱなし系は別コンポーネントが持つが、破壊/設置トリガーはここで掃除
+      mobileActions.breakBlock = false;
+      mobileActions.placeBlock = false;
+      touchLook.deltaX = 0;
+      touchLook.deltaY = 0;
+    };
+    const onVisibility = () => {
+      if (document.hidden) clearStuck();
+    };
+    window.addEventListener('blur', clearStuck);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', clearStuck);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearStuck();
+      resetMobileActionTriggers();
+    };
+  }, []);
 
   return (
     <div

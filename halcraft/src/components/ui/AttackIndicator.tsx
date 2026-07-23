@@ -2,6 +2,7 @@
 // ビルダーの攻撃チャージに加え、グローブ押し準備・ボム装填数も表示
 
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { isTouchDevice } from '../../utils/device';
 
 interface IndicatorView {
@@ -109,6 +110,10 @@ export function AttackIndicator() {
   const glovePulling = usePlayerStore((s) => s.glovePulling);
   const bombArmedCount = usePlayerStore((s) => s.bombArmedCount);
   const bombMaxCount = usePlayerStore((s) => s.bombMaxCount);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+
+  // 搭乗中は乗り物照準に任せる
+  if (activeVehicle !== null) return null;
 
   const view = getIndicator(
     equippedItem,

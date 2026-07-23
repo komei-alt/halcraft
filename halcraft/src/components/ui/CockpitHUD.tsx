@@ -513,17 +513,33 @@ export function CockpitHUD() {
             bottom: '12%',
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.48)',
-            borderRadius: 6,
-            padding: '5px 12px',
-            border: '1px solid rgba(255, 200, 100, 0.35)',
-            fontFamily: 'monospace',
-            fontSize: 11,
-            color: '#ffd27a',
-            textShadow: '0 1px 3px rgba(0,0,0,0.85)',
-            whiteSpace: 'nowrap',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
           }}>
-            🔫 {mySeat === 'gunner_left' ? 'LEFT' : 'RIGHT'} GUN • 画面中央に撃つ
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.48)',
+              borderRadius: 6,
+              padding: '5px 12px',
+              border: '1px solid rgba(255, 200, 100, 0.35)',
+              fontFamily: 'monospace',
+              fontSize: 11,
+              color: '#ffd27a',
+              textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+              whiteSpace: 'nowrap',
+            }}>
+              🔫 {mySeat === 'gunner_left' ? 'LEFT' : 'RIGHT'} GUN • 画面中央に撃つ
+            </div>
+            <div style={{
+              fontFamily: 'monospace',
+              fontSize: 10,
+              color: 'rgba(220, 230, 255, 0.72)',
+              textShadow: '0 1px 3px rgba(0,0,0,0.85)',
+              whiteSpace: 'nowrap',
+            }}>
+              1-3 座席 / F 降りる
+            </div>
           </div>
         </>
       )}

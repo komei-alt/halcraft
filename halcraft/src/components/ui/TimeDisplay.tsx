@@ -41,15 +41,15 @@ export function TimeDisplay() {
   const isNight = useGameStore((s) => s.isNight);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const inHelicopter = useVehicleStore((s) => s.helicopter.mySeat !== null);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const isSimpleHud = useSimpleHud();
   const modeLabel = isBuildMode
     ? creativeFlying ? '🏗️ 建築 / 飛行中' : '🏗️ 建築'
     : '⚔️ 戦争';
   const modeColor = isBuildMode ? '#9bdcff' : '#b9f28f';
 
-  // ミニマップと同じ右上を占有しない
-  if (inHelicopter) return null;
+  // 乗り物中はミニマップ・照準・計器を優先（右上を空ける）
+  if (activeVehicle !== null) return null;
 
   return (
     <div

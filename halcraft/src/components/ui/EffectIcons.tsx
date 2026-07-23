@@ -3,6 +3,7 @@
 
 import { useEffectStore } from '../../stores/useEffectStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { EFFECT_INFO } from '../../types/potions';
 import { useSimpleHud } from '../../utils/hudDensity';
 
@@ -16,6 +17,7 @@ function formatTime(seconds: number): string {
 export function EffectIcons() {
   const effects = useEffectStore((s) => s.effects);
   const phase = useGameStore((s) => s.phase);
+  const inHelicopter = useVehicleStore((s) => s.helicopter.mySeat !== null);
   const isSimpleHud = useSimpleHud();
 
   if (phase !== 'playing' || effects.length === 0) return null;
@@ -25,8 +27,9 @@ export function EffectIcons() {
       id="effect-icons"
       style={{
         position: 'fixed',
+        // ヘリ搭乗時は右上ミニマップと重ならないよう左へずらす
         top: isSimpleHud ? 42 : 10,
-        right: 10,
+        right: inHelicopter ? (isSimpleHud ? 118 : 132) : 10,
         display: 'flex',
         flexDirection: isSimpleHud ? 'row' : 'column',
         gap: isSimpleHud ? 5 : 4,

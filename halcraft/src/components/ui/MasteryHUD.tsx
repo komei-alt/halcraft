@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { getModeFlowRankLabel, useModeFlowStore } from '../../stores/useModeFlowStore';
 import {
   getMasteryProgress,
@@ -376,6 +377,7 @@ function getItemMapSynergyStatus({
 export function MasteryHUD() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const selectedBlock = usePlayerStore((s) => s.getSelectedBlock());
   const isPlaceMode = usePlayerStore((s) => s.isPlaceMode);
@@ -420,7 +422,8 @@ export function MasteryHUD() {
     return () => window.clearInterval(timer);
   }, [buildFocusUntil, combatFocusUntil, phase]);
 
-  if (phase !== 'playing' || !mastery) return null;
+  // 搭乗中は大型の熟練度カードを隠し、照準周りを空ける
+  if (phase !== 'playing' || !mastery || activeVehicle !== null) return null;
 
   const def = MASTERY_DEFS[equippedItem];
   const progress = getMasteryProgress(mastery);

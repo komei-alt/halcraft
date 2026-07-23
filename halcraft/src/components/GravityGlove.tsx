@@ -76,6 +76,7 @@ export function GravityGlove() {
     vertexColors: true,
     transparent: true,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
     sizeAttenuation: true,
