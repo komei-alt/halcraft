@@ -263,6 +263,7 @@ export function BlockUseEffect() {
     opacity: 0.92,
     sizeAttenuation: true,
     depthWrite: false,
+    depthTest: true,
   }), []);
 
   const spawnEffect = useCallback((

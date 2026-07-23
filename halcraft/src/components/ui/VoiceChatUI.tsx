@@ -9,6 +9,7 @@ import { voiceChat } from '../../utils/voiceChat';
 import type { VoiceChatState } from '../../utils/voiceChat';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { isTouchDevice } from '../../utils/device';
 
 // --- SVG アイコン ---
@@ -50,6 +51,7 @@ const SpeakerMutedIcon = ({ size = 18 }: { size?: number }) => (
 export function VoiceChatUI() {
   const phase = useGameStore((s) => s.phase);
   const connected = useMultiplayerStore((s) => s.connected);
+  const inHelicopter = useVehicleStore((s) => s.helicopter.mySeat !== null);
 
   const [vcState, setVcState] = useState<VoiceChatState>('disconnected');
   const [isMicEnabled, setIsMicEnabled] = useState(false);
@@ -157,7 +159,8 @@ export function VoiceChatUI() {
       style={{
         position: 'fixed',
         top: isTouch ? 76 : 64,
-        right: isTouch ? 12 : 16,
+        // ヘリの右上ミニマップと重ならないよう左へずらす
+        right: inHelicopter ? (isTouch ? 120 : 140) : (isTouch ? 12 : 16),
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useStageEventStore } from '../../stores/useStageEventStore';
 import { getStageEvent } from '../../types/stageEvents';
 import { getStagePressure } from '../../types/stagePressures';
@@ -13,6 +14,7 @@ import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 export function StageEventHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const elapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
   const nextTriggerAtSeconds = useStageEventStore((s) => s.nextTriggerAtSeconds);
   const recentEvent = useStageEventStore((s) => s.recentEvent);
@@ -24,7 +26,7 @@ export function StageEventHUD() {
     return () => window.clearInterval(timer);
   }, []);
 
-  if (phase !== 'playing' || !stage || isCompact) return null;
+  if (phase !== 'playing' || !stage || isCompact || activeVehicle !== null) return null;
 
   const definition = getStageEvent(stage.id);
   if (!definition || nextTriggerAtSeconds === null) return null;

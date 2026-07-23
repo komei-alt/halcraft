@@ -168,6 +168,7 @@ export function BombSlinger() {
     transparent: true,
     opacity: 0.75,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
     sizeAttenuation: true,
@@ -177,6 +178,7 @@ export function BombSlinger() {
     transparent: true,
     opacity: 0.55,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
@@ -238,6 +240,7 @@ export function BombSlinger() {
         toneMapped: false,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        depthTest: true,
       }),
     );
     spark.position.y = 0.28;
@@ -251,6 +254,7 @@ export function BombSlinger() {
         opacity: 0.3,
         side: THREE.DoubleSide,
         depthWrite: false,
+        depthTest: true,
         toneMapped: false,
         blending: THREE.AdditiveBlending,
       }),

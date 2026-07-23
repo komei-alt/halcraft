@@ -152,6 +152,7 @@ export function AllyMeleeAttackFX() {
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
@@ -160,6 +161,7 @@ export function AllyMeleeAttackFX() {
     transparent: true,
     opacity: 0.45,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
@@ -168,6 +170,7 @@ export function AllyMeleeAttackFX() {
     transparent: true,
     opacity: 0.85,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
@@ -177,6 +180,7 @@ export function AllyMeleeAttackFX() {
     transparent: true,
     opacity: 0.7,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
@@ -186,6 +190,7 @@ export function AllyMeleeAttackFX() {
     transparent: true,
     opacity: 0.95,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
@@ -205,6 +210,7 @@ export function AllyMeleeAttackFX() {
     opacity: 0.95,
     sizeAttenuation: true,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);

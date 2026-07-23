@@ -347,6 +347,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
     transparent: true,
     opacity: 0,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
