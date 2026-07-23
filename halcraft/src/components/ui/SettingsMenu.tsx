@@ -11,6 +11,8 @@ import {
   type ResolutionScale,
   type ShadowQuality,
 } from '../../stores/useSettingsStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useCoasterStore } from '../../stores/useCoasterStore';
 import { isTouchDevice } from '../../utils/device';
 import { getPerformanceProfile, type PerformanceTier } from '../../utils/performance';
 import { setBGMVolume } from '../../utils/musicManager';
@@ -233,6 +235,10 @@ function Toggle({
 
 export function SettingsButton({ variant, onClick }: SettingsButtonProps) {
   const isMenu = variant === 'menu';
+  // ゲーム中は左上に置くが、搭乗中は左上HPと重なるので少し下へ
+  const inVehicle = useVehicleStore((s) => s.activeVehicle !== null);
+  const onCoaster = useCoasterStore((s) => s.isBoarded);
+  const rideMode = !isMenu && (inVehicle || onCoaster);
 
   return (
     <button
@@ -242,7 +248,7 @@ export function SettingsButton({ variant, onClick }: SettingsButtonProps) {
       onClick={onClick}
       style={{
         position: 'fixed',
-        top: isMenu ? 16 : 14,
+        top: isMenu ? 16 : (rideMode ? 44 : 14),
         right: isMenu ? 16 : 'auto',
         left: isMenu ? 'auto' : 14,
         zIndex: isMenu ? 230 : 145,

@@ -95,8 +95,24 @@ export function Joystick() {
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
       document.removeEventListener('touchcancel', handleTouchEnd);
+      resetKnob();
     };
-  }, [handleTouchMove, handleTouchEnd]);
+  }, [handleTouchMove, handleTouchEnd, resetKnob]);
+
+  // タブ離脱でスティック入力が残って歩き続けるのを防ぐ
+  useEffect(() => {
+    const clearHeld = () => resetKnob();
+    const onVisibility = () => {
+      if (document.hidden) clearHeld();
+    };
+    window.addEventListener('blur', clearHeld);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', clearHeld);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearHeld();
+    };
+  }, [resetKnob]);
 
   return (
     <div

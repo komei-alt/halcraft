@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useCoasterStore } from '../../stores/useCoasterStore';
 
 /** 回復中かどうかを判定（定期ポーリングで更新） */
 function useIsRegenerating(): boolean {
@@ -122,6 +123,7 @@ export function HealthBar() {
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const isRegenerating = useIsRegenerating();
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const onCoaster = useCoasterStore((s) => s.isBoarded);
 
   if (isBuildMode) return null;
 
@@ -130,8 +132,8 @@ export function HealthBar() {
   const fullHearts = Math.floor(hp / 2);
   const hasHalf = hp % 2 === 1;
   const lowHp = hp > 0 && hp <= maxHp * 0.3;
-  // 搭乗中はホットバーが無いので左上へ寄せて中央照準を邪魔しない
-  const inVehicle = activeVehicle !== null;
+  // 乗り物/コースター乗車中はホットバーが無いので左上へ寄せる
+  const inVehicle = activeVehicle !== null || onCoaster;
 
   return (
     <div

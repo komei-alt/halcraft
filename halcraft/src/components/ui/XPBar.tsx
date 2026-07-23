@@ -4,6 +4,7 @@
 import { useExperienceStore } from '../../stores/useExperienceStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useCoasterStore } from '../../stores/useCoasterStore';
 
 export function XPBar() {
   const level = useExperienceStore((s) => s.level);
@@ -11,9 +12,10 @@ export function XPBar() {
   const phase = useGameStore((s) => s.phase);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const onCoaster = useCoasterStore((s) => s.isBoarded);
 
   // 搭乗中はホットバー周辺HUDを畳む
-  if (phase !== 'playing' || isBuildMode || activeVehicle !== null) return null;
+  if (phase !== 'playing' || isBuildMode || activeVehicle !== null || onCoaster) return null;
 
   return (
     <div

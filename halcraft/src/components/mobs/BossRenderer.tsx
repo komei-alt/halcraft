@@ -309,6 +309,7 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
     sizeAttenuation: true,

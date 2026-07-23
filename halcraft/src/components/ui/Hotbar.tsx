@@ -8,6 +8,7 @@ import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useCoasterStore } from '../../stores/useCoasterStore';
 import { useStageBuildScoreStore } from '../../stores/useStageBuildScoreStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import {
@@ -488,6 +489,7 @@ export function Hotbar() {
   const hotbarSlots = usePlayerStore((s) => s.hotbarSlots);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const onCoaster = useCoasterStore((s) => s.isBoarded);
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const glovePushReady = usePlayerStore((s) => s.glovePushReady);
   const glovePulling = usePlayerStore((s) => s.glovePulling);
@@ -602,8 +604,8 @@ export function Hotbar() {
     return map;
   }, [hotbarSlots]);
 
-  // 乗り物搭乗中は下端HUDを隠して射撃・計器の視界を優先
-  if (activeVehicle !== null) return null;
+  // 乗り物/コースター乗車中は下端HUDを隠して視界を優先
+  if (activeVehicle !== null || onCoaster) return null;
 
   return (
     <div

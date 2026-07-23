@@ -5,6 +5,7 @@
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useVehicleStore } from '../../stores/useVehicleStore';
+import { useCoasterStore } from '../../stores/useCoasterStore';
 
 const ICON_COUNT = 10; // 各アイコンは2ポイント分
 
@@ -13,9 +14,10 @@ export function HungerBar() {
   const phase = useGameStore((s) => s.phase);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const onCoaster = useCoasterStore((s) => s.isBoarded);
 
   // メニュー画面・ビルドモード・搭乗中は非表示（搭乗中は左上HPのみ）
-  if (phase !== 'playing' || isBuildMode || activeVehicle !== null) return null;
+  if (phase !== 'playing' || isBuildMode || activeVehicle !== null || onCoaster) return null;
 
   const isCritical = hunger <= 4;
   const isLow = hunger <= 6;

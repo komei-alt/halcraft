@@ -135,6 +135,7 @@ export function MobDeathEffect() {
     opacity: 0.9,
     sizeAttenuation: true,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
   }), []);
@@ -143,6 +144,7 @@ export function MobDeathEffect() {
     color: 0xffffff,
     toneMapped: false,
     vertexColors: true,
+    depthTest: true,
   }), []);
 
   const waveMaterial = useMemo(() => new THREE.MeshBasicMaterial({
@@ -151,6 +153,7 @@ export function MobDeathEffect() {
     transparent: true,
     opacity: 0.62,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
     blending: THREE.AdditiveBlending,

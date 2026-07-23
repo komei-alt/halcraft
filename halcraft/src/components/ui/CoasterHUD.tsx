@@ -7,7 +7,8 @@ import { COASTER_MAX_SPEED } from '../../utils/coasterPhysics';
 
 const HUD_STYLE: React.CSSProperties = {
   position: 'fixed',
-  bottom: 100,
+  // ホットバー非表示時は下端に寄せて視界を空ける
+  bottom: 18,
   left: '50%',
   transform: 'translateX(-50%)',
   display: 'flex',
