@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useStageChallengeStore, getStageChallengeMedalLabel } from '../../stores/useStageChallengeStore';
 import {
   getStageChallengeMedal,
@@ -24,6 +25,7 @@ function isNearChallengeGoal(current: number, target: number): boolean {
 export function StageChallengeHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
   const stats = useStageChallengeStore((s) => s.stats);
   const completedIds = useStageChallengeStore((s) => s.completedIds);
   const recentCompletion = useStageChallengeStore((s) => s.recentCompletion);
@@ -38,7 +40,8 @@ export function StageChallengeHUD() {
     return () => window.clearTimeout(timer);
   }, [clearRecentCompletion, recentCompletion]);
 
-  if (phase !== 'playing' || !stage) return null;
+  // 搭乗中は左上レールを畳んで射撃視界を優先
+  if (phase !== 'playing' || !stage || activeVehicle !== null) return null;
 
   const challenges = getStageChallenges(stage.id);
   if (challenges.length === 0) return null;

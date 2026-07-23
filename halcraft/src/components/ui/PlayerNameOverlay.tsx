@@ -16,9 +16,56 @@ import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
 import { useMultiplayerStore } from '../../stores/useMultiplayerStore';
 import { useMobStore } from '../../stores/useMobStore';
+import { useWorldStore } from '../../stores/useWorldStore';
+import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
 
 /** 画面端マージン（px） */
 const EDGE_MARGIN = 60;
+/** 壁 occluded 判定の最大距離 */
+const OCCLUSION_MAX_DIST = 48;
+/** レイステップ（ブロック単位の簡易遮蔽） */
+const OCCLUSION_STEP = 0.45;
+
+function isOccludingBlock(blockId: BlockId): boolean {
+  if (blockId === BLOCK_IDS.AIR) return false;
+  const def = BLOCK_DEFS[blockId];
+  if (!def) return true;
+  // 空気・透明・流体・非標準は遮蔽しない
+  if (def.transparent || def.isLiquid || def.nonStandard || def.noCollision) return false;
+  return true;
+}
+
+/** カメラから頭上までの線上に固体があれば遮蔽 */
+function isLabelOccluded(
+  cam: THREE.Camera,
+  targetX: number,
+  targetY: number,
+  targetZ: number,
+  getBlock: (x: number, y: number, z: number) => BlockId,
+): boolean {
+  const ox = cam.position.x;
+  const oy = cam.position.y;
+  const oz = cam.position.z;
+  const dx = targetX - ox;
+  const dy = targetY - oy;
+  const dz = targetZ - oz;
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist < 1.2) return false;
+  if (dist > OCCLUSION_MAX_DIST) return true;
+
+  const steps = Math.min(96, Math.floor(dist / OCCLUSION_STEP));
+  // 手前〜目標手前まで。目標セル自体はスキップ
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    // 最後の少し手前で止める（頭の中のブロック誤検知防止）
+    if (t > 0.92) break;
+    const x = Math.floor(ox + dx * t);
+    const y = Math.floor(oy + dy * t);
+    const z = Math.floor(oz + dz * t);
+    if (isOccludingBlock(getBlock(x, y, z))) return true;
+  }
+  return false;
+}
 /** 名前ラベルの最小表示サイズ（px） */
 const MIN_FONT_SIZE = 12;
 /** 名前ラベルの最大表示サイズ（px） */
@@ -190,6 +237,7 @@ export function PlayerNameOverlay() {
     speaking: boolean,
     dead: boolean,
     micEnabled: boolean,
+    occluded: boolean,
   ) => {
     // 3D頭上座標
     projVec.current.set(worldX, worldY + headOffset, worldZ);
@@ -202,6 +250,13 @@ export function PlayerNameOverlay() {
     const screenX = (projected.x * 0.5 + 0.5) * screenW;
     const screenY = (-projected.y * 0.5 + 0.5) * screenH;
     const isBehind = projected.z > 1;
+
+    // 壁の向こうは名前も端矢印も出さない（ウォールハック防止）
+    if (occluded) {
+      label.container.style.opacity = '0';
+      label.arrow.style.display = 'none';
+      return;
+    }
 
     // 距離に応じたフォントサイズ（一定範囲に固定してぼやけ防止）
     const fontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, 14 + (10 - dist) * 0.3));
@@ -304,6 +359,7 @@ export function PlayerNameOverlay() {
   useFrame(() => {
     const remotePlayers = useMultiplayerStore.getState().remotePlayers;
     const mobs = useMobStore.getState().mobs;
+    const getBlock = useWorldStore.getState().getBlock;
     const screenW = size.width;
     const screenH = size.height;
 
@@ -321,6 +377,14 @@ export function PlayerNameOverlay() {
       if (label.nameSpan.textContent !== player.name) {
         label.nameSpan.textContent = player.name;
       }
+      const headY = player.position[1] + 2.4;
+      const occluded = isLabelOccluded(
+        camera,
+        player.position[0],
+        headY,
+        player.position[2],
+        getBlock,
+      );
       updateLabel(
         label,
         player.position[0], player.position[1], player.position[2],
@@ -329,6 +393,7 @@ export function PlayerNameOverlay() {
         player.speaking,
         player.isDead,
         player.micEnabled,
+        occluded,
       );
     }
 
@@ -341,6 +406,8 @@ export function PlayerNameOverlay() {
       if (!label) {
         label = createLabel(mobLabelId, 'プロトタイプ', 'ally');
       }
+      const allyHeadY = mob.y + 4.2;
+      const allyOccluded = isLabelOccluded(camera, mob.x, allyHeadY, mob.z, getBlock);
       updateLabel(
         label,
         mob.x, mob.y, mob.z,
@@ -349,6 +416,7 @@ export function PlayerNameOverlay() {
         false,
         false,
         false,
+        allyOccluded,
       );
     }
 
