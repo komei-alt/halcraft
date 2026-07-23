@@ -3,6 +3,7 @@
 
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import { ARMOR_DEFS, type ArmorSlot } from '../../types/armor';
 
 const SLOT_ORDER: ArmorSlot[] = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -13,8 +14,10 @@ export function ArmorHUD() {
   const totalDefense = usePlayerStore((s) => s.getTotalDefense());
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const phase = useGameStore((s) => s.phase);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
-  if (phase !== 'playing' || isBuildMode) return null;
+  // 搭乗中は下端HUDを畳む
+  if (phase !== 'playing' || isBuildMode || activeVehicle !== null) return null;
 
   // 何も装備していなければ非表示
   const hasArmor = SLOT_ORDER.some((slot) => equippedArmor[slot]);

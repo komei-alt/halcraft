@@ -46,6 +46,7 @@ const flameOuterMat = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 0.92,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
@@ -54,14 +55,16 @@ const flameInnerMat = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 0.85,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
 const flameGlowMat = new THREE.MeshBasicMaterial({
   color: 0xff8a55,
   transparent: true,
-  opacity: 0.22,
+  opacity: 0.18,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
@@ -77,8 +80,9 @@ const wickMat = new THREE.MeshStandardMaterial({ color: 0x2d130e, roughness: 1 }
 const candleGlowMat = new THREE.MeshBasicMaterial({
   color: 0xffc2a0,
   transparent: true,
-  opacity: 0.2,
+  opacity: 0.16,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });

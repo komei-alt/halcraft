@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-07-23',
     items: [
+      { type: 'improve', text: '乗り物に乗っているとき、防具HUDも下に出なくなって見やすくなったよ！' },
+      { type: 'fix', text: '松明の炎やポータルの光が壁を透けにくくなったよ！' },
       { type: 'improve', text: '乗り物に乗っているとき、HPは左上にまとまって、下の空腹やXPが邪魔しなくなったよ！' },
       { type: 'fix', text: 'やられて復活したあと操作が戻らないことがあるのを直したよ！' },
       { type: 'improve', text: 'ライトセーバーと機関銃が画面の真ん中をふさぎにくくなったよ！' },

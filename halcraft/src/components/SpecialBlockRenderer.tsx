@@ -35,6 +35,8 @@ const portalSurfaceMaterial = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 0.7,
   depthWrite: false,
+  // 壁越しにポータルが光って見えるのを防ぐ
+  depthTest: true,
   side: THREE.DoubleSide,
   blending: THREE.AdditiveBlending,
   toneMapped: false,

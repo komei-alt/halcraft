@@ -3,6 +3,7 @@
 
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 
 /** 最大息（秒） */
 const MAX_AIR = 15;
@@ -13,21 +14,23 @@ export function AirSupplyBar() {
   const airSupply = usePlayerStore((s) => s.airSupply);
   const isSubmerged = usePlayerStore((s) => s.isSubmerged);
   const phase = useGameStore((s) => s.phase);
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
 
   // 水中でない時／プレイ外は非表示
   if (!isSubmerged || phase !== 'playing') return null;
 
   const ratio = airSupply / MAX_AIR;
   const filledBubbles = Math.ceil(ratio * BUBBLE_COUNT);
+  // 搭乗中は下端が空いているので左上HPの下へ
+  const inVehicle = activeVehicle !== null;
 
   return (
     <div
       style={{
         position: 'fixed',
-        // 体力・空腹の上に置き、重ならないようにする
-        bottom: 100,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        ...(inVehicle
+          ? { top: 40, left: 14, bottom: 'auto', transform: 'none' }
+          : { bottom: 100, left: '50%', transform: 'translateX(-50%)' }),
         display: 'flex',
         gap: 2,
         zIndex: 100,
