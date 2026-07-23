@@ -568,6 +568,8 @@ export function CombatExplosionFX() {
       opacity: 0.98,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
+      depthWrite: false,
+      depthTest: true,
     });
     mat.map = glowTexture;
     mat.alphaTest = 0.02;
@@ -581,6 +583,7 @@ export function CombatExplosionFX() {
       blending: THREE.NormalBlending,
       toneMapped: true,
       depthWrite: false,
+      depthTest: true,
     });
     mat.map = softTexture;
     mat.alphaTest = 0.04;
@@ -594,6 +597,7 @@ export function CombatExplosionFX() {
     transparent: true,
     opacity: 1,
     depthWrite: false,
+    depthTest: true,
     vertexColors: true,
   }), []);
 
@@ -602,6 +606,7 @@ export function CombatExplosionFX() {
     transparent: true,
     opacity: 0.7,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
@@ -613,6 +618,7 @@ export function CombatExplosionFX() {
     transparent: true,
     opacity: 0.85,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
     vertexColors: true,

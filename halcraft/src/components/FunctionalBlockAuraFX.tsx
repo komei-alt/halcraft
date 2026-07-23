@@ -255,11 +255,11 @@ export function FunctionalBlockAuraFX() {
     transparent: true,
     opacity: 0.68,
     depthWrite: false,
-    // 壁越しに光輪が見えるのを防ぐ（地表よりわずかに手前へ）
+    // 壁越しに光輪が見えるのを防ぐ（手前押しは控えめ）
     depthTest: true,
     polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    polygonOffsetFactor: -0.5,
+    polygonOffsetUnits: -0.5,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     toneMapped: false,

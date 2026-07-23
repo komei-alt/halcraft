@@ -47,6 +47,8 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-07-23',
     items: [
+      { type: 'improve', text: '乗り物に乗っているとき、ボスのHP表示が小さくなって照準の邪魔をしなくなったよ！' },
+      { type: 'fix', text: '爆発の光が壁を透けにくくなったよ！' },
       { type: 'improve', text: '乗り物に乗っているとき、ステージの進行カードも邪魔しなくなったよ！' },
       { type: 'fix', text: 'ヒットやボムの光が壁を透けにくくなったよ！' },
       { type: 'improve', text: 'ヘリに乗っているとき、ボイスボタンがミニマップに重ならなくなったよ！' },

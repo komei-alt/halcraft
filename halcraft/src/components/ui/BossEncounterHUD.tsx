@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { useMobStore } from '../../stores/useMobStore';
+import { useVehicleStore } from '../../stores/useVehicleStore';
 import {
   formatStageBossReward,
   getStageBossEncounter,
@@ -63,6 +64,8 @@ export function BossEncounterHUD() {
   const boss = useMemo(() => parseBossHudKey(bossKey), [bossKey]);
   const lastAnnouncedBossId = useRef<string | null>(null);
   const isCompact = isTouchDevice() || window.innerWidth <= 560;
+  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const inVehicle = activeVehicle !== null;
 
   const encounter = useMemo(
     () => getStageBossEncounterById(boss?.bossEncounterId) ?? getStageBossEncounter(currentStageId),
@@ -92,13 +95,16 @@ export function BossEncounterHUD() {
       id="boss-encounter-hud"
       style={{
         position: 'fixed',
-        top: isCompact ? 'auto' : 14,
+        // 搭乗中は中央上を少し薄く・細くして照準を邪魔しない
+        top: isCompact ? 'auto' : (inVehicle ? 8 : 14),
         bottom: isCompact ? 'calc(168px + env(safe-area-inset-bottom))' : 'auto',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 118,
-        width: isCompact ? 'min(340px, calc(100vw - 28px))' : 430,
-        padding: isCompact ? '9px 11px' : '10px 13px',
+        width: isCompact
+          ? 'min(340px, calc(100vw - 28px))'
+          : (inVehicle ? 320 : 430),
+        padding: isCompact ? '9px 11px' : (inVehicle ? '7px 10px' : '10px 13px'),
         borderRadius: 8,
         border: `1px solid ${accent}88`,
         background: danger
@@ -111,6 +117,7 @@ export function BossEncounterHUD() {
         pointerEvents: 'none',
         fontFamily: "'Segoe UI', 'Hiragino Sans', sans-serif",
         animation: 'masteryPulse 0.28s ease-out',
+        opacity: inVehicle ? 0.88 : 1,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
