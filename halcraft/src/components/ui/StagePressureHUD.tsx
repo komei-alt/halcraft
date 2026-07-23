@@ -3,10 +3,10 @@
 
 import { useEffect, useMemo } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useStagePressureStore } from '../../stores/useStagePressureStore';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import { STAGE_MOBILE_RAIL_TOP, STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
@@ -20,7 +20,7 @@ const SEVERITY_COLORS = {
 export function StagePressureHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const pressure = useStagePressureStore((s) => s.pressure);
   const severity = useStagePressureStore((s) => s.severity);
   const isSheltered = useStagePressureStore((s) => s.isSheltered);
@@ -38,7 +38,7 @@ export function StagePressureHUD() {
     return () => window.clearTimeout(timer);
   }, [clearRecentRelief, recentRelief]);
 
-  if (phase !== 'playing' || !stage || !definition || activeVehicle !== null) return null;
+  if (phase !== 'playing' || !stage || !definition || rideMode) return null;
 
   const activeRelief = recentRelief?.stageId === stage.id ? recentRelief : null;
   const severityColor = SEVERITY_COLORS[severity];

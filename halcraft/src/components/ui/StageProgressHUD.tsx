@@ -14,11 +14,11 @@ import {
 } from '../../stores/useModeFlowStore';
 import { useMobStore } from '../../stores/useMobStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import {
   getStageBossEncounter,
   getStageBossEncounterById,
 } from '../../types/stageBossEncounters';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import {
   getStageChallengeProgress,
   getStageChallenges,
@@ -1043,7 +1043,7 @@ function StageSignatureMomentAnnouncer({
 export function StageProgressHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const runId = useGameStore((s) => s.runId);
   const enemiesDefeated = useGameStore((s) => s.enemiesDefeated);
   const stageElapsedSeconds = useGameStore((s) => s.stageElapsedSeconds);
@@ -1105,7 +1105,7 @@ export function StageProgressHUD() {
   }, [phase]);
 
   // 搭乗中は左上の大型進行カードを畳み、照準視界を優先
-  if (phase !== 'playing' || !stage || activeVehicle !== null) return null;
+  if (phase !== 'playing' || !stage || rideMode) return null;
 
   const target = stage.rules.objective.targetCount;
   const landmarkBriefing = getStageLandmarkBriefing(stage);

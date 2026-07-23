@@ -3,17 +3,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useStageConditionStore } from '../../stores/useStageConditionStore';
 import { getStageCondition, getStageConditionProgress } from '../../types/stageConditions';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import { STAGE_MOBILE_RAIL_TOP, STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
 export function StageConditionHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const charge = useStageConditionStore((s) => s.charge);
   const activeUntil = useStageConditionStore((s) => s.activeUntil);
   const activeChain = useStageConditionStore((s) => s.activeChain);
@@ -38,7 +38,7 @@ export function StageConditionHUD() {
     return () => window.clearTimeout(timer);
   }, [clearRecentActivation, recentActivation]);
 
-  if (phase !== 'playing' || !stage || !condition || activeVehicle !== null) return null;
+  if (phase !== 'playing' || !stage || !condition || rideMode) return null;
 
   const activeRemainingSeconds = Math.max(0, Math.ceil((activeUntil - now) / 1000));
   const active = activeRemainingSeconds > 0;

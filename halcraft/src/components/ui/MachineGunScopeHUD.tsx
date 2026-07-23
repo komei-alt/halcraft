@@ -3,8 +3,8 @@
 
 import { useGameStore } from '../../stores/useGameStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { getStageCombatStyleForItem } from '../../types/stageCombatStyles';
+import { useIsRideMode } from '../../utils/hudRideMode';
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
@@ -21,9 +21,9 @@ export function MachineGunScopeHUD() {
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const isDead = usePlayerStore((s) => s.isDead);
   const progress = usePlayerStore((s) => s.machineGunScopeProgress);
-  const activeVehicle = useVehicleStore((s) => s.getActiveVehicle());
+  const rideMode = useIsRideMode();
 
-  if (phase !== 'playing' || isDead || activeVehicle !== null) return null;
+  if (phase !== 'playing' || isDead || rideMode) return null;
   if (equippedItem !== 'machine_gun' || progress < 0.05) return null;
 
   const accent = getStageCombatStyleForItem(currentStageId, 'machine_gun')?.accent ?? '#7ee8ff';

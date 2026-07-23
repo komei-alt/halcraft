@@ -2,17 +2,17 @@
 // クロスヘア下に表示し、発射後だけ短く現れる。READY時はパルスで目立たせる
 
 import { usePlayerStore } from '../../stores/usePlayerStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 
 export function RocketCooldownIndicator() {
   const rocketCharge = usePlayerStore((s) => s.rocketCharge);
   const rocketReadyPulseUntil = usePlayerStore((s) => s.rocketReadyPulseUntil);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
 
   const isReadyPulse = rocketCharge >= 1 && rocketReadyPulseUntil > performance.now();
-  if (activeVehicle !== null) return null;
+  if (rideMode) return null;
   if (equippedItem !== 'rocket_launcher' || (rocketCharge >= 1 && !isReadyPulse)) return null;
 
   const isCompact = isTouchDevice() || (typeof window !== 'undefined' && window.innerWidth <= 560);

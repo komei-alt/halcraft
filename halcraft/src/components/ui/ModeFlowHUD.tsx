@@ -9,10 +9,10 @@ import {
   getScaledStageModeReward,
   useModeFlowStore,
 } from '../../stores/useModeFlowStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { formatStageModeRewardDetail, getStageModeRule } from '../../types/stageModeRules';
 import { getStagePressure } from '../../types/stagePressures';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import { STAGE_RIGHT_RAIL_TOP } from './stageHudLayout';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
@@ -23,7 +23,7 @@ function formatSeconds(ms: number): string {
 export function ModeFlowHUD() {
   const phase = useGameStore((s) => s.phase);
   const stage = useGameStore((s) => s.currentStage);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const meter = useModeFlowStore((s) => s.meter);
   const lastGainLabel = useModeFlowStore((s) => s.lastGainLabel);
   const streak = useModeFlowStore((s) => s.streak);
@@ -61,7 +61,7 @@ export function ModeFlowHUD() {
   const pressure = useMemo(() => getStagePressure(stage?.id), [stage?.id]);
 
   // 搭乗中は右レールを畳んで射撃視界を優先
-  if (phase !== 'playing' || !stage || !rule || isCompact || activeVehicle !== null) return null;
+  if (phase !== 'playing' || !stage || !rule || isCompact || rideMode) return null;
 
   const progress = Math.max(0, Math.min(1, meter / rule.threshold));
   const streakRemainingMs = rule.category === 'war' ? Math.max(0, streakExpiresAt - now) : 0;

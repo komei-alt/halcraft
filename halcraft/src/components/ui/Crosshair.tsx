@@ -2,11 +2,11 @@
 // 乗り物搭乗中は非表示
 
 import { useEffect, useMemo, useState } from 'react';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useInventoryStore } from '../../stores/useInventoryStore';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import {
   getStageCombatStyle,
   getStageCombatStyleForItem,
@@ -89,7 +89,7 @@ function formatReticleSeconds(remainingMs: number): string {
 }
 
 export function Crosshair() {
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
@@ -129,7 +129,7 @@ export function Crosshair() {
 
   // プレイ中以外・乗り物搭乗中は専用照準/UIに任せる
   // 機関銃ADS中はスコープHUDに照準を任せる（二重照準を早めに避ける）
-  if (phase !== 'playing' || activeVehicle !== null) return null;
+  if (phase !== 'playing' || rideMode) return null;
   if (equippedItem === 'machine_gun' && machineGunScopeProgress > 0.12) return null;
 
   const profile = CROSSHAIR_PROFILES[equippedItem];

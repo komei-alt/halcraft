@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore, type EquippedItem } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { getMasteryProgress, getMasteryTitle, useMasteryStore } from '../../stores/useMasteryStore';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import { useModeFlowStore } from '../../stores/useModeFlowStore';
 import { useStageChallengeStore } from '../../stores/useStageChallengeStore';
 import { getMasteryPerkSummary } from '../../types/masteryPerks';
@@ -252,7 +252,7 @@ function getChallengeHint(
 export function WeaponSwitchPopover() {
   const phase = useGameStore((s) => s.phase);
   const currentStageId = useGameStore((s) => s.currentStageId);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const masteryItems = useMasteryStore((s) => s.items);
   const modeMeter = useModeFlowStore((s) => s.meter);
@@ -316,7 +316,7 @@ export function WeaponSwitchPopover() {
   useEffect(() => () => clearTimers(), [clearTimers]);
 
   // 搭乗中は武器切替ポップを出さない（徒歩装備の案内が邪魔）
-  if (!visible || phase !== 'playing' || activeVehicle !== null) return null;
+  if (!visible || phase !== 'playing' || rideMode) return null;
 
   const content = isTouch ? getMobileContent(displayItem) : CONTENT_BY_ITEM[displayItem];
   const mastery = masteryItems[displayItem];

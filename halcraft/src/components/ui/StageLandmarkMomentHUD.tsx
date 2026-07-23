@@ -11,6 +11,7 @@ import {
   STAGE_LANDMARK_RADIUS,
 } from '../../types/stageLandmarks';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 import { playStageLandmarkSound } from '../../utils/sounds';
 import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
 
@@ -47,6 +48,7 @@ export function StageLandmarkMomentHUD() {
   const stage = useGameStore((s) => s.currentStage);
   const runId = useGameStore((s) => s.runId);
   const playerPosition = usePlayerStore((s) => s.worldPosition);
+  const rideMode = useIsRideMode();
   const [now, setNow] = useState(() => performance.now());
   const [moment, setMoment] = useState<LandmarkMoment | null>(null);
   const shownKeysRef = useRef(new Set<string>());
@@ -91,7 +93,8 @@ export function StageLandmarkMomentHUD() {
     return () => window.clearInterval(timer);
   }, [moment]);
 
-  if (phase !== 'playing' || !stage || !briefing || !moment || now > moment.visibleUntil) return null;
+  // 搭乗中は中央上の瞬間演出を出さない
+  if (phase !== 'playing' || !stage || !briefing || !moment || now > moment.visibleUntil || rideMode) return null;
 
   const copy = getMomentCopy(moment.kind, stage.category);
   const accent = moment.kind === 'arrival' ? '#fff1a8' : stage.color;

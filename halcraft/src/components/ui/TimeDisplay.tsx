@@ -2,8 +2,8 @@
 // ゲーム内の時刻と昼夜状態を表示（シンプル時は時刻のみ）
 
 import { useGameStore } from '../../stores/useGameStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useSimpleHud } from '../../utils/hudDensity';
+import { useIsRideMode } from '../../utils/hudRideMode';
 
 // --- SVG アイコン ---
 const SunIcon = ({ size = 18, color = '#FFE8B0' }: { size?: number; color?: string }) => (
@@ -41,7 +41,7 @@ export function TimeDisplay() {
   const isNight = useGameStore((s) => s.isNight);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const creativeFlying = useGameStore((s) => s.creativeFlying);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const isSimpleHud = useSimpleHud();
   const modeLabel = isBuildMode
     ? creativeFlying ? '🏗️ 建築 / 飛行中' : '🏗️ 建築'
@@ -49,7 +49,7 @@ export function TimeDisplay() {
   const modeColor = isBuildMode ? '#9bdcff' : '#b9f28f';
 
   // 乗り物中はミニマップ・照準・計器を優先（右上を空ける）
-  if (activeVehicle !== null) return null;
+  if (rideMode) return null;
 
   return (
     <div

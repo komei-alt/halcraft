@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react';
 import { useMiningFocusStore } from '../../stores/useMiningFocusStore';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
-import { useVehicleStore } from '../../stores/useVehicleStore';
 import { TOOL_DEFS } from '../../types/tools';
 import { isTouchDevice } from '../../utils/device';
+import { useIsRideMode } from '../../utils/hudRideMode';
 
 const TOOL_TIER_LABELS: Record<number, string> = {
   0: '素手',
@@ -45,7 +45,7 @@ export function ToolHUD() {
   const tools = usePlayerStore((s) => s.tools);
   const isBuildMode = useGameStore((s) => s.isBuildMode);
   const phase = useGameStore((s) => s.phase);
-  const activeVehicle = useVehicleStore((s) => s.activeVehicle);
+  const rideMode = useIsRideMode();
   const target = useMiningFocusStore((s) => s.target);
   const [now, setNow] = useState(() => performance.now());
   const isTouch = isTouchDevice();
@@ -57,7 +57,7 @@ export function ToolHUD() {
   }, [target]);
 
   // 搭乗中はツールHUDを隠し、照準・計器を優先
-  if (phase !== 'playing' || isBuildMode || activeVehicle !== null || (!equippedToolId && !target)) return null;
+  if (phase !== 'playing' || isBuildMode || rideMode || (!equippedToolId && !target)) return null;
 
   const def = equippedToolId ? TOOL_DEFS[equippedToolId] : undefined;
   const targetFresh = target && now - target.updatedAt < 650 ? target : null;

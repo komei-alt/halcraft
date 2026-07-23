@@ -47,6 +47,7 @@ export const UPDATES: UpdateGroup[] = [
   {
     date: '2026-07-23',
     items: [
+      { type: 'improve', text: 'コースターに乗っているときも、いろんなカードが消えて見やすくなったよ！' },
       { type: 'fix', text: 'スマホでジョイスティックを離したあとも歩き続けることがあるのを直したよ！' },
       { type: 'improve', text: 'コースターに乗っているときも、下のホットバーが消えて見やすくなったよ！' },
       { type: 'fix', text: '設定ボタンがHP表示と重ならないようにしたよ！' },
