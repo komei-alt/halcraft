@@ -107,8 +107,10 @@ const SPAWN_INTERVAL = 2.5;
 const ZOMBIE_HP = 10;
 /** ダーウィンのHP（夜に出る強めの敵） */
 const DARWIN_HP = 24;
-/** プロトタイプのHP（味方は頑丈） */
-const PROTOTYPE_HP = 50;
+/** プロトタイプのHP（味方の要。敵の連射でも粘る） */
+const PROTOTYPE_HP = 280;
+/** 倒されたあとの再スポーン間隔（秒）≈ 2分 */
+const PROTOTYPE_RESPAWN_INTERVAL = 120;
 /** プロトタイプの追従距離（スポーン位置） */
 const PROTOTYPE_FOLLOW_DISTANCE = 8;
 /** ニワトリのHP */
@@ -129,8 +131,12 @@ const DARWIN_SPAWN_INTERVAL = 18;
 const IRON_GOLEM_HP = 40;
 /** ボスジャイアントのHP */
 const BOSS_GIANT_HP = 500;
+/** ボス撃破後の再出現までの待ち時間（秒）≈ 10分（プロトよりかなり長い） */
+const BOSS_RESPAWN_INTERVAL = 600;
 /** フレンドリーファイヤー後の怒り持続時間（秒） */
 const ANGRY_DURATION = 30;
+
+export { PROTOTYPE_RESPAWN_INTERVAL, BOSS_RESPAWN_INTERVAL };
 
 let nextMobId = 0;
 
@@ -223,8 +229,14 @@ interface MobState {
   /** 最後のスポーン時刻 */
   lastSpawnTime: number;
 
-  /** SPAWNERからの最後のプロトタイプスポーン時刻 */
+  /** SPAWNERからの最後のゴーレムスポーン時刻 */
   lastProtoSpawnTime: number;
+
+  /** プロトタイプが倒された時刻（0=未撃破・初回即スポーン可） */
+  lastPrototypeDeathTime: number;
+
+  /** ボスが倒された時刻（0=未撃破） */
+  lastBossDeathTime: number;
 
   /** モブを追加 */
   spawnMob: (type: MobType, x: number, y: number, z: number, tuning?: StageEnemyTuning, stageId?: string | null) => void;
@@ -279,6 +291,8 @@ export const useMobStore = create<MobState>((set, get) => ({
   mobs: [],
   lastSpawnTime: 0,
   lastProtoSpawnTime: 0,
+  lastPrototypeDeathTime: 0,
+  lastBossDeathTime: 0,
   _lastChickenSpawnTime: 0,
   _lastSpiderSpawnTime: 0,
   _lastDarwinSpawnTime: 0,
@@ -418,9 +432,18 @@ export const useMobStore = create<MobState>((set, get) => ({
 
       // 死亡イベントをstateに蓄積（正しいZustandパターン）
       const currentDeathEvents = (state as MobState & { _deathEvents: MobDeathEvent[] })._deathEvents;
+      const nowSec = performance.now() / 1000;
+      let lastPrototypeDeathTime = state.lastPrototypeDeathTime;
+      let lastBossDeathTime = state.lastBossDeathTime;
+      for (const event of newDeathEvents) {
+        if (event.type === 'prototype') lastPrototypeDeathTime = nowSec;
+        if (event.type === 'boss_giant') lastBossDeathTime = nowSec;
+      }
       return {
         mobs: updatedMobs,
         _deathEvents: [...currentDeathEvents, ...newDeathEvents],
+        lastPrototypeDeathTime,
+        lastBossDeathTime,
       };
     });
   },
@@ -470,6 +493,15 @@ export const useMobStore = create<MobState>((set, get) => ({
     // 既にプロトタイプが存在する場合はスポーンしない
     const hasPrototype = state.mobs.some((m) => m.type === 'prototype');
     if (hasPrototype) return;
+
+    // 撃破後は一定時間待ってから再スポーン（初回は lastPrototypeDeathTime=0 で即スポーン）
+    const now = performance.now() / 1000;
+    if (
+      state.lastPrototypeDeathTime > 0
+      && now - state.lastPrototypeDeathTime < PROTOTYPE_RESPAWN_INTERVAL
+    ) {
+      return;
+    }
 
     // プレイヤーの近くにスポーン
     const angle = Math.random() * Math.PI * 2;
@@ -539,11 +571,20 @@ export const useMobStore = create<MobState>((set, get) => ({
     set({ _lastDarwinSpawnTime: now } as Partial<MobState>);
   },
 
-  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, stageId) => {
+  trySpawnBoss: (playerX, playerZ, surfaceYFn, stageId) => {
     const state = get();
     // 既にボスが存在する場合はスポーンしない
     const hasBoss = state.mobs.some((m) => m.type === 'boss_giant');
     if (hasBoss) return;
+
+    // 撃破後は長いクールダウン（初回は lastBossDeathTime=0 で即可能）
+    const now = performance.now() / 1000;
+    if (
+      state.lastBossDeathTime > 0
+      && now - state.lastBossDeathTime < BOSS_RESPAWN_INTERVAL
+    ) {
+      return;
+    }
 
     // プレイヤーのやや遠くにスポーン
     const angle = Math.random() * Math.PI * 2;

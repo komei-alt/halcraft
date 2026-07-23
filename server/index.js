@@ -213,6 +213,8 @@ const BOSS_ATTACK_RANGE = 3.5;
 const BOSS_ATTACK_DAMAGE = 8;
 const BOSS_ATTACK_COOLDOWN = 1.5;
 const BOSS_HEIGHT = 6.0;
+/** ボス撃破後の再出現（秒）≈ 10分 */
+const BOSS_RESPAWN_INTERVAL = 600;
 
 const PROTOTYPE_SPEED = 3.0;
 const PROTOTYPE_FOLLOW_MIN = 4;
@@ -223,7 +225,10 @@ const PROTOTYPE_ATTACK_DAMAGE = 6;
 const PROTOTYPE_ATTACK_COOLDOWN = 0.6;
 const PROTOTYPE_HEIGHT = 3.6;
 const PROTOTYPE_JUMP_VEL = 10;
-const PROTOTYPE_HP = 50;
+/** 味方プロトタイプHP（クライアントと揃える） */
+const PROTOTYPE_HP = 280;
+/** 倒されたあとの再スポーン間隔（秒）≈ 2分 */
+const PROTOTYPE_RESPAWN_INTERVAL = 120;
 
 function makeDefaultHeliState(stageId) {
   const x = HELIPORT_CENTER.x;
@@ -349,6 +354,11 @@ class Stage {
     this.lastMobUpdate = Date.now();
     this.wasNight = false;
     this.lastDarwinSpawnTime = 0;
+    /** プロトタイプ撃破時刻（秒）0=未撃破 */
+    this.lastPrototypeDeathTime = 0;
+    /** ボス撃破時刻（秒）0=未撃破 */
+    this.lastBossDeathTime = 0;
+    this.hadBossEver = false;
     this.vehicleStates = makeDefaultVehiclesState(this.id);
     this.helicopterState = this.vehicleStates.helicopter;
     // ボイスチャット参加者（socket.id）。新規参加者へ既存メンバーを通知するために保持
@@ -569,26 +579,38 @@ class Stage {
       }
     }
 
+    const nowSec = now / 1000;
     const hasPrototype = this.mobs.some((m) => m.type === 'prototype');
     if (!hasPrototype && validPlayers > 0) {
-      const angle = Math.random() * Math.PI * 2;
-      const sx = avgX + Math.cos(angle) * 8;
-      const sz = avgZ + Math.sin(angle) * 8;
-      const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
-      this.spawnMob('prototype', sx, sy, sz);
+      const canSpawnProto = this.lastPrototypeDeathTime <= 0
+        || nowSec - this.lastPrototypeDeathTime >= PROTOTYPE_RESPAWN_INTERVAL;
+      if (canSpawnProto) {
+        const angle = Math.random() * Math.PI * 2;
+        const sx = avgX + Math.cos(angle) * 8;
+        const sz = avgZ + Math.sin(angle) * 8;
+        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
+        this.spawnMob('prototype', sx, sy, sz);
+      }
     }
 
-    // ── 戦争カテゴリのステージでボスをスポーン ──
+    // ── 戦争カテゴリのステージでボスをスポーン（撃破後は長めのクールダウン） ──
     if (this.id.startsWith('war-')) {
       const hasBoss = this.mobs.some((m) => m.type === 'boss_giant');
       if (!hasBoss && validPlayers > 0) {
-        const angle = Math.random() * Math.PI * 2;
-        const distance = 20;
-        const sx = avgX + Math.cos(angle) * distance;
-        const sz = avgZ + Math.sin(angle) * distance;
-        const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
-        this.spawnMob('boss_giant', sx, sy, sz);
-        console.log(`[Boss] ステージ ${this.id} に巨大ボスをスポーン (${sx.toFixed(1)}, ${sy.toFixed(1)}, ${sz.toFixed(1)})`);
+        const canFirstBoss = !this.hadBossEver;
+        const canRespawnBoss = this.hadBossEver
+          && this.lastBossDeathTime > 0
+          && nowSec - this.lastBossDeathTime >= BOSS_RESPAWN_INTERVAL;
+        if (canFirstBoss || canRespawnBoss) {
+          const angle = Math.random() * Math.PI * 2;
+          const distance = 20;
+          const sx = avgX + Math.cos(angle) * distance;
+          const sz = avgZ + Math.sin(angle) * distance;
+          const sy = getTerrainHeight(Math.floor(sx), Math.floor(sz), this.id) + 2;
+          this.spawnMob('boss_giant', sx, sy, sz);
+          this.hadBossEver = true;
+          console.log(`[Boss] ステージ ${this.id} に巨大ボスをスポーン (${sx.toFixed(1)}, ${sy.toFixed(1)}, ${sz.toFixed(1)})`);
+        }
       }
     }
 
@@ -695,7 +717,10 @@ class Stage {
           m.vy = 0;
         }
 
-        if (m.hp <= 0) continue;
+        if (m.hp <= 0) {
+          this.lastPrototypeDeathTime = Date.now() / 1000;
+          continue;
+        }
         updatedMobs.push(m);
         continue;
       }
@@ -753,7 +778,10 @@ class Stage {
         }
 
         if (m.y < -20) continue;
-        if (m.hp <= 0) continue;
+        if (m.hp <= 0) {
+          this.lastBossDeathTime = Date.now() / 1000;
+          continue;
+        }
         updatedMobs.push(m);
         continue;
       }
@@ -1180,6 +1208,11 @@ io.on('connection', (socket) => {
     mob.vy = 5;
     mob.vz = (data.knockbackZ || 0) * 8;
     mob.hitTimer = 0.3;
+    if (mob.hp <= 0) {
+      const nowSec = Date.now() / 1000;
+      if (mob.type === 'prototype') stage.lastPrototypeDeathTime = nowSec;
+      if (mob.type === 'boss_giant') stage.lastBossDeathTime = nowSec;
+    }
   });
 
   socket.on('player:attack', (data) => {

@@ -200,15 +200,28 @@ export function MobManager() {
       trySpawnDarwin(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
     }
 
-    // 撃破数がステージ目標に届いたらボスを出す
+    // 味方プロトタイプ（倒されたら約2分後に再スポーン）
+    useMobStore.getState().trySpawnPrototype(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+
+    // 撃破数がステージ目標に届いたらボスを出す（撃破後は長めのクールダウンで再出現）
     if (
-      isWarMode &&
-      enemyTuning &&
-      !gameState.bossSpawned &&
-      gameState.enemiesDefeated >= enemyTuning.bossAfterDefeats
+      isWarMode
+      && enemyTuning
+      && gameState.enemiesDefeated >= enemyTuning.bossAfterDefeats
     ) {
-      useMobStore.getState().trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z), gameState.currentStageId);
-      useGameStore.getState().setBossSpawned(true);
+      const mobState = useMobStore.getState();
+      const hasBoss = mobState.mobs.some((m) => m.type === 'boss_giant');
+      if (!hasBoss) {
+        const canFirstSpawn = !gameState.bossSpawned;
+        const canRespawn = gameState.bossSpawned && mobState.lastBossDeathTime > 0;
+        if (canFirstSpawn || canRespawn) {
+          const before = mobState.mobs.length;
+          mobState.trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z), gameState.currentStageId);
+          if (useMobStore.getState().mobs.length > before) {
+            useGameStore.getState().setBossSpawned(true);
+          }
+        }
+      }
     }
 
     // 昼間はニワトリスポーン
