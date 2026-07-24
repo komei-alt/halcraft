@@ -4,7 +4,11 @@
 
 import { createNoise3D, type NoiseFunction3D } from 'simplex-noise';
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../../types/blocks';
+import { getTerrainHeight } from './heightmap';
 import type { ChunkData } from './types';
+
+/** 洞窟の上に必ず残す地表ブロックの厚み */
+const MIN_SURFACE_CRUST_DEPTH = 4;
 
 /** 洞窟ノイズ生成器（シード固定でワールド全体で一貫した洞窟） */
 let caveNoise3D: NoiseFunction3D | null = null;
@@ -58,7 +62,15 @@ export function carveCaves(chunk: ChunkData, cx: number, cz: number): void {
     const worldX = baseX + lx;
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const worldZ = baseZ + lz;
-      for (let ly = 2; ly < Math.min(SEA_LEVEL, WORLD_HEIGHT - 1); ly++) {
+      const surfaceY = getTerrainHeight(worldX, worldZ);
+      const caveCeilingY = Math.min(
+        SEA_LEVEL - 1,
+        WORLD_HEIGHT - 2,
+        surfaceY - MIN_SURFACE_CRUST_DEPTH,
+      );
+
+      // 川底や低地でも地表の殻を残し、洞窟が地面を貫通して地下溶岩を露出させない。
+      for (let ly = 2; ly <= caveCeilingY; ly++) {
         // 岩盤は削らない
         if (ly <= 1) continue;
         const block = chunk[lx][ly][lz];

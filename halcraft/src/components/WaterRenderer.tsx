@@ -90,7 +90,9 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         }
         vWave = wave;
 
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
+        // Three.js の fog_vertex は mvPosition を参照するため、先に必ず定義する。
+        vec4 mvPosition = viewMatrix * worldPos;
+        gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }
     `,
@@ -164,34 +166,6 @@ function createWaterMaterial(): THREE.ShaderMaterial {
   return material;
 }
 
-/**
- * 流体が「空気・透明・別ブロック」に触れて露出しているか。
- * 注意: `above !== blockId` だけでは固体の下の溶岩まで描画してしまい、
- * 地面が透けてマグマが見える原因になる。固体に完全に囲まれた流体は描かない。
- */
-function isLiquidBlockExposed(
-  getBlock: (x: number, y: number, z: number) => BlockId,
-  x: number,
-  y: number,
-  z: number,
-  blockId: BlockId,
-): boolean {
-  const neighbors: BlockId[] = [
-    getBlock(x, y + 1, z),
-    getBlock(x, y - 1, z),
-    getBlock(x + 1, y, z),
-    getBlock(x - 1, y, z),
-    getBlock(x, y, z + 1),
-    getBlock(x, y, z - 1),
-  ];
-  for (const neighbor of neighbors) {
-    if (neighbor === blockId) continue;
-    // 空気・ガラス・非標準・別流体に接していれば露出
-    if (isBlockTransparent(neighbor)) return true;
-  }
-  return false;
-}
-
 /** 溶岩シェーダーマテリアル（発光 + 熱ゆらぎ + 表面の割れ目） */
 function createLavaMaterial(): THREE.ShaderMaterial {
   const material = new THREE.ShaderMaterial({
@@ -257,8 +231,54 @@ function createLavaMaterial(): THREE.ShaderMaterial {
   return material;
 }
 
-/** 共有boxGeometry（流体ブロック用） */
-const liquidGeometry = new THREE.BoxGeometry(1, 1, 1);
+interface LiquidFaceDefinition {
+  offset: readonly [number, number, number];
+  geometry: THREE.PlaneGeometry;
+}
+
+function createLiquidFaceGeometry(
+  rotation: readonly [number, number, number],
+  translation: readonly [number, number, number],
+): THREE.PlaneGeometry {
+  const geometry = new THREE.PlaneGeometry(1, 1);
+  geometry.rotateX(rotation[0]);
+  geometry.rotateY(rotation[1]);
+  geometry.rotateZ(rotation[2]);
+  geometry.translate(translation[0], translation[1], translation[2]);
+  return geometry;
+}
+
+/**
+ * 流体を箱ごと描かず、実際に露出している面だけを InstancedMesh にする。
+ * 地下の溶岩が横の洞窟へ露出していても、固体に接する上面・側面はGPUへ送らない。
+ */
+const LIQUID_FACE_DEFINITIONS: readonly LiquidFaceDefinition[] = [
+  {
+    offset: [1, 0, 0],
+    geometry: createLiquidFaceGeometry([0, Math.PI / 2, 0], [0.5, 0, 0]),
+  },
+  {
+    offset: [-1, 0, 0],
+    geometry: createLiquidFaceGeometry([0, -Math.PI / 2, 0], [-0.5, 0, 0]),
+  },
+  {
+    offset: [0, 1, 0],
+    geometry: createLiquidFaceGeometry([-Math.PI / 2, 0, 0], [0, 0.5, 0]),
+  },
+  {
+    offset: [0, -1, 0],
+    geometry: createLiquidFaceGeometry([Math.PI / 2, 0, 0], [0, -0.5, 0]),
+  },
+  {
+    offset: [0, 0, 1],
+    geometry: createLiquidFaceGeometry([0, 0, 0], [0, 0, 0.5]),
+  },
+  {
+    offset: [0, 0, -1],
+    geometry: createLiquidFaceGeometry([0, Math.PI, 0], [0, 0, -0.5]),
+  },
+] as const;
+
 const LIQUID_CENTER_UPDATE_INTERVAL_MS = 650;
 
 function getLiquidNightMix(gameTime: number, dimension: string): number {
@@ -279,6 +299,74 @@ interface LiquidRendererProps {
   instanceScale?: number;
 }
 
+interface LiquidFaceMeshProps {
+  blockId: BlockId;
+  geometry: THREE.PlaneGeometry;
+  getBlock: (x: number, y: number, z: number) => BlockId;
+  instanceScale: number;
+  material: THREE.ShaderMaterial;
+  positions: Float32Array;
+  renderOrder: number;
+}
+
+function LiquidFaceMesh({
+  blockId,
+  geometry,
+  getBlock,
+  instanceScale,
+  material,
+  positions,
+  renderOrder,
+}: LiquidFaceMeshProps) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummyRef = useRef(new THREE.Object3D());
+  const count = positions.length / 3;
+
+  // 初回描画前に行列を入れ、原点に面が固まるフラッシュを防ぐ。
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh || count === 0) return;
+
+    const dummy = dummyRef.current;
+    const isLava = blockId === BLOCK_IDS.LAVA;
+    for (let index = 0; index < count; index++) {
+      const offset = index * 3;
+      const bx = positions[offset];
+      const by = positions[offset + 1];
+      const bz = positions[offset + 2];
+      let yScale = instanceScale;
+      let yCenter = by + 0.5;
+
+      // 横だけ露出した地下溶岩は上端も固体から離し、共面を作らない。
+      if (isLava && !isBlockTransparent(getBlock(bx, by + 1, bz))) {
+        yScale = instanceScale * 0.88;
+        yCenter = by + yScale * 0.5;
+      }
+
+      dummy.position.set(bx + 0.5, yCenter, bz + 0.5);
+      dummy.scale.set(instanceScale, yScale, instanceScale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    }
+
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.visible = true;
+  }, [blockId, count, getBlock, instanceScale, positions]);
+
+  if (count === 0) return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[geometry, material, count]}
+      renderOrder={renderOrder}
+      frustumCulled={false}
+      visible={false}
+    />
+  );
+}
+
 /** 流体ブロックの InstancedMesh 描画 */
 function LiquidRenderer({
   blockId,
@@ -287,8 +375,6 @@ function LiquidRenderer({
   visibleChunkPadding = 1,
   instanceScale = 1,
 }: LiquidRendererProps) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummyRef = useRef(new THREE.Object3D());
   const lastCenterUpdate = useRef(0);
   const material = useMemo(() => createMaterial(), [createMaterial]);
   const { camera } = useThree();
@@ -303,10 +389,10 @@ function LiquidRenderer({
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius + visibleChunkPadding);
   const [cameraChunk, setCameraChunk] = useState({ cx: 0, cz: 0 });
 
-  const liquidPositions = useMemo(() => {
+  const liquidFacePositions = useMemo(() => {
     // blockIndexVersion は索引更新時にこのメモを作り直すためのトリガー
     void blockIndexVersion;
-    const positions: number[] = [];
+    const positionsByFace = LIQUID_FACE_DEFINITIONS.map(() => [] as number[]);
     const indexedBlocks = getIndexedBlockPositions(blockId);
 
     for (const pos of indexedBlocks) {
@@ -316,47 +402,22 @@ function LiquidRenderer({
         continue;
       }
 
-      // 固体に完全に囲まれた流体は描かない（地下マグマの地面透け防止）
-      if (!isLiquidBlockExposed(getBlock, pos.x, pos.y, pos.z, blockId)) {
-        continue;
+      for (let faceIndex = 0; faceIndex < LIQUID_FACE_DEFINITIONS.length; faceIndex++) {
+        const face = LIQUID_FACE_DEFINITIONS[faceIndex];
+        const neighbor = getBlock(
+          pos.x + face.offset[0],
+          pos.y + face.offset[1],
+          pos.z + face.offset[2],
+        );
+        if (neighbor === blockId || !isBlockTransparent(neighbor)) continue;
+        positionsByFace[faceIndex].push(pos.x, pos.y, pos.z);
       }
-      positions.push(pos.x, pos.y, pos.z);
     }
 
-    return new Float32Array(positions);
+    return positionsByFace.map((positions) => new Float32Array(positions));
   }, [blockId, blockIndexVersion, cameraChunk.cx, cameraChunk.cz, getBlock, getIndexedBlockPositions, visibleDistance]);
 
-  const count = liquidPositions.length / 3;
-
-  // 初回描画前に行列を入れる（原点に1フレーム固まるのを防ぐ）
-  useLayoutEffect(() => {
-    if (!meshRef.current || count === 0) return;
-    const dummy = dummyRef.current;
-    const scale = instanceScale;
-    const isLava = blockId === BLOCK_IDS.LAVA;
-    for (let i = 0; i < count; i++) {
-      const off = i * 3;
-      const bx = liquidPositions[off];
-      const by = liquidPositions[off + 1];
-      const bz = liquidPositions[off + 2];
-      // 溶岩の上に固体がある場合は上面を下げ、地面ブロックへ食い込まない
-      let yScale = scale;
-      let yCenter = by + 0.5;
-      if (isLava) {
-        const above = getBlock(bx, by + 1, bz);
-        if (!isBlockTransparent(above)) {
-          yScale = scale * 0.88;
-          yCenter = by + 0.5 * yScale;
-        }
-      }
-      dummy.position.set(bx + 0.5, yCenter, bz + 0.5);
-      dummy.scale.set(scale, yScale, scale);
-      dummy.updateMatrix();
-      meshRef.current!.setMatrixAt(i, dummy.matrix);
-    }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    meshRef.current.visible = true;
-  }, [blockId, getBlock, liquidPositions, count, instanceScale]);
+  const faceCount = liquidFacePositions.reduce((total, positions) => total + positions.length / 3, 0);
 
   // マテリアル破棄
   useEffect(() => () => {
@@ -378,35 +439,39 @@ function LiquidRenderer({
       ));
     }
 
-    const liquidMaterial = meshRef.current?.material;
-    if (liquidMaterial instanceof THREE.ShaderMaterial) {
-      if (liquidAnimation) {
-        liquidMaterial.uniforms.uTime.value += delta;
-      }
+    if (liquidAnimation) {
+      material.uniforms.uTime.value += delta;
+    }
 
-      const sunDirectionUniform = liquidMaterial.uniforms.uSunDirection;
-      const nightMixUniform = liquidMaterial.uniforms.uNightMix;
-      if (sunDirectionUniform && nightMixUniform) {
-        const gameState = useGameStore.getState();
-        const sunAngle = gameState.gameTime * Math.PI * 2;
-        const sunDirection = sunDirectionUniform.value as THREE.Vector3;
-        sunDirection.set(Math.cos(sunAngle), Math.max(0.16, Math.sin(sunAngle)), 0.38).normalize();
-        nightMixUniform.value = getLiquidNightMix(gameState.gameTime, gameState.dimension);
-      }
+    const sunDirectionUniform = material.uniforms.uSunDirection;
+    const nightMixUniform = material.uniforms.uNightMix;
+    if (sunDirectionUniform && nightMixUniform) {
+      const gameState = useGameStore.getState();
+      const sunAngle = gameState.gameTime * Math.PI * 2;
+      const sunDirection = sunDirectionUniform.value as THREE.Vector3;
+      sunDirection.set(Math.cos(sunAngle), Math.max(0.16, Math.sin(sunAngle)), 0.38).normalize();
+      nightMixUniform.value = getLiquidNightMix(gameState.gameTime, gameState.dimension);
     }
   });
   /* eslint-enable react-hooks/immutability */
 
-  if (count === 0) return null;
+  if (faceCount === 0) return null;
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[liquidGeometry, material, count]}
-      renderOrder={renderOrder}
-      frustumCulled={false}
-      visible={false}
-    />
+    <group>
+      {LIQUID_FACE_DEFINITIONS.map((face, faceIndex) => (
+        <LiquidFaceMesh
+          key={faceIndex}
+          blockId={blockId}
+          geometry={face.geometry}
+          getBlock={getBlock}
+          instanceScale={instanceScale}
+          material={material}
+          positions={liquidFacePositions[faceIndex]}
+          renderOrder={renderOrder}
+        />
+      ))}
+    </group>
   );
 }
 
@@ -427,8 +492,8 @@ export function LavaRenderer() {
     <LiquidRenderer
       blockId={BLOCK_IDS.LAVA}
       createMaterial={createLavaMaterial}
-      // 地形（renderOrder 0）より後でも depthTest で遮る。手前押しはしない
-      renderOrder={0}
+      // 先に深度へ書き、同位置では後から描く地形面を必ず優先する。
+      renderOrder={-1}
       visibleChunkPadding={2}
       // 地形面より内側へ縮め、隣接面の共面チラつきを防ぐ
       instanceScale={0.96}

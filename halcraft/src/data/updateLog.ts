@@ -45,6 +45,12 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-24',
+    items: [
+      { type: 'fix', text: '地面や壁が消えて地下のマグマが見える不具合を、洞窟と水面の描画から直したよ！' },
+    ],
+  },
+  {
     date: '2026-07-23',
     items: [
       { type: 'improve', text: '味方プロトタイプの体力がとても強くなって、倒れても約2分で戻ってくるよ！' },
