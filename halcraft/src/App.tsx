@@ -11,8 +11,13 @@ import './App.css';
 
 const RIG_LAB_ENABLED = import.meta.env.DEV
   && new URLSearchParams(window.location.search).get('rigLab') === '1';
+const AUDIO_LAB_ENABLED = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('audioLab') === '1';
 const RigLab = import.meta.env.DEV
   ? lazy(() => import('./components/mobs/RigLab'))
+  : null;
+const AudioLab = import.meta.env.DEV
+  ? lazy(() => import('./components/audio/AudioLab'))
   : null;
 const GameExperience = lazy(() => import('./components/GameExperience'));
 
@@ -67,6 +72,13 @@ function MainGameApp() {
 }
 
 export default function App() {
+  if (AUDIO_LAB_ENABLED && AudioLab) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#081019' }} />}>
+        <AudioLab />
+      </Suspense>
+    );
+  }
   if (RIG_LAB_ENABLED && RigLab) {
     return (
       <Suspense fallback={<div className="rig-lab" />}>

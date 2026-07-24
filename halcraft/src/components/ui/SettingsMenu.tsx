@@ -15,8 +15,7 @@ import { useVehicleStore } from '../../stores/useVehicleStore';
 import { useCoasterStore } from '../../stores/useCoasterStore';
 import { isTouchDevice } from '../../utils/device';
 import { getPerformanceProfile, type PerformanceTier } from '../../utils/performance';
-import { setBGMVolume } from '../../utils/musicManager';
-import { setSfxVolume } from '../../utils/sounds';
+import { audioEngine, type DynamicRangeMode } from '../../audio';
 import { SG } from './startScreenTheme';
 
 interface SettingsButtonProps {
@@ -112,6 +111,12 @@ const hudDensityOptions: Array<SegmentOption<HudDensity>> = [
   { value: 'detailed', label: '詳細', icon: 'D' },
 ];
 
+const dynamicRangeOptions: Array<SegmentOption<DynamicRangeMode>> = [
+  { value: 'night', label: '夜間', icon: 'N' },
+  { value: 'standard', label: '標準', icon: 'S' },
+  { value: 'wide', label: 'ワイド', icon: 'W' },
+];
+
 const tierLabels: Record<PerformanceTier, string> = {
   low: '軽量',
   balanced: '標準',
@@ -153,6 +158,7 @@ function Segment<T extends string>({
           <button
             key={option.value}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
             style={{
               display: 'flex',
@@ -233,6 +239,37 @@ function Toggle({
   );
 }
 
+function VolumeSlider({
+  label,
+  value,
+  color,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: 5 }}>
+      <div style={labelStyle}>
+        <span>{label}</span>
+        <span style={valueStyle}>{Math.round(value * 100)}%</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={Math.round(value * 100)}
+        onChange={(event) => onChange(Number(event.currentTarget.value) / 100)}
+        style={{ width: '100%', accentColor: color }}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
 export function SettingsButton({ variant, onClick }: SettingsButtonProps) {
   const isMenu = variant === 'menu';
   // ゲーム中は左上に置くが、搭乗中は左上HPと重なるので少し下へ
@@ -282,8 +319,15 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const waterAnimation = useSettingsStore((s) => s.waterAnimation);
   const hudDensity = useSettingsStore((s) => s.hudDensity);
   const showControlsGuide = useSettingsStore((s) => s.showControlsGuide);
+  const masterVolume = useSettingsStore((s) => s.masterVolume);
   const bgmVolume = useSettingsStore((s) => s.bgmVolume);
+  const ambienceVolume = useSettingsStore((s) => s.ambienceVolume);
   const sfxVolume = useSettingsStore((s) => s.sfxVolume);
+  const dialogueVolume = useSettingsStore((s) => s.dialogueVolume);
+  const voiceChatVolume = useSettingsStore((s) => s.voiceChatVolume);
+  const audioMuted = useSettingsStore((s) => s.audioMuted);
+  const dynamicRange = useSettingsStore((s) => s.dynamicRange);
+  const spatialAudio = useSettingsStore((s) => s.spatialAudio);
   const applyGraphicsPreset = useSettingsStore((s) => s.applyGraphicsPreset);
   const setGraphicsPreset = useSettingsStore((s) => s.setGraphicsPreset);
   const setRenderDistance = useSettingsStore((s) => s.setRenderDistance);
@@ -294,10 +338,17 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setWaterAnimation = useSettingsStore((s) => s.setWaterAnimation);
   const setHudDensity = useSettingsStore((s) => s.setHudDensity);
   const setShowControlsGuide = useSettingsStore((s) => s.setShowControlsGuide);
+  const setMasterVolume = useSettingsStore((s) => s.setMasterVolume);
   const setBgmVolumeSetting = useSettingsStore((s) => s.setBgmVolume);
+  const setAmbienceVolume = useSettingsStore((s) => s.setAmbienceVolume);
   const setSfxVolumeSetting = useSettingsStore((s) => s.setSfxVolume);
+  const setDialogueVolume = useSettingsStore((s) => s.setDialogueVolume);
+  const setVoiceChatVolume = useSettingsStore((s) => s.setVoiceChatVolume);
+  const setAudioMuted = useSettingsStore((s) => s.setAudioMuted);
+  const setDynamicRange = useSettingsStore((s) => s.setDynamicRange);
+  const setSpatialAudio = useSettingsStore((s) => s.setSpatialAudio);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
-  const isTouch = isTouchDevice();
+  const isCompact = isTouchDevice() || window.innerWidth <= 560;
   const performanceProfile = getPerformanceProfile();
   const presetLabel = presetOptions.find((o) => o.value === graphicsPreset)?.label ?? graphicsPreset;
   const presetValueLabel = graphicsPreset === 'auto'
@@ -326,25 +377,36 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [open, onClose]);
 
-  // 保存済み音量をエンジンへ反映
+  // 保存済みのミックスを共有エンジンへ即時反映
   useEffect(() => {
-    setBGMVolume(bgmVolume);
-    setSfxVolume(sfxVolume);
-  }, [bgmVolume, sfxVolume]);
+    audioEngine.applyMix({
+      masterVolume,
+      musicVolume: bgmVolume,
+      ambienceVolume,
+      sfxVolume,
+      dialogueVolume,
+      voiceChatVolume,
+      muted: audioMuted,
+      dynamicRange,
+      spatialAudio,
+    });
+  }, [
+    ambienceVolume,
+    audioMuted,
+    bgmVolume,
+    dialogueVolume,
+    dynamicRange,
+    masterVolume,
+    sfxVolume,
+    spatialAudio,
+    voiceChatVolume,
+  ]);
 
   if (!open) return null;
 
   const handleRenderDistanceChange = (e: ChangeEvent<HTMLInputElement>) => {
     setGraphicsPreset('balanced');
     setRenderDistance(Number(e.currentTarget.value));
-  };
-
-  const handleBgmVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setBgmVolumeSetting(Number(e.currentTarget.value) / 100);
-  };
-
-  const handleSfxVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setSfxVolumeSetting(Number(e.currentTarget.value) / 100);
   };
 
   return (
@@ -373,12 +435,12 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
-              padding: isTouch ? '14px 16px 10px' : '15px 20px 11px',
+              padding: isCompact ? '14px 16px 10px' : '15px 20px 11px',
         }}>
           <div>
             <div style={{
               color: '#fff',
-              fontSize: isTouch ? 22 : 26,
+              fontSize: isCompact ? 22 : 26,
               fontWeight: 900,
               letterSpacing: '0.08em',
             }}>
@@ -415,7 +477,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isTouch ? '1fr' : '1fr auto',
+          gridTemplateColumns: isCompact ? '1fr' : '1fr auto',
           alignItems: 'center',
           gap: 12,
           padding: '12px 16px',
@@ -434,7 +496,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             <div style={{
               marginTop: 4,
               color: '#fff',
-              fontSize: isTouch ? 14 : 15,
+              fontSize: isCompact ? 14 : 15,
               fontWeight: 900,
               letterSpacing: 0,
             }}>
@@ -445,14 +507,14 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
-            justifyContent: isTouch ? 'stretch' : 'flex-end',
+            justifyContent: isCompact ? 'stretch' : 'flex-end',
           }}>
             <button
               type="button"
               onClick={() => applyGraphicsPreset('light')}
               style={{
                 ...quickButtonStyle,
-                flex: isTouch ? '1 1 130px' : '0 0 auto',
+                flex: isCompact ? '1 1 130px' : '0 0 auto',
                 background: 'rgba(70, 175, 120, 0.30)',
                 borderColor: 'rgba(120, 235, 165, 0.70)',
               }}
@@ -464,7 +526,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
               onClick={() => applyGraphicsPreset('auto')}
               style={{
                 ...quickButtonStyle,
-                flex: isTouch ? '1 1 130px' : '0 0 auto',
+                flex: isCompact ? '1 1 130px' : '0 0 auto',
               }}
             >
               端末に合わせる
@@ -591,34 +653,41 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
         </div>
 
         <div style={sectionStyle}>
-          <div style={labelStyle}>
-            <span>音楽の音量</span>
-            <span style={valueStyle}>{Math.round(bgmVolume * 100)}%</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 900, fontSize: 14 }}>サウンドミックス</div>
+              <div style={{ color: 'rgba(255,255,255,0.48)', fontSize: 11, marginTop: 3 }}>
+                冒険の迫力と、声の聞き取りやすさを別々に調整できるよ
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAudioMuted(!audioMuted)}
+              aria-pressed={audioMuted}
+              style={{
+                ...quickButtonStyle,
+                borderColor: audioMuted ? '#ff8a80aa' : `${SG.build}99`,
+                background: audioMuted ? 'rgba(255,80,80,0.18)' : quickButtonStyle.background,
+              }}
+            >
+              {audioMuted ? '🔇 ミュート中' : '🔊 音あり'}
+            </button>
           </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={Math.round(bgmVolume * 100)}
-            onChange={handleBgmVolumeChange}
-            style={{ width: '100%', accentColor: '#63c8ff' }}
-            aria-label="音楽の音量"
-          />
-          <div style={labelStyle}>
-            <span>効果音の音量</span>
-            <span style={valueStyle}>{Math.round(sfxVolume * 100)}%</span>
+          <VolumeSlider label="全体" value={masterVolume} color="#ffffff" onChange={setMasterVolume} />
+          <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            <VolumeSlider label="音楽" value={bgmVolume} color="#63c8ff" onChange={setBgmVolumeSetting} />
+            <VolumeSlider label="環境音" value={ambienceVolume} color="#78d89a" onChange={setAmbienceVolume} />
+            <VolumeSlider label="効果音" value={sfxVolume} color="#ffc06d" onChange={setSfxVolumeSetting} />
+            <VolumeSlider label="キャラクターの声" value={dialogueVolume} color="#d39cff" onChange={setDialogueVolume} />
+            <VolumeSlider label="ボイスチャット" value={voiceChatVolume} color="#7edcff" onChange={setVoiceChatVolume} />
           </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={Math.round(sfxVolume * 100)}
-            onChange={handleSfxVolumeChange}
-            style={{ width: '100%', accentColor: '#ffc06d' }}
-            aria-label="効果音の音量"
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.2fr 0.8fr', gap: 10, alignItems: 'center' }}>
+            <div>
+              <div style={{ ...labelStyle, marginBottom: 6 }}><span>音の強弱</span></div>
+              <Segment value={dynamicRange} options={dynamicRangeOptions} onChange={setDynamicRange} />
+            </div>
+            <Toggle label="立体音響" checked={spatialAudio} onChange={setSpatialAudio} />
+          </div>
         </div>
 
         <div style={sectionStyle}>

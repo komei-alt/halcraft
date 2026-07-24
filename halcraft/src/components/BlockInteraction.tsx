@@ -50,6 +50,7 @@ import {
   playBlockUseFeedbackSound,
   playMiningBlockedSound,
 } from '../utils/sounds';
+import { getBlockAudioMaterial } from '../utils/blockAudioMaterial';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
 import { resolveDecorativeDrop } from '../data/blockMaterials';
@@ -1268,7 +1269,10 @@ export function BlockInteraction() {
 
     setBlock(t.placeX, t.placeY, t.placeZ, selectedBlock);
     sendBlockPlace(t.placeX, t.placeY, t.placeZ, selectedBlock);
-    playBlockPlaceSound();
+    playBlockPlaceSound(
+      { x: t.placeX + 0.5, y: t.placeY + 0.5, z: t.placeZ + 0.5 },
+      getBlockAudioMaterial(selectedBlock),
+    );
     usePlayerStore.setState((s) => ({
       cameraShake: Math.min(1, Math.max(s.cameraShake, 0.08)),
     }));
@@ -1614,7 +1618,10 @@ export function BlockInteraction() {
             spawnBlockBreakEffect(blockId, found.x, found.y, found.z);
             grantBrokenBlock(blockId, found.x, found.y, found.z);
             sendBlockBreak(found.x, found.y, found.z);
-            playBlockBreakSound();
+            playBlockBreakSound(
+              { x: found.x + 0.5, y: found.y + 0.5, z: found.z + 0.5 },
+              getBlockAudioMaterial(blockId),
+            );
             usePlayerStore.setState((s) => ({
               cameraShake: Math.min(1, Math.max(s.cameraShake, 0.14)),
             }));
@@ -1725,7 +1732,10 @@ export function BlockInteraction() {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
-              playBlockBreakSound();
+              playBlockBreakSound(
+                { x: t.x + 0.5, y: t.y + 0.5, z: t.z + 0.5 },
+                getBlockAudioMaterial(blockId),
+              );
               usePlayerStore.setState((s) => ({
                 cameraShake: Math.min(1, Math.max(s.cameraShake, 0.13)),
               }));
@@ -1787,7 +1797,10 @@ export function BlockInteraction() {
               spawnBlockBreakEffect(blockId, t.x, t.y, t.z);
               grantBrokenBlock(blockId, t.x, t.y, t.z);
               sendBlockBreak(t.x, t.y, t.z);
-              playBlockBreakSound();
+              playBlockBreakSound(
+                { x: t.x + 0.5, y: t.y + 0.5, z: t.z + 0.5 },
+                getBlockAudioMaterial(blockId),
+              );
               usePlayerStore.setState((s) => ({
                 cameraShake: Math.min(1, Math.max(s.cameraShake, 0.13)),
               }));

@@ -4,6 +4,7 @@
 
 import { SEA_LEVEL } from '../types/blocks';
 import type { BiomeId, StageCategory } from '../types/stages';
+import { audioEngine } from '../audio';
 
 interface AmbientProfile {
   windLevel: number;
@@ -269,7 +270,8 @@ function safeStop(source: AudioScheduledSourceNode): void {
 export function initAmbientSounds(): void {
   if (isRunning) return;
 
-  audioCtx = new AudioContext();
+  audioCtx = audioEngine.getContext();
+  if (!audioCtx) return;
   // ブラウザの自動再生ポリシー対応
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
@@ -277,7 +279,7 @@ export function initAmbientSounds(): void {
 
   masterGain = audioCtx.createGain();
   masterGain.gain.value = AMBIENT_VOLUME * ambientPresence;
-  masterGain.connect(audioCtx.destination);
+  masterGain.connect(audioEngine.getBusInput('ambience'));
 
   // --- 風音: 音程を持つオシレーターではなく、自然音に近い色付きノイズで構成 ---
   const windSource = trackSource(audioCtx.createBufferSource());
@@ -658,33 +660,45 @@ export function stopAmbientSounds(): void {
   if (!isRunning) return;
   isRunning = false;
 
-  for (const source of activeSources) {
-    safeStop(source);
-  }
+  const stoppingSources = activeSources;
+  const stoppingMaster = masterGain;
+  const stoppingContext = audioCtx;
   activeSources = [];
+  if (stoppingMaster && stoppingContext) {
+    const now = stoppingContext.currentTime;
+    stoppingMaster.gain.cancelScheduledValues(now);
+    stoppingMaster.gain.setValueAtTime(stoppingMaster.gain.value, now);
+    stoppingMaster.gain.linearRampToValueAtTime(0, now + 0.16);
+  }
+
+  // 参照は即座に外し、すぐ再入場しても古い停止タイマーが新グラフを消さないようにする。
+  audioCtx = null;
+  masterGain = null;
+  windBodyGain = null;
+  windAirGain = null;
+  windRustleGain = null;
+  waterGain = null;
+  caveGain = null;
+  windBodyFilterNode = null;
+  windAirFilterNode = null;
+  waterFilterNode = null;
+  caveFilterNode = null;
+  caveDroneNode = null;
+  modeToneGain = null;
+  modeToneFilterNode = null;
+  modeToneNode = null;
+  modeTextureGain = null;
+  modeTextureFilterNode = null;
+  biomeSignatureBodyGain = null;
+  biomeSignatureAirGain = null;
+  biomeSignatureBodyFilterNode = null;
+  biomeSignatureAirFilterNode = null;
 
   setTimeout(() => {
-    audioCtx?.close();
-    audioCtx = null;
-    masterGain = null;
-    windBodyGain = null;
-    windAirGain = null;
-    windRustleGain = null;
-    waterGain = null;
-    caveGain = null;
-    windBodyFilterNode = null;
-    windAirFilterNode = null;
-    waterFilterNode = null;
-    caveFilterNode = null;
-    caveDroneNode = null;
-    modeToneGain = null;
-    modeToneFilterNode = null;
-    modeToneNode = null;
-    modeTextureGain = null;
-    modeTextureFilterNode = null;
-    biomeSignatureBodyGain = null;
-    biomeSignatureAirGain = null;
-    biomeSignatureBodyFilterNode = null;
-    biomeSignatureAirFilterNode = null;
-  }, 500);
+    for (const source of stoppingSources) {
+      safeStop(source);
+      source.disconnect();
+    }
+    stoppingMaster?.disconnect();
+  }, 190);
 }

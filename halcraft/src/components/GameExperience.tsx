@@ -42,7 +42,9 @@ import { SkinSelector } from './ui/SkinSelector';
 import { AirSupplyBar } from './ui/AirSupplyBar';
 import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { HungerBar } from './ui/HungerBar';
+import { DialogueSubtitle } from './ui/DialogueSubtitle';
 import { StageChallengeRewardSystem } from './StageChallengeRewardSystem';
+import { DialogueDirector } from './DialogueDirector';
 import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
@@ -190,6 +192,8 @@ export default function GameExperience({ onOpenSettings }: GameExperienceProps) 
       {showDetailedHud && <StageEventHUD />}
       {showDetailedHud && <StagePressureHUD />}
       <StageOpeningBriefing />
+      <DialogueDirector />
+      <DialogueSubtitle />
       <BossEncounterHUD />
       {showDetailedHud && <ModeFlowHUD />}
       <StageChallengeRewardSystem />

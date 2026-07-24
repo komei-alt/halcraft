@@ -1,7 +1,7 @@
 {
   "name": "halcraft",
   "private": true,
-  "version": "1.0.236",
+  "version": "1.0.237",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "prebuild": "npm run assets:build",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "audio:validate": "node scripts/validate-audio-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

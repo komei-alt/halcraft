@@ -291,6 +291,7 @@ export function BombSlinger() {
     });
     playRocketExplosionSound(
       camera.position.distanceTo(new THREE.Vector3(bomb.x, bomb.y, bomb.z)),
+      { x: bomb.x, y: bomb.y, z: bomb.z },
     );
 
     const mobs = useMobStore.getState().mobs;

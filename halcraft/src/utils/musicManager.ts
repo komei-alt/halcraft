@@ -1,162 +1,277 @@
-// BGM（バックグラウンドミュージック）マネージャー
-// Web Audio API で手続き的にアンビエントBGMを生成する
-// Minecraft風の穏やかなピアノ + パッド音をランダムに生成
+// 適応型 BGM マネージャー
+// 録音済みの探索・森林・戦闘・ボス曲を、ゲーム状態に合わせて途切れなくクロスフェードする。
+
+import { audioEngine } from '../audio/AudioEngine';
+import type { StageCategory } from '../types/stages';
+
+export type BGMTrackId = 'exploration' | 'forest' | 'battle' | 'boss';
+
+export interface BGMScene {
+  biome?: string | null;
+  category?: StageCategory | null;
+  dimension?: 'overworld' | 'nether';
+  isNight?: boolean;
+  combatIntensity?: number;
+  bossActive?: boolean;
+}
+
+interface BGMTrackDefinition {
+  title: string;
+  level: number;
+}
+
+interface BGMDeck {
+  element: HTMLAudioElement;
+  source: MediaElementAudioSourceNode;
+  gain: GainNode;
+  trackId: BGMTrackId | null;
+}
+
+const TRACKS: Record<BGMTrackId, BGMTrackDefinition> = {
+  exploration: { title: 'Fairy Adventure', level: 0.92 },
+  forest: { title: 'Iremos Forest', level: 0.96 },
+  battle: { title: 'Determined Pursuit', level: 0.78 },
+  boss: { title: 'Battle RPG Theme', level: 0.78 },
+};
+
+const BGM_OUTPUT_GAIN = 0.46;
+const CROSSFADE_SECONDS = 2.4;
+const MIN_TRACK_DWELL_MS = 6500;
+const COMBAT_RELEASE_MS = 9000;
+const FADE_CURVE_POINTS = 64;
 
 let audioCtx: AudioContext | null = null;
-let masterGain: GainNode | null = null;
+let outputGain: GainNode | null = null;
+let decks: [BGMDeck, BGMDeck] | null = null;
+let activeDeckIndex = -1;
+let currentTrack: BGMTrackId | null = null;
+let desiredTrack: BGMTrackId = 'exploration';
 let isPlaying = false;
-let nextNoteTime = 0;
-let schedulerTimer: ReturnType<typeof setInterval> | null = null;
-/** ポーズ等で一時的に下げる係数（0-1） */
-let bgmPresence = 1;
-/** ユーザー設定の BGM 音量（0-1） */
-let userBgmVolume = 1;
+let transitionSerial = 0;
+let lastTransitionAt = 0;
+let combatHoldUntil = 0;
+let deferredTransitionTimer: ReturnType<typeof setTimeout> | null = null;
 
-function applyBgmGain(rampSeconds = 0.12): void {
-  if (!masterGain || !audioCtx) return;
-  const target = Math.max(0, Math.min(1, userBgmVolume)) * bgmPresence * BGM_VOLUME;
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function supportsOgg(): boolean {
+  if (typeof document === 'undefined') return true;
+  return document.createElement('audio').canPlayType('audio/ogg; codecs="vorbis"') !== '';
+}
+
+function getTrackUrl(trackId: BGMTrackId): string {
+  return `/audio/music/${trackId}.${supportsOgg() ? 'ogg' : 'mp3'}`;
+}
+
+function createDeck(context: AudioContext, destination: AudioNode): BGMDeck {
+  const element = new Audio();
+  element.preload = 'auto';
+  element.loop = true;
+  element.crossOrigin = 'anonymous';
+
+  const source = context.createMediaElementSource(element);
+  const gain = context.createGain();
+  gain.gain.value = 0;
+  source.connect(gain);
+  gain.connect(destination);
+  return { element, source, gain, trackId: null };
+}
+
+function ensureGraph(): boolean {
+  if (audioCtx && outputGain && decks) return true;
+  if (typeof window === 'undefined') return false;
+  const context = audioEngine.getContext();
+  if (!context) return false;
+
+  const nextOutput = context.createGain();
+  nextOutput.gain.value = BGM_OUTPUT_GAIN;
+  nextOutput.connect(audioEngine.getBusInput('music'));
+
+  audioCtx = context;
+  outputGain = nextOutput;
+  decks = [createDeck(context, nextOutput), createDeck(context, nextOutput)];
+  return true;
+}
+
+function makeFadeCurve(fadeIn: boolean, level: number): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(FADE_CURVE_POINTS);
+  for (let index = 0; index < curve.length; index++) {
+    const progress = index / (curve.length - 1);
+    const gain = fadeIn
+      ? Math.sin(progress * Math.PI * 0.5)
+      : Math.cos(progress * Math.PI * 0.5);
+    curve[index] = gain * level;
+  }
+  return curve;
+}
+
+function scheduleFade(param: AudioParam, fadeIn: boolean, level: number, now: number, seconds: number): void {
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(param.value, now);
+  param.setValueCurveAtTime(makeFadeCurve(fadeIn, level), now, seconds);
+}
+
+async function crossfadeTo(trackId: BGMTrackId): Promise<void> {
+  if (!isPlaying || !ensureGraph() || !audioCtx || !decks) return;
+  if (currentTrack === trackId && activeDeckIndex >= 0) return;
+
+  const serial = ++transitionSerial;
+  const nextIndex = activeDeckIndex === 0 ? 1 : 0;
+  const incoming = decks[nextIndex];
+  const outgoing = activeDeckIndex >= 0 ? decks[activeDeckIndex] : null;
+
+  incoming.element.pause();
+  if (incoming.trackId !== trackId) {
+    incoming.element.src = getTrackUrl(trackId);
+    incoming.element.load();
+    incoming.trackId = trackId;
+  }
+  try {
+    incoming.element.currentTime = 0;
+  } catch {
+    // メタデータ読込前は currentTime の変更が拒否されるブラウザがある。
+  }
+
+  await audioEngine.unlock();
+  try {
+    await incoming.element.play();
+  } catch {
+    // 自動再生制限時は次のユーザー操作または scene 更新で再試行する。
+    if (serial === transitionSerial) incoming.gain.gain.value = 0;
+    return;
+  }
+
+  if (!isPlaying || serial !== transitionSerial || !audioCtx) {
+    incoming.element.pause();
+    return;
+  }
+
   const now = audioCtx.currentTime;
-  masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setValueAtTime(masterGain.gain.value, now);
-  masterGain.gain.linearRampToValueAtTime(target, now + rampSeconds);
-}
+  const seconds = outgoing ? CROSSFADE_SECONDS : 1.15;
+  const incomingLevel = TRACKS[trackId].level;
+  incoming.gain.gain.cancelScheduledValues(now);
+  incoming.gain.gain.setValueAtTime(0, now);
+  scheduleFade(incoming.gain.gain, true, incomingLevel, now, seconds);
+  if (outgoing) scheduleFade(outgoing.gain.gain, false, outgoing.gain.gain.value, now, seconds);
 
-/** BGMの音量（0-1） */
-const BGM_VOLUME = 0.08;
+  activeDeckIndex = nextIndex;
+  currentTrack = trackId;
+  lastTransitionAt = performance.now();
 
-/** ペンタトニックスケール（C, D, E, G, A）の周波数（2オクターブ） */
-const PENTATONIC_NOTES = [
-  261.63, 293.66, 329.63, 392.00, 440.00,  // C4-A4
-  523.25, 587.33, 659.26, 783.99, 880.00,  // C5-A5
-];
-
-/** パッドコード（アンビエントな背景和音） */
-const PAD_CHORDS = [
-  [261.63, 329.63, 392.00], // C major
-  [293.66, 369.99, 440.00], // D minor
-  [220.00, 261.63, 329.63], // Am
-  [246.94, 311.13, 392.00], // B diminished → G major
-];
-
-/** ピアノ風の単音を再生 */
-function playNote(ctx: AudioContext, gain: GainNode, freq: number, startTime: number, duration: number): void {
-  const osc = ctx.createOscillator();
-  const noteGain = ctx.createGain();
-
-  osc.type = 'sine';
-  osc.frequency.value = freq;
-
-  // エンベロープ: ゆるい立ち上がり + 長い減衰
-  noteGain.gain.setValueAtTime(0, startTime);
-  noteGain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
-  noteGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-  osc.connect(noteGain);
-  noteGain.connect(gain);
-  osc.start(startTime);
-  osc.stop(startTime + duration);
-}
-
-/** パッド和音を再生 */
-function playPad(ctx: AudioContext, gain: GainNode, chord: number[], startTime: number, duration: number): void {
-  for (const freq of chord) {
-    const osc = ctx.createOscillator();
-    const noteGain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-
-    noteGain.gain.setValueAtTime(0, startTime);
-    noteGain.gain.linearRampToValueAtTime(0.06, startTime + 1);
-    noteGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-    osc.connect(noteGain);
-    noteGain.connect(gain);
-    osc.start(startTime);
-    osc.stop(startTime + duration);
+  if (outgoing) {
+    const outgoingElement = outgoing.element;
+    window.setTimeout(() => {
+      if (activeDeckIndex === nextIndex) outgoingElement.pause();
+    }, seconds * 1000 + 120);
   }
 }
 
-/** BGMスケジューラー（先読みでノートを予約） */
-function scheduleBGM(): void {
-  if (!audioCtx || !masterGain) return;
-
-  const lookAhead = 0.5; // 500ms先読み
-
-  while (nextNoteTime < audioCtx.currentTime + lookAhead) {
-    // ランダムにメロディかパッドか決定
-    const r = Math.random();
-
-    if (r < 0.4) {
-      // メロディノート
-      const noteIdx = Math.floor(Math.random() * PENTATONIC_NOTES.length);
-      const freq = PENTATONIC_NOTES[noteIdx];
-      const duration = 1.5 + Math.random() * 3;
-      playNote(audioCtx, masterGain, freq, nextNoteTime, duration);
-      nextNoteTime += 0.8 + Math.random() * 2;
-    } else if (r < 0.6) {
-      // パッド和音
-      const chordIdx = Math.floor(Math.random() * PAD_CHORDS.length);
-      const duration = 4 + Math.random() * 4;
-      playPad(audioCtx, masterGain, PAD_CHORDS[chordIdx], nextNoteTime, duration);
-      nextNoteTime += 3 + Math.random() * 4;
-    } else {
-      // 無音（間を作る）
-      nextNoteTime += 1 + Math.random() * 3;
-    }
+function requestTrack(trackId: BGMTrackId, urgent = false): void {
+  desiredTrack = trackId;
+  if (!isPlaying || currentTrack === trackId) return;
+  if (deferredTransitionTimer) {
+    clearTimeout(deferredTransitionTimer);
+    deferredTransitionTimer = null;
   }
+
+  const elapsed = performance.now() - lastTransitionAt;
+  if (!urgent && currentTrack && elapsed < MIN_TRACK_DWELL_MS) {
+    deferredTransitionTimer = setTimeout(() => {
+      deferredTransitionTimer = null;
+      if (isPlaying && desiredTrack !== currentTrack) void crossfadeTo(desiredTrack);
+    }, MIN_TRACK_DWELL_MS - elapsed);
+    return;
+  }
+  void crossfadeTo(trackId);
 }
 
-/** BGM再生開始 */
+/** 純粋関数としてテストできる、シーンから曲への割当。 */
+export function resolveBGMTrack(scene: BGMScene, combatHeld = false): BGMTrackId {
+  if (scene.bossActive) return 'boss';
+  const combatIntensity = clamp01(scene.combatIntensity ?? 0);
+  if (scene.dimension === 'nether' || combatIntensity >= 0.14 || combatHeld) return 'battle';
+  if (scene.category === 'build' && scene.biome === 'forest') return 'forest';
+  if (scene.category === 'war' && scene.isNight) return 'battle';
+  return 'exploration';
+}
+
+/** 敵数・ボス・バイオームなどの変化に応じて次の曲を選ぶ。 */
+export function updateBGMScene(scene: BGMScene): void {
+  const now = performance.now();
+  if ((scene.combatIntensity ?? 0) >= 0.14 || scene.bossActive) {
+    combatHoldUntil = now + COMBAT_RELEASE_MS;
+  }
+  const nextTrack = resolveBGMTrack(scene, now < combatHoldUntil && !scene.bossActive);
+  requestTrack(nextTrack, nextTrack === 'boss');
+}
+
+/** BGM 再生開始。初回は現在選択済みのシーン曲をフェードインする。 */
 export function startBGM(): void {
   if (isPlaying) return;
-
-  audioCtx = new AudioContext();
-  // ブラウザの自動再生ポリシー対応
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {
-      // ユーザーインタラクション後にリトライ
-    });
-  }
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = userBgmVolume * bgmPresence * BGM_VOLUME;
-  masterGain.connect(audioCtx.destination);
-
-  nextNoteTime = audioCtx.currentTime + 2; // 2秒後から開始
+  if (!ensureGraph()) return;
   isPlaying = true;
-
-  schedulerTimer = setInterval(scheduleBGM, 200);
+  void crossfadeTo(desiredTrack);
 }
 
-/** BGM停止 */
+/** BGM 停止。AudioContext はゲーム全体で共有するため閉じない。 */
 export function stopBGM(): void {
   if (!isPlaying) return;
   isPlaying = false;
-
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer);
-    schedulerTimer = null;
+  transitionSerial++;
+  if (deferredTransitionTimer) {
+    clearTimeout(deferredTransitionTimer);
+    deferredTransitionTimer = null;
   }
+  if (!audioCtx || !decks) return;
 
-  if (masterGain) {
-    masterGain.gain.linearRampToValueAtTime(0, audioCtx!.currentTime + 1);
+  const now = audioCtx.currentTime;
+  // 直後に再開されても、停止中の同一トラック判定で無音のままにならないよう先に解除する。
+  currentTrack = null;
+  for (const deck of decks) {
+    deck.gain.gain.cancelScheduledValues(now);
+    deck.gain.gain.setValueAtTime(deck.gain.gain.value, now);
+    deck.gain.gain.linearRampToValueAtTime(0, now + 0.55);
   }
-
-  setTimeout(() => {
-    audioCtx?.close();
-    audioCtx = null;
-    masterGain = null;
-  }, 1500);
+  window.setTimeout(() => {
+    if (isPlaying || !decks) return;
+    for (const deck of decks) deck.element.pause();
+    activeDeckIndex = -1;
+    currentTrack = null;
+  }, 680);
 }
 
-/** BGM音量調整（0-1。設定スライダー向け） */
-export function setBGMVolume(vol: number): void {
-  userBgmVolume = Math.max(0, Math.min(1, vol));
-  applyBgmGain(0.08);
+/** BGM 音量調整（0-1）。最終的な音量は共有ミキサーで管理する。 */
+export function setBGMVolume(volume: number): void {
+  audioEngine.setBusVolume('music', clamp01(volume));
 }
 
-/** ポーズ/死亡時などに BGM を一時的に下げる（0=無音、1=通常） */
+/** 後方互換 API。ポーズ等の存在感は共有ミキサーへ一本化する。 */
 export function setBGMPresence(presence: number): void {
-  bgmPresence = Math.max(0, Math.min(1, presence));
-  applyBgmGain(0.18);
+  audioEngine.setPresence(clamp01(presence));
+}
+
+/** 開発用 Audio Lab から任意の曲を即座に確認する。 */
+export function previewBGMTrack(trackId: BGMTrackId): void {
+  desiredTrack = trackId;
+  if (!isPlaying) {
+    startBGM();
+    return;
+  }
+  requestTrack(trackId, true);
+}
+
+export function getBGMState(): {
+  playing: boolean;
+  currentTrack: BGMTrackId | null;
+  desiredTrack: BGMTrackId;
+  title: string | null;
+} {
+  return {
+    playing: isPlaying,
+    currentTrack,
+    desiredTrack,
+    title: currentTrack ? TRACKS[currentTrack].title : null,
+  };
 }

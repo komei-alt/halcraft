@@ -1,7 +1,7 @@
 // ライトセイバー専用サウンドエンジン
 // Web Audio API でプロシージャル生成する厚めのSF武器サウンド
 
-let audioCtx: AudioContext | null = null;
+import { audioEngine } from '../audio';
 
 interface MasterBus {
   ctx: AudioContext;
@@ -20,13 +20,7 @@ let masterBus: MasterBus | null = null;
 let humLoop: HumLoop | null = null;
 
 function getAudioContext(): AudioContext | null {
-  if (audioCtx) return audioCtx;
-  try {
-    audioCtx = new AudioContext();
-    return audioCtx;
-  } catch {
-    return null;
-  }
+  return audioEngine.getContext();
 }
 
 function resumeIfNeeded(ctx: AudioContext): void {
@@ -53,7 +47,7 @@ function getMasterInput(ctx: AudioContext): GainNode {
 
   input.connect(compressor);
   compressor.connect(output);
-  output.connect(ctx.destination);
+  output.connect(audioEngine.getBusInput('player'));
 
   masterBus = { ctx, input };
   return input;
@@ -64,8 +58,8 @@ const lastPlayTime: Record<string, number> = {};
 
 function canPlay(key: string, minIntervalMs: number): boolean {
   const now = performance.now();
-  const last = lastPlayTime[key] || 0;
-  if (now - last < minIntervalMs) return false;
+  const last = lastPlayTime[key];
+  if (last !== undefined && now - last < minIntervalMs) return false;
   lastPlayTime[key] = now;
   return true;
 }

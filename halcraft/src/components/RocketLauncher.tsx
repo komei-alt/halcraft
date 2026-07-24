@@ -589,9 +589,9 @@ export function RocketLauncher() {
       const next = [...prev, createExplosion(pos, Boolean(directHit?.precision))];
       return next.slice(-4);
     });
-    playRocketExplosionSound(pos.distanceTo(camera.position));
+    playRocketExplosionSound(pos.distanceTo(camera.position), pos);
     if (directHit) {
-      playRocketDirectHitSound(pos.distanceTo(camera.position), directHit.precision);
+      playRocketDirectHitSound(pos.distanceTo(camera.position), directHit.precision, pos);
     }
   }, [applyExplosionDamage, camera, destroyExplosionBlocks, rocketAccent]);
 
@@ -666,7 +666,7 @@ export function RocketLauncher() {
     recoil.current = 1.35;
     muzzleFlashTimer.current = 0.2;
     backblastTimer.current = 0.28;
-    playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position));
+    playRocketLaunchSound(muzzleWorld.current.distanceTo(camera.position), muzzleWorld.current);
     // 発射の手応え — 軽いカメラシェイク + 三人称リコイル同期
     usePlayerStore.setState((s) => ({
       cameraShake: Math.min(1, Math.max(s.cameraShake, 0.28)),
@@ -703,7 +703,7 @@ export function RocketLauncher() {
 
       const withoutDuplicate = projectilesRef.current.filter((p) => p.syncId !== data.rocketId);
       syncProjectiles([...withoutDuplicate.slice(-7), projectile]);
-      playRocketLaunchSound(startPos.distanceTo(camera.position));
+      playRocketLaunchSound(startPos.distanceTo(camera.position), startPos);
     });
 
     const unsubscribeExplode = onRemoteRocketExplode((data) => {
