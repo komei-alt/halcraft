@@ -114,8 +114,8 @@ const atlasTextureNames = Array.from(new Set(renderableBlockDefs.flatMap((defini
 }))).sort();
 
 const atlasTextureUrls = atlasTextureNames.map((name) => `/textures/blocks/${name}`);
-const atlasCellSize = 128;
-const atlasPadding = 2;
+const atlasCellSize = 256;
+const atlasPadding = 4;
 const tintColor = new THREE.Color();
 
 function createLayerBuffers(): LayerBuffers {
@@ -204,8 +204,12 @@ function getBlockTint(
     case BLOCK_IDS.CHEST:
       return tintColor.setRGB(1.04 + variation, 0.97 + heightLift * 0.35, 0.86 + noise * 0.07);
     case BLOCK_IDS.SAND:
+      // 原画の砂粒を残したまま、夕日の下で砂岩らしい黄土色へ寄せる。
+      return tintColor.setRGB(1.0 + heightLift * 0.35, 0.72 + variation * 0.28, 0.38 + noise * 0.06);
     case BLOCK_IDS.SOUL_SAND:
-      return tintColor.setRGB(1.06 + heightLift, 0.99 + variation, 0.86 + noise * 0.07);
+      return tintColor.setRGB(0.88 + heightLift * 0.25, 0.34 + variation * 0.2, 0.12 + noise * 0.04);
+    case BLOCK_IDS.NETHERRACK:
+      return tintColor.setRGB(1.0 + heightLift * 0.2, 0.88 + variation * 0.16, 0.72 + noise * 0.03);
     case BLOCK_IDS.SNOW:
       return tintColor.setRGB(0.95 + variation * 0.35, 1 + heightLift, 1.07 + noise * 0.04);
     case BLOCK_IDS.GLASS:
@@ -257,8 +261,8 @@ function createTextureAtlas(textures: THREE.Texture[]): TextureAtlas {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   texture.name = 'HalCraft Block Atlas v2';
   return { texture, slots };
@@ -326,6 +330,7 @@ function appendFace(
   y: number,
   lz: number,
   tint: THREE.Color,
+  vertexAo: readonly number[],
 ): void {
   const vertexOffset = buffers.positions.length / 3;
   const faceLight = face.normal[1] > 0.5
@@ -351,7 +356,8 @@ function appendFace(
     buffers.positions.push(lx + corner[0], y + corner[1], lz + corner[2]);
     buffers.normals.push(face.normal[0], face.normal[1], face.normal[2]);
     buffers.uvs.push(faceUvs[index][0], faceUvs[index][1]);
-    buffers.colors.push(tint.r * faceLight, tint.g * faceLight, tint.b * faceLight);
+    const light = faceLight * vertexAo[index];
+    buffers.colors.push(tint.r * light, tint.g * light, tint.b * light);
   }
 
   buffers.indices.push(
@@ -362,6 +368,49 @@ function appendFace(
     vertexOffset + 2,
     vertexOffset + 3,
   );
+}
+
+function isAoOccluder(blockId: BlockId): boolean {
+  if (blockId === BLOCK_IDS.AIR) return false;
+  const definition = BLOCK_DEFS[blockId];
+  return Boolean(definition && !definition.transparent && !definition.isLiquid && !definition.nonStandard);
+}
+
+/**
+ * 面の4頂点ごとに周囲3セルを調べる軽量ボクセルAO。
+ * ポストFXを強くしなくても、段丘・ピラミッド・サボテンの接合部に奥行きが出る。
+ */
+function getFaceVertexAo(
+  chunks: Map<string, ChunkData>,
+  face: FaceDefinition,
+  worldX: number,
+  y: number,
+  worldZ: number,
+): readonly number[] {
+  const normal = face.normal;
+  const tangentAxes = [0, 1, 2].filter((axis) => normal[axis] === 0);
+  const origin = [worldX + normal[0], y + normal[1], worldZ + normal[2]];
+
+  return face.corners.map((corner) => {
+    const axisA = tangentAxes[0];
+    const axisB = tangentAxes[1];
+    const signA = corner[axisA] === 0 ? -1 : 1;
+    const signB = corner[axisB] === 0 ? -1 : 1;
+    const sideA = [...origin];
+    const sideB = [...origin];
+    const diagonal = [...origin];
+    sideA[axisA] += signA;
+    sideB[axisB] += signB;
+    diagonal[axisA] += signA;
+    diagonal[axisB] += signB;
+
+    const occupiedA = isAoOccluder(readWorldBlock(chunks, sideA[0], sideA[1], sideA[2]));
+    const occupiedB = isAoOccluder(readWorldBlock(chunks, sideB[0], sideB[1], sideB[2]));
+    const occupiedDiagonal = isAoOccluder(readWorldBlock(chunks, diagonal[0], diagonal[1], diagonal[2]));
+    if (occupiedA && occupiedB) return 0.52;
+    const occlusion = Number(occupiedA) + Number(occupiedB) + Number(occupiedDiagonal);
+    return 1 - occlusion * 0.13;
+  });
 }
 
 function buildChunkMeshes(
@@ -409,7 +458,8 @@ function buildChunkMeshes(
           const textureName = getTextureForFace(definition, face.role);
           const slot = atlas.slots.get(textureName);
           if (!slot) continue;
-          appendFace(buffers, face, slot, lx, y, lz, tint);
+          const vertexAo = getFaceVertexAo(chunks, face, worldX, y, worldZ);
+          appendFace(buffers, face, slot, lx, y, lz, tint, vertexAo);
           faceCount++;
         }
       }
@@ -471,7 +521,7 @@ function ChunkRenderer({
 
   if (!meshSet) return null;
   // 近距離だけ影の描画パスへ入れ、立体感とフレームレートを両立する。
-  const castsShadow = castBlockShadows && distance <= 2.35;
+  const castsShadow = castBlockShadows && distance <= 2.75;
 
   return (
     <group position={[cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE]}>

@@ -153,11 +153,11 @@ function getStageLookTuning(
       hue: -0.018,
     },
     desert: {
-      bloomMultiplier: 1.14,
-      bloomThresholdOffset: -0.02,
-      saturationOffset: 0.02,
-      contrastOffset: 0.01,
-      hue: 0.024,
+      bloomMultiplier: 1.2,
+      bloomThresholdOffset: -0.035,
+      saturationOffset: 0.075,
+      contrastOffset: 0.028,
+      hue: 0.01,
     },
   };
 

@@ -11,6 +11,7 @@ import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
 import { placeVillage, chunkContainsVillage } from './structures/village';
 import { placeStageLandmarks } from './structures/stageLandmarks';
+import { placeDesertCinematicScenery } from './structures/desertCinematic';
 import { getCurrentBiome } from './biomeConfig';
 import { carveCaves } from './caves';
 import { placeOres } from './ores';
@@ -130,6 +131,9 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // ステージごとの目的地・防衛拠点を最後に重ねて、マップごとの差を見える化する
   placeStageLandmarks(chunk, cx, cz);
+
+  // 砂漠決戦では、ランドマークの周囲をメサ・オアシス・街道で映画的に構成する
+  placeDesertCinematicScenery(chunk, cx, cz);
 
   finalizeChunkBounds(chunk);
 

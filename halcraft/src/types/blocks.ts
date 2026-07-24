@@ -366,7 +366,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
   [BLOCK_IDS.SAND]: {
     id: BLOCK_IDS.SAND,
     name: '砂ブロック',
-    texture: 'sand.png',
+    texture: 'desert_sandstone.png',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -615,7 +615,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
   [BLOCK_IDS.NETHERRACK]: {
     id: BLOCK_IDS.NETHERRACK,
     name: 'ネザーラック',
-    texture: 'stone.png',
+    texture: 'desert_terracotta.png',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -625,7 +625,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
   [BLOCK_IDS.SOUL_SAND]: {
     id: BLOCK_IDS.SOUL_SAND,
     name: 'ソウルサンド',
-    texture: 'sand.png',
+    texture: 'desert_sandstone.png',
     transparent: false,
     unbreakable: false,
     emissive: false,

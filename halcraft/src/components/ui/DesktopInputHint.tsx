@@ -25,8 +25,11 @@ export function DesktopInputHint() {
     document.addEventListener('pointerlockchange', sync);
     document.addEventListener('focusin', sync);
     document.addEventListener('visibilitychange', sync);
+    // Pointer Lock がコンポーネントの初期化より先に成立した場合も、案内を残さない。
+    const syncTimer = window.setInterval(sync, 250);
 
     return () => {
+      window.clearInterval(syncTimer);
       window.removeEventListener('focus', sync);
       window.removeEventListener('blur', sync);
       document.removeEventListener('pointerlockchange', sync);
@@ -51,10 +54,11 @@ export function DesktopInputHint() {
         inset: 0,
         zIndex: 220,
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-end',
         justifyContent: 'center',
-        // 薄い水色ティントで「固まった水色画面」に見えないよう、明示的な再開 UI を出す
-        background: 'radial-gradient(ellipse at center, rgba(20, 40, 70, 0.28) 0%, rgba(6, 10, 18, 0.55) 100%)',
+        paddingBottom: 92,
+        // 景色を暗く覆わず、下端の案内だけで再開できるようにする。
+        background: 'linear-gradient(to top, rgba(6, 10, 18, 0.28) 0%, transparent 28%)',
         pointerEvents: 'auto',
         cursor: 'pointer',
       }}
@@ -68,27 +72,24 @@ export function DesktopInputHint() {
         }}
         style={{
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
           alignItems: 'center',
           gap: 10,
-          padding: '18px 28px',
-          borderRadius: 16,
+          padding: '10px 16px',
+          borderRadius: 12,
           border: '1px solid rgba(255, 214, 128, 0.42)',
           background: 'rgba(10, 12, 18, 0.9)',
           color: '#ffe2a0',
           fontSize: 15,
           fontWeight: 800,
           letterSpacing: '0.04em',
-          boxShadow: '0 16px 40px rgba(0, 0, 0, 0.4)',
+          boxShadow: '0 10px 26px rgba(0, 0, 0, 0.32)',
           cursor: 'pointer',
           backdropFilter: 'blur(10px)',
         }}
       >
-        <span style={{ fontSize: 28 }}>🖱️</span>
+        <span style={{ fontSize: 20 }}>🖱️</span>
         <span>クリックして操作を再開</span>
-        <span style={{ color: 'rgba(255, 255, 255, 0.62)', fontSize: 12, fontWeight: 600 }}>
-          画面を押すとマウスロックが戻るよ
-        </span>
       </button>
     </div>
   );

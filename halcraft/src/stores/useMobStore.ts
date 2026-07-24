@@ -10,6 +10,7 @@ import {
   type StageBossEncounterId,
   type StageBossSummonType,
 } from '../types/stageBossEncounters';
+import { STAGE_LANDMARK_CENTER } from '../types/stageLandmarks';
 
 /** モブの種類 */
 export type MobType = 'zombie' | 'darwin' | 'prototype' | 'chicken' | 'spider' | 'iron_golem' | 'boss_giant';
@@ -503,10 +504,12 @@ export const useMobStore = create<MobState>((set, get) => ({
       return;
     }
 
-    // プレイヤーの近くにスポーン
-    const angle = Math.random() * Math.PI * 2;
-    const spawnX = playerX + Math.cos(angle) * PROTOTYPE_FOLLOW_DISTANCE;
-    const spawnZ = playerZ + Math.sin(angle) * PROTOTYPE_FOLLOW_DISTANCE;
+    // 開始時の主景を遮らないよう、ランドマークと反対側へスポーンする。
+    const landmarkDx = STAGE_LANDMARK_CENTER.x - playerX;
+    const landmarkDz = STAGE_LANDMARK_CENTER.z - playerZ;
+    const landmarkDistance = Math.max(1, Math.hypot(landmarkDx, landmarkDz));
+    const spawnX = playerX - (landmarkDx / landmarkDistance) * PROTOTYPE_FOLLOW_DISTANCE;
+    const spawnZ = playerZ - (landmarkDz / landmarkDistance) * PROTOTYPE_FOLLOW_DISTANCE;
     const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
 
     get().spawnMob('prototype', spawnX, spawnY, spawnZ);

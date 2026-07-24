@@ -17,12 +17,13 @@ export interface StageLandmarkBriefing {
   modeLabel: string;
 }
 
-export const STAGE_LANDMARK_CENTER = Object.freeze({ x: -18, z: 22 });
+// スポーン地点から約75m先に置き、谷越しに景観の主役として読める距離を確保する。
+export const STAGE_LANDMARK_CENTER = Object.freeze({ x: -42, z: 62 });
 export const STAGE_LANDMARK_WORLD_CENTER = Object.freeze({
   x: STAGE_LANDMARK_CENTER.x + 0.5,
   z: STAGE_LANDMARK_CENTER.z + 0.5,
 });
-export const STAGE_LANDMARK_RADIUS = 12;
+export const STAGE_LANDMARK_RADIUS = 18;
 
 const LANDMARK_BRIEFINGS: Record<string, Omit<StageLandmarkBriefing, 'name'>> = {
   'build-forest': {

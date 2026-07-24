@@ -252,16 +252,13 @@ function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: Stage
   }
 
   if (stage.biome === 'desert') {
-    // 遠景から目的地として読める段状ピラミッド。北面には3ブロック幅の入口を残す。
-    for (let h = 1; h <= 6; h++) {
-      const radius = 8 - h;
+    // 大きな段状ピラミッドを面で構成し、夕日の明暗が各段へはっきり落ちるようにする。
+    for (let h = 1; h <= 14; h++) {
+      const radius = 18 - h;
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
-          const onTerraceEdge = Math.abs(dx) === radius || Math.abs(dz) === radius;
-          if (!onTerraceEdge) continue;
-          const entrance = dz === -radius && Math.abs(dx) <= 1 && h <= 3;
-          if (entrance) continue;
-          const accentStep = h === 2 && (Math.abs(dx) + Math.abs(dz)) % 5 === 0;
+          const accentBand = h === 3 || h === 8 || h === 12;
+          const weathered = (Math.abs(dx * 3 + dz * 5 + h) % 19) === 0;
           setWorldBlock(
             chunk,
             cx,
@@ -269,12 +266,30 @@ function placeWarLandmark(chunk: ChunkData, cx: number, cz: number, stage: Stage
             center.x + dx,
             baseY + h,
             center.z + dz,
-            accentStep ? BLOCK_IDS.IRON_CRACKED : BLOCK_IDS.SAND,
+            weathered
+              ? BLOCK_IDS.NETHERRACK
+              : accentBand
+                ? BLOCK_IDS.SOUL_SAND
+                : BLOCK_IDS.SAND,
           );
         }
       }
     }
-    setWorldBlock(chunk, cx, cz, center.x, baseY + 7, center.z, BLOCK_IDS.GLOWSTONE);
+
+    // 北面に奥行きのある入口を掘り、最奥の紫光を遠景の焦点にする。
+    for (let dz = -17; dz <= -2; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let h = 1; h <= 4; h++) {
+          setWorldBlock(chunk, cx, cz, center.x + dx, baseY + h, center.z + dz, BLOCK_IDS.AIR);
+        }
+      }
+    }
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let h = 1; h <= 3; h++) {
+        setWorldBlock(chunk, cx, cz, center.x + dx, baseY + h, center.z - 1, BLOCK_IDS.ENCHANT);
+      }
+    }
+    setWorldBlock(chunk, cx, cz, center.x, baseY + 15, center.z, BLOCK_IDS.GLOWSTONE);
     for (const pos of [
       { x: center.x - 4, z: center.z },
       { x: center.x + 4, z: center.z },
