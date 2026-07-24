@@ -1,13 +1,14 @@
 {
   "name": "halcraft",
   "private": true,
-  "version": "1.0.233",
+  "version": "1.0.234",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -39,6 +40,7 @@
     "meshoptimizer": "^1.0.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
-    "vite": "^8.0.1"
+    "vite": "^8.0.1",
+    "vitest": "^4.1.10"
   }
 }

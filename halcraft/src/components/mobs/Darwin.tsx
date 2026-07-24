@@ -18,7 +18,7 @@ const DARWIN_MODEL: GlbMobModelConfig = {
   damagedTint: new THREE.Color(0xff4444),
   bobAmount: 0.04,
   bobSpeed: 4.5,
-  rigStyle: 'humanoid',
+  rigProfile: 'darwin',
   attackDuration: 0.48,
 };
 

@@ -5,7 +5,21 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Billboard } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { MobData } from '../../stores/useMobStore';
+import { useMobStore, type MobData } from '../../stores/useMobStore';
+import { useWorldStore } from '../../stores/useWorldStore';
+import {
+  MOB_RIG_PROFILES,
+  advanceLocomotionPhase,
+  computeBodyStabilization,
+  createFootPlantState,
+  createLocomotionPhaseState,
+  sampleGait,
+  sampleRigSurfaceY,
+  setSegmentTransform,
+  solveTwoBoneIK,
+  updatePlantedFoot,
+  type TwoBoneIkResult,
+} from '../../utils/mobRigMotion';
 
 const SPIDER_EYE_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xff261f,
@@ -24,15 +38,19 @@ const EYE_GEOMETRY = new THREE.OctahedronGeometry(1, 0);
 const FANG_GEOMETRY = new THREE.ConeGeometry(0.5, 1, 5);
 
 const LEG_DEFS = [
-  { side: -1, pair: 0, z: 0.24 },
-  { side: 1, pair: 0, z: 0.24 },
-  { side: -1, pair: 1, z: 0.08 },
-  { side: 1, pair: 1, z: 0.08 },
-  { side: -1, pair: 2, z: -0.1 },
-  { side: 1, pair: 2, z: -0.1 },
-  { side: -1, pair: 3, z: -0.28 },
-  { side: 1, pair: 3, z: -0.28 },
+  { side: -1, pair: 0, z: 0.28, phase: 0 },
+  { side: 1, pair: 0, z: 0.28, phase: 0.5 },
+  { side: -1, pair: 1, z: 0.1, phase: 0.5 },
+  { side: 1, pair: 1, z: 0.1, phase: 0 },
+  { side: -1, pair: 2, z: -0.1, phase: 0 },
+  { side: 1, pair: 2, z: -0.1, phase: 0.5 },
+  { side: -1, pair: 3, z: -0.3, phase: 0.5 },
+  { side: 1, pair: 3, z: -0.3, phase: 0 },
 ] as const;
+
+const SPIDER_RIG_PROFILE = MOB_RIG_PROFILES.spider;
+const SPIDER_UPPER_LEG_LENGTH = 0.5;
+const SPIDER_LOWER_LEG_LENGTH = 0.46;
 
 const EYE_POSITIONS = [
   [-0.12, 0.35, 0.51, 0.052],
@@ -55,9 +73,31 @@ export function Spider({ mob, animTime }: SpiderProps) {
   const bodyGroupRef = useRef<THREE.Group>(null);
   const upperLegsRef = useRef<THREE.InstancedMesh>(null);
   const lowerLegsRef = useRef<THREE.InstancedMesh>(null);
+  const feetRef = useRef<THREE.InstancedMesh>(null);
   const eyesRef = useRef<THREE.InstancedMesh>(null);
   const fangsRef = useRef<THREE.InstancedMesh>(null);
   const animClock = useRef(0);
+  const locomotionRef = useRef(createLocomotionPhaseState((animTime * 0.37) % 1));
+  const footPlantsRef = useRef(LEG_DEFS.map(() => createFootPlantState()));
+  const previousRootRef = useRef(new THREE.Vector3(mob.x, mob.y, mob.z));
+  const scratchRef = useRef({
+    part: new THREE.Object3D(),
+    hip: new THREE.Vector3(),
+    restWorld: new THREE.Vector3(),
+    nextWorld: new THREE.Vector3(),
+    footLocal: new THREE.Vector3(),
+    pole: new THREE.Vector3(),
+    toe: new THREE.Vector3(),
+    rootWorld: new THREE.Vector3(),
+    ik: {
+      knee: new THREE.Vector3(),
+      foot: new THREE.Vector3(),
+      stretch: 1,
+    } satisfies TwoBoneIkResult,
+    footHeights: new Array<number>(LEG_DEFS.length).fill(0),
+    groundHeights: new Array<number>(LEG_DEFS.length).fill(mob.y),
+    frame: 0,
+  });
   const hitFlashRef = useRef<THREE.Mesh>(null);
   const hitRingRef = useRef<THREE.Mesh>(null);
 
@@ -110,12 +150,24 @@ export function Spider({ mob, animTime }: SpiderProps) {
     fangs.computeBoundingSphere();
   }, []);
 
-  useFrame((_, delta) => {
-    animClock.current += delta;
+  useFrame(({ camera }, delta) => {
+    const dt = Math.min(delta, 0.05);
+    animClock.current += dt;
     const t = animClock.current;
-    const speed = Math.hypot(mob.vx, mob.vz);
-    const attackTimer = mob.attackTimer ?? 0;
+    const live = useMobStore.getState().mobs.find((entry) => entry.id === mob.id) ?? mob;
+    const speed = Math.hypot(live.vx, live.vz);
+    const attackTimer = live.attackTimer ?? 0;
     const isAttacking = attackTimer > 0.01;
+    const isMoving = !isAttacking && speed > 0.12;
+    const phase = advanceLocomotionPhase(locomotionRef.current, {
+      speed,
+      delta: dt,
+      rotation: live.rotation,
+      moving: isMoving,
+      profile: SPIDER_RIG_PROFILE,
+    });
+    const walkCycle = phase * Math.PI * 2;
+
     // 攻撃 progress: 0→1
     const atkProgress = isAttacking
       ? THREE.MathUtils.clamp(1 - attackTimer / 0.4, 0, 1)
@@ -143,11 +195,9 @@ export function Spider({ mob, animTime }: SpiderProps) {
       }
     }
 
-    const isMoving = !isAttacking && speed > 0.12;
-    const walkCycle = t * (isMoving ? 11 : 1.8);
     // 被ダメフラッシュ（白→赤）
-    const hp = THREE.MathUtils.clamp(mob.hitTimer / 0.34, 0, 1);
-    const wf = THREE.MathUtils.clamp((mob.hitTimer - 0.15) / 0.1, 0, 1);
+    const hp = THREE.MathUtils.clamp(live.hitTimer / 0.34, 0, 1);
+    const wf = THREE.MathUtils.clamp((live.hitTimer - 0.15) / 0.1, 0, 1);
     if (hp > 0.01) {
       const flash = 0.55 + wf * 0.45;
       materials.body.color.setRGB(flash, 0.25 + wf * 0.55, 0.22 + wf * 0.5);
@@ -171,33 +221,17 @@ export function Spider({ mob, animTime }: SpiderProps) {
       materials.leg.emissiveIntensity = 0;
     }
 
-    const hdx = mob.hitDirX ?? 0;
-    const hdz = mob.hitDirZ ?? 0;
-    const localX = hdx * Math.cos(mob.rotation) - hdz * Math.sin(mob.rotation);
+    const hdx = live.hitDirX ?? 0;
+    const hdz = live.hitDirZ ?? 0;
+    const localX = hdx * Math.cos(live.rotation) - hdz * Math.sin(live.rotation);
     const hitTilt = hp > 0
-      ? Math.sin(mob.hitTimer * 36) * (0.16 + hp * 0.14) - hp * 0.2
+      ? Math.sin(live.hitTimer * 36) * (0.16 + hp * 0.14) - hp * 0.2
       : 0;
     const hitRoll = localX * hp * 0.45 + (hp > 0 ? Math.sin(t * 42) * hp * 0.1 : 0);
-    const bodyBob = isMoving ? Math.abs(Math.sin(walkCycle * 2)) * 0.035 : Math.sin(t * 2) * 0.008;
 
     if (rootRef.current) {
-      rootRef.current.position.set(mob.x, mob.y, mob.z);
-      rootRef.current.rotation.y = mob.rotation;
-    }
-    if (bodyGroupRef.current) {
-      bodyGroupRef.current.rotation.set(
-        hitTilt + crouch * 0.9 - lunge * 0.25,
-        localX * hp * 0.2,
-        hitRoll + hitTilt * 0.2,
-      );
-      bodyGroupRef.current.position.set(
-        localX * hp * 0.08,
-        bodyBob + crouch * 0.08 - hp * 0.05,
-        lunge - hp * 0.1,
-      );
-      const squash = 1 - hp * 0.12;
-      const widen = 1 + hp * 0.1;
-      bodyGroupRef.current.scale.set(widen, squash, widen);
+      rootRef.current.position.set(live.x, live.y, live.z);
+      rootRef.current.rotation.y = live.rotation;
     }
 
     if (hitFlashRef.current) {
@@ -238,60 +272,133 @@ export function Spider({ mob, animTime }: SpiderProps) {
 
     const upperLegs = upperLegsRef.current;
     const lowerLegs = lowerLegsRef.current;
-    if (!upperLegs || !lowerLegs) return;
+    const feet = feetRef.current;
+    if (!upperLegs || !lowerLegs || !feet) return;
 
-    const part = new THREE.Object3D();
-    const speedBoost = isMoving ? 1 : 0.35;
+    const scratch = scratchRef.current;
+    // HMRで古いref形状が残った場合も、リロードなしで新LODキャッシュへ移行する。
+    scratch.groundHeights ??= new Array<number>(LEG_DEFS.length).fill(live.y);
+    scratch.frame = (scratch.frame ?? 0) + 1;
+    const part = scratch.part;
+    const rootDistance = previousRootRef.current.distanceTo(scratch.rootWorld.set(live.x, live.y, live.z));
+    if (rootDistance > 2.2) {
+      for (const foot of footPlantsRef.current) foot.initialized = false;
+    }
+    previousRootRef.current.set(live.x, live.y, live.z);
+
+    const cos = Math.cos(live.rotation);
+    const sin = Math.sin(live.rotation);
+    const speedNorm = THREE.MathUtils.clamp(speed / 3.5, 0.35, 1.15);
+    const getBlock = useWorldStore.getState().getBlock;
+    const distanceSq = camera.position.distanceToSquared(scratch.rootWorld.set(live.x, live.y, live.z));
+    const groundCadence = distanceSq > 30 * 30 ? 4 : distanceSq > 18 * 18 ? 2 : 1;
+
     LEG_DEFS.forEach((leg, index) => {
-      const phase = leg.pair * (Math.PI / 2) + (leg.side < 0 ? Math.PI * 0.15 : 0);
-      const gait = Math.sin(walkCycle + phase);
-      const gait2 = Math.cos(walkCycle + phase);
-      // 前脚は攻撃時に前方へ突き出す
+      const gait = sampleGait(phase, leg.phase, SPIDER_RIG_PROFILE);
+      const restX = leg.side * (0.78 + leg.pair * 0.025);
+      const restZ = leg.z + (leg.pair - 1.5) * 0.055;
+      scratch.restWorld.set(
+        live.x + cos * restX + sin * restZ,
+        live.y,
+        live.z - sin * restX + cos * restZ,
+      );
+      if (scratch.frame % groundCadence === 0 || !footPlantsRef.current[index].initialized) {
+        scratch.groundHeights[index] = sampleRigSurfaceY(
+          getBlock,
+          scratch.restWorld.x,
+          scratch.restWorld.z,
+          live.y,
+          SPIDER_RIG_PROFILE.maxGroundStep,
+        );
+      }
+      const groundY = scratch.groundHeights[index];
+      scratch.nextWorld.copy(scratch.restWorld);
+      scratch.nextWorld.x += sin * SPIDER_RIG_PROFILE.stepReach * speedNorm;
+      scratch.nextWorld.z += cos * SPIDER_RIG_PROFILE.stepReach * speedNorm;
+      // 旋回中に外側の足を少し広く置き、胴体が回っても足が交差しない。
+      scratch.nextWorld.x += cos * leg.side * Math.abs(gait.stride) * 0.035;
+      scratch.nextWorld.z -= sin * leg.side * Math.abs(gait.stride) * 0.035;
+
+      const planted = updatePlantedFoot(footPlantsRef.current[index], {
+        gait,
+        restWorld: scratch.restWorld,
+        nextWorld: scratch.nextWorld,
+        groundY,
+        lift: SPIDER_RIG_PROFILE.footLift,
+        moving: isMoving,
+        delta: dt,
+      });
+      scratch.footHeights[index] = planted.y;
+
+      const dx = planted.x - live.x;
+      const dz = planted.z - live.z;
+      scratch.footLocal.set(
+        cos * dx - sin * dz,
+        planted.y - live.y,
+        sin * dx + cos * dz,
+      );
+
+      // 前2対は噛み付き時だけ浮かせ、後ろ4脚は接地したまま体を支える。
       const frontLeg = leg.pair <= 1;
-      const atkLegLift = isAttacking && frontLeg ? 0.1 + fangOpen * 0.12 : 0;
-      const atkStride = isAttacking && frontLeg ? lunge * 0.35 : 0;
-      const lift = isMoving
-        ? Math.max(0, gait) * 0.12 * speedBoost
-        : Math.sin(walkCycle * 0.6 + phase) * 0.014;
-      const stride = isMoving ? gait2 * 0.11 * speedBoost : gait2 * 0.012;
-      const splay = (leg.pair - 1.5) * 0.18;
-      const curl = isMoving ? Math.max(0, -gait) * 0.16 : 0.04;
+      if (isAttacking && frontLeg) {
+        scratch.footLocal.y += 0.08 + fangOpen * 0.12;
+        scratch.footLocal.z += lunge * 0.42 + fangOpen * 0.13;
+      }
 
-      part.position.set(
-        leg.side * 0.48,
-        0.25 + lift + atkLegLift,
-        leg.z + stride * 0.55 + atkStride,
+      scratch.hip.set(
+        leg.side * 0.39,
+        0.27 + crouch * 0.04,
+        leg.z,
       );
-      part.rotation.set(
-        curl * 0.35 - (frontLeg ? fangOpen * 0.4 : 0),
-        -leg.side * splay,
-        -leg.side * (0.22 + gait * 0.14),
+      scratch.pole.set(leg.side, 0.32, (leg.pair - 1.5) * 0.3).normalize();
+      solveTwoBoneIK(
+        scratch.hip,
+        scratch.footLocal,
+        scratch.pole,
+        SPIDER_UPPER_LEG_LENGTH,
+        SPIDER_LOWER_LEG_LENGTH,
+        scratch.ik,
       );
-      part.scale.set(0.45, 0.065, 0.075);
-      part.updateMatrix();
+
+      setSegmentTransform(part, scratch.hip, scratch.ik.knee, 0.105);
       upperLegs.setMatrixAt(index, part.matrix);
-
-      part.position.set(
-        leg.side * (0.82 + lift * 0.15),
-        0.08 + lift * 0.45 + atkLegLift * 0.4,
-        leg.z + stride * 1.05 + atkStride * 1.2,
-      );
-      part.rotation.set(
-        curl * 0.65 - (frontLeg ? fangOpen * 0.5 : 0),
-        -leg.side * splay * 1.2,
-        -leg.side * (0.55 - gait * 0.16),
-      );
-      part.scale.set(0.36, 0.052, 0.065);
-      part.updateMatrix();
+      setSegmentTransform(part, scratch.ik.knee, scratch.ik.foot, 0.082);
       lowerLegs.setMatrixAt(index, part.matrix);
+      scratch.toe.copy(scratch.ik.foot).add(scratch.pole.set(leg.side * 0.08, 0, 0.08));
+      setSegmentTransform(part, scratch.ik.foot, scratch.toe, 0.07);
+      feet.setMatrixAt(index, part.matrix);
     });
 
-    upperLegs.count = LEG_DEFS.length;
-    lowerLegs.count = LEG_DEFS.length;
-    upperLegs.instanceMatrix.needsUpdate = true;
-    lowerLegs.instanceMatrix.needsUpdate = true;
-    upperLegs.visible = true;
-    lowerLegs.visible = true;
+    const stabilization = computeBodyStabilization(
+      scratch.footHeights,
+      live.y,
+      SPIDER_RIG_PROFILE,
+      phase,
+    );
+    const bodyBob = isMoving
+      ? stabilization.bob + stabilization.lift
+      : Math.sin(t * SPIDER_RIG_PROFILE.idleFrequency) * 0.008;
+    if (bodyGroupRef.current) {
+      bodyGroupRef.current.rotation.set(
+        hitTilt + crouch * 0.9 - lunge * 0.25,
+        localX * hp * 0.2,
+        hitRoll + hitTilt * 0.2 + Math.sin(walkCycle) * SPIDER_RIG_PROFILE.bodyRoll,
+      );
+      bodyGroupRef.current.position.set(
+        localX * hp * 0.08,
+        bodyBob + crouch * 0.08 - hp * 0.05,
+        lunge - hp * 0.1,
+      );
+      const squash = 1 - hp * 0.12;
+      const widen = 1 + hp * 0.1;
+      bodyGroupRef.current.scale.set(widen, squash, widen);
+    }
+
+    for (const mesh of [upperLegs, lowerLegs, feet]) {
+      mesh.count = LEG_DEFS.length;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.visible = true;
+    }
   });
 
   // animTime 初回同期
@@ -363,24 +470,6 @@ export function Spider({ mob, animTime }: SpiderProps) {
         />
 
         <instancedMesh
-          ref={upperLegsRef}
-          args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
-          castShadow
-          receiveShadow
-          dispose={null}
-          visible={false}
-          frustumCulled={false}
-        />
-        <instancedMesh
-          ref={lowerLegsRef}
-          args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
-          castShadow
-          receiveShadow
-          dispose={null}
-          visible={false}
-          frustumCulled={false}
-        />
-        <instancedMesh
           ref={eyesRef}
           args={[EYE_GEOMETRY, SPIDER_EYE_MATERIAL, EYE_POSITIONS.length]}
           dispose={null}
@@ -392,6 +481,35 @@ export function Spider({ mob, animTime }: SpiderProps) {
           dispose={null}
         />
       </group>
+
+      {/* 足は胴体ボブの外側に置き、スタンス中の足先をワールド座標へ固定する。 */}
+      <instancedMesh
+        ref={upperLegsRef}
+        args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
+        castShadow
+        receiveShadow
+        dispose={null}
+        visible={false}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={lowerLegsRef}
+        args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
+        castShadow
+        receiveShadow
+        dispose={null}
+        visible={false}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={feetRef}
+        args={[LEG_GEOMETRY, materials.leg, LEG_DEFS.length]}
+        castShadow
+        receiveShadow
+        dispose={null}
+        visible={false}
+        frustumCulled={false}
+      />
 
       {mob.hp < mob.maxHp && (
         <Billboard position={[0, 0.86, 0]}>

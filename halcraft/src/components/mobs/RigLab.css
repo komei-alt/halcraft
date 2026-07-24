@@ -1,0 +1,170 @@
+/* 開発専用 Mob Rig Lab。RigLab と同じ遅延チャンクでだけ読み込む。 */
+.rig-lab {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: #e8fff8;
+  background: #101a20;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.rig-lab__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.rig-lab__panel-toggle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgb(125 231 210 / 32%);
+  border-radius: 999px;
+  color: #bdf7eb;
+  background: rgb(9 21 26 / 82%);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.rig-lab__panel-toggle:hover {
+  color: #071511;
+  background: #7de7d2;
+}
+
+.rig-lab__panel {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 4;
+  width: min(360px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgb(133 235 211 / 22%);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgb(9 21 26 / 94%), rgb(18 34 39 / 88%));
+  box-shadow: 0 24px 70px rgb(0 0 0 / 42%), inset 0 1px rgb(255 255 255 / 6%);
+  backdrop-filter: blur(18px);
+}
+
+.rig-lab__panel h1 {
+  margin: 2px 0 8px;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.rig-lab__eyebrow,
+.rig-lab__hint {
+  margin: 0;
+  color: #7de7d2;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.rig-lab__description {
+  margin: 0 0 18px;
+  color: rgb(232 255 248 / 68%);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.rig-lab__actions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-bottom: 18px;
+}
+
+.rig-lab__actions button {
+  min-height: 34px;
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 9px;
+  color: rgb(232 255 248 / 66%);
+  background: rgb(255 255 255 / 4%);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rig-lab__actions button:hover,
+.rig-lab__actions button.is-active {
+  border-color: rgb(125 231 210 / 62%);
+  color: #071511;
+  background: #7de7d2;
+}
+
+.rig-lab__panel > label,
+.rig-lab__selects label {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  color: rgb(232 255 248 / 72%);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rig-lab__panel label > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rig-lab__panel input[type="range"] {
+  width: 100%;
+  accent-color: #7de7d2;
+}
+
+.rig-lab__selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rig-lab__selects select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  color: #e8fff8;
+  background: #17282d;
+}
+
+.rig-lab__legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
+  margin: 16px 0;
+  padding: 14px 14px 14px 30px;
+  border-radius: 11px;
+  color: rgb(232 255 248 / 65%);
+  background: rgb(0 0 0 / 18%);
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .rig-lab__panel {
+    top: 10px;
+    left: 10px;
+    width: calc(100vw - 20px);
+    max-height: 46vh;
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .rig-lab__description,
+  .rig-lab__legend {
+    display: none;
+  }
+}

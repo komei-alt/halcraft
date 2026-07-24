@@ -4,7 +4,7 @@
 
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { Suspense, lazy, useState, useCallback, useEffect, useRef } from 'react';
 import { Player } from './components/Player';
 import { World } from './components/World';
 import { Environment } from './components/Environment';
@@ -128,6 +128,12 @@ import { getPerformanceProfile } from './utils/performance';
 import { useSettingsStore } from './stores/useSettingsStore';
 import './App.css';
 
+const RIG_LAB_ENABLED = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('rigLab') === '1';
+const RigLab = import.meta.env.DEV
+  ? lazy(() => import('./components/mobs/RigLab'))
+  : null;
+
 function GameCanvas() {
   const isTouch = isTouchDevice();
   useSettingsStore((s) => s.graphicsPreset);
@@ -245,7 +251,7 @@ function GameCanvas() {
   );
 }
 
-export default function App() {
+function MainGameApp() {
   const phase = useGameStore((s) => s.phase);
   const isTouch = isTouchDevice();
   const hudDensity = useSettingsStore((s) => s.hudDensity);
@@ -443,4 +449,15 @@ export default function App() {
       )}
     </>
   );
+}
+
+export default function App() {
+  if (RIG_LAB_ENABLED && RigLab) {
+    return (
+      <Suspense fallback={<div className="rig-lab" />}>
+        <RigLab />
+      </Suspense>
+    );
+  }
+  return <MainGameApp />;
 }

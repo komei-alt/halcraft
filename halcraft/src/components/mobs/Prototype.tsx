@@ -23,7 +23,7 @@ const PROTOTYPE_MODEL: GlbMobModelConfig = {
   angryTint: new THREE.Color(0xff6633),
   bobAmount: 0.028,
   bobSpeed: 5.5,
-  rigStyle: 'humanoid',
+  rigProfile: 'prototype_arachnid',
   attackDuration: PROTOTYPE_ATTACK_ANIM_DURATION,
 };
 

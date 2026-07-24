@@ -1,9 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+/* eslint-disable react-hooks/immutability -- useFrame内でThree.jsのマテリアルと行列を直接更新する */
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useMobStore, type MobData } from '../../stores/useMobStore';
 import type { StageBossEncounterId } from '../../types/stageBossEncounters';
 import { MOB_HITBOXES } from '../../utils/mobHitboxes';
+import {
+  MOB_RIG_PROFILES,
+  advanceLocomotionPhase,
+  createLocomotionPhaseState,
+  sampleGait,
+} from '../../utils/mobRigMotion';
 
 interface BossRendererProps {
   mob: MobData;
@@ -16,6 +23,80 @@ interface BossPart {
   position: VectorTuple;
   scale: VectorTuple;
   rotation?: VectorTuple;
+  /** 自動推定が合わない造形だけ明示できる関節スロット */
+  joint?: BossJoint;
+}
+
+type BossJoint = 'body' | 'head' | 'leftLeg' | 'rightLeg' | 'leftArm' | 'rightArm';
+type BossPartKind = 'body' | 'armor' | 'branch' | 'spike' | 'eye';
+
+interface BossJointPose {
+  leftLegPitch: number;
+  rightLegPitch: number;
+  leftArmPitch: number;
+  rightArmPitch: number;
+  headPitch: number;
+  headYaw: number;
+}
+
+const EMPTY_BOSS_POSE: BossJointPose = {
+  leftLegPitch: 0,
+  rightLegPitch: 0,
+  leftArmPitch: 0,
+  rightArmPitch: 0,
+  headPitch: 0,
+  headYaw: 0,
+};
+
+const BOSS_JOINT_PIVOTS: Readonly<Record<Exclude<BossJoint, 'body'>, THREE.Vector3>> = {
+  head: new THREE.Vector3(0, 1.5, 0),
+  leftLeg: new THREE.Vector3(-0.28, 0.02, 0),
+  rightLeg: new THREE.Vector3(0.28, 0.02, 0),
+  leftArm: new THREE.Vector3(-0.55, 1.12, 0),
+  rightArm: new THREE.Vector3(0.55, 1.12, 0),
+};
+
+function inferBossJoint(part: BossPart, kind: BossPartKind): BossJoint {
+  if (part.joint) return part.joint;
+  const [x, y] = part.position;
+  if (kind === 'eye') return 'head';
+  if (kind === 'body') {
+    if (y < 0.05) return x < 0 ? 'leftLeg' : 'rightLeg';
+    if (Math.abs(x) > 0.48 && y < 1.45) return x < 0 ? 'leftArm' : 'rightArm';
+    if (y > 1.32) return 'head';
+    return 'body';
+  }
+  if (kind === 'branch') {
+    if (Math.abs(x) > 0.42 && y < 1.65) return x < 0 ? 'leftArm' : 'rightArm';
+    return y > 1.55 ? 'head' : 'body';
+  }
+  if (kind === 'armor') {
+    if (Math.abs(x) > 0.46 && y < 1.7) return x < 0 ? 'leftArm' : 'rightArm';
+    return y > 1.55 ? 'head' : 'body';
+  }
+  if (kind === 'spike') {
+    if (Math.abs(x) > 0.58 && y < 1.86) return x < 0 ? 'leftArm' : 'rightArm';
+    return 'head';
+  }
+  return 'body';
+}
+
+function getJointRotation(joint: BossJoint, pose: BossJointPose, target: THREE.Euler): THREE.Euler {
+  switch (joint) {
+    case 'head':
+      return target.set(pose.headPitch, pose.headYaw, 0);
+    case 'leftLeg':
+      return target.set(pose.leftLegPitch, 0, -0.025);
+    case 'rightLeg':
+      return target.set(pose.rightLegPitch, 0, 0.025);
+    case 'leftArm':
+      return target.set(pose.leftArmPitch, 0, -0.035);
+    case 'rightArm':
+      return target.set(pose.rightArmPitch, 0, 0.035);
+    case 'body':
+    default:
+      return target.set(0, 0, 0);
+  }
 }
 
 interface BossSilhouette {
@@ -49,23 +130,44 @@ function InstancedBossParts({
   geometry,
   material,
   parts,
+  kind,
+  poseRef,
   castShadow = true,
 }: {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   parts: readonly BossPart[];
+  kind: BossPartKind;
+  poseRef: RefObject<BossJointPose>;
   castShadow?: boolean;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const scratchRef = useRef({
+    partObject: new THREE.Object3D(),
+    baseQuaternion: new THREE.Quaternion(),
+    jointQuaternion: new THREE.Quaternion(),
+    rotation: new THREE.Euler(),
+  });
 
-  useLayoutEffect(() => {
+  const writeMatrices = (): void => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    const partObject = new THREE.Object3D();
+    const scratch = scratchRef.current;
+    const partObject = scratch.partObject;
+    const pose = poseRef.current ?? EMPTY_BOSS_POSE;
     parts.forEach((part, index) => {
+      const joint = inferBossJoint(part, kind);
       partObject.position.set(...part.position);
       partObject.rotation.set(...(part.rotation ?? [0, 0, 0]));
+      scratch.baseQuaternion.copy(partObject.quaternion);
+      getJointRotation(joint, pose, scratch.rotation);
+      scratch.jointQuaternion.setFromEuler(scratch.rotation);
+      if (joint !== 'body') {
+        const pivot = BOSS_JOINT_PIVOTS[joint];
+        partObject.position.sub(pivot).applyQuaternion(scratch.jointQuaternion).add(pivot);
+        partObject.quaternion.copy(scratch.baseQuaternion).premultiply(scratch.jointQuaternion);
+      }
       partObject.scale.set(...part.scale);
       partObject.updateMatrix();
       mesh.setMatrixAt(index, partObject.matrix);
@@ -74,7 +176,17 @@ function InstancedBossParts({
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     mesh.visible = parts.length > 0;
-  }, [parts]);
+  };
+
+  useLayoutEffect(() => {
+    writeMatrices();
+    // parts/kind はシルエット切替時だけ変わる。pose は useFrame で読む。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, parts]);
+
+  useFrame(() => {
+    writeMatrices();
+  });
 
   if (parts.length === 0) return null;
 
@@ -230,6 +342,9 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
   const groupRef = useRef<THREE.Group>(null);
   const targetPositionRef = useRef(new THREE.Vector3(mob.x, mob.y, mob.z));
   const targetQuaternionRef = useRef(new THREE.Quaternion());
+  const locomotionRef = useRef(createLocomotionPhaseState((animTime * 0.11) % 1));
+  const animationClockRef = useRef(animTime);
+  const jointPoseRef = useRef<BossJointPose>({ ...EMPTY_BOSS_POSE });
   const encounterId = mob.bossEncounterId ?? 'forest_guardian';
   const silhouette = BOSS_SILHOUETTES[encounterId];
   const accent = mob.traitAccent ?? '#ff6b4a';
@@ -324,6 +439,8 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     const group = groupRef.current;
     if (!group) return;
     const dt = Math.min(delta, 0.05);
+    animationClockRef.current += dt;
+    const rigTime = animationClockRef.current;
     // 親の再レンダーに頼らず、ストア上の最新座標・攻撃タイマーを参照
     const live = useMobStore.getState().mobs.find((entry) => entry.id === mob.id) ?? mob;
 
@@ -338,6 +455,17 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     const atkProgress = isAttacking
       ? THREE.MathUtils.clamp(1 - attackTimer / 0.72, 0, 1)
       : 0;
+    const moving = speed > 0.1 && !isAttacking;
+    const locomotionPhase = advanceLocomotionPhase(locomotionRef.current, {
+      speed,
+      delta: dt,
+      rotation: live.rotation,
+      moving,
+      profile: MOB_RIG_PROFILES.boss,
+    });
+    const leftGait = sampleGait(locomotionPhase, 0, MOB_RIG_PROFILES.boss);
+    const rightGait = sampleGait(locomotionPhase, 0.5, MOB_RIG_PROFILES.boss);
+    const speedNorm = THREE.MathUtils.clamp(speed / 2.2, 0.35, 1.15);
 
     // 攻撃: 溜め後傾 → 振り下ろし前傾 → 着地
     let windupPitch = 0;
@@ -364,6 +492,29 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
         slamScaleXZ = THREE.MathUtils.lerp(1.12, 1, u);
       }
     }
+
+    let slamArms = 0;
+    if (isAttacking) {
+      if (atkProgress < 0.4) {
+        slamArms = THREE.MathUtils.lerp(0, -0.95, atkProgress / 0.4);
+      } else if (atkProgress < 0.55) {
+        slamArms = THREE.MathUtils.lerp(-0.95, 1.35, (atkProgress - 0.4) / 0.15);
+      } else {
+        slamArms = THREE.MathUtils.lerp(1.35, 0, (atkProgress - 0.55) / 0.45);
+      }
+    }
+
+    const pose = jointPoseRef.current;
+    pose.leftLegPitch = moving ? leftGait.stride * 0.34 * speedNorm : 0;
+    pose.rightLegPitch = moving ? rightGait.stride * 0.34 * speedNorm : 0;
+    pose.leftArmPitch = isAttacking ? slamArms : -pose.rightLegPitch * 0.72;
+    pose.rightArmPitch = isAttacking ? slamArms : -pose.leftLegPitch * 0.72;
+    pose.headPitch = isAttacking
+      ? -windupPitch * 0.34
+      : Math.sin(rigTime * MOB_RIG_PROFILES.boss.idleFrequency) * 0.035;
+    pose.headYaw = moving
+      ? -Math.sin(locomotionPhase * Math.PI * 2) * 0.07
+      : Math.sin(rigTime * 0.62) * 0.045;
 
     // 着地瞬間で衝撃波を起動（progress 0.45 付近）
     if (isAttacking && lastAttackProgress.current < 0.45 && atkProgress >= 0.45) {
@@ -462,8 +613,8 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     dustGeo.setDrawRange(0, di);
     if (dustPointsRef.current) dustPointsRef.current.visible = di > 0;
 
-    if (speed > 0.1 && !isAttacking) {
-      group.position.y += Math.sin(animTime * 5) * 0.1;
+    if (moving) {
+      group.position.y += Math.abs(Math.sin(locomotionPhase * Math.PI * 2)) * MOB_RIG_PROFILES.boss.bodyBob;
     }
 
     // 被ダメフラッシュ（白熱）
@@ -487,7 +638,7 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
     const hdz = live.hitDirZ ?? 0;
     const localX = hdx * Math.cos(live.rotation) - hdz * Math.sin(live.rotation);
     const hitLean = -hp * 0.18;
-    const hitRoll = localX * hp * 0.22 + Math.sin(animTime * 40) * hp * 0.08;
+    const hitRoll = localX * hp * 0.22 + Math.sin(rigTime * 40) * hp * 0.08;
 
     if (modelGroupRef.current) {
       const squash = (1 - hp * 0.12) * slamScaleY;
@@ -495,7 +646,8 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
       const base = BOSS_MODEL_SCALE;
       modelGroupRef.current.scale.set(base * widen, base * squash, base * widen);
       modelGroupRef.current.rotation.x = windupPitch + hitLean;
-      modelGroupRef.current.rotation.z = hitRoll;
+      modelGroupRef.current.rotation.z = hitRoll
+        + (moving ? Math.sin(locomotionPhase * Math.PI * 2) * MOB_RIG_PROFILES.boss.bodyRoll : 0);
       modelGroupRef.current.position.y = BOSS_MODEL_Y_OFFSET - slamDrop - hp * 0.08;
       modelGroupRef.current.position.x = localX * hp * 0.15;
     }
@@ -601,11 +753,42 @@ export function BossRenderer({ mob, animTime }: BossRendererProps) {
           />
         </mesh>
 
-        <InstancedBossParts geometry={BOX_GEOMETRY} material={bodyMaterial} parts={silhouette.body} />
-        <InstancedBossParts geometry={BOX_GEOMETRY} material={armorMaterial} parts={silhouette.armor} />
-        <InstancedBossParts geometry={BRANCH_GEOMETRY} material={bodyMaterial} parts={silhouette.branches} />
-        <InstancedBossParts geometry={SPIKE_GEOMETRY} material={armorMaterial} parts={silhouette.spikes} />
-        <InstancedBossParts geometry={BOX_GEOMETRY} material={accentMaterial} parts={silhouette.eyes} castShadow={false} />
+        <InstancedBossParts
+          geometry={BOX_GEOMETRY}
+          material={bodyMaterial}
+          parts={silhouette.body}
+          kind="body"
+          poseRef={jointPoseRef}
+        />
+        <InstancedBossParts
+          geometry={BOX_GEOMETRY}
+          material={armorMaterial}
+          parts={silhouette.armor}
+          kind="armor"
+          poseRef={jointPoseRef}
+        />
+        <InstancedBossParts
+          geometry={BRANCH_GEOMETRY}
+          material={bodyMaterial}
+          parts={silhouette.branches}
+          kind="branch"
+          poseRef={jointPoseRef}
+        />
+        <InstancedBossParts
+          geometry={SPIKE_GEOMETRY}
+          material={armorMaterial}
+          parts={silhouette.spikes}
+          kind="spike"
+          poseRef={jointPoseRef}
+        />
+        <InstancedBossParts
+          geometry={BOX_GEOMETRY}
+          material={accentMaterial}
+          parts={silhouette.eyes}
+          kind="eye"
+          poseRef={jointPoseRef}
+          castShadow={false}
+        />
 
         <mesh
           geometry={CORE_GEOMETRY}

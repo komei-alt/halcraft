@@ -19,7 +19,7 @@ const IRON_GOLEM_MODEL: GlbMobModelConfig = {
   angryTint: new THREE.Color(0xcc6666),
   bobAmount: 0.025,
   bobSpeed: 3,
-  rigStyle: 'brute',
+  rigProfile: 'brute',
   attackDuration: 0.52,
 };
 

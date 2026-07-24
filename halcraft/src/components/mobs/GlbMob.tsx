@@ -7,12 +7,14 @@ import { Billboard, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useMobStore, type MobData } from '../../stores/useMobStore';
+import { useWorldStore } from '../../stores/useWorldStore';
 import { computeGroundOffset } from '../../utils/autoGround';
 import {
   buildProceduralMobRig,
-  type MobRigStyle,
+  type MobRigProfileId,
   type ProceduralMobRig,
 } from '../../utils/mobProceduralRig';
+import { MOB_RIG_PROFILES, sampleRigSurfaceY } from '../../utils/mobRigMotion';
 
 export interface GlbMobModelConfig {
   path: string;
@@ -36,7 +38,7 @@ export interface GlbMobModelConfig {
    * プロシージャル・リグの体型。
    * 省略時は humanoid。'none' でリグ無効（従来の剛体＋簡易ボブのみ）。
    */
-  rigStyle?: MobRigStyle | 'none';
+  rigProfile?: MobRigProfileId | 'none';
   /** 攻撃モーション全体の長さ（秒）。省略時はリグ側デフォルト */
   attackDuration?: number;
 }
@@ -70,6 +72,14 @@ function cloneSceneWithMaterials(scene: THREE.Group): THREE.Group {
     }
   });
   return clone;
+}
+
+function disposeSceneMaterials(scene: THREE.Object3D): void {
+  scene.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => material.dispose());
+  });
 }
 
 type ColorMaterial = THREE.Material & { color: THREE.Color };
@@ -162,20 +172,23 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   const rigRef = useRef<ProceduralMobRig | null>(null);
   const animClock = useRef(0);
   const wasHitActive = useRef(false);
-  const rigStyle = config.rigStyle ?? 'humanoid';
+  const rigProfile = config.rigProfile ?? 'darwin';
 
   // 静的クローン（フォールバック用）とリグ
   const { fallbackScene, rig, originalColorsFallback, originalColorsRig } = useMemo(() => {
-    const fallback = cloneSceneWithMaterials(scene);
     let built: ProceduralMobRig | null = null;
-    if (rigStyle !== 'none') {
+    if (rigProfile !== 'none') {
       try {
-        built = buildProceduralMobRig(scene, rigStyle);
+        built = buildProceduralMobRig(scene, rigProfile);
       } catch {
         built = null;
       }
     }
-    const fallbackColors = collectOriginalColors(fallback);
+    // リグ成功時は同じGLBのフォールバック複製を作らず、GPUメモリを二重消費しない。
+    const fallback = built ? null : cloneSceneWithMaterials(scene);
+    const fallbackColors = fallback
+      ? collectOriginalColors(fallback)
+      : new Map<string, THREE.Color>();
     const rigColors = built
       ? collectOriginalColorsFromTraverse(built.traverseMaterials)
       : new Map<THREE.Material, THREE.Color>();
@@ -185,15 +198,16 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       originalColorsFallback: fallbackColors,
       originalColorsRig: rigColors,
     };
-  }, [scene, rigStyle]);
+  }, [scene, rigProfile]);
 
   useEffect(() => {
     rigRef.current = rig;
     return () => {
       rig?.dispose();
+      if (fallbackScene) disposeSceneMaterials(fallbackScene);
       if (rigRef.current === rig) rigRef.current = null;
     };
-  }, [rig]);
+  }, [fallbackScene, rig]);
 
   // 自動接地
   const groundedPosition = useMemo((): [number, number, number] => {
@@ -240,7 +254,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   useEffect(() => {
     if (rig) {
       tintMaterials(rig.traverseMaterials, originalColorsRig, tint, glowColor, glowIntensity);
-    } else {
+    } else if (fallbackScene) {
       tintScene(fallbackScene, originalColorsFallback, tint, glowColor, glowIntensity);
     }
   }, [
@@ -254,7 +268,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
   ]);
 
   // 毎フレーム: ストア上の最新座標を直接読む（親の React 再レンダーに依存しない）
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     animClock.current += delta;
     const t = animClock.current;
     const live = useMobStore.getState().mobs.find((entry) => entry.id === mob.id) ?? mob;
@@ -278,7 +292,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       const liveIntensity = 0.25 + hp * 1.1 + wf * 1.6;
       if (rig) {
         tintMaterials(rig.traverseMaterials, originalColorsRig, liveTint, liveGlow, liveIntensity);
-      } else {
+      } else if (fallbackScene) {
         tintScene(fallbackScene, originalColorsFallback, liveTint, liveGlow, liveIntensity);
       }
     } else if (wasHitActive.current) {
@@ -291,7 +305,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
             angryTintColor.clone().multiplyScalar(0.5),
             0.34,
           );
-        } else {
+        } else if (fallbackScene) {
           tintScene(
             fallbackScene,
             originalColorsFallback,
@@ -307,7 +321,7 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
         const idleIntensity = 0.18 + (traitAccent ? 0.07 : 0);
         if (rig) {
           tintMaterials(rig.traverseMaterials, originalColorsRig, null, idleGlow, idleIntensity);
-        } else {
+        } else if (fallbackScene) {
           tintScene(fallbackScene, originalColorsFallback, null, idleGlow, idleIntensity);
         }
       }
@@ -377,8 +391,36 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       );
     }
 
+    const profile = rigProfile === 'none' ? null : MOB_RIG_PROFILES[rigProfile];
+    const getBlock = useWorldStore.getState().getBlock;
+    const probeSpacing = rigProfile === 'avian'
+      ? 0.12
+      : rigProfile === 'brute'
+        ? 0.38
+        : rigProfile === 'prototype_arachnid'
+          ? 0.72
+          : 0.24;
+    const rootCos = Math.cos(live.rotation);
+    const rootSin = Math.sin(live.rotation);
+    const leftX = live.x - rootCos * probeSpacing;
+    const leftZ = live.z + rootSin * probeSpacing;
+    const rightX = live.x + rootCos * probeSpacing;
+    const rightZ = live.z - rootSin * probeSpacing;
+    const leftGround = profile
+      ? sampleRigSurfaceY(getBlock, leftX, leftZ, live.y, profile.maxGroundStep)
+      : live.y;
+    const rightGround = profile
+      ? sampleRigSurfaceY(getBlock, rightX, rightZ, live.y, profile.maxGroundStep)
+      : live.y;
+    const scale = Math.max(0.001, config.scale);
+    const anchorWorldX = rootCos * groundedPosition[0] + rootSin * groundedPosition[2];
+    const anchorWorldZ = -rootSin * groundedPosition[0] + rootCos * groundedPosition[2];
+    const distanceSq = camera.position.distanceToSquared(groupRef.current?.position ?? camera.position);
+    const lod: 0 | 1 | 2 = distanceSq > 34 * 34 ? 2 : distanceSq > 20 * 20 ? 1 : 0;
+
     rigRef.current?.update({
       time: t,
+      delta,
       moving,
       speed,
       hitTimer: liveHitTimer,
@@ -388,6 +430,19 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
       attackDuration: config.attackDuration,
       angry: liveAngry,
       ally: live.isAlly,
+      rotation: live.rotation,
+      worldX: live.x,
+      worldY: live.y,
+      worldZ: live.z,
+      modelScale: config.scale,
+      modelYaw: config.modelRotation?.[1] ?? 0,
+      anchorOffsetX: anchorWorldX,
+      anchorOffsetY: groundedPosition[1],
+      anchorOffsetZ: anchorWorldZ,
+      leftFootGroundOffset: (leftGround - live.y) / scale,
+      rightFootGroundOffset: (rightGround - live.y) / scale,
+      getBlock,
+      lod,
     });
   });
 
@@ -488,12 +543,12 @@ export function GlbMob({ mob, animTime, config }: GlbMobProps) {
           <group rotation={modelRotation}>
             <primitive object={rig.root} />
           </group>
-        ) : (
+        ) : fallbackScene ? (
           <primitive
             object={fallbackScene}
             rotation={modelRotation}
           />
-        )}
+        ) : null}
       </group>
 
       {mob.hp < mob.maxHp && (

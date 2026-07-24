@@ -2,14 +2,25 @@
 // 歩行・待機・被ダメなどのプロシージャルアニメを駆動する
 
 import * as THREE from 'three';
+import { buildPrototypeMultipartRig } from './mobPrototypeRig';
+import { buildRigidPartMobRig } from './mobRigidPartRig';
+import {
+  MOB_RIG_PROFILES,
+  advanceLocomotionPhase,
+  createLocomotionPhaseState,
+  sampleGait,
+  type MobRigProfileId,
+} from './mobRigMotion';
+import type { GetBlockFn } from './collision';
 
-/** リグの体型プリセット */
-export type MobRigStyle = 'zombie' | 'humanoid' | 'brute' | 'chicken';
+export type { MobRigProfileId } from './mobRigMotion';
 
 /** アニメーション入力 */
 export interface MobRigAnimState {
   /** 経過時間（秒） */
   time: number;
+  /** フレーム時間。距離ベース歩容に使う */
+  delta?: number;
   /** 移動中か */
   moving: boolean;
   /** 水平速度（ブロック/秒） */
@@ -27,6 +38,24 @@ export interface MobRigAnimState {
   angry: boolean;
   /** 味方か（アニメのトーンを少し変える） */
   ally?: boolean;
+  /** モブのワールド向きと座標（接地・旋回踏み替え用） */
+  rotation?: number;
+  worldX?: number;
+  worldY?: number;
+  worldZ?: number;
+  /** GLBモデルのルート変換 */
+  modelScale?: number;
+  modelYaw?: number;
+  anchorOffsetX?: number;
+  anchorOffsetY?: number;
+  anchorOffsetZ?: number;
+  /** 左右の足元地形差。モデルローカル単位。 */
+  leftFootGroundOffset?: number;
+  rightFootGroundOffset?: number;
+  /** 多脚リグが各足の直下を調べるためのブロック取得関数 */
+  getBlock?: GetBlockFn;
+  /** 0=近距離、1=中距離、2=遠距離 */
+  lod?: 0 | 1 | 2;
 }
 
 export interface ProceduralMobRig {
@@ -96,7 +125,7 @@ interface StyleParams {
   heavy: number;
 }
 
-function getStyleParams(style: MobRigStyle): StyleParams {
+function getStyleParams(style: MobRigProfileId): StyleParams {
   switch (style) {
     case 'zombie':
       return {
@@ -118,7 +147,7 @@ function getStyleParams(style: MobRigStyle): StyleParams {
         walkFreq: 3.6,
         heavy: 1.2,
       };
-    case 'chicken':
+    case 'avian':
       return {
         walkAmp: 0.7,
         armAmp: 0.9,
@@ -128,7 +157,7 @@ function getStyleParams(style: MobRigStyle): StyleParams {
         walkFreq: 9.5,
         heavy: 0.55,
       };
-    case 'humanoid':
+    case 'darwin':
     default:
       return {
         walkAmp: 0.58,
@@ -259,7 +288,7 @@ function paintVertexWeights(
   z: number,
   box: THREE.Box3,
   boneIndex: Record<BoneName, number>,
-  style: MobRigStyle,
+  style: MobRigProfileId,
 ): { indices: [number, number, number, number]; weights: [number, number, number, number] } {
   const size = new THREE.Vector3();
   box.getSize(size);
@@ -303,7 +332,7 @@ function paintVertexWeights(
   add('R_lowerArm', armBand * (0.3 + outerR) * Math.exp(-Math.pow((ny - 0.56) * 5, 2)));
 
   // チキンは腕＝翼なので横方向をより強く
-  if (style === 'chicken') {
+  if (style === 'avian') {
     add('L_upperArm', (1 - nx) * 1.2 * armBand);
     add('R_upperArm', nx * 1.2 * armBand);
   }
@@ -350,14 +379,14 @@ function paintVertexWeights(
 
 function createBoneHierarchy(
   box: THREE.Box3,
-  style: MobRigStyle,
+  style: MobRigProfileId,
 ): { bones: THREE.Bone[]; boneMap: Record<BoneName, THREE.Bone>; rootBone: THREE.Bone } {
   const size = new THREE.Vector3();
   const min = box.min.clone();
   box.getSize(size);
 
   // チキンは少し脚長めに見せるため Y 配置を圧縮
-  const yScale = style === 'chicken' ? 0.92 : style === 'brute' ? 1.05 : 1;
+  const yScale = style === 'avian' ? 0.92 : style === 'brute' ? 1.05 : 1;
 
   const boneMap = {} as Record<BoneName, THREE.Bone>;
   const bones: THREE.Bone[] = [];
@@ -394,7 +423,7 @@ function convertMeshToSkinned(
   mesh: THREE.Mesh,
   boneIndex: Record<BoneName, number>,
   box: THREE.Box3,
-  style: MobRigStyle,
+  style: MobRigProfileId,
 ): THREE.SkinnedMesh {
   const geometry = mesh.geometry.clone();
   // ワールド座標へベイク（スケルトンと一致させる）
@@ -440,8 +469,17 @@ function convertMeshToSkinned(
  */
 export function buildProceduralMobRig(
   sourceScene: THREE.Object3D,
-  style: MobRigStyle,
+  style: MobRigProfileId,
 ): ProceduralMobRig | null {
+  if (style === 'prototype_arachnid') {
+    return buildPrototypeMultipartRig(sourceScene);
+  }
+  // コードネイティブのクモとボスは各Renderer側で専用リグを持つ。
+  if (style === 'spider' || style === 'boss') return null;
+
+  const rigidPartRig = buildRigidPartMobRig(sourceScene, style);
+  if (rigidPartRig) return rigidPartRig;
+
   const meshes = findMeshes(sourceScene);
   if (meshes.length === 0) return null;
 
@@ -451,10 +489,10 @@ export function buildProceduralMobRig(
     const bc = b.geometry.getAttribute('position')?.count ?? 0;
     return bc - ac;
   });
-  // humanoid/brute: 最大32パーツ（手足が別メッシュでも動く）
-  // zombie: 大きめ2メッシュ / chicken: 1メッシュ
+  // darwin/brute: 最大32パーツ（手足が別メッシュでも動く）
+  // zombie: 大きめ2メッシュ / avian: 1メッシュ
   const meshCap =
-    style === 'humanoid' || style === 'brute' ? 32
+    style === 'darwin' || style === 'brute' ? 32
       : style === 'zombie' ? 4
         : 1;
   const targetMeshes = meshes.slice(0, meshCap);
@@ -509,6 +547,8 @@ export function buildProceduralMobRig(
   }
 
   const styleParams = getStyleParams(style);
+  const rigProfile = MOB_RIG_PROFILES[style];
+  const locomotionPhase = createLocomotionPhaseState();
   const bodyHeight = Math.max(0.01, box.max.y - box.min.y);
   const scratchEuler = new THREE.Euler();
   const scratchQuat = new THREE.Quaternion();
@@ -533,12 +573,21 @@ export function buildProceduralMobRig(
     // 攻撃中は歩行をほぼ止める
     const moving = !attacking && state.moving && state.speed > 0.05;
     const speedNorm = THREE.MathUtils.clamp(state.speed / 3.2, 0.35, 1.45);
-    const freq = p.walkFreq * (moving ? speedNorm : 0.28);
-    const t = state.time * freq;
+    const previousPhase = locomotionPhase.phase;
+    const basePhase = advanceLocomotionPhase(locomotionPhase, {
+      speed: state.speed,
+      delta: state.delta ?? 1 / 60,
+      rotation: state.rotation ?? 0,
+      moving,
+      profile: rigProfile,
+    });
+    const steppedInPlace = Math.abs(basePhase - previousPhase) > 0.00001;
+    const stepping = moving || steppedInPlace;
+    const t = basePhase * Math.PI * 2;
     const hit = THREE.MathUtils.clamp(state.hitTimer / 0.24, 0, 1);
     const angry = state.angry ? 1 : 0;
     const allyBoost = state.ally ? 1.12 : 1;
-    const amp = (moving ? 1 : 0.18) * p.walkAmp * (0.85 + speedNorm * 0.22) * allyBoost;
+    const amp = (stepping ? 1 : 0.08) * p.walkAmp * (0.85 + speedNorm * 0.22) * allyBoost;
 
     // リセット
     for (const name of BONE_NAMES) {
@@ -561,16 +610,17 @@ export function buildProceduralMobRig(
     );
 
     // --- 歩行（脚・膝・足・骨盤・腕・胴の連動） ---
-    const legSwing = Math.sin(t) * amp;
-    const legSwingR = Math.sin(t + Math.PI) * amp;
-    const kneeL = (
-      Math.max(0, -Math.sin(t)) * p.kneeAmp
-      + Math.max(0, Math.sin(t)) * p.kneeAmp * 0.12
-    ) * (moving ? 1 : 0.12);
-    const kneeR = (
-      Math.max(0, -Math.sin(t + Math.PI)) * p.kneeAmp
-      + Math.max(0, Math.sin(t + Math.PI)) * p.kneeAmp * 0.12
-    ) * (moving ? 1 : 0.12);
+    const gaitL = sampleGait(basePhase, 0, rigProfile);
+    const gaitR = sampleGait(basePhase, 0.5, rigProfile);
+    const idleLeg = Math.sin(state.time * rigProfile.idleFrequency) * p.walkAmp * 0.025;
+    const legSwing = stepping ? gaitL.stride * amp : idleLeg;
+    const legSwingR = stepping ? gaitR.stride * amp : -idleLeg;
+    const kneeL = stepping
+      ? gaitL.lift * p.kneeAmp + (1 - gaitL.plantedWeight) * p.kneeAmp * 0.08
+      : p.kneeAmp * 0.04;
+    const kneeR = stepping
+      ? gaitR.lift * p.kneeAmp + (1 - gaitR.plantedWeight) * p.kneeAmp * 0.08
+      : p.kneeAmp * 0.04;
     const strideLean = moving ? Math.min(0.14, state.speed * 0.035) : 0;
 
     setBoneEuler('L_upperLeg', legSwing + strideLean * 0.15, 0, 0.045);
@@ -589,11 +639,17 @@ export function buildProceduralMobRig(
       0,
       0,
     );
+    boneMap.L_foot.position.y += state.leftFootGroundOffset ?? 0;
+    boneMap.R_foot.position.y += state.rightFootGroundOffset ?? 0;
 
-    const hipBob = moving
-      ? Math.abs(Math.sin(t * 2)) * 0.042 * p.heavy
+    const hipBob = stepping
+      ? Math.abs(Math.sin(t * 2)) * rigProfile.bodyBob * p.heavy
       : breath * 0.02;
     boneMap.hips.position.y += hipBob * bodyHeight * 0.09;
+    boneMap.hips.position.y += (
+      (state.leftFootGroundOffset ?? 0)
+      + (state.rightFootGroundOffset ?? 0)
+    ) * 0.18;
     if (moving) {
       boneMap.hips.position.z += Math.sin(t * 2) * bodyHeight * 0.004 * p.heavy;
     }
@@ -623,7 +679,7 @@ export function buildProceduralMobRig(
       setBoneEuler('R_upperArm', -zArm, -0.15, -0.35 + Math.sin(t + 0.4 + Math.PI) * 0.08);
       setBoneEuler('L_lowerArm', -0.35 - Math.sin(t) * 0.1, 0, 0.1);
       setBoneEuler('R_lowerArm', -0.35 - Math.sin(t + Math.PI) * 0.1, 0, -0.1);
-    } else if (style === 'chicken') {
+    } else if (style === 'avian') {
       const flap = moving ? Math.sin(t * 1.6) * p.armAmp : Math.sin(state.time * 3) * 0.25;
       setBoneEuler('L_upperArm', 0.2, 0, 0.9 + flap);
       setBoneEuler('R_upperArm', 0.2, 0, -0.9 - flap);
