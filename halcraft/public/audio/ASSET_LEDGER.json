@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "generatedFor": "HalCraft audio overhaul",
+  "policy": "Only edited production exports belong under public/audio. Family recording masters must remain outside Git and outside public paths.",
+  "sources": [
+    {
+      "provider": "Kenney",
+      "pack": "Impact Sounds 1.0",
+      "url": "https://kenney.nl/assets/impact-sounds",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["recorded/footsteps", "recorded/impacts"]
+    },
+    {
+      "provider": "Kenney",
+      "pack": "Interface Sounds 1.0",
+      "url": "https://kenney.nl/assets/interface-sounds",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["recorded/ui"]
+    },
+    {
+      "provider": "Kenney",
+      "pack": "Sci-fi Sounds 1.0",
+      "url": "https://kenney.nl/assets/sci-fi-sounds",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["recorded/scifi"]
+    },
+    {
+      "provider": "Kenney",
+      "pack": "Music Jingles 1.0",
+      "url": "https://kenney.nl/assets/music-jingles",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["recorded/jingles"]
+    },
+    {
+      "provider": "OpenGameArt",
+      "author": "MintoDog",
+      "pack": "Fairy Adventure",
+      "url": "https://opengameart.org/content/fairy-adventure",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["music/exploration.ogg", "music/exploration.mp3"]
+    },
+    {
+      "provider": "OpenGameArt",
+      "author": "beardalaxy",
+      "pack": "Iremos Forest Theme Loop",
+      "url": "https://opengameart.org/content/iremos-forest-theme-loop",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["music/forest.ogg", "music/forest.mp3"]
+    },
+    {
+      "provider": "OpenGameArt",
+      "author": "Emma_MA",
+      "pack": "Determined Pursuit - Epic Orchestra Loop",
+      "url": "https://opengameart.org/content/determined-pursuit-epic-orchestra-loop",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["music/battle.ogg", "music/battle.mp3"]
+    },
+    {
+      "provider": "OpenGameArt",
+      "author": "CleytonKauffman",
+      "pack": "Boss Battle Theme",
+      "url": "https://opengameart.org/content/boss-battle-theme",
+      "license": "Creative Commons Zero (CC0 1.0)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "paths": ["music/boss.ogg", "music/boss.mp3"]
+    }
+  ],
+  "familyVoice": {
+    "included": false,
+    "requiredBeforeInclusion": [
+      "explicit publication consent",
+      "edited export without unnecessary personal metadata",
+      "subtitle entry",
+      "loudness and peak validation"
+    ]
+  }
+}

@@ -59,6 +59,7 @@ import { MobManager } from './components/mobs/MobManager';
 import { RemotePlayers } from './components/RemotePlayers';
 import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
 import { SoundManager } from './components/SoundManager';
+import { DialogueDirector } from './components/DialogueDirector';
 import { Helicopter } from './components/vehicles/Helicopter';
 import { Tank } from './components/vehicles/Tank';
 import { Airplane } from './components/vehicles/Airplane';
@@ -119,6 +120,7 @@ import { MobileControls } from './components/ui/mobile/MobileControls';
 import { SkinSelector } from './components/ui/SkinSelector';
 import { AirSupplyBar } from './components/ui/AirSupplyBar';
 import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
+import { DialogueSubtitle } from './components/ui/DialogueSubtitle';
 import { HungerBar } from './components/ui/HungerBar';
 import { SettingsButton, SettingsMenu } from './components/ui/SettingsMenu';
 import { isTouchDevice } from './utils/device';
@@ -130,8 +132,13 @@ import './App.css';
 
 const RIG_LAB_ENABLED = import.meta.env.DEV
   && new URLSearchParams(window.location.search).get('rigLab') === '1';
+const AUDIO_LAB_ENABLED = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('audioLab') === '1';
 const RigLab = import.meta.env.DEV
   ? lazy(() => import('./components/mobs/RigLab'))
+  : null;
+const AudioLab = import.meta.env.DEV
+  ? lazy(() => import('./components/audio/AudioLab'))
   : null;
 
 function GameCanvas() {
@@ -409,6 +416,8 @@ function MainGameApp() {
           {showDetailedHud && <StageEventHUD />}
           {showDetailedHud && <StagePressureHUD />}
           <StageOpeningBriefing />
+          <DialogueDirector />
+          <DialogueSubtitle />
           <BossEncounterHUD />
           {showDetailedHud && <ModeFlowHUD />}
           <StageChallengeRewardSystem />
@@ -452,6 +461,13 @@ function MainGameApp() {
 }
 
 export default function App() {
+  if (AUDIO_LAB_ENABLED && AudioLab) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#081019' }} />}>
+        <AudioLab />
+      </Suspense>
+    );
+  }
   if (RIG_LAB_ENABLED && RigLab) {
     return (
       <Suspense fallback={<div className="rig-lab" />}>

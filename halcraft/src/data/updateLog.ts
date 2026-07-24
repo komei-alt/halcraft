@@ -45,6 +45,15 @@ export const UPDATE_ICONS: Record<UpdateType, string> = {
  */
 export const UPDATES: UpdateGroup[] = [
   {
+    date: '2026-07-25',
+    items: [
+      { type: 'feature', text: '足音・ブロック・武器・爆発にたくさんの本物の音が加わって、動きや材質の違いが耳でもわかるようになったよ！' },
+      { type: 'feature', text: '探索・森・戦い・ボスで音楽がなめらかに切り替わり、冒険が映画みたいに盛り上がるようになったよ！' },
+      { type: 'feature', text: '冒険ガイドや仲間のことばが字幕で順番に出て、大切なお知らせを聞き逃しにくくなったよ！' },
+      { type: 'improve', text: '洞窟・水中・音の方向と距離がもっと自然になり、設定で音ごとの大きさや強弱も細かく選べるようになったよ！' },
+    ],
+  },
+  {
     date: '2026-07-24',
     items: [
       { type: 'feature', text: 'プロトタイプのクモみたいな足に関節がついて、地面をつかみながらかっこよく歩くようになったよ！' },

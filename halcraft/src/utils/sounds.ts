@@ -5,24 +5,14 @@
 import type { BlockUseFeedbackSoundKind } from './blockUseFeedback';
 import type { BiomeId, StageCategory } from '../types/stages';
 import type { StageChallengeMedal } from '../types/stageChallenges';
-
-/** AudioContext のシングルトン */
-let audioCtx: AudioContext | null = null;
+import { audioEngine, playRecordedCue, preloadCoreRecordedAudio, type AudioVector3 } from '../audio';
+import type { BlockAudioMaterial } from './blockAudioMaterial';
 
 /** 効果音全体の音量係数（設定スライダー 0-1） */
 let sfxVolume = 1;
-/** 効果音用マスターゲイン（全SFXがここへ接続） */
-let sfxMaster: GainNode | null = null;
-
 /** AudioContext を取得/初期化する */
 function getAudioContext(): AudioContext | null {
-  if (audioCtx) return audioCtx;
-  try {
-    audioCtx = new AudioContext();
-    return audioCtx;
-  } catch {
-    return null;
-  }
+  return audioEngine.getContext();
 }
 
 /** 効果音の出力先（音量スライダー対応） */
@@ -32,12 +22,7 @@ function getSfxDestination(): AudioNode {
     // 呼び出し側で ctx を確認済み。到達しない想定。
     throw new Error('AudioContext is not available');
   }
-  if (!sfxMaster || sfxMaster.context !== ctx) {
-    sfxMaster = ctx.createGain();
-    sfxMaster.gain.value = sfxVolume;
-    sfxMaster.connect(getSfxDestination());
-  }
-  return sfxMaster;
+  return audioEngine.getBusInput('world');
 }
 
 /** 効果音の現在の音量係数（0-1） */
@@ -48,12 +33,9 @@ export function getSfxVolume(): number {
 /** 効果音の音量を設定（0-1） */
 export function setSfxVolume(volume: number): void {
   sfxVolume = Math.max(0, Math.min(1, volume));
-  if (sfxMaster) {
-    const now = sfxMaster.context.currentTime;
-    sfxMaster.gain.cancelScheduledValues(now);
-    sfxMaster.gain.setValueAtTime(sfxMaster.gain.value, now);
-    sfxMaster.gain.linearRampToValueAtTime(sfxVolume, now + 0.08);
-  }
+  audioEngine.setBusVolume('world', sfxVolume);
+  audioEngine.setBusVolume('player', sfxVolume);
+  audioEngine.setBusVolume('ui', sfxVolume * 0.9);
 }
 
 /**
@@ -61,10 +43,9 @@ export function setSfxVolume(volume: number): void {
  * ブラウザの自動再生ポリシー対応
  */
 export function initAudio(): void {
-  const ctx = getAudioContext();
-  if (ctx && ctx.state === 'suspended') {
-    ctx.resume();
-  }
+  void audioEngine.unlock().then((unlocked) => {
+    if (unlocked) void preloadCoreRecordedAudio();
+  });
 }
 
 // ============================================
@@ -77,8 +58,8 @@ const lastPlayTime: Record<string, number> = {};
 /** レート制限チェック */
 function canPlay(key: string, minIntervalMs: number): boolean {
   const now = performance.now();
-  const last = lastPlayTime[key] || 0;
-  if (now - last < minIntervalMs) return false;
+  const last = lastPlayTime[key];
+  if (last !== undefined && now - last < minIntervalMs) return false;
   lastPlayTime[key] = now;
   return true;
 }
@@ -188,6 +169,7 @@ export function playMeleeSwingSound(): void {
 export function playMeleeHitSound(heavy = false): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('melee_hit', 70)) return;
+  playRecordedCue('impact.punch', { gain: heavy ? 1.16 : 0.86 });
 
   const now = ctx.currentTime;
   const base = heavy ? 130 : 190;
@@ -544,6 +526,15 @@ export function playBiomeFootstepSound(
   const profile = FOOTSTEP_PROFILES[biome];
   if (!ctx || !canPlay(`step:${profile.key}`, 92)) return;
 
+  const recordedFootstep = biome === 'snow'
+    ? 'footstep.snow'
+    : biome === 'desert'
+      ? 'footstep.soft'
+      : category === 'war'
+        ? 'footstep.stone'
+        : 'footstep.grass';
+  playRecordedCue(recordedFootstep, { gain: Math.min(1.18, Math.max(0.72, intensity)) });
+
   const now = ctx.currentTime;
   const strength = Math.min(1.35, Math.max(0.72, intensity));
   const warPush = category === 'war' ? 1.18 : 1;
@@ -734,7 +725,7 @@ export function playZombieGrunt(distance: number): void {
 // 6. モブ死亡音（撃破時の爽快な音）
 // ============================================
 
-export function playMobDeathSound(distance: number): void {
+export function playMobDeathSound(distance: number, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('mobDeath', 100)) return;
 
@@ -742,6 +733,7 @@ export function playMobDeathSound(distance: number): void {
   const maxDist = 25;
   if (distance > maxDist) return;
   const volume = Math.max(0, 0.4 * (1 - distance / maxDist));
+  playRecordedCue('impact.soft', { position, gain: Math.max(0.2, volume) });
 
   const now = ctx.currentTime;
 
@@ -868,13 +860,17 @@ export function playMachineGunSound(distance: number): void {
 // 8. 弾丸着弾音
 // ============================================
 
-export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): void {
+export function playBulletImpactSound(distance: number, type: 'block' | 'mob', position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay(`impact_${type}`, 40)) return;
 
   const maxDist = 42;
   if (distance > maxDist) return;
   const volume = Math.max(0, 0.42 * (1 - distance / maxDist));
+  playRecordedCue(type === 'block' ? 'scifi.impact' : 'impact.punch', {
+    position,
+    gain: Math.max(0.18, volume),
+  });
 
   const now = ctx.currentTime;
 
@@ -957,13 +953,14 @@ export function playBulletImpactSound(distance: number, type: 'block' | 'mob'): 
 // 9. ロケットランチャー発射音
 // ============================================
 
-export function playRocketLaunchSound(distance: number): void {
+export function playRocketLaunchSound(distance: number, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('rocketLaunch', 100)) return;
 
   const maxDist = 55;
   if (distance > maxDist) return;
   const volume = Math.max(0, 0.78 * (1 - distance / maxDist));
+  playRecordedCue('scifi.thruster', { position, gain: Math.max(0.18, volume) });
 
   const now = ctx.currentTime;
 
@@ -1035,13 +1032,14 @@ export function playRocketLaunchSound(distance: number): void {
 // 10. ロケット爆発音
 // ============================================
 
-export function playRocketExplosionSound(distance: number): void {
+export function playRocketExplosionSound(distance: number, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('rocketExplosion', 70)) return;
 
   const maxDist = 80;
   if (distance > maxDist) return;
   const volume = Math.max(0, 0.92 * (1 - distance / maxDist));
+  playRecordedCue('scifi.explosion', { position, gain: Math.max(0.18, volume) });
 
   const now = ctx.currentTime;
 
@@ -1134,13 +1132,14 @@ export function playRocketExplosionSound(distance: number): void {
 }
 
 /** ロケット直撃の命中アクセント — 爆発音の後に「狙って当てた」手応えを足す */
-export function playRocketDirectHitSound(distance: number, precision: boolean): void {
+export function playRocketDirectHitSound(distance: number, precision: boolean, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('rocketDirectHit', precision ? 260 : 420)) return;
 
   const maxDist = 72;
   if (distance > maxDist) return;
   const volume = Math.max(0, (precision ? 0.34 : 0.22) * (1 - distance / maxDist));
+  playRecordedCue('scifi.impact', { position, gain: Math.max(0.2, volume * 1.4) });
   const now = ctx.currentTime + 0.035;
   const notes = precision ? [520, 1040, 1560] : [420, 840];
 
@@ -1242,13 +1241,14 @@ export function playHelicopterRotor(distance: number): void {
 // 12. 乗り物爆発音（超ド派手）
 // ============================================
 
-export function playVehicleExplosionSound(distance: number): void {
+export function playVehicleExplosionSound(distance: number, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('vehicleExplosion', 200)) return;
 
   const maxDist = 100;
   if (distance > maxDist) return;
   const volume = Math.max(0, 1.0 * (1 - distance / maxDist));
+  playRecordedCue('scifi.explosion.low', { position, gain: Math.max(0.2, volume) });
 
   const now = ctx.currentTime;
 
@@ -1426,13 +1426,14 @@ export function playBombFallingSound(distance: number): void {
 // 14. TNT爆発音
 // ============================================
 
-export function playTntExplosionSound(distance: number): void {
+export function playTntExplosionSound(distance: number, position?: AudioVector3): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('tntExplosion', 80)) return;
 
   const maxDist = 80;
   if (distance > maxDist) return;
   const volume = Math.max(0, 0.85 * (1 - distance / maxDist));
+  playRecordedCue('scifi.explosion', { position, gain: Math.max(0.18, volume) });
 
   const now = ctx.currentTime;
 
@@ -1519,9 +1520,19 @@ export function playTntExplosionSound(distance: number): void {
 // 15. ブロック破壊音
 // ============================================
 
-export function playBlockBreakSound(): void {
+export function playBlockBreakSound(position?: AudioVector3, material: BlockAudioMaterial = 'stone'): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('blockBreak', 48)) return;
+  const cue = material === 'wood'
+    ? 'impact.wood'
+    : material === 'metal'
+      ? 'impact.metal'
+      : material === 'glass'
+        ? 'impact.glass'
+        : material === 'soft'
+          ? 'impact.soft'
+          : 'impact.mining';
+  playRecordedCue(cue, { position, gain: 0.82 });
 
   const now = ctx.currentTime;
 
@@ -1576,9 +1587,19 @@ export function playBlockBreakSound(): void {
 }
 
 /** ブロック設置SE — 置いた手応えが残る短い低音 */
-export function playBlockPlaceSound(): void {
+export function playBlockPlaceSound(position?: AudioVector3, material: BlockAudioMaterial = 'stone'): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('blockPlace', 45)) return;
+  const cue = material === 'wood'
+    ? 'impact.wood'
+    : material === 'metal'
+      ? 'impact.metal'
+      : material === 'glass'
+        ? 'impact.glass'
+        : material === 'soft'
+          ? 'impact.soft'
+          : 'impact.mining';
+  playRecordedCue(cue, { position, gain: 0.68, playbackRate: 0.92 });
   const now = ctx.currentTime;
 
   const thud = ctx.createOscillator();
@@ -1764,6 +1785,7 @@ export function playBlockUseFeedbackSound(kind: BlockUseFeedbackSoundKind): void
 export function playInventoryEmptySound(): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('inventoryEmpty', 180)) return;
+  playRecordedCue('ui.error', { gain: 0.72 });
   const now = ctx.currentTime;
 
   const osc = ctx.createOscillator();
@@ -1834,6 +1856,7 @@ type StageCombatCueSoundKind = 'match' | 'surge';
 export function playItemSwitchSound(kind: ItemSwitchSoundKind): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('itemSwitch', 90)) return;
+  playRecordedCue('ui.select', { gain: 0.62 });
   const now = ctx.currentTime;
   const config: Record<ItemSwitchSoundKind, {
     notes: number[];
@@ -2223,6 +2246,9 @@ export type StageOpportunitySoundKind = 'build' | 'war' | 'boss';
 export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay(`itemPickup:${kind}`, kind === 'common' ? 70 : 115)) return;
+  playRecordedCue(kind === 'hazard' ? 'ui.error' : kind === 'common' ? 'ui.select' : 'ui.confirm', {
+    gain: kind === 'common' ? 0.5 : 0.72,
+  });
   const now = ctx.currentTime;
   const profile: Record<ItemPickupSoundKind, {
     notes: number[];
@@ -2322,6 +2348,7 @@ export function playItemPickupSound(kind: ItemPickupSoundKind = 'common'): void 
 export function playStageStartSound(kind: StageStartSoundKind, biome?: BiomeId): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('stageStart', 900)) return;
+  playRecordedCue(kind === 'build' ? 'jingle.reward' : 'ui.open', { gain: 0.72 });
   const now = ctx.currentTime;
   const notes = kind === 'build'
     ? [392, 523.25, 659.25, 783.99]
@@ -2468,6 +2495,7 @@ export function playStageClearFanfareSound(
 ): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay(`stageClear:${kind}`, 1600)) return;
+  playRecordedCue('jingle.clear', { gain: strongFinish ? 1 : 0.82 });
 
   const now = ctx.currentTime;
   const isBuild = kind === 'build';
@@ -3047,6 +3075,7 @@ export function playStageLandmarkSound(kind: StageStartSoundKind): void {
 export function playBossSpawnSound(): void {
   const ctx = getAudioContext();
   if (!ctx || !canPlay('bossSpawn', 1800)) return;
+  playRecordedCue('scifi.explosion.low', { gain: 0.86, playbackRate: 0.82 });
   const now = ctx.currentTime;
 
   const rumble = ctx.createOscillator();

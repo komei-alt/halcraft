@@ -385,7 +385,7 @@ function SingleTurret({ position }: { position: TurretPos }) {
     setImpacts(nextImpacts);
 
     // 着弾音再生
-    playBulletImpactSound(pos.distanceTo(camera.position), type);
+    playBulletImpactSound(pos.distanceTo(camera.position), type, pos);
   }, [camera]);
 
   // メインループ

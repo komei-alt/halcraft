@@ -496,7 +496,7 @@ export function PlayerMachineGun() {
 
         if (hit.type === 'block') {
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, bullet.scoped);
-          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'block');
+          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'block', hit.hitPos);
           continue;
         }
 
@@ -511,7 +511,7 @@ export function PlayerMachineGun() {
             spawnDamagePopup(hitDamage, mob.x, mob.y + 1.0, mob.z, precisionHit);
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, precisionHit);
-          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
+          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob', hit.hitPos);
           useMasteryStore.getState().recordItemHit('machine_gun', {
             label: precisionHit ? '精密制圧ヒット' : '連射ヒット',
             amount: precisionHit ? 9 : 6,

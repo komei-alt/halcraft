@@ -1,12 +1,13 @@
 {
   "name": "halcraft",
   "private": true,
-  "version": "1.0.234",
+  "version": "1.0.235",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "audio:validate": "node scripts/validate-audio-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

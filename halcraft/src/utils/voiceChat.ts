@@ -16,6 +16,7 @@
 // ============================================
 
 import { getSocket, getServerUrl } from './socket';
+import { audioEngine } from '../audio';
 
 /** フォールバック用の ICE 設定（サーバーから取得できなかった場合） */
 const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
@@ -34,6 +35,8 @@ interface PeerConnection {
   pc: RTCPeerConnection;
   /** リモートオーディオの再生要素 */
   audioElement: HTMLAudioElement;
+  /** 共有ミキサーへ接続するリモート音声ノード */
+  mediaSource: MediaElementAudioSourceNode | null;
   /** Perfect Negotiation: 衝突時に自分が譲るか（politeなら譲る） */
   polite: boolean;
   /** 自分がオファー作成中か */
@@ -82,7 +85,10 @@ class VoiceChatManager {
   private speakingTimer: ReturnType<typeof setInterval> | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private speakingSource: MediaStreamAudioSourceNode | null = null;
   private isSpeaking = false;
+  private remoteSpeakers = new Set<string>();
+  private voiceDuckRelease: (() => void) | null = null;
   private socketListenersAttached = false;
   /** サーバーから取得した ICE 設定 */
   private iceConfig: RTCConfiguration = { iceServers: FALLBACK_ICE_SERVERS };
@@ -312,12 +318,12 @@ class VoiceChatManager {
       this.localStream = null;
     }
 
-    // AudioContext を閉じる
-    if (this.audioContext) {
-      void this.audioContext.close();
-      this.audioContext = null;
-      this.analyser = null;
-    }
+    // ゲーム共有 AudioContext は閉じず、マイク解析ノードだけ外す
+    this.speakingSource?.disconnect();
+    this.analyser?.disconnect();
+    this.speakingSource = null;
+    this.audioContext = null;
+    this.analyser = null;
 
     this.isMicEnabled = false;
     this.isMuted = false;
@@ -339,12 +345,14 @@ class VoiceChatManager {
     // 全ピア接続を切断
     for (const [peerId, peer] of this.peers) {
       peer.pc.close();
+      peer.mediaSource?.disconnect();
       peer.audioElement.srcObject = null;
       peer.audioElement.remove();
       this.peers.delete(peerId);
     }
 
     this.detachSocketListeners();
+    this.clearRemoteSpeaking();
     this.isSpeakerEnabled = false;
     this.callbacks.onSpeakerChange?.(false);
     this.setState('disconnected');
@@ -381,6 +389,7 @@ class VoiceChatManager {
     for (const [, peer] of this.peers) {
       peer.audioElement.muted = !this.isSpeakerEnabled;
     }
+    this.updateVoiceDuck();
 
     this.callbacks.onSpeakerChange?.(this.isSpeakerEnabled);
     return this.isSpeakerEnabled;
@@ -393,11 +402,11 @@ class VoiceChatManager {
     if (!this.localStream) return;
 
     // iOS Safari: AudioContext はユーザーインタラクション内で resume が必要
-    this.audioContext = new AudioContext();
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume();
-    }
+    this.audioContext = audioEngine.getContext();
+    if (!this.audioContext) return;
+    await audioEngine.unlock();
     const source = this.audioContext.createMediaStreamSource(this.localStream);
+    this.speakingSource = source;
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
     source.connect(this.analyser);
@@ -432,6 +441,28 @@ class VoiceChatManager {
     }
   }
 
+  private handleRemoteSpeaking(playerId: string, speaking: boolean): void {
+    if (speaking) this.remoteSpeakers.add(playerId);
+    else this.remoteSpeakers.delete(playerId);
+    this.updateVoiceDuck();
+    this.callbacks.onRemoteSpeaking?.(playerId, speaking);
+  }
+
+  private updateVoiceDuck(): void {
+    const shouldDuck = this.isSpeakerEnabled && this.remoteSpeakers.size > 0;
+    if (shouldDuck && !this.voiceDuckRelease) {
+      this.voiceDuckRelease = audioEngine.beginDuck();
+    } else if (!shouldDuck && this.voiceDuckRelease) {
+      this.voiceDuckRelease();
+      this.voiceDuckRelease = null;
+    }
+  }
+
+  private clearRemoteSpeaking(): void {
+    this.remoteSpeakers.clear();
+    this.updateVoiceDuck();
+  }
+
   // ── Socket.IO シグナリング ──
 
   private socketHandlers: Record<string, (data: Record<string, unknown>) => void> = {};
@@ -448,7 +479,7 @@ class VoiceChatManager {
       'voice:offer': (data) => this.handleOffer(data.fromId as string, data.offer as RTCSessionDescriptionInit),
       'voice:answer': (data) => this.handleAnswer(data.fromId as string, data.answer as RTCSessionDescriptionInit),
       'voice:ice-candidate': (data) => this.handleIceCandidate(data.fromId as string, data.candidate as RTCIceCandidateInit),
-      'voice:speaking': (data) => this.callbacks.onRemoteSpeaking?.(data.id as string, data.speaking as boolean),
+      'voice:speaking': (data) => this.handleRemoteSpeaking(data.id as string, data.speaking as boolean),
     };
 
     for (const [event, handler] of Object.entries(this.socketHandlers)) {
@@ -495,10 +526,13 @@ class VoiceChatManager {
     const peer = this.peers.get(peerId);
     if (peer) {
       peer.pc.close();
+      peer.mediaSource?.disconnect();
       peer.audioElement.srcObject = null;
       peer.audioElement.remove();
       this.peers.delete(peerId);
     }
+    this.remoteSpeakers.delete(peerId);
+    this.updateVoiceDuck();
   }
 
   /** オファーを受信 → Perfect Negotiation で衝突を裁定しつつアンサーを返す */
@@ -600,9 +634,21 @@ class VoiceChatManager {
     audioElement.style.display = 'none';
     document.body.appendChild(audioElement);
 
+    const context = audioEngine.getContext();
+    let mediaSource: MediaElementAudioSourceNode | null = null;
+    if (context) {
+      try {
+        mediaSource = context.createMediaElementSource(audioElement);
+        mediaSource.connect(audioEngine.getBusInput('voiceChat'));
+      } catch {
+        mediaSource = null;
+      }
+    }
+
     const peer: PeerConnection = {
       pc,
       audioElement,
+      mediaSource,
       polite,
       makingOffer: false,
       ignoreOffer: false,

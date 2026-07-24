@@ -2,6 +2,7 @@
 // グラフィック品質・表示補助を localStorage に保存する
 
 import { create } from 'zustand';
+import type { DynamicRangeMode } from '../audio';
 
 const SETTINGS_STORAGE_KEY = 'halcraft-settings';
 
@@ -22,10 +23,21 @@ export interface SettingsSnapshot {
   waterAnimation: boolean;
   hudDensity: HudDensity;
   showControlsGuide: boolean;
+  /** 全体音量 0-1 */
+  masterVolume: number;
   /** BGM 音量 0-1 */
   bgmVolume: number;
+  /** 環境音 音量 0-1 */
+  ambienceVolume: number;
   /** 効果音 音量 0-1 */
   sfxVolume: number;
+  /** キャラクター・案内音声音量 0-1 */
+  dialogueVolume: number;
+  /** ボイスチャット音量 0-1 */
+  voiceChatVolume: number;
+  audioMuted: boolean;
+  dynamicRange: DynamicRangeMode;
+  spatialAudio: boolean;
 }
 
 interface SettingsState extends SettingsSnapshot {
@@ -39,8 +51,15 @@ interface SettingsState extends SettingsSnapshot {
   setWaterAnimation: (enabled: boolean) => void;
   setHudDensity: (density: HudDensity) => void;
   setShowControlsGuide: (enabled: boolean) => void;
+  setMasterVolume: (volume: number) => void;
   setBgmVolume: (volume: number) => void;
+  setAmbienceVolume: (volume: number) => void;
   setSfxVolume: (volume: number) => void;
+  setDialogueVolume: (volume: number) => void;
+  setVoiceChatVolume: (volume: number) => void;
+  setAudioMuted: (muted: boolean) => void;
+  setDynamicRange: (mode: DynamicRangeMode) => void;
+  setSpatialAudio: (enabled: boolean) => void;
   resetSettings: () => void;
 }
 
@@ -54,8 +73,15 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   waterAnimation: true,
   hudDensity: 'simple',
   showControlsGuide: false,
+  masterVolume: 1,
   bgmVolume: 0.85,
+  ambienceVolume: 0.82,
   sfxVolume: 1,
+  dialogueVolume: 1,
+  voiceChatVolume: 1,
+  audioMuted: false,
+  dynamicRange: 'standard',
+  spatialAudio: true,
 };
 
 const PRESET_SETTINGS: Record<GraphicsPreset, SettingsSnapshot> = {
@@ -122,6 +148,10 @@ function isHudDensity(value: unknown): value is HudDensity {
   return value === 'simple' || value === 'detailed';
 }
 
+function isDynamicRange(value: unknown): value is DynamicRangeMode {
+  return value === 'night' || value === 'standard' || value === 'wide';
+}
+
 function clampRenderDistance(value: number): number {
   return Math.max(4, Math.min(10, Math.round(value)));
 }
@@ -141,8 +171,15 @@ function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot
     waterAnimation: state.waterAnimation,
     hudDensity: state.hudDensity,
     showControlsGuide: state.showControlsGuide,
+    masterVolume: state.masterVolume,
     bgmVolume: state.bgmVolume,
+    ambienceVolume: state.ambienceVolume,
     sfxVolume: state.sfxVolume,
+    dialogueVolume: state.dialogueVolume,
+    voiceChatVolume: state.voiceChatVolume,
+    audioMuted: state.audioMuted,
+    dynamicRange: state.dynamicRange,
+    spatialAudio: state.spatialAudio,
   };
 }
 
@@ -187,12 +224,33 @@ function loadSettings(): SettingsSnapshot {
       showControlsGuide: typeof parsed.showControlsGuide === 'boolean'
         ? parsed.showControlsGuide
         : DEFAULT_SETTINGS.showControlsGuide,
+      masterVolume: typeof parsed.masterVolume === 'number'
+        ? clampVolume(parsed.masterVolume)
+        : DEFAULT_SETTINGS.masterVolume,
       bgmVolume: typeof parsed.bgmVolume === 'number'
         ? clampVolume(parsed.bgmVolume)
         : DEFAULT_SETTINGS.bgmVolume,
+      ambienceVolume: typeof parsed.ambienceVolume === 'number'
+        ? clampVolume(parsed.ambienceVolume)
+        : DEFAULT_SETTINGS.ambienceVolume,
       sfxVolume: typeof parsed.sfxVolume === 'number'
         ? clampVolume(parsed.sfxVolume)
         : DEFAULT_SETTINGS.sfxVolume,
+      dialogueVolume: typeof parsed.dialogueVolume === 'number'
+        ? clampVolume(parsed.dialogueVolume)
+        : DEFAULT_SETTINGS.dialogueVolume,
+      voiceChatVolume: typeof parsed.voiceChatVolume === 'number'
+        ? clampVolume(parsed.voiceChatVolume)
+        : DEFAULT_SETTINGS.voiceChatVolume,
+      audioMuted: typeof parsed.audioMuted === 'boolean'
+        ? parsed.audioMuted
+        : DEFAULT_SETTINGS.audioMuted,
+      dynamicRange: isDynamicRange(parsed.dynamicRange)
+        ? parsed.dynamicRange
+        : DEFAULT_SETTINGS.dynamicRange,
+      spatialAudio: typeof parsed.spatialAudio === 'boolean'
+        ? parsed.spatialAudio
+        : DEFAULT_SETTINGS.spatialAudio,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -216,11 +274,18 @@ export const useSettingsStore = create<SettingsState>((set) => {
 
     setGraphicsPreset: (graphicsPreset) => setAndSave({ graphicsPreset }),
     applyGraphicsPreset: (preset) => set((state) => {
-      // 音量は画質プリセット切替で変えない
+      // 音響設定は画質プリセット切替で変えない
       const next = {
         ...PRESET_SETTINGS[preset],
+        masterVolume: state.masterVolume,
         bgmVolume: state.bgmVolume,
+        ambienceVolume: state.ambienceVolume,
         sfxVolume: state.sfxVolume,
+        dialogueVolume: state.dialogueVolume,
+        voiceChatVolume: state.voiceChatVolume,
+        audioMuted: state.audioMuted,
+        dynamicRange: state.dynamicRange,
+        spatialAudio: state.spatialAudio,
       };
       saveSettings(next);
       return next;
@@ -233,8 +298,15 @@ export const useSettingsStore = create<SettingsState>((set) => {
     setWaterAnimation: (waterAnimation) => setAndSave({ waterAnimation }),
     setHudDensity: (hudDensity) => setAndSave({ hudDensity }),
     setShowControlsGuide: (showControlsGuide) => setAndSave({ showControlsGuide }),
+    setMasterVolume: (masterVolume) => setAndSave({ masterVolume: clampVolume(masterVolume) }),
     setBgmVolume: (bgmVolume) => setAndSave({ bgmVolume: clampVolume(bgmVolume) }),
+    setAmbienceVolume: (ambienceVolume) => setAndSave({ ambienceVolume: clampVolume(ambienceVolume) }),
     setSfxVolume: (sfxVolume) => setAndSave({ sfxVolume: clampVolume(sfxVolume) }),
+    setDialogueVolume: (dialogueVolume) => setAndSave({ dialogueVolume: clampVolume(dialogueVolume) }),
+    setVoiceChatVolume: (voiceChatVolume) => setAndSave({ voiceChatVolume: clampVolume(voiceChatVolume) }),
+    setAudioMuted: (audioMuted) => setAndSave({ audioMuted }),
+    setDynamicRange: (dynamicRange) => setAndSave({ dynamicRange }),
+    setSpatialAudio: (spatialAudio) => setAndSave({ spatialAudio }),
     resetSettings: () => setAndSave(DEFAULT_SETTINGS),
   };
 });

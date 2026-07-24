@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Vector3 } from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
 import { useMobStore } from '../stores/useMobStore';
 import { useGameStore } from '../stores/useGameStore';
@@ -16,18 +17,17 @@ import {
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
-import { setBGMPresence, setBGMVolume, startBGM, stopBGM } from '../utils/musicManager';
+import { startBGM, stopBGM, updateBGMScene } from '../utils/musicManager';
 import {
   initAmbientSounds,
-  setAmbientPresence,
   stopAmbientSounds,
   updateAmbientSounds,
 } from '../utils/ambientSounds';
 import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
 import { stopLightsaberHumLoop } from '../utils/lightsaberSounds';
-import { setSfxVolume } from '../utils/sounds';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { audioEngine } from '../audio';
 
 /** 足音の最小水平速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
@@ -55,12 +55,32 @@ export function SoundManager() {
   const initialized = useRef(false);
   const bgmStarted = useRef(false);
   const lastAudioPresence = useRef(1);
+  const listenerForward = useRef(new Vector3(0, 0, -1));
 
   // Canvas が外れた（タイトルへ戻る等）ときに音源を確実に止める
   useEffect(() => () => {
     stopLightsaberHumLoop();
     stopBGM();
     stopAmbientSounds();
+  }, []);
+
+  useEffect(() => {
+    const applySettings = (): void => {
+      const settings = useSettingsStore.getState();
+      audioEngine.applyMix({
+        masterVolume: settings.masterVolume,
+        musicVolume: settings.bgmVolume,
+        ambienceVolume: settings.ambienceVolume,
+        sfxVolume: settings.sfxVolume,
+        dialogueVolume: settings.dialogueVolume,
+        voiceChatVolume: settings.voiceChatVolume,
+        muted: settings.audioMuted,
+        dynamicRange: settings.dynamicRange,
+        spatialAudio: settings.spatialAudio,
+      });
+    };
+    applySettings();
+    return useSettingsStore.subscribe(applySettings);
   }, []);
 
   useFrame((_, delta) => {
@@ -79,8 +99,7 @@ export function SoundManager() {
           : 0.08;
     if (Math.abs(lastAudioPresence.current - targetPresence) > 0.001) {
       lastAudioPresence.current = targetPresence;
-      setBGMPresence(targetPresence);
-      setAmbientPresence(targetPresence);
+      audioEngine.setPresence(targetPresence);
       if (!audioActive) {
         stopLightsaberHumLoop();
       }
@@ -92,6 +111,30 @@ export function SoundManager() {
     const cx = camera.position.x;
     const cy = camera.position.y;
     const cz = camera.position.z;
+    const forward = camera.getWorldDirection(listenerForward.current);
+    audioEngine.updateListener({
+      position: { x: cx, y: cy, z: cz },
+      forward: { x: forward.x, y: forward.y, z: forward.z },
+      up: { x: camera.up.x, y: camera.up.y, z: camera.up.z },
+    });
+
+    const mobs = useMobStore.getState().mobs;
+    const hostileCount = mobs.reduce(
+      (count, mob) => count + (!mob.isAlly && mob.type !== 'chicken' ? 1 : 0),
+      0,
+    );
+    const bossActive = mobs.some((mob) => mob.type === 'boss_giant');
+    const modeState = useModeFlowStore.getState();
+    const modeRule = getStageModeRule(gameState.currentStage?.id);
+    const modeFlowRatio = modeRule ? modeState.meter / modeRule.threshold : 0;
+    updateBGMScene({
+      biome: gameState.currentStage?.biome,
+      category: gameState.currentStage?.category ?? null,
+      dimension: gameState.dimension,
+      isNight: gameState.isNight,
+      combatIntensity: Math.min(1, hostileCount / 5 + modeFlowRatio * 0.32),
+      bossActive,
+    });
 
     // --- zombieGruntTimer の lazy init ---
     if (zombieGruntTimer.current < 0) {
@@ -107,13 +150,8 @@ export function SoundManager() {
       // BGMと環境音を開始
       if (!bgmStarted.current) {
         bgmStarted.current = true;
-        const settings = useSettingsStore.getState();
-        setBGMVolume(settings.bgmVolume);
-        setSfxVolume(settings.sfxVolume);
         startBGM();
         initAmbientSounds();
-        setBGMPresence(1);
-        setAmbientPresence(1);
       }
       return;
     }
@@ -157,8 +195,6 @@ export function SoundManager() {
     }
 
     // --- モブのサウンド ---
-    const mobs = useMobStore.getState().mobs;
-
     // ゾンビのうめき声（最も近いゾンビの距離で判定）
     zombieGruntTimer.current -= dt;
     if (zombieGruntTimer.current <= 0) {
@@ -216,9 +252,11 @@ export function SoundManager() {
     const isUnderwater = playerState.isSubmerged;
     const isUnderground = cy < SEA_LEVEL;
     const isOutside = !isUnderground;
-    const modeState = useModeFlowStore.getState();
-    const modeRule = getStageModeRule(gameState.currentStage?.id);
-    const modeFlowRatio = modeRule ? modeState.meter / modeRule.threshold : 0;
+    audioEngine.setEnvironment({
+      underwater: isUnderwater,
+      underground: isUnderground,
+      dimension: gameState.dimension,
+    });
     updateAmbientSounds(
       isOutside,
       isUnderwater,

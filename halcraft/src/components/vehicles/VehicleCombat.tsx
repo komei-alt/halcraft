@@ -93,7 +93,7 @@ export function VehicleCombat() {
 
     // 2. 爆発音 + カメラシェイク
     const explosionDist = camera.position.distanceTo(new THREE.Vector3(cx, cy, cz));
-    playVehicleExplosionSound(explosionDist);
+    playVehicleExplosionSound(explosionDist, { x: cx, y: cy, z: cz });
     const shake = Math.max(0, 1 - explosionDist / 40) * 1.0;
     if (shake > 0.05) {
       usePlayerStore.setState((s) => ({

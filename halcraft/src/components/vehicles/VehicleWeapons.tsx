@@ -587,7 +587,7 @@ export function VehicleWeapons() {
       age: 0,
     }]);
 
-    playRocketLaunchSound(startPos.distanceTo(camera.position));
+    playRocketLaunchSound(startPos.distanceTo(camera.position), startPos);
     setMuzzleFlashes((prev) => [...prev.slice(-12), {
       id: nextProjectileId++,
       pos: startPos.clone(),
@@ -608,7 +608,7 @@ export function VehicleWeapons() {
     applyRocketExplosionDamage(pos);
     spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
     spawnCombatExplosion(pos.x, pos.y, pos.z, { style: 'rocket', intensity: 1.15, accent: '#ff9a40' });
-    playRocketExplosionSound(pos.distanceTo(camera.position));
+    playRocketExplosionSound(pos.distanceTo(camera.position), pos);
     useMultiplayerStore.getState().sendRocketExplode(rocket.syncId, [pos.x, pos.y, pos.z]);
     setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.35 }]);
   }, [applyRocketExplosionDamage, camera, destroyExplosionBlocks]);
@@ -619,7 +619,7 @@ export function VehicleWeapons() {
     applyBombExplosionDamage(pos);
     spawnHitImpactEffect(pos.x, pos.y, pos.z, 0, 1, 0, true);
     spawnCombatExplosion(pos.x, pos.y, pos.z, { style: 'bomb', intensity: 1.3, accent: '#ff6a18' });
-    playRocketExplosionSound(pos.distanceTo(camera.position));
+    playRocketExplosionSound(pos.distanceTo(camera.position), pos);
     useMultiplayerStore.getState().sendRocketExplode(bomb.syncId, [pos.x, pos.y, pos.z]);
     setExplosions((prev) => [...prev, { id: nextProjectileId++, pos: pos.clone(), life: 0.4 }]);
 
@@ -827,7 +827,7 @@ export function VehicleWeapons() {
 
         if (hit.type === 'block') {
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
-          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'block');
+          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'block', hit.hitPos);
           continue;
         }
 
@@ -841,7 +841,7 @@ export function VehicleWeapons() {
             recordVehicleStrike(bullet.type);
           }
           spawnHitImpactEffect(hit.hitPos.x, hit.hitPos.y, hit.hitPos.z, hit.normal.x, hit.normal.y, hit.normal.z, false);
-          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob');
+          playBulletImpactSound(hit.hitPos.distanceTo(camera.position), 'mob', hit.hitPos);
           continue;
         }
 

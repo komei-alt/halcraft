@@ -75,7 +75,7 @@ export function triggerTntExplosion(
     const playerDist = Math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2);
 
     // 爆発音（プレイヤー距離に基づく音量）
-    playTntExplosionSound(playerDist);
+    playTntExplosionSound(playerDist, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
 
     // カメラシェイク（距離に応じて減衰）— CombatExplosionFX 側と合算
     const shakeFactor = Math.max(0, 1 - playerDist / (EXPLOSION_RADIUS * 2));
@@ -101,7 +101,7 @@ export function triggerTntExplosion(
     }
   } else {
     // playerPos なしでも音は鳴らす（距離0で最大音量）
-    playTntExplosionSound(0);
+    playTntExplosionSound(0, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
   }
 
   // モブへのダメージ

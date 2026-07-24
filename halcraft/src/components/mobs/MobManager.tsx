@@ -446,7 +446,7 @@ export function MobManager() {
       const ddx = event.x - playerX;
       const ddz = event.z - playerZ;
       const distance = Math.sqrt(ddx * ddx + ddz * ddz);
-      playMobDeathSound(distance);
+      playMobDeathSound(distance, { x: event.x, y: event.y, z: event.z });
 
       if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin' || event.type === 'boss_giant') {
         useGameStore.getState().registerEnemyDefeat();

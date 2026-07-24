@@ -541,7 +541,7 @@ export function MachineGun() {
     setImpacts((prev) => [...prev, effect]);
 
     // 着弾音再生
-    playBulletImpactSound(pos.distanceTo(camera.position), type);
+    playBulletImpactSound(pos.distanceTo(camera.position), type, pos);
   }, [camera]);
 
   // ─── フレーム更新 ─────────────────────────────────
