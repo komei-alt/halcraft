@@ -21,6 +21,16 @@ export type TerrainShape = 'plains' | 'rolling' | 'hills' | 'mountains' | 'dunes
 /** 地表に撒く装飾の種類 */
 export type DecorKind = 'bush' | 'rock' | 'flower' | 'snowRock' | 'deadBush';
 
+/** ワールド座標ベースで決定的に生成する植生パレット要素 */
+export interface VegetationPaletteEntry {
+  blockId: BlockId;
+  weight: number;
+  minMoisture?: number;
+  maxMoisture?: number;
+  maxSlope?: number;
+  nearWater?: boolean;
+}
+
 /** バイオーム設定 */
 export interface BiomeConfig {
   id: BiomeId;
@@ -67,6 +77,10 @@ export interface BiomeConfig {
   treeDensity: number;
   /** 木の高さ範囲 */
   treeHeight: { min: number; max: number };
+  /** バイオーム固有の地表植物 */
+  vegetationPalette: readonly VegetationPaletteEntry[];
+  /** 地表植物の生成密度（描画品質による間引き前） */
+  vegetationDensity: number;
 
   // 環境色 (hex)
   /** 昼間の空色 */
@@ -107,8 +121,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     terrainShape: 'rolling',
     peakBlock: BLOCK_IDS.STONE,
     peakHeight: 30,
-    decorKinds: ['bush', 'rock', 'flower'],
-    decorDensity: 0.18,
+    decorKinds: ['rock'],
+    decorDensity: 0.035,
     surfaceBlock: BLOCK_IDS.GRASS,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -116,6 +130,14 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     treeType: 'oak',
     treeDensity: 0.4,
     treeHeight: { min: 4, max: 7 },
+    vegetationPalette: [
+      { blockId: BLOCK_IDS.TALL_GRASS, weight: 5, minMoisture: 0.22, maxSlope: 0.62 },
+      { blockId: BLOCK_IDS.WILDFLOWER, weight: 1.35, minMoisture: 0.3, maxSlope: 0.48 },
+      { blockId: BLOCK_IDS.BUSH, weight: 1.1, minMoisture: 0.34, maxSlope: 0.54 },
+      { blockId: BLOCK_IDS.MUSHROOM, weight: 0.6, minMoisture: 0.56, maxSlope: 0.42 },
+      { blockId: BLOCK_IDS.REED, weight: 0.9, minMoisture: 0.58, maxSlope: 0.3, nearWater: true },
+    ],
+    vegetationDensity: 0.34,
     // 現在の色を維持（青空）
     daySkyColor: 0x6eb6f0,
     dayFogColor: 0xb8d6c4,
@@ -142,8 +164,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     terrainShape: 'islands',
     peakBlock: null,
     peakHeight: 99,
-    decorKinds: ['bush', 'flower'],
-    decorDensity: 0.2,
+    decorKinds: ['rock'],
+    decorDensity: 0.025,
     surfaceBlock: BLOCK_IDS.GRASS,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -151,6 +173,14 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     treeType: 'palm',
     treeDensity: 0.3,
     treeHeight: { min: 6, max: 10 },
+    vegetationPalette: [
+      { blockId: BLOCK_IDS.TALL_GRASS, weight: 4, minMoisture: 0.28, maxSlope: 0.56 },
+      { blockId: BLOCK_IDS.WILDFLOWER, weight: 2.2, minMoisture: 0.38, maxSlope: 0.46 },
+      { blockId: BLOCK_IDS.BUSH, weight: 1.6, minMoisture: 0.42, maxSlope: 0.5 },
+      { blockId: BLOCK_IDS.REED, weight: 1.6, minMoisture: 0.55, maxSlope: 0.28, nearWater: true },
+      { blockId: BLOCK_IDS.MUSHROOM, weight: 0.55, minMoisture: 0.68, maxSlope: 0.4 },
+    ],
+    vegetationDensity: 0.4,
     // 鮮やかで明るい空
     daySkyColor: 0x48b8ea,
     dayFogColor: 0x9ee0d8,
@@ -178,7 +208,7 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     peakBlock: BLOCK_IDS.STONE,
     peakHeight: 34,
     decorKinds: ['snowRock', 'rock'],
-    decorDensity: 0.14,
+    decorDensity: 0.035,
     surfaceBlock: BLOCK_IDS.SNOW,
     subSurfaceBlock: BLOCK_IDS.DIRT,
     deepBlock: BLOCK_IDS.STONE,
@@ -186,6 +216,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     treeType: 'pine',
     treeDensity: 0.25,
     treeHeight: { min: 5, max: 9 },
+    vegetationPalette: [
+      { blockId: BLOCK_IDS.FROST_GRASS, weight: 4.2, minMoisture: 0.18, maxSlope: 0.56 },
+      { blockId: BLOCK_IDS.BUSH, weight: 0.45, minMoisture: 0.42, maxSlope: 0.4 },
+    ],
+    vegetationDensity: 0.2,
     // 白っぽい空、霧が近い
     daySkyColor: 0x88b4d8,
     dayFogColor: 0xdceaf2,
@@ -212,8 +247,8 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     terrainShape: 'dunes',
     peakBlock: null,
     peakHeight: 99,
-    decorKinds: ['deadBush'],
-    decorDensity: 0.055,
+    decorKinds: [],
+    decorDensity: 0,
     surfaceBlock: BLOCK_IDS.SAND,
     subSurfaceBlock: BLOCK_IDS.SAND,
     deepBlock: BLOCK_IDS.STONE,
@@ -221,6 +256,11 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     treeType: 'cactus',
     treeDensity: 0.22,
     treeHeight: { min: 2, max: 5 },
+    vegetationPalette: [
+      { blockId: BLOCK_IDS.DEAD_BUSH, weight: 4.4, maxMoisture: 0.64, maxSlope: 0.52 },
+      { blockId: BLOCK_IDS.REED, weight: 0.8, minMoisture: 0.6, maxSlope: 0.24, nearWater: true },
+    ],
+    vegetationDensity: 0.1,
     // オレンジがかった明るい空
     daySkyColor: 0x238fce,
     dayFogColor: 0xf0b66f,

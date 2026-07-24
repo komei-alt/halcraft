@@ -4,6 +4,7 @@
 import { useGameStore } from '../../stores/useGameStore';
 import { useSimpleHud } from '../../utils/hudDensity';
 import { useIsRideMode } from '../../utils/hudRideMode';
+import { HUD, hudGlassPanel } from './startScreenTheme';
 
 // --- SVG アイコン ---
 const SunIcon = ({ size = 18, color = '#FFE8B0' }: { size?: number; color?: string }) => (
@@ -54,7 +55,9 @@ export function TimeDisplay() {
   return (
     <div
       id="time-display"
+      className="hc-hud-glass"
       style={{
+        ...hudGlassPanel(true),
         position: 'fixed',
         top: 12,
         right: 16,
@@ -62,6 +65,7 @@ export function TimeDisplay() {
         flexDirection: 'column',
         alignItems: 'flex-end',
         gap: isSimpleHud ? 0 : 4,
+        padding: isSimpleHud ? '7px 10px' : '8px 11px',
         zIndex: 100,
         pointerEvents: 'none',
       }}
@@ -71,7 +75,7 @@ export function TimeDisplay() {
         style={{
           fontSize: isSimpleHud ? 16 : 18,
           fontWeight: 700,
-          color: isNight ? '#8888ff' : '#FFE8B0',
+          color: isNight ? '#b8b5ff' : HUD.text,
           textShadow: isNight
             ? '0 0 8px rgba(100,100,255,0.5), 1px 1px 3px rgba(0,0,0,0.8)'
             : '0 0 8px rgba(255,200,100,0.4), 1px 1px 3px rgba(0,0,0,0.6)',

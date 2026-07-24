@@ -7,7 +7,7 @@ import { RUNWAY_CENTER, RUNWAY_LENGTH, RUNWAY_WIDTH } from './constants';
 import { getCurrentBiome } from './biomeConfig';
 import { fbmChannel, getNoiseField } from './noise';
 
-export const WORLD_GENERATOR_VERSION = 2;
+export const WORLD_GENERATOR_VERSION = 3;
 
 export interface TerrainSample {
   height: number;

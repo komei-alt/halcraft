@@ -47,7 +47,7 @@ const LIQUID_VERTEX_SHADER = /* glsl */ `
 `;
 
 /** 水面シェーダーマテリアル（波アニメーション + 半透明 + シーン霧） */
-function createWaterMaterial(): THREE.ShaderMaterial {
+function createWaterMaterial(quality: number): THREE.ShaderMaterial {
   const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -62,6 +62,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         uOpacity: { value: 0.55 },
         uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.2).normalize() },
         uNightMix: { value: 0 },
+        uQuality: { value: quality },
       },
     ]),
     vertexShader: /* glsl */ `
@@ -69,6 +70,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       #include <fog_pars_vertex>
 
       uniform float uTime;
+      uniform float uQuality;
       varying vec3 vWorldPos;
       varying float vWave;
       varying float vTopSurface;
@@ -83,9 +85,10 @@ function createWaterMaterial(): THREE.ShaderMaterial {
         // 水面の波（上面の頂点のみ動かす）
         float wave = 0.0;
         if (position.y > 0.0) {
-          wave = sin(worldPos.x * 1.5 + uTime * 1.2) * 0.04
+          wave = (sin(worldPos.x * 1.5 + uTime * 1.2) * 0.04
                + sin(worldPos.z * 1.8 + uTime * 0.8) * 0.03
-               + sin((worldPos.x + worldPos.z) * 0.8 + uTime * 1.5) * 0.02;
+               + sin((worldPos.x + worldPos.z) * 0.8 + uTime * 1.5) * 0.02)
+               * mix(0.36, 1.0, uQuality);
           worldPos.y += wave;
         }
         vWave = wave;
@@ -105,6 +108,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
       uniform float uTime;
       uniform vec3 uSunDirection;
       uniform float uNightMix;
+      uniform float uQuality;
       varying vec3 vWorldPos;
       varying float vWave;
       varying float vTopSurface;
@@ -116,7 +120,7 @@ function createWaterMaterial(): THREE.ShaderMaterial {
                      + cos((vWorldPos.x + vWorldPos.z) * 0.8 + uTime * 1.5) * 0.016;
         float waveDz = cos(vWorldPos.z * 1.8 + uTime * 0.8) * 0.054
                      + cos((vWorldPos.x + vWorldPos.z) * 0.8 + uTime * 1.5) * 0.016;
-        vec3 waveNormal = normalize(vec3(-waveDx, 1.0, -waveDz));
+        vec3 waveNormal = normalize(vec3(-waveDx * mix(0.35, 1.0, uQuality), 1.0, -waveDz * mix(0.35, 1.0, uQuality)));
         vec3 surfaceNormal = normalize(mix(vWorldNormal, waveNormal, vTopSurface));
         vec3 viewDirection = normalize(cameraPosition - vWorldPos);
         float fresnel = pow(1.0 - clamp(dot(surfaceNormal, viewDirection), 0.0, 1.0), 3.2);
@@ -152,8 +156,8 @@ function createWaterMaterial(): THREE.ShaderMaterial {
                           * 0.08
                           * vTopSurface;
         color += max(sparkle, 0.0) * (0.65 + vTopSurface * 0.9);
-        color += vec3(0.42, 0.95, 1.0) * caustic;
-        color += vec3(0.78, 1.0, 0.95) * whiteRibbon;
+        color += vec3(0.42, 0.95, 1.0) * caustic * uQuality;
+        color += vec3(0.78, 1.0, 0.95) * whiteRibbon * uQuality;
 
         float alpha = clamp(uOpacity * (0.9 + vTopSurface * 0.1) + fresnel * 0.14, 0.42, 0.76);
         gl_FragColor = vec4(color, alpha);
@@ -477,10 +481,16 @@ function LiquidRenderer({
 
 /** 水ブロックの InstancedMesh 描画 */
 export function WaterRenderer() {
+  useSettingsStore((state) => state.graphicsPreset);
+  const profile = getPerformanceProfile();
+  const createMaterial = useMemo(
+    () => () => createWaterMaterial(profile.materialDetail === 'pbr' ? 1 : 0),
+    [profile.materialDetail],
+  );
   return (
     <LiquidRenderer
       blockId={BLOCK_IDS.WATER}
-      createMaterial={createWaterMaterial}
+      createMaterial={createMaterial}
       renderOrder={100}
     />
   );

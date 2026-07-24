@@ -4,9 +4,12 @@
 import { useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { BLOCK_DEFS, type BlockId } from '../types/blocks';
+import type { BlockId } from '../types/blocks';
 import { registerBlockBreakEffectSpawner } from '../utils/effectTriggers';
 import { createSizedPointsMaterial } from '../utils/sizedPointsMaterial';
+import { getBlockMaterialColorHex } from '../data/blockMaterials';
+import { getPerformanceProfile } from '../utils/performance';
+import { useSettingsStore } from '../stores/useSettingsStore';
 
 /** ブロックのテクスチャから代表色を取得するキャッシュ */
 const blockColorCache = new Map<number, THREE.Color>();
@@ -14,31 +17,7 @@ const blockColorCache = new Map<number, THREE.Color>();
 function getBlockColor(blockId: BlockId): THREE.Color {
   if (blockColorCache.has(blockId)) return blockColorCache.get(blockId)!;
 
-  const def = BLOCK_DEFS[blockId];
-  if (!def) {
-    const fallback = new THREE.Color(0x888888);
-    blockColorCache.set(blockId, fallback);
-    return fallback;
-  }
-
-  if (def.emissiveColor) {
-    blockColorCache.set(blockId, def.emissiveColor.clone());
-    return def.emissiveColor.clone();
-  }
-
-  const colorMap: Record<string, number> = {
-    'grass.png': 0x5a8f29, 'grass_top.png': 0x5a8f29, 'grass_side.png': 0x6b7a54,
-    'dirt.png': 0x8b6914, 'wood.png': 0x9c7a4a, 'iron.png': 0xb0b0b0,
-    'iron_cracked.png': 0x909090, 'iron_mossy.png': 0x7a9a7a, 'bedrock.png': 0x555555,
-    'raw_wood.png': 0x7a5a3a, 'glass.png': 0xaaddff, 'enchant.png': 0x6633cc,
-    'electric.png': 0x00ddff, 'spawner.png': 0xff4422, 'stairs.png': 0x9c7a4a,
-    'torch.png': 0xff8833, 'bed.png': 0xcc4444, 'turret.svg': 0x787883,
-    'door.svg': 0x7c5b31, 'ladder.svg': 0x4524ff, 'campfire.svg': 0xff5522, 'candle.svg': 0xf4c9ba,
-  };
-
-  const texName = def.faceTextures?.top || def.texture;
-  const hex = colorMap[texName] ?? 0x888888;
-  const color = new THREE.Color(hex);
+  const color = new THREE.Color(getBlockMaterialColorHex(blockId));
   blockColorCache.set(blockId, color);
   return color;
 }
@@ -98,12 +77,15 @@ function createColorVariation(baseColor: THREE.Color, lightJitter = 0.3, saturat
 }
 
 export function BlockBreakEffect() {
+  useSettingsStore((state) => state.graphicsPreset);
+  const profile = getPerformanceProfile();
   const effectsRef = useRef<BreakEffect[]>([]);
   const shardMeshRef = useRef<THREE.InstancedMesh>(null);
   const ringMeshRef = useRef<THREE.InstancedMesh>(null);
-  const maxParticles = MAX_EFFECTS * DUST_PER_BREAK;
-  const maxShards = MAX_EFFECTS * SHARDS_PER_BREAK;
-  const maxRings = MAX_EFFECTS * RINGS_PER_BREAK;
+  const effectLimit = Math.max(4, Math.min(MAX_EFFECTS, Math.floor(profile.particleBudget / 42)));
+  const maxParticles = effectLimit * DUST_PER_BREAK;
+  const maxShards = effectLimit * SHARDS_PER_BREAK;
+  const maxRings = effectLimit * RINGS_PER_BREAK;
 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -127,6 +109,7 @@ export function BlockBreakEffect() {
     transparent: true,
     opacity: 0.96,
     depthWrite: false,
+    depthTest: true,
   }), []);
 
   const ringMaterial = useMemo(() => new THREE.MeshBasicMaterial({
@@ -134,6 +117,7 @@ export function BlockBreakEffect() {
     transparent: true,
     opacity: 0.62,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
@@ -242,10 +226,10 @@ export function BlockBreakEffect() {
 
     const effects = effectsRef.current;
     effects.push(effect);
-    if (effects.length > MAX_EFFECTS) {
-      effects.splice(0, effects.length - MAX_EFFECTS);
+    if (effects.length > effectLimit) {
+      effects.splice(0, effects.length - effectLimit);
     }
-  }, []);
+  }, [effectLimit]);
 
   // グローバルトリガーに登録
   useEffect(() => {

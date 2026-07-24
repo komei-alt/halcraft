@@ -113,7 +113,10 @@ export function MobManager() {
   // 位置更新のたびに React ツリー全体を再レンダーしない
   const mobIdentityKey = useMobStore((s) => buildMobIdentityKey(s.mobs));
   const renderMobs = useMemo(
-    () => useMobStore.getState().mobs,
+    () => {
+      void mobIdentityKey;
+      return useMobStore.getState().mobs;
+    },
     [mobIdentityKey],
   );
   const setMobs = useMobStore((s) => s.setMobs);

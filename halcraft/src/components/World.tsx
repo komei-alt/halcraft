@@ -1,8 +1,8 @@
-// ハルクラ・サーフェスメッシュレンダラー v2
-// 露出した面だけをテクスチャアトラスへまとめ、チャンクごとの描画回数と三角形数を削減する。
+// ハルクラ・サーフェスメッシュレンダラー v3
+// 露出面を共通PBRアトラスへまとめ、画質・転送量・描画回数を同時に管理する。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame, useLoader, useThree } from '@react-three/fiber';
+import { addAfterEffect, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   BLOCK_DEFS,
@@ -17,6 +17,8 @@ import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { getPerformanceProfile } from '../utils/performance';
 import type { ChunkData } from '../utils/terrain/types';
+import { getBlockMaterialSpec, getMaterialIdForFace } from '../data/blockMaterials';
+import { useBlockPbrAtlas, type BlockPbrAtlas } from '../utils/blockPbrAtlas';
 
 type FaceTextureRole = 'top' | 'side' | 'bottom';
 type MaterialLayer = 'opaque' | 'cutout' | 'polished' | 'emissive' | 'transparent';
@@ -28,10 +30,7 @@ interface AtlasSlot {
   v1: number;
 }
 
-interface TextureAtlas {
-  texture: THREE.CanvasTexture;
-  slots: Map<string, AtlasSlot>;
-}
+type TextureAtlas = BlockPbrAtlas;
 
 interface FaceDefinition {
   offset: readonly [number, number, number];
@@ -100,31 +99,10 @@ const MATERIAL_LAYERS: readonly MaterialLayer[] = [
   'transparent',
 ] as const;
 
-const renderableBlockDefs = (Object.values(BLOCK_DEFS) as BlockInfo[]).filter((definition) =>
-  definition.id !== BLOCK_IDS.AIR && !definition.isLiquid && !definition.nonStandard,
-);
-
-const atlasTextureNames = Array.from(new Set(renderableBlockDefs.flatMap((definition) => {
-  if (!definition.faceTextures) return [definition.texture];
-  return [
-    definition.faceTextures.top,
-    definition.faceTextures.side,
-    definition.faceTextures.bottom,
-  ];
-}))).sort();
-
-const atlasTextureUrls = atlasTextureNames.map((name) => `/textures/blocks/${name}`);
-const atlasCellSize = 256;
-const atlasPadding = 4;
 const tintColor = new THREE.Color();
 
 function createLayerBuffers(): LayerBuffers {
   return { positions: [], normals: [], uvs: [], colors: [], indices: [] };
-}
-
-function getTextureForFace(definition: BlockInfo, role: FaceTextureRole): string {
-  if (!definition.faceTextures) return definition.texture;
-  return definition.faceTextures[role];
 }
 
 function isMetallicBlock(blockId: BlockId): boolean {
@@ -142,8 +120,9 @@ function isGemBlock(blockId: BlockId): boolean {
 }
 
 function getMaterialLayer(definition: BlockInfo): MaterialLayer {
-  if (definition.id === BLOCK_IDS.LEAVES) return 'cutout';
-  if (definition.id === BLOCK_IDS.GLASS || definition.transparent) return 'transparent';
+  const spec = getBlockMaterialSpec(definition.id);
+  if (spec.alphaMode === 'cutout' || definition.id === BLOCK_IDS.LEAVES) return 'cutout';
+  if (spec.alphaMode === 'blend' || definition.id === BLOCK_IDS.GLASS || definition.transparent) return 'transparent';
   if (definition.emissive || definition.emissiveColor) return 'emissive';
   if (isMetallicBlock(definition.id) || isGemBlock(definition.id)) return 'polished';
   return 'opaque';
@@ -228,82 +207,47 @@ function getBlockTint(
   }
 }
 
-function createTextureAtlas(textures: THREE.Texture[]): TextureAtlas {
-  const requiredCells = Math.ceil(Math.sqrt(Math.max(1, textures.length)));
-  const atlasSize = THREE.MathUtils.ceilPowerOfTwo(requiredCells * atlasCellSize);
-  const columns = Math.floor(atlasSize / atlasCellSize);
-  const canvas = document.createElement('canvas');
-  canvas.width = atlasSize;
-  canvas.height = atlasSize;
-  const context = canvas.getContext('2d', { alpha: true });
-  if (!context) throw new Error('ブロックテクスチャアトラスを作成できませんでした');
-  context.imageSmoothingEnabled = false;
-  context.clearRect(0, 0, atlasSize, atlasSize);
-
-  const slots = new Map<string, AtlasSlot>();
-  for (let index = 0; index < atlasTextureNames.length; index++) {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const x = column * atlasCellSize;
-    const y = row * atlasCellSize;
-    const size = atlasCellSize - atlasPadding * 2;
-    const image = textures[index].image as CanvasImageSource;
-    context.drawImage(image, x + atlasPadding, y + atlasPadding, size, size);
-
-    slots.set(atlasTextureNames[index], {
-      u0: (x + atlasPadding + 0.5) / atlasSize,
-      u1: (x + atlasCellSize - atlasPadding - 0.5) / atlasSize,
-      v0: 1 - (y + atlasCellSize - atlasPadding - 0.5) / atlasSize,
-      v1: 1 - (y + atlasPadding + 0.5) / atlasSize,
-    });
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.generateMipmaps = true;
-  texture.needsUpdate = true;
-  texture.name = 'HalCraft Block Atlas v2';
-  return { texture, slots };
-}
-
-function createWorldMaterials(atlas: TextureAtlas): Record<MaterialLayer, THREE.MeshStandardMaterial> {
+function createWorldMaterials(
+  atlas: TextureAtlas,
+  materialDetail: 'base' | 'pbr',
+): Record<MaterialLayer, THREE.MeshStandardMaterial> {
+  const pbr = materialDetail === 'pbr';
   const common: THREE.MeshStandardMaterialParameters = {
-    map: atlas.texture,
+    map: atlas.baseColor,
+    normalMap: pbr ? atlas.normal : null,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    aoMap: pbr ? atlas.orm : null,
+    aoMapIntensity: 0.82,
+    roughnessMap: pbr ? atlas.orm : null,
+    metalnessMap: pbr ? atlas.orm : null,
     vertexColors: true,
-    roughness: 0.84,
-    metalness: 0,
+    roughness: pbr ? 1 : 0.88,
+    metalness: pbr ? 1 : 0.04,
   };
   return {
     opaque: new THREE.MeshStandardMaterial(common),
     cutout: new THREE.MeshStandardMaterial({
       ...common,
-      alphaTest: 0.28,
+      alphaTest: 0.34,
       side: THREE.DoubleSide,
     }),
     polished: new THREE.MeshStandardMaterial({
       ...common,
-      roughness: 0.34,
-      metalness: 0.38,
-      envMapIntensity: 0.72,
+      envMapIntensity: 0.9,
     }),
     emissive: new THREE.MeshStandardMaterial({
       ...common,
-      roughness: 0.48,
-      emissive: new THREE.Color(0x6a4326),
-      emissiveMap: atlas.texture,
-      emissiveIntensity: 0.34,
+      emissiveMap: pbr ? atlas.emissive : atlas.baseColor,
+      emissive: new THREE.Color(0xffffff),
+      emissiveIntensity: 1.18,
     }),
     transparent: new THREE.MeshStandardMaterial({
       ...common,
       transparent: true,
-      opacity: 0.7,
-      roughness: 0.12,
-      metalness: 0.05,
-      envMapIntensity: 0.78,
+      opacity: 0.72,
+      envMapIntensity: 0.94,
       depthWrite: false,
-      alphaTest: 0.025,
+      alphaTest: 0.02,
     }),
   };
 }
@@ -455,8 +399,8 @@ function buildChunkMeshes(
             : readWorldBlock(chunks, worldX + face.offset[0], ny, worldZ + face.offset[2]);
           if (!shouldRenderFace(blockId, neighborId)) continue;
 
-          const textureName = getTextureForFace(definition, face.role);
-          const slot = atlas.slots.get(textureName);
+          const materialId = getMaterialIdForFace(definition, face.role);
+          const slot = atlas.slots.get(materialId);
           if (!slot) continue;
           const vertexAo = getFaceVertexAo(chunks, face, worldX, y, worldZ);
           appendFace(buffers, face, slot, lx, y, lz, tint, vertexAo);
@@ -473,7 +417,11 @@ function buildChunkMeshes(
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(buffers.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(buffers.normals, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(buffers.uvs, 2));
+    const uvAttribute = new THREE.Float32BufferAttribute(buffers.uvs, 2);
+    geometry.setAttribute('uv', uvAttribute);
+    // Three.jsのAOマップ用UVチャンネル。全PBRアトラスは同じ配置を共有する。
+    geometry.setAttribute('uv1', uvAttribute.clone());
+    geometry.setAttribute('uv2', uvAttribute.clone());
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(buffers.colors, 3));
     geometry.setIndex(buffers.indices);
     geometry.computeBoundingBox();
@@ -545,9 +493,8 @@ function ChunkRenderer({
 
 /** ワールド全体を、距離順の円形チャンクストリーミングで描画する。 */
 export function World() {
-  const loadedTextures = useLoader(THREE.TextureLoader, atlasTextureUrls);
-  const atlas = useMemo(() => createTextureAtlas(loadedTextures), [loadedTextures]);
-  const materials = useMemo(() => createWorldMaterials(atlas), [atlas]);
+  const { camera, gl } = useThree();
+  const atlas = useBlockPbrAtlas();
   const initChunks = useWorldStore((state) => state.initChunks);
   const processChunkQueue = useWorldStore((state) => state.processChunkQueue);
   const processFluidSimulation = useWorldStore((state) => state.processFluidSimulation);
@@ -555,14 +502,18 @@ export function World() {
   const graphicsPreset = useSettingsStore((state) => state.graphicsPreset);
   const renderDistance = useSettingsStore((state) => state.renderDistance);
   const shadowQuality = useSettingsStore((state) => state.shadowQuality);
-  const { camera, gl } = useThree();
   const performanceProfile = getPerformanceProfile();
+  const materials = useMemo(
+    () => createWorldMaterials(atlas, performanceProfile.materialDetail),
+    [atlas, performanceProfile.materialDetail],
+  );
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
   const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
   const castBlockShadows = performanceProfile.shadowsEnabled && performanceProfile.tier !== 'low';
   const [visibleChunks, setVisibleChunks] = useState<VisibleChunk[]>([]);
   const lastUpdateTime = useRef(0);
   const lastTelemetryTime = useRef(0);
+  const visibleChunkCount = useRef(0);
   const previousVisibleKey = useRef('');
   const initialRenderDistanceRef = useRef(initialRenderDistance);
 
@@ -571,23 +522,26 @@ export function World() {
   }, [initChunks]);
 
   useEffect(() => () => {
-    atlas.texture.dispose();
     Object.values(materials).forEach((material) => material.dispose());
-  }, [atlas, materials]);
+  }, [materials]);
+
+  // gl.info は描画後に確定するため、実測値は afterEffect で記録する。
+  useEffect(() => addAfterEffect(() => {
+    const now = performance.now();
+    if (now - lastTelemetryTime.current < 1000) return;
+    lastTelemetryTime.current = now;
+    gl.domElement.setAttribute('data-world-renderer', 'surface-mesh-v3-pbr');
+    gl.domElement.setAttribute('data-material-pipeline', 'pbr-atlas-v1');
+    gl.domElement.setAttribute('data-visible-chunks', String(visibleChunkCount.current));
+    gl.domElement.setAttribute('data-render-calls', String(gl.info.render.calls));
+    gl.domElement.setAttribute('data-render-triangles', String(gl.info.render.triangles));
+  }), [gl]);
 
   useFrame(() => {
     processChunkQueue();
     processFluidSimulation();
 
     const now = performance.now();
-    if (now - lastTelemetryTime.current >= 1000) {
-      lastTelemetryTime.current = now;
-      gl.domElement.setAttribute('data-world-renderer', 'surface-mesh-v2');
-      gl.domElement.setAttribute('data-visible-chunks', String(visibleChunks.length));
-      gl.domElement.setAttribute('data-render-calls', String(gl.info.render.calls));
-      gl.domElement.setAttribute('data-render-triangles', String(gl.info.render.triangles));
-    }
-
     if (lastUpdateTime.current !== 0 && now - lastUpdateTime.current < 250) return;
     lastUpdateTime.current = now;
 
@@ -612,6 +566,7 @@ export function World() {
     const visibleKey = visible.map(({ cx, cz }) => `${cx},${cz}`).join(';');
     if (visibleKey === previousVisibleKey.current) return;
     previousVisibleKey.current = visibleKey;
+    visibleChunkCount.current = visible.length;
     setVisibleChunks(visible);
   });
 
@@ -621,7 +576,7 @@ export function World() {
   void shadowQuality;
 
   return (
-    <group name="halcraft-world-surface-mesh-v2">
+    <group name="halcraft-world-surface-mesh-v3-pbr">
       {visibleChunks.map((chunk) => (
         <ChunkRenderer
           key={`${chunk.cx},${chunk.cz}`}

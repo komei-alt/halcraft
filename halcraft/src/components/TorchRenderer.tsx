@@ -8,19 +8,15 @@ import * as THREE from 'three';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { inferTorchMount, type TorchMount } from '../utils/blockFacing';
+import { mapGeometryToMaterialAtlas, useAtlasPbrMaterial } from '../utils/blockPbrAtlas';
 
-// 共有マテリアル（全松明で再利用）
-const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
-const holderMaterial = new THREE.MeshStandardMaterial({
-  color: 0x444444, roughness: 0.7,
-  emissive: new THREE.Color(0x331100), emissiveIntensity: 0.3,
-});
 const flameMaterial = new THREE.MeshBasicMaterial({
   color: 0xff6600,
   transparent: true,
   opacity: 0.92,
   side: THREE.DoubleSide,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
@@ -30,6 +26,7 @@ const innerFlameMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.85,
   side: THREE.DoubleSide,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
@@ -39,13 +36,14 @@ const glowMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.22,
   side: THREE.DoubleSide,
   depthWrite: false,
+  depthTest: true,
   toneMapped: false,
   blending: THREE.AdditiveBlending,
 });
 
 // 共有ジオメトリ
-const stickGeom = new THREE.BoxGeometry(0.12, 0.6, 0.12);
-const holderGeom = new THREE.BoxGeometry(0.16, 0.08, 0.16);
+const stickGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.12, 0.6, 0.12), 'wood_planks');
+const holderGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.16, 0.08, 0.16), 'iron');
 const flameGeom = new THREE.ConeGeometry(0.10, 0.28, 6);
 const innerFlameGeom = new THREE.ConeGeometry(0.06, 0.20, 5);
 const glowGeom = new THREE.SphereGeometry(0.18, 8, 8);
@@ -86,6 +84,8 @@ export function TorchRenderer() {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
   const getIndexedBlockPositions = useWorldStore((s) => s.getIndexedBlockPositions);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const stickMaterial = useAtlasPbrMaterial('wood_planks');
+  const holderMaterial = useAtlasPbrMaterial('iron', { emissiveIntensity: 0.16 });
 
   // InstancedMesh の ref
   const stickRef = useRef<THREE.InstancedMesh>(null);

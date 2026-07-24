@@ -51,6 +51,8 @@ import { getBlockUseProfile } from '../../utils/blockUseFeedback';
 import { isTouchDevice } from '../../utils/device';
 import { useSimpleHud } from '../../utils/hudDensity';
 import { playBlockUseFeedbackSound } from '../../utils/sounds';
+import { getBlockIconUrl } from '../../data/blockMaterials';
+import { HUD, hudGlassPanel } from './startScreenTheme';
 
 interface HotbarStageHint {
   icon: string;
@@ -591,15 +593,12 @@ export function Hotbar() {
     return () => window.clearTimeout(timer);
   }, [equippedItem, selectedHotbarItem, selectedIsBlock, selectedProfile.soundKind, selectedSlot]);
 
-  // テクスチャをdata URLに変換して表示用に準備（hotbarSlotsが変わるたび再計算）
+  // PBR素材と同じ決定的生成元から作った256px WebPアイコンを使う。
   const textures = useMemo(() => {
     const map = new Map<number, string>();
     hotbarSlots.forEach((item) => {
       if (!isBlockHotbarItem(item)) return;
-      const def = BLOCK_DEFS[item];
-      if (def) {
-        map.set(item, `/textures/blocks/${def.texture}`);
-      }
+      if (BLOCK_DEFS[item]) map.set(item, getBlockIconUrl(item));
     });
     return map;
   }, [hotbarSlots]);
@@ -1143,18 +1142,15 @@ export function Hotbar() {
 
       <div
         id="hotbar"
+        className="hc-hud-glass"
         style={{
+          ...hudGlassPanel(true),
           display: 'flex',
           gap: 2,
           padding: 4,
           maxWidth: 'calc(100vw - 24px)',
           overflowX: 'auto',
           boxSizing: 'border-box',
-          background: 'rgba(8, 11, 17, 0.42)',
-          borderRadius: 12,
-          border: '1px solid rgba(255,255,255,0.15)',
-          backdropFilter: 'blur(11px)',
-          WebkitBackdropFilter: 'blur(11px)',
           scrollbarWidth: 'none',
         }}
       >
@@ -1202,11 +1198,11 @@ export function Hotbar() {
                 height: cellSize,
                 border: isSelected
                   ? `3px solid ${accent}`
-                  : `2px solid ${hasItem ? `${accent}66` : 'rgba(255,255,255,0.18)'}`,
+                  : `2px solid ${hasItem ? `${accent}66` : HUD.bronzeSoft}`,
                 borderRadius: 4,
                 background: isSelected
                   ? `linear-gradient(135deg, ${glow}, rgba(255,255,255,0.14))`
-                  : 'rgba(0,0,0,0.3)',
+                  : 'rgba(20,14,8,0.46)',
                 opacity: hasItem ? 1 : 0.46,
                 display: 'flex',
                 alignItems: 'center',

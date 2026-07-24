@@ -52,6 +52,7 @@ import {
 } from '../utils/sounds';
 import { getMobHitbox, getMobHitboxMaxY, getMobHitboxMinY } from '../utils/mobHitboxes';
 import { triggerTntExplosion } from '../utils/tntExplosion';
+import { resolveDecorativeDrop } from '../data/blockMaterials';
 import {
   getBlockUseProfile,
   type BlockUseFeedbackContent,
@@ -1300,7 +1301,8 @@ export function BlockInteraction() {
       useInventoryStore.getState().addItem(blockId, 1);
       return;
     }
-    dropItem(blockId, x, y, z);
+    const resolvedDrop = resolveDecorativeDrop(blockId, x, y, z);
+    if (resolvedDrop !== null) dropItem(resolvedDrop, x, y, z);
   }, [dropItem, isBuildMode]);
 
   /** 近接: スイング開始時に保留し、ヒットフレームでダメージ確定 */
@@ -1821,7 +1823,7 @@ export function BlockInteraction() {
         lastPlacedRef.current = `${t.placeX},${t.placeY},${t.placeZ}`;
       }
     }
-  }, [breakBlock, camera, emitMiningBlockedFeedback, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, startMeleeSwing, tryMeleeAttack, tryPlaceSelectedBlock]);
+  }, [breakBlock, camera, emitMiningBlockedFeedback, equippedItem, getBlock, grantBrokenBlock, interactWithTargetBlock, isBuildMode, recordBlockBreakMastery, sendBlockBreak, tryMeleeAttack, tryPlaceSelectedBlock]);
 
   // 左クリック離し → 破壊中止
   const handleMouseUp = useCallback((e: MouseEvent) => {

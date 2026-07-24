@@ -54,7 +54,7 @@ import {
   type StageOpportunitySoundKind,
 } from '../../utils/sounds';
 import { getStageEventHudDisplay } from './stageEventDisplay';
-import { HUD_TEXT_SHADOW, SG } from './startScreenTheme';
+import { HUD_TEXT_SHADOW, SG, hudGlassPanel } from './startScreenTheme';
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -1253,20 +1253,17 @@ export function StageProgressHUD() {
       />
       <div
         id="stage-progress-hud"
+        className="hc-hud-glass"
         style={{
+          ...hudGlassPanel(isCompact),
           position: 'fixed',
           top: isCompact ? 54 : 14,
           left: isCompact ? 14 : 64,
           zIndex: 96,
           width: isCompact ? 'min(248px, calc(100vw - 28px))' : 280,
-          padding: 0,
-          background: 'none',
-          border: 'none',
-          backdropFilter: 'none',
-          WebkitBackdropFilter: 'none',
+          padding: isCompact ? '8px 10px' : '10px 12px',
           color: '#fff',
           pointerEvents: 'none',
-          boxShadow: 'none',
           textShadow: HUD_TEXT_SHADOW,
           fontFamily: SG.font,
         }}

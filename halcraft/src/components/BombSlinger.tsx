@@ -562,9 +562,9 @@ export function BombSlinger() {
         let px = camera.position.x + aimDir.current.x * 0.55 + rightWorld.current.x * 0.28 - upWorld.current.x * 0.22;
         let py = camera.position.y + aimDir.current.y * 0.55 + rightWorld.current.y * 0.28 - upWorld.current.y * 0.22;
         let pz = camera.position.z + aimDir.current.z * 0.55 + rightWorld.current.z * 0.28 - upWorld.current.z * 0.22;
-        let vx = throwVel.current.x;
+        const vx = throwVel.current.x;
         let vy = throwVel.current.y;
-        let vz = throwVel.current.z;
+        const vz = throwVel.current.z;
         const posAttr = trajGeo.getAttribute('position') as THREE.BufferAttribute;
         const arr = posAttr.array as Float32Array;
         const step = 0.065;

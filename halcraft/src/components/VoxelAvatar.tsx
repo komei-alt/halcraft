@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { cloneHaruModelScene } from '../utils/modelMaterials';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { type SkinDef, type SkinId, SKIN_DEFS, DEFAULT_SKIN_ID } from '../types/skins';
 import type { EquippedItem } from '../stores/usePlayerStore';
@@ -243,19 +244,7 @@ const PART_PHYSICS: Record<string, PartPhysics> = {
 };
 
 function cloneWardenScene(scene: THREE.Group): THREE.Group {
-  const clone = scene.clone(true);
-  clone.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      if (Array.isArray(child.material)) {
-        child.material = child.material.map((mat) => mat.clone());
-      } else {
-        child.material = child.material.clone();
-      }
-    }
-  });
-  return clone;
+  return cloneHaruModelScene(scene);
 }
 
 function WardenAvatar({

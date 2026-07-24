@@ -1,0 +1,56 @@
+/**
+ * ハルクラの静的PBRアトラス正本。
+ * sheet/index は material-sources 内の4x4生成シートを指す。
+ * derive は既存セルを組み合わせて、ゲーム固有の面材を決定的に生成する。
+ */
+export const MATERIAL_SOURCES = [
+  { id: 'grass_top', family: 'flora', sheet: 'terrain', index: 0, roughness: 0.9, metalness: 0, normalStrength: 1.15 },
+  { id: 'grass_side', family: 'soil', derive: 'grass_side', roughness: 0.94, metalness: 0, normalStrength: 1.05 },
+  { id: 'dirt', family: 'soil', sheet: 'terrain', index: 1, roughness: 0.98, metalness: 0, normalStrength: 1.15 },
+  { id: 'oak_bark', family: 'wood', sheet: 'terrain', index: 2, roughness: 0.9, metalness: 0, normalStrength: 1.3 },
+  { id: 'wood_planks', family: 'wood', sheet: 'terrain', index: 3, roughness: 0.84, metalness: 0, normalStrength: 1.05 },
+  { id: 'leaves', family: 'flora', sheet: 'terrain', index: 4, roughness: 0.86, metalness: 0, normalStrength: 1.2, alphaMode: 'cutout' },
+  { id: 'stone', family: 'stone', sheet: 'terrain', index: 5, roughness: 0.92, metalness: 0, normalStrength: 1.25 },
+  { id: 'bedrock', family: 'stone', sheet: 'terrain', index: 6, roughness: 0.96, metalness: 0.02, normalStrength: 1.35 },
+  { id: 'sandstone', family: 'sand', sheet: 'terrain', index: 8, roughness: 0.94, metalness: 0, normalStrength: 0.9 },
+  { id: 'sand', family: 'sand', sheet: 'terrain', index: 7, roughness: 0.98, metalness: 0, normalStrength: 0.7 },
+  { id: 'terracotta', family: 'terracotta', sheet: 'terrain', index: 9, roughness: 0.91, metalness: 0, normalStrength: 0.95 },
+  { id: 'snow_top', family: 'snow', sheet: 'terrain', index: 10, roughness: 0.8, metalness: 0, normalStrength: 0.65 },
+  { id: 'snow_side', family: 'snow', derive: 'snow_side', roughness: 0.86, metalness: 0, normalStrength: 0.75 },
+  { id: 'ice', family: 'ice', sheet: 'terrain', index: 11, roughness: 0.22, metalness: 0.02, normalStrength: 0.45, alphaMode: 'blend' },
+  { id: 'netherrack', family: 'nether', sheet: 'terrain', index: 12, roughness: 0.88, metalness: 0, normalStrength: 1.25, emissive: 0.2 },
+  { id: 'soul_sand', family: 'nether', sheet: 'terrain', index: 13, roughness: 0.97, metalness: 0, normalStrength: 1.1, emissive: 0.08 },
+  { id: 'iron', family: 'metal', sheet: 'special', index: 4, roughness: 0.36, metalness: 0.8, normalStrength: 0.7 },
+  { id: 'iron_cracked', family: 'metal', sheet: 'special', index: 5, roughness: 0.52, metalness: 0.65, normalStrength: 1.05 },
+  { id: 'iron_mossy', family: 'metal', sheet: 'special', index: 6, roughness: 0.66, metalness: 0.48, normalStrength: 1.0 },
+  { id: 'iron_ingot', family: 'metal', sheet: 'special', index: 7, roughness: 0.28, metalness: 0.92, normalStrength: 0.55 },
+  { id: 'glass', family: 'glass', sheet: 'terrain', index: 15, roughness: 0.12, metalness: 0.03, normalStrength: 0.28, alphaMode: 'blend' },
+  { id: 'coal_ore', family: 'ore', sheet: 'special', index: 0, roughness: 0.9, metalness: 0.06, normalStrength: 1.2 },
+  { id: 'iron_ore', family: 'ore', sheet: 'special', index: 1, roughness: 0.76, metalness: 0.28, normalStrength: 1.2 },
+  { id: 'gold_ore', family: 'ore', sheet: 'special', index: 2, roughness: 0.52, metalness: 0.5, normalStrength: 1.25, emissive: 0.08 },
+  { id: 'diamond_ore', family: 'ore', sheet: 'special', index: 3, roughness: 0.38, metalness: 0.26, normalStrength: 1.3, emissive: 0.3 },
+  { id: 'gold_ingot', family: 'metal', derive: 'gold_ingot', roughness: 0.24, metalness: 0.94, normalStrength: 0.55, emissive: 0.08 },
+  { id: 'diamond_gem', family: 'crystal', derive: 'diamond_gem', roughness: 0.18, metalness: 0.12, normalStrength: 0.75, emissive: 0.42 },
+  { id: 'enchant', family: 'magic', sheet: 'special', index: 8, roughness: 0.48, metalness: 0.08, normalStrength: 0.9, emissive: 0.78 },
+  { id: 'electric', family: 'magic', sheet: 'special', index: 9, roughness: 0.34, metalness: 0.4, normalStrength: 0.75, emissive: 0.92 },
+  { id: 'glowstone', family: 'magic', sheet: 'special', index: 10, roughness: 0.44, metalness: 0.02, normalStrength: 1.0, emissive: 1 },
+  { id: 'nether_portal', family: 'magic', sheet: 'special', index: 11, roughness: 0.26, metalness: 0.04, normalStrength: 0.55, emissive: 1, alphaMode: 'blend' },
+  { id: 'chest', family: 'wood', sheet: 'special', index: 12, roughness: 0.66, metalness: 0.2, normalStrength: 0.9 },
+  { id: 'furnace', family: 'stone', sheet: 'special', index: 13, roughness: 0.82, metalness: 0.12, normalStrength: 1.1, emissive: 0.42 },
+  { id: 'tnt', family: 'functional', sheet: 'special', index: 14, roughness: 0.72, metalness: 0.04, normalStrength: 0.8 },
+  { id: 'spawner', family: 'functional', sheet: 'special', index: 15, roughness: 0.46, metalness: 0.56, normalStrength: 0.9, emissive: 0.62 },
+  { id: 'farmland', family: 'soil', derive: 'farmland', roughness: 0.99, metalness: 0, normalStrength: 1.2 },
+  { id: 'cactus', family: 'flora', derive: 'cactus', roughness: 0.82, metalness: 0, normalStrength: 0.9 },
+];
+
+export const PLANT_SOURCES = [
+  { id: 'tall_grass', index: 0 },
+  { id: 'wildflower', index: 1 },
+  { id: 'bush', index: 2 },
+  { id: 'reed', index: 3 },
+  { id: 'mushroom', index: 4 },
+  { id: 'dead_bush', index: 5 },
+  { id: 'frost_grass', index: 6 },
+  { id: 'nether_fungus', index: 7, emissive: 0.8 },
+  { id: 'cactus_blossom', index: 8 },
+];

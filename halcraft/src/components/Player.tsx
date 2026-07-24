@@ -96,8 +96,13 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // スポーン座標（家の玄関前。開始時からマップの景色が見える）
 const SPAWN_X = PLAYER_SPAWN.x;
 const SPAWN_Z = PLAYER_SPAWN.z;
-const INITIAL_LANDMARK_YAW = Math.atan2(-(STAGE_LANDMARK_CENTER.x - SPAWN_X), -(STAGE_LANDMARK_CENTER.z - SPAWN_Z));
-const INITIAL_LANDMARK_PITCH = -0.14;
+// ランドマークを画面中央で塞がず、三分割の左側に置いて地形の抜けも同時に見せる。
+const INITIAL_LANDMARK_YAW = Math.atan2(
+  -(STAGE_LANDMARK_CENTER.x - SPAWN_X),
+  -(STAGE_LANDMARK_CENTER.z - SPAWN_Z),
+) - 0.46;
+// 初回から足元と遠景が同時に入るよう、空を見上げすぎない視線へ下げる。
+const INITIAL_LANDMARK_PITCH = -0.36;
 const getSpawnY = () => getTerrainHeight(SPAWN_X, SPAWN_Z) + 1.1;
 
 function clamp(value: number, min: number, max: number): number {

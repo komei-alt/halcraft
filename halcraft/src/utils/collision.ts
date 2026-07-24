@@ -28,6 +28,16 @@ const FULL_BLOCK_COLLISION_BOXES: readonly BlockCollisionBox[] = [{
   maxZ: 1,
 }];
 
+/** サボテン等、見た目どおり少し内側へ寄せた当たり判定。 */
+const INSET_BLOCK_COLLISION_BOXES: readonly BlockCollisionBox[] = [{
+  minX: 0.12,
+  maxX: 0.88,
+  minY: 0,
+  maxY: 1,
+  minZ: 0.12,
+  maxZ: 0.88,
+}];
+
 /**
  * 表示モデルと同じく、下段は全面、高段は+Z側半分に配置する。
  * 高さを0.48/0.96に留め、0.5m step-up後の接地判定へ僅かな余裕を残す。
@@ -51,8 +61,10 @@ const STAIRS_COLLISION_BOXES: readonly BlockCollisionBox[] = [
   },
 ];
 
-function getBlockCollisionBoxes(blockId: BlockId): readonly BlockCollisionBox[] {
-  return blockId === BLOCK_IDS.STAIRS ? STAIRS_COLLISION_BOXES : FULL_BLOCK_COLLISION_BOXES;
+export function getBlockCollisionBoxes(blockId: BlockId): readonly BlockCollisionBox[] {
+  if (blockId === BLOCK_IDS.STAIRS) return STAIRS_COLLISION_BOXES;
+  if (BLOCK_DEFS[blockId]?.collisionShape === 'inset') return INSET_BLOCK_COLLISION_BOXES;
+  return FULL_BLOCK_COLLISION_BOXES;
 }
 
 /**
@@ -82,7 +94,7 @@ function findAABBCollisionTop(
   const maxY = py + height;
   const minZ = pz - radius;
   const maxZ = pz + radius;
-  const isSolid = solidCheck ?? ((id: BlockId) => id !== BLOCK_IDS.AIR);
+  const isSolid = solidCheck ?? isBlockSolid;
   let highestTop: number | null = null;
 
   for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {

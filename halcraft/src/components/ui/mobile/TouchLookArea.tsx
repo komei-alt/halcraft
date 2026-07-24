@@ -118,6 +118,7 @@ export function TouchLookArea() {
   }, []);
 
   useEffect(() => {
+    const touchMap = activeTouches.current;
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd);
     document.addEventListener('touchcancel', handleTouchEnd);
@@ -129,7 +130,7 @@ export function TouchLookArea() {
         clearTimeout(longPressTimer.current);
         longPressTimer.current = null;
       }
-      activeTouches.current.clear();
+      touchMap.clear();
     };
   }, [handleTouchMove, handleTouchEnd]);
 

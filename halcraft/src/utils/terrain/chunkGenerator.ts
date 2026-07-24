@@ -5,7 +5,7 @@
 import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL, type BlockId } from '../../types/blocks';
 import { getTerrainSample } from './heightmap';
 import { placeTreesInChunk } from './structures/trees';
-import { placeDecorInChunk } from './structures/decor';
+import { placeDecorInChunk, placeNetherFloraInChunk } from './structures/decor';
 import { placePlayerHouse } from './structures/house';
 import { placeHeliport, chunkContainsHeliport } from './structures/heliport';
 import { placeRunway, chunkContainsRunway } from './structures/runway';
@@ -80,7 +80,7 @@ export function generateChunk(cx: number, cz: number): ChunkData {
           }
         } else if (fillWater && ly > surfaceY && ly <= SEA_LEVEL) {
           // 地表より上で海面以下は水で埋める
-          blockId = BLOCK_IDS.WATER;
+          blockId = biome.id === 'snow' && ly === SEA_LEVEL ? BLOCK_IDS.ICE : BLOCK_IDS.WATER;
         }
         // ly > surfaceY && ly > SEA_LEVEL は AIR
 
@@ -134,6 +134,10 @@ export function generateChunk(cx: number, cz: number): ChunkData {
 
   // 砂漠決戦では、ランドマークの周囲をメサ・オアシス・街道で映画的に構成する
   placeDesertCinematicScenery(chunk, cx, cz);
+
+  // ランドマーク・ネザー地形を重ねた後で、その露出面に固有植生を生やす。
+  finalizeChunkBounds(chunk);
+  placeNetherFloraInChunk(chunk, cx, cz);
 
   finalizeChunkBounds(chunk);
 

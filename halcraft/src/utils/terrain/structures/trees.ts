@@ -1,265 +1,201 @@
-// 木配置ユーティリティ
-// ノイズベースで自然な密度分布の木を配置
-// バイオームに応じて木の種類と密度を変更
+// 木配置ユーティリティ v2
+// 木の根元をワールド座標で判定し、隣接チャンク側の樹冠も同じ根元から再構築する。
 
 import { getTreeNoise } from '../noise';
-import { getTerrainHeight } from '../heightmap';
+import { getTerrainSample } from '../heightmap';
 import { getCurrentBiome } from '../biomeConfig';
-import { BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT } from '../../../types/blocks';
-import { HELIPORT_CENTER, HELIPORT_SIZE, VILLAGE_CENTER } from '../constants';
+import { BLOCK_IDS, CHUNK_SIZE, SEA_LEVEL, WORLD_HEIGHT, type BlockId } from '../../../types/blocks';
+import { isVegetationExcluded } from './decor';
 import type { ChunkData } from '../types';
 
-/**
- * ワールド座標 (x, z) で木を生やすかどうかを判定
- * ノイズベースで自然な密度分布を実現
- * 構造物エリア（ヘリポート・村）では木を生やさない
- */
-function shouldPlaceTree(worldX: number, worldZ: number): boolean {
-  // ヘリポート周辺は木を除外
-  if (
-    Math.abs(worldX - HELIPORT_CENTER.x) < HELIPORT_SIZE + 3 &&
-    Math.abs(worldZ - HELIPORT_CENTER.z) < HELIPORT_SIZE + 3
-  ) {
-    return false;
-  }
-
-  // 村エリアは木を除外（広めにとる）
-  if (
-    Math.abs(worldX - VILLAGE_CENTER.x) < 25 &&
-    Math.abs(worldZ - VILLAGE_CENTER.z) < 25
-  ) {
-    return false;
-  }
-
-  const biome = getCurrentBiome();
-  const tn = getTreeNoise();
-
-  // 木の密度を決めるノイズ（大きなスケール）
-  const density = tn(worldX * 0.08, worldZ * 0.08);
-  // 細かい配置ノイズ（個別の木の位置決め）
-  const placement = tn(worldX * 0.5 + 100, worldZ * 0.5 + 100);
-
-  // バイオームの密度に応じてしきい値を調整
-  // treeDensity が高いほど、より多くの場所で木が生成される
-  const densityThreshold = 0.8 - biome.treeDensity;
-  return density > densityThreshold * 0.5 && placement > (1.0 - biome.treeDensity);
+interface ChunkWriteContext {
+  chunk: ChunkData;
+  cx: number;
+  cz: number;
 }
 
-/**
- * 木の幹の高さを決定（バイオーム設定に基づく）
- */
+const TREE_REACH = 3;
+
+function setWorldBlock(
+  context: ChunkWriteContext,
+  worldX: number,
+  y: number,
+  worldZ: number,
+  blockId: BlockId,
+  onlyAir = false,
+): void {
+  if (y < 0 || y >= WORLD_HEIGHT) return;
+  const lx = worldX - context.cx * CHUNK_SIZE;
+  const lz = worldZ - context.cz * CHUNK_SIZE;
+  if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return;
+  if (onlyAir && context.chunk[lx][y][lz] !== BLOCK_IDS.AIR) return;
+  context.chunk[lx][y][lz] = blockId;
+}
+
+/** 同じワールド座標・seedなら常に同じ木の有無を返す。 */
+export function shouldPlaceTreeAt(worldX: number, worldZ: number): boolean {
+  if (isVegetationExcluded(worldX, worldZ)) return false;
+  const biome = getCurrentBiome();
+  const tn = getTreeNoise();
+  const density = tn(worldX * 0.08, worldZ * 0.08);
+  const placement = tn(worldX * 0.5 + 100, worldZ * 0.5 + 100);
+  const densityThreshold = 0.8 - biome.treeDensity;
+  return density > densityThreshold * 0.5 && placement > 1 - biome.treeDensity;
+}
+
 function getTreeHeight(worldX: number, worldZ: number): number {
   const biome = getCurrentBiome();
-  const tn = getTreeNoise();
-  const h = tn(worldX * 0.7 + 200, worldZ * 0.7 + 200);
+  const heightNoise = getTreeNoise()(worldX * 0.7 + 200, worldZ * 0.7 + 200);
   const range = biome.treeHeight.max - biome.treeHeight.min;
-  return biome.treeHeight.min + Math.floor((h + 1) / 2 * range);
+  return biome.treeHeight.min + Math.floor((heightNoise + 1) * 0.5 * range);
 }
 
-/**
- * オーク（標準の広葉樹）を配置
- */
-function placeOak(chunk: ChunkData, lx: number, surfaceY: number, lz: number, trunkHeight: number): void {
+function canGrowAt(worldX: number, worldZ: number): boolean {
+  const biome = getCurrentBiome();
+  const sample = getTerrainSample(worldX, worldZ);
+  if (sample.height < SEA_LEVEL) return false;
+  if (sample.slopeHint > 0.7) return false;
+  if (biome.peakBlock !== null && sample.height >= biome.peakHeight) return false;
+  if (biome.id === 'tropical' && sample.height <= SEA_LEVEL + 1) return false;
+  return true;
+}
+
+function placeOak(
+  context: ChunkWriteContext,
+  worldX: number,
+  surfaceY: number,
+  worldZ: number,
+  trunkHeight: number,
+): void {
   const trunkTop = surfaceY + trunkHeight;
   if (trunkTop + 3 >= WORLD_HEIGHT) return;
-
-  // 幹
-  for (let ty = surfaceY + 1; ty <= trunkTop; ty++) {
-    chunk[lx][ty][lz] = BLOCK_IDS.RAW_WOOD;
+  for (let y = surfaceY + 1; y <= trunkTop; y++) {
+    setWorldBlock(context, worldX, y, worldZ, BLOCK_IDS.RAW_WOOD);
   }
 
-  // 太い樹冠を支える短い枝を出し、幹から球が生えただけの輪郭を避ける
   const branchY = Math.max(surfaceY + 2, trunkTop - 1);
-  const branchDirections = ((lx + lz) & 1) === 0
+  const directions = ((worldX + worldZ) & 1) === 0
     ? [[1, 0], [-1, 0]]
     : [[0, 1], [0, -1]];
-  for (const [dx, dz] of branchDirections) {
-    const bx = lx + dx;
-    const bz = lz + dz;
-    if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE) {
-      chunk[bx][branchY][bz] = BLOCK_IDS.RAW_WOOD;
-    }
+  for (const [dx, dz] of directions) {
+    setWorldBlock(context, worldX + dx, branchY, worldZ + dz, BLOCK_IDS.RAW_WOOD, true);
   }
 
-  // 球状の葉
-  const leafCenter = trunkTop;
-  const leafRadius = 2;
-  for (let dx = -leafRadius; dx <= leafRadius; dx++) {
-    for (let dy = -1; dy <= leafRadius; dy++) {
-      for (let dz = -leafRadius; dz <= leafRadius; dz++) {
-        const bx = lx + dx;
-        const by = leafCenter + dy;
-        const bz = lz + dz;
-        if (bx < 0 || bx >= CHUNK_SIZE) continue;
-        if (by < 0 || by >= WORLD_HEIGHT) continue;
-        if (bz < 0 || bz >= CHUNK_SIZE) continue;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist > leafRadius + 0.5) continue;
-        if (dx === 0 && dz === 0 && by <= trunkTop) continue;
-        if (chunk[bx][by][bz] === BLOCK_IDS.AIR) {
-          chunk[bx][by][bz] = BLOCK_IDS.LEAVES;
-        }
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -1; dy <= 2; dy++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) > 2.5) continue;
+        if (dx === 0 && dz === 0 && trunkTop + dy <= trunkTop) continue;
+        setWorldBlock(context, worldX + dx, trunkTop + dy, worldZ + dz, BLOCK_IDS.LEAVES, true);
       }
     }
   }
 }
 
-/**
- * ヤシの木を配置（トロピカルバイオーム用）
- * 細い幹 + 頂上に放射状の葉
- */
-function placePalm(chunk: ChunkData, lx: number, surfaceY: number, lz: number, trunkHeight: number): void {
+function placePalm(
+  context: ChunkWriteContext,
+  worldX: number,
+  surfaceY: number,
+  worldZ: number,
+  trunkHeight: number,
+): void {
   const trunkTop = surfaceY + trunkHeight;
   if (trunkTop + 2 >= WORLD_HEIGHT) return;
-
-  // 幹（RAW_WOOD）
-  for (let ty = surfaceY + 1; ty <= trunkTop; ty++) {
-    chunk[lx][ty][lz] = BLOCK_IDS.RAW_WOOD;
+  for (let y = surfaceY + 1; y <= trunkTop; y++) {
+    setWorldBlock(context, worldX, y, worldZ, BLOCK_IDS.RAW_WOOD);
   }
-
-  // 頂上に十字の葉（ヤシの葉っぱ風）
   const leafY = trunkTop + 1;
   const arms = [
-    [0, 0], [1, 0], [2, 0], [3, 0],
-    [-1, 0], [-2, 0], [-3, 0],
-    [0, 1], [0, 2], [0, 3],
-    [0, -1], [0, -2], [0, -3],
+    [0, 0], [1, 0], [2, 0], [3, 0], [-1, 0], [-2, 0], [-3, 0],
+    [0, 1], [0, 2], [0, 3], [0, -1], [0, -2], [0, -3],
     [1, 1], [-1, -1], [1, -1], [-1, 1],
   ];
   for (const [dx, dz] of arms) {
-    const bx = lx + dx;
-    const bz = lz + dz;
-    if (bx < 0 || bx >= CHUNK_SIZE || bz < 0 || bz >= CHUNK_SIZE) continue;
-    if (leafY >= WORLD_HEIGHT) continue;
-    if (chunk[bx][leafY][bz] === BLOCK_IDS.AIR) {
-      chunk[bx][leafY][bz] = BLOCK_IDS.LEAVES;
-    }
-    // 先端は少し下がる
-    const dist = Math.abs(dx) + Math.abs(dz);
-    if (dist >= 2 && leafY - 1 > 0) {
-      if (chunk[bx][leafY - 1][bz] === BLOCK_IDS.AIR) {
-        chunk[bx][leafY - 1][bz] = BLOCK_IDS.LEAVES;
-      }
+    setWorldBlock(context, worldX + dx, leafY, worldZ + dz, BLOCK_IDS.LEAVES, true);
+    if (Math.abs(dx) + Math.abs(dz) >= 2) {
+      setWorldBlock(context, worldX + dx, leafY - 1, worldZ + dz, BLOCK_IDS.LEAVES, true);
     }
   }
-  // 頂上にも葉
-  if (chunk[lx][leafY][lz] === BLOCK_IDS.AIR) {
-    chunk[lx][leafY][lz] = BLOCK_IDS.LEAVES;
-  }
-
-  // 葉の下に実のような影色を一点置き、樹冠の上下を読みやすくする
-  if (leafY - 1 > surfaceY && chunk[lx][leafY - 1][lz] === BLOCK_IDS.AIR) {
-    chunk[lx][leafY - 1][lz] = BLOCK_IDS.RAW_WOOD;
-  }
+  setWorldBlock(context, worldX, leafY - 1, worldZ, BLOCK_IDS.RAW_WOOD, true);
 }
 
-/**
- * 松の木を配置（雪バイオーム用）
- * 三角形の輪郭の葉
- */
-function placePine(chunk: ChunkData, lx: number, surfaceY: number, lz: number, trunkHeight: number): void {
+function placePine(
+  context: ChunkWriteContext,
+  worldX: number,
+  surfaceY: number,
+  worldZ: number,
+  trunkHeight: number,
+): void {
   const trunkTop = surfaceY + trunkHeight;
   if (trunkTop + 2 >= WORLD_HEIGHT) return;
-
-  // 幹
-  for (let ty = surfaceY + 1; ty <= trunkTop; ty++) {
-    chunk[lx][ty][lz] = BLOCK_IDS.RAW_WOOD;
+  for (let y = surfaceY + 1; y <= trunkTop; y++) {
+    setWorldBlock(context, worldX, y, worldZ, BLOCK_IDS.RAW_WOOD);
   }
-
-  // 三角形の葉（下から上に向かって半径が狭くなる）
-  const leafLayers = Math.min(trunkHeight - 1, 5);
-  for (let layer = 0; layer < leafLayers; layer++) {
-    const layerY = trunkTop - layer;
+  const layers = Math.min(trunkHeight - 1, 5);
+  for (let layer = 0; layer < layers; layer++) {
+    const y = trunkTop - layer;
     const radius = Math.min(layer + 1, 3);
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
-        if (Math.abs(dx) + Math.abs(dz) > radius + 1) continue;
-        const bx = lx + dx;
-        const bz = lz + dz;
-        if (bx < 0 || bx >= CHUNK_SIZE || bz < 0 || bz >= CHUNK_SIZE) continue;
-        if (layerY < 0 || layerY >= WORLD_HEIGHT) continue;
-        if (dx === 0 && dz === 0 && layerY <= trunkTop) continue;
-        if (chunk[bx][layerY][bz] === BLOCK_IDS.AIR) {
-          chunk[bx][layerY][bz] = BLOCK_IDS.LEAVES;
-        }
+        if (Math.abs(dx) + Math.abs(dz) > radius + 1 || (dx === 0 && dz === 0)) continue;
+        setWorldBlock(context, worldX + dx, y, worldZ + dz, BLOCK_IDS.LEAVES, true);
       }
     }
   }
-  // 頂上に葉
-  if (trunkTop + 1 < WORLD_HEIGHT && chunk[lx][trunkTop + 1][lz] === BLOCK_IDS.AIR) {
-    chunk[lx][trunkTop + 1][lz] = BLOCK_IDS.LEAVES;
-  }
+  setWorldBlock(context, worldX, trunkTop + 1, worldZ, BLOCK_IDS.LEAVES, true);
 }
 
-/**
- * サボテンを配置（砂漠バイオーム用）
- * 幹のみ、葉なし
- */
-function placeCactus(chunk: ChunkData, lx: number, surfaceY: number, lz: number, trunkHeight: number): void {
+function placeCactus(
+  context: ChunkWriteContext,
+  worldX: number,
+  surfaceY: number,
+  worldZ: number,
+  trunkHeight: number,
+): void {
   const trunkTop = surfaceY + trunkHeight;
   if (trunkTop >= WORLD_HEIGHT) return;
-
-  // サボテン柱（LEAVESブロックで代用 — 色的に緑で合う）
-  for (let ty = surfaceY + 1; ty <= trunkTop; ty++) {
-    chunk[lx][ty][lz] = BLOCK_IDS.LEAVES;
+  for (let y = surfaceY + 1; y <= trunkTop; y++) {
+    setWorldBlock(context, worldX, y, worldZ, BLOCK_IDS.CACTUS);
   }
-
-  // 左右非対称の腕を付け、遠景でもサボテンと判別できる輪郭にする
-  if (trunkHeight >= 3) {
-    const primaryDirection = ((lx + lz) & 1) === 0 ? 1 : -1;
-    const armY = surfaceY + Math.max(2, trunkHeight - 1);
-    const armX = lx + primaryDirection;
-    if (armX >= 0 && armX < CHUNK_SIZE) {
-      chunk[armX][armY][lz] = BLOCK_IDS.LEAVES;
-      if (armY + 1 < WORLD_HEIGHT) chunk[armX][armY + 1][lz] = BLOCK_IDS.LEAVES;
-    }
-    if (trunkHeight >= 5) {
-      const secondaryZ = lz - primaryDirection;
-      if (secondaryZ >= 0 && secondaryZ < CHUNK_SIZE) {
-        chunk[lx][armY - 1][secondaryZ] = BLOCK_IDS.LEAVES;
-      }
-    }
+  if (trunkHeight < 3) return;
+  const direction = ((worldX + worldZ) & 1) === 0 ? 1 : -1;
+  const armY = surfaceY + Math.max(2, trunkHeight - 1);
+  setWorldBlock(context, worldX + direction, armY, worldZ, BLOCK_IDS.CACTUS, true);
+  setWorldBlock(context, worldX + direction, armY + 1, worldZ, BLOCK_IDS.CACTUS, true);
+  if (trunkHeight >= 5) {
+    setWorldBlock(context, worldX, armY - 1, worldZ - direction, BLOCK_IDS.CACTUS, true);
   }
 }
 
 /**
- * チャンクに木を配置するヘルパー
- * チャンク境界から3ブロック以上内側にのみ配置（葉のオーバーフロー防止）
- * バイオームに応じた木の種類を選択
+ * 根元候補をチャンク外まで走査し、現在のチャンク内へ入る枝葉だけを書き込む。
+ * これにより樹冠が境界で欠けず、隣接チャンクの生成順にも依存しない。
  */
 export function placeTreesInChunk(chunk: ChunkData, cx: number, cz: number): void {
-  const MARGIN = 3; // チャンク端からの余白（葉の半径分）
   const biome = getCurrentBiome();
+  const context = { chunk, cx, cz };
+  const minX = cx * CHUNK_SIZE - TREE_REACH;
+  const maxX = (cx + 1) * CHUNK_SIZE + TREE_REACH - 1;
+  const minZ = cz * CHUNK_SIZE - TREE_REACH;
+  const maxZ = (cz + 1) * CHUNK_SIZE + TREE_REACH - 1;
 
-  for (let lx = MARGIN; lx < CHUNK_SIZE - MARGIN; lx++) {
-    for (let lz = MARGIN; lz < CHUNK_SIZE - MARGIN; lz++) {
-      const worldX = cx * CHUNK_SIZE + lx;
-      const worldZ = cz * CHUNK_SIZE + lz;
-
-      if (!shouldPlaceTree(worldX, worldZ)) continue;
-
-      // 地表を探す
-      const surfaceY = getTerrainHeight(worldX, worldZ);
-
-      // 地表がバイオームの地表ブロックのときだけ木を生やす
-      const surfaceBlock = chunk[lx][surfaceY]?.[lz];
-      if (surfaceBlock !== biome.surfaceBlock) continue;
-
+  for (let worldX = minX; worldX <= maxX; worldX++) {
+    for (let worldZ = minZ; worldZ <= maxZ; worldZ++) {
+      if (!shouldPlaceTreeAt(worldX, worldZ) || !canGrowAt(worldX, worldZ)) continue;
+      const surfaceY = getTerrainSample(worldX, worldZ).height;
       const trunkHeight = getTreeHeight(worldX, worldZ);
-
-      // バイオームに応じた木を配置
       switch (biome.treeType) {
         case 'oak':
-          placeOak(chunk, lx, surfaceY, lz, trunkHeight);
+          placeOak(context, worldX, surfaceY, worldZ, trunkHeight);
           break;
         case 'palm':
-          placePalm(chunk, lx, surfaceY, lz, trunkHeight);
+          placePalm(context, worldX, surfaceY, worldZ, trunkHeight);
           break;
         case 'pine':
-          placePine(chunk, lx, surfaceY, lz, trunkHeight);
+          placePine(context, worldX, surfaceY, worldZ, trunkHeight);
           break;
         case 'cactus':
-          placeCactus(chunk, lx, surfaceY, lz, trunkHeight);
+          placeCactus(context, worldX, surfaceY, worldZ, trunkHeight);
           break;
       }
     }

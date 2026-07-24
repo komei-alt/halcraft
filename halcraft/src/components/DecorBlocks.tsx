@@ -5,6 +5,7 @@ import { BLOCK_IDS, type BlockId } from '../types/blocks';
 import { useWorldStore } from '../stores/useWorldStore';
 import { useFunctionalBlockStore } from '../stores/useFunctionalBlockStore';
 import { facingToYaw, inferWallFacing } from '../utils/blockFacing';
+import { mapGeometryToMaterialAtlas, useAtlasPbrMaterial } from '../utils/blockPbrAtlas';
 
 function usePlacedBlockPositions(blockId: BlockId) {
   const blockIndexVersion = useWorldStore((s) => s.blockIndexVersion);
@@ -17,30 +18,6 @@ function usePlacedBlockPositions(blockId: BlockId) {
   }, [blockId, blockIndexVersion, getIndexedBlockPositions]);
 }
 
-const doorBodyMat = new THREE.MeshStandardMaterial({ color: 0x7d5b33, roughness: 0.92 });
-const doorWindowMat = new THREE.MeshStandardMaterial({
-  color: 0xf7f5f0,
-  emissive: new THREE.Color(0x554433),
-  emissiveIntensity: 0.08,
-  roughness: 0.4,
-});
-const doorInsetMat = new THREE.MeshStandardMaterial({ color: 0x644826, roughness: 0.95 });
-const knobMat = new THREE.MeshStandardMaterial({ color: 0xb8843e, metalness: 0.45, roughness: 0.35 });
-
-const ladderMat = new THREE.MeshStandardMaterial({
-  color: 0x4021ff,
-  emissive: new THREE.Color(0x2510aa),
-  emissiveIntensity: 0.35,
-  roughness: 0.42,
-});
-
-const logMat = new THREE.MeshStandardMaterial({ color: 0x8f6636, roughness: 0.9 });
-const coalMat = new THREE.MeshStandardMaterial({
-  color: 0x392a22,
-  emissive: new THREE.Color(0x2a1108),
-  emissiveIntensity: 0.22,
-  roughness: 1,
-});
 const flameOuterMat = new THREE.MeshBasicMaterial({
   color: 0xff3b18,
   transparent: true,
@@ -69,14 +46,6 @@ const flameGlowMat = new THREE.MeshBasicMaterial({
   blending: THREE.AdditiveBlending,
 });
 
-const candlePlateMat = new THREE.MeshStandardMaterial({ color: 0x2e160d, roughness: 0.9 });
-const candleWaxMat = new THREE.MeshStandardMaterial({
-  color: 0xcab9b1,
-  emissive: new THREE.Color(0x65423a),
-  emissiveIntensity: 0.12,
-  roughness: 0.98,
-});
-const wickMat = new THREE.MeshStandardMaterial({ color: 0x2d130e, roughness: 1 });
 const candleGlowMat = new THREE.MeshBasicMaterial({
   color: 0xffc2a0,
   transparent: true,
@@ -87,37 +56,22 @@ const candleGlowMat = new THREE.MeshBasicMaterial({
   blending: THREE.AdditiveBlending,
 });
 
-const doorGeom = new THREE.BoxGeometry(0.92, 0.96, 0.08);
-const doorInsetGeom = new THREE.BoxGeometry(0.24, 0.22, 0.04);
-const doorKnobGeom = new THREE.SphereGeometry(0.035, 10, 10);
-const ladderRailGeom = new THREE.BoxGeometry(0.08, 0.92, 0.06);
-const ladderRungGeom = new THREE.BoxGeometry(0.76, 0.06, 0.06);
-const logGeom = new THREE.BoxGeometry(0.84, 0.12, 0.18);
-const emberGeom = new THREE.SphereGeometry(0.05, 8, 8);
+const doorGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.92, 0.96, 0.08), 'wood_planks');
+const doorWindowGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.24, 0.22, 0.04), 'glass');
+const doorInsetGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.24, 0.22, 0.04), 'wood_planks');
+const doorKnobGeom = mapGeometryToMaterialAtlas(new THREE.SphereGeometry(0.035, 10, 10), 'gold_ingot');
+const ladderRailGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.08, 0.92, 0.06), 'electric');
+const ladderRungGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.76, 0.06, 0.06), 'electric');
+const logGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.84, 0.12, 0.18), 'oak_bark');
+const emberGeom = mapGeometryToMaterialAtlas(new THREE.SphereGeometry(0.05, 8, 8), 'coal_ore');
 const flameOuterGeom = new THREE.ConeGeometry(0.22, 0.42, 10);
 const flameInnerGeom = new THREE.ConeGeometry(0.11, 0.26, 8);
 const glowGeom = new THREE.SphereGeometry(0.34, 10, 10);
-const candlePlateGeom = new THREE.CylinderGeometry(0.24, 0.28, 0.04, 16);
-const candleWaxGeom = new THREE.CylinderGeometry(0.12, 0.14, 0.34, 14);
-const wickGeom = new THREE.BoxGeometry(0.02, 0.08, 0.02);
+const candlePlateGeom = mapGeometryToMaterialAtlas(new THREE.CylinderGeometry(0.24, 0.28, 0.04, 16), 'iron');
+const candleWaxGeom = mapGeometryToMaterialAtlas(new THREE.CylinderGeometry(0.12, 0.14, 0.34, 14), 'glowstone');
+const wickGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.02, 0.08, 0.02), 'netherrack');
 
 // 種・レバーは配置数が増えても描画回数が増えないよう、部品単位でインスタンス化する。
-const wheatSproutMat = new THREE.MeshStandardMaterial({
-  color: 0x7fbe46,
-  emissive: new THREE.Color(0x213d12),
-  emissiveIntensity: 0.12,
-  roughness: 0.86,
-  side: THREE.DoubleSide,
-});
-const leverBaseMat = new THREE.MeshStandardMaterial({ color: 0x59606a, metalness: 0.34, roughness: 0.5 });
-const leverHandleMat = new THREE.MeshStandardMaterial({ color: 0x9a6a34, metalness: 0.18, roughness: 0.7 });
-const leverKnobMat = new THREE.MeshStandardMaterial({
-  color: 0xd84b35,
-  emissive: new THREE.Color(0x5f130b),
-  emissiveIntensity: 0.28,
-  roughness: 0.46,
-});
-
 /** 互い違いの若葉を1メッシュにまとめた、小麦の芽の軽量ジオメトリ */
 function createWheatSproutGeometry(): THREE.BufferGeometry {
   const positions = new Float32Array([
@@ -126,22 +80,30 @@ function createWheatSproutGeometry(): THREE.BufferGeometry {
     0, 0.03, 0, 0, 0.2, -0.22, 0, 0.43, -0.035,
     0.006, 0.06, 0, 0.006, 0.23, 0.22, 0.006, 0.47, 0.035,
   ]);
+  const uvs = new Float32Array([
+    0.5, 0, 0, 0.45, 0.5, 1,
+    0.5, 0, 1, 0.45, 0.5, 1,
+    0.5, 0, 0, 0.45, 0.5, 1,
+    0.5, 0, 1, 0.45, 0.5, 1,
+  ]);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  return geometry;
+  return mapGeometryToMaterialAtlas(geometry, 'grass_top');
 }
 
 const wheatSproutGeom = createWheatSproutGeometry();
-const leverBaseGeom = new THREE.BoxGeometry(0.58, 0.12, 0.42);
-const leverHandleGeom = new THREE.CylinderGeometry(0.045, 0.065, 0.46, 8);
-const leverKnobGeom = new THREE.SphereGeometry(0.1, 10, 7);
+const leverBaseGeom = mapGeometryToMaterialAtlas(new THREE.BoxGeometry(0.58, 0.12, 0.42), 'stone');
+const leverHandleGeom = mapGeometryToMaterialAtlas(new THREE.CylinderGeometry(0.045, 0.065, 0.46, 8), 'oak_bark');
+const leverKnobGeom = mapGeometryToMaterialAtlas(new THREE.SphereGeometry(0.1, 10, 7), 'tnt');
 
 /** 小麦の種を、成長し始めた小さな若葉として描画する */
 export function WheatSeedsRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.WHEAT_SEEDS);
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const wheatSproutMat = useAtlasPbrMaterial('grass_top', { side: THREE.DoubleSide });
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -179,6 +141,9 @@ export function LeverRenderer() {
   const baseRef = useRef<THREE.InstancedMesh>(null);
   const handleRef = useRef<THREE.InstancedMesh>(null);
   const knobRef = useRef<THREE.InstancedMesh>(null);
+  const leverBaseMat = useAtlasPbrMaterial('stone');
+  const leverHandleMat = useAtlasPbrMaterial('oak_bark');
+  const leverKnobMat = useAtlasPbrMaterial('tnt', { emissiveIntensity: 0.28 });
 
   useLayoutEffect(() => {
     const base = baseRef.current;
@@ -232,6 +197,10 @@ export function DoorRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.DOOR);
   const openDoors = useFunctionalBlockStore((s) => s.openDoors);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const doorBodyMat = useAtlasPbrMaterial('wood_planks');
+  const doorWindowMat = useAtlasPbrMaterial('glass', { transparent: true, opacity: 0.7, depthWrite: false });
+  const doorInsetMat = useAtlasPbrMaterial('wood_planks');
+  const knobMat = useAtlasPbrMaterial('gold_ingot');
 
   if (positions.length === 0) return null;
 
@@ -243,6 +212,7 @@ export function DoorRenderer() {
           position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
           yaw={facingToYaw(inferWallFacing(getBlock, pos.x, pos.y, pos.z))}
           open={Boolean(openDoors[`${pos.x},${pos.y},${pos.z}`])}
+          materials={{ doorBodyMat, doorWindowMat, doorInsetMat, knobMat }}
         />
       ))}
     </group>
@@ -253,12 +223,20 @@ function DoorModel({
   position,
   yaw,
   open,
+  materials,
 }: {
   position: [number, number, number];
   yaw: number;
   open: boolean;
+  materials: {
+    doorBodyMat: THREE.MeshStandardMaterial;
+    doorWindowMat: THREE.MeshStandardMaterial;
+    doorInsetMat: THREE.MeshStandardMaterial;
+    knobMat: THREE.MeshStandardMaterial;
+  };
 }) {
   const panelRef = useRef<THREE.Group>(null);
+  const { doorBodyMat, doorWindowMat, doorInsetMat, knobMat } = materials;
 
   useFrame((_, delta) => {
     if (!panelRef.current) return;
@@ -276,10 +254,10 @@ function DoorModel({
       <group ref={panelRef} position={[-0.46, 0, 0.42]}>
         <group position={[0.46, 0, 0]}>
           <mesh position={[0, 0.5, 0]} geometry={doorGeom} material={doorBodyMat} />
-          <mesh position={[-0.25, 0.76, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[0.25, 0.76, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[-0.25, 0.48, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
-          <mesh position={[0.25, 0.48, 0.035]} geometry={doorInsetGeom} material={doorWindowMat} />
+          <mesh position={[-0.25, 0.76, 0.035]} geometry={doorWindowGeom} material={doorWindowMat} />
+          <mesh position={[0.25, 0.76, 0.035]} geometry={doorWindowGeom} material={doorWindowMat} />
+          <mesh position={[-0.25, 0.48, 0.035]} geometry={doorWindowGeom} material={doorWindowMat} />
+          <mesh position={[0.25, 0.48, 0.035]} geometry={doorWindowGeom} material={doorWindowMat} />
           <mesh position={[-0.25, 0.17, 0.035]} geometry={doorInsetGeom} material={doorInsetMat} />
           <mesh position={[0.25, 0.17, 0.035]} geometry={doorInsetGeom} material={doorInsetMat} />
           <mesh position={[0.32, 0.36, 0.05]} geometry={doorKnobGeom} material={knobMat} />
@@ -292,6 +270,7 @@ function DoorModel({
 export function LadderRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.LADDER);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const ladderMat = useAtlasPbrMaterial('electric', { emissiveIntensity: 0.35 });
 
   if (positions.length === 0) return null;
 
@@ -316,6 +295,8 @@ export function LadderRenderer() {
 
 export function CampfireRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.CAMPFIRE);
+  const logMat = useAtlasPbrMaterial('oak_bark');
+  const coalMat = useAtlasPbrMaterial('coal_ore', { emissiveIntensity: 0.22 });
 
   if (positions.length === 0) return null;
 
@@ -326,6 +307,8 @@ export function CampfireRenderer() {
           key={`campfire-${pos.x}-${pos.y}-${pos.z}`}
           position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
           phase={pos.x * 0.37 + pos.z * 0.53}
+          logMat={logMat}
+          coalMat={coalMat}
         />
       ))}
     </group>
@@ -335,9 +318,13 @@ export function CampfireRenderer() {
 function CampfireModel({
   position,
   phase,
+  logMat,
+  coalMat,
 }: {
   position: [number, number, number];
   phase: number;
+  logMat: THREE.MeshStandardMaterial;
+  coalMat: THREE.MeshStandardMaterial;
 }) {
   const flameRef = useRef<THREE.Group>(null);
 
@@ -372,6 +359,9 @@ function CampfireModel({
 
 export function CandleRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.CANDLE);
+  const candlePlateMat = useAtlasPbrMaterial('iron');
+  const candleWaxMat = useAtlasPbrMaterial('glowstone', { emissiveIntensity: 0.18 });
+  const wickMat = useAtlasPbrMaterial('netherrack', { emissiveIntensity: 0.08 });
 
   if (positions.length === 0) return null;
 
@@ -382,6 +372,9 @@ export function CandleRenderer() {
           key={`candle-${pos.x}-${pos.y}-${pos.z}`}
           position={[pos.x + 0.5, pos.y, pos.z + 0.5]}
           phase={pos.x * 0.31 + pos.z * 0.29}
+          candlePlateMat={candlePlateMat}
+          candleWaxMat={candleWaxMat}
+          wickMat={wickMat}
         />
       ))}
     </group>
@@ -391,9 +384,15 @@ export function CandleRenderer() {
 function CandleModel({
   position,
   phase,
+  candlePlateMat,
+  candleWaxMat,
+  wickMat,
 }: {
   position: [number, number, number];
   phase: number;
+  candlePlateMat: THREE.MeshStandardMaterial;
+  candleWaxMat: THREE.MeshStandardMaterial;
+  wickMat: THREE.MeshStandardMaterial;
 }) {
   const flameRef = useRef<THREE.Group>(null);
 

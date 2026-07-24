@@ -22,6 +22,16 @@ export const SG = {
   font: "'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Segoe UI','Hiragino Sans',sans-serif",
 } as const;
 
+/** ゲーム内HUD: スモークガラス＋ブロンズの共通トークン */
+export const HUD = {
+  smoke: 'rgba(9, 12, 14, 0.78)',
+  smokeSoft: 'rgba(9, 12, 14, 0.64)',
+  bronze: 'rgba(232, 178, 78, 0.72)',
+  bronzeSoft: 'rgba(232, 178, 78, 0.28)',
+  text: '#fff4d2',
+  accent: '#f2b84f',
+} as const;
+
 /** カテゴリのアクセント（建築=空色 / 戦争=炎色） */
 export function categoryAccent(category: 'build' | 'war'): string {
   return category === 'build' ? SG.build : SG.war;
@@ -65,29 +75,26 @@ export function glassPanel(accentGlow?: string): CSSProperties {
   };
 }
 
-/**
- * ゲーム中 HUD はカードを廃止し、世界の上に直接テキスト/アイコン/バーを浮かべる。
- * カード背景の代わりに、この強いテキストシャドウ（縁取り＋影）で
- * どんな背景でも読めるようにする。HUD のルート要素に textShadow として与え、
- * 子テキストへ継承させるのが基本。
- */
+/** 世界を隠し過ぎず、明暗どちらでも読める共通テキストシャドウ。 */
 export const HUD_TEXT_SHADOW =
   '0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.9), 0 0 9px rgba(0,0,0,0.55)';
 
-/**
- * カードレイアウト廃止後の HUD ルート用スタイル。
- * 背景・枠・blur を持たず（= カードにしない）、可読性は HUD_TEXT_SHADOW で担保する。
- * カードが本当に妥当な集中モーダル（設定/クラフト等）にはこれを使わない。
- */
-export function hudCardless(): CSSProperties {
+export function hudGlassPanel(compact = false): CSSProperties {
   return {
-    background: 'none',
-    border: 'none',
-    boxShadow: 'none',
-    backdropFilter: 'none',
-    WebkitBackdropFilter: 'none',
-    borderRadius: 0,
+    background: compact ? HUD.smokeSoft : HUD.smoke,
+    border: `1px solid ${HUD.bronze}`,
+    borderRadius: compact ? 10 : 12,
+    boxShadow: `0 8px 24px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,244,210,0.08), 0 0 18px ${HUD.bronzeSoft}`,
+    backdropFilter: 'blur(9px)',
+    WebkitBackdropFilter: 'blur(9px)',
     textShadow: HUD_TEXT_SHADOW,
     fontFamily: SG.font,
   };
+}
+
+/**
+ * 互換API。ゲーム内HUDは小型スモークガラスへ統一する。
+ */
+export function hudCardless(): CSSProperties {
+  return hudGlassPanel(true);
 }

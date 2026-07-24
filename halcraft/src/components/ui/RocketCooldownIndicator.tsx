@@ -1,6 +1,7 @@
 // ロケットランチャーのリチャージ表示
 // クロスヘア下に表示し、発射後だけ短く現れる。READY時はパルスで目立たせる
 
+import { useEffect, useState } from 'react';
 import { usePlayerStore } from '../../stores/usePlayerStore';
 import { isTouchDevice } from '../../utils/device';
 import { useIsRideMode } from '../../utils/hudRideMode';
@@ -10,8 +11,14 @@ export function RocketCooldownIndicator() {
   const rocketReadyPulseUntil = usePlayerStore((s) => s.rocketReadyPulseUntil);
   const equippedItem = usePlayerStore((s) => s.equippedItem);
   const rideMode = useIsRideMode();
+  const [now, setNow] = useState(0);
 
-  const isReadyPulse = rocketCharge >= 1 && rocketReadyPulseUntil > performance.now();
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(performance.now()), 50);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const isReadyPulse = rocketCharge >= 1 && rocketReadyPulseUntil > now;
   if (rideMode) return null;
   if (equippedItem !== 'rocket_launcher' || (rocketCharge >= 1 && !isReadyPulse)) return null;
 

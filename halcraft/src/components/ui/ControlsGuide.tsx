@@ -10,6 +10,7 @@ import { usePlayerStore } from '../../stores/usePlayerStore';
 import { useGameStore } from '../../stores/useGameStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { isTouchDevice } from '../../utils/device';
+import { hudGlassPanel } from './startScreenTheme';
 
 /** キーバッジのスタイル */
 function KeyBadge({ children, color = '#ffdd00' }: { children: React.ReactNode; color?: string }) {
@@ -377,15 +378,15 @@ export function ControlsGuide() {
   const isInVehicle = activeVehicle !== null && mySeat !== null;
 
   return (
-    <div style={{
+    <div className="hc-hud-glass" style={{
+      ...hudGlassPanel(true),
       position: 'fixed',
       bottom: isTouch ? 'calc(70px + env(safe-area-inset-bottom))' : '80px',
       right: '12px',
       display: 'flex',
       flexDirection: 'column',
       gap: '3px',
-      background: 'none',
-      padding: 0,
+      padding: '8px 9px',
       zIndex: 95,
       pointerEvents: 'none',
       maxWidth: '200px',

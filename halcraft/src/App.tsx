@@ -1,131 +1,12 @@
-// ハルクラ — メインアプリケーション
-// Canvas + カスタム物理（Rapier不使用で軽量動作）
-// デスクトップ＆モバイル両対応
+// ハルクラ — 開始画面とゲーム本体を分離したアプリケーション境界
 
-import { Canvas } from '@react-three/fiber';
-import * as THREE from 'three';
-import { Suspense, lazy, useState, useCallback, useEffect, useRef } from 'react';
-import { Player } from './components/Player';
-import { World } from './components/World';
-import { Environment } from './components/Environment';
-import { BlockInteraction } from './components/BlockInteraction';
-import { BuilderHeldItem } from './components/BuilderHeldItem';
-import { BlockBreakEffect } from './components/BlockBreakEffect';
-import { BlockUseEffect } from './components/BlockUseEffect';
-import { DamagePopup } from './components/DamagePopup';
-import { HitImpactEffect } from './components/HitImpactEffect';
-import { AllyMeleeAttackFX } from './components/AllyMeleeAttackFX';
-import { CombatExplosionFX } from './components/CombatExplosionFX';
-import { MobDeathEffect } from './components/MobDeathEffect';
-import { RocketLauncher } from './components/RocketLauncher';
-import { GravityGlove } from './components/GravityGlove';
-import { BombSlinger } from './components/BombSlinger';
-import { DroppedItems } from './components/DroppedItems';
-import { BlockLights } from './components/BlockLights';
-import { TorchRenderer } from './components/TorchRenderer';
-import { BedRenderer } from './components/BedRenderer';
-import { TurretRenderer } from './components/TurretRenderer';
-import {
-  CampfireRenderer,
-  CandleRenderer,
-  DoorRenderer,
-  LadderRenderer,
-  LeverRenderer,
-  WheatSeedsRenderer,
-} from './components/DecorBlocks';
-import { NetherPortalRenderer, StairsRenderer } from './components/SpecialBlockRenderer';
-import { RailRenderer } from './components/RailRenderer';
-import { CoasterCart } from './components/CoasterCart';
-import { LavaRenderer, WaterRenderer } from './components/WaterRenderer';
-import { LiquidSurfaceFX } from './components/LiquidSurfaceFX';
-import { StageConditionFX } from './components/StageConditionFX';
-import { StageEventFX } from './components/StageEventFX';
-import { StageLandmarkBeaconFX } from './components/StageLandmarkBeaconFX';
-import { StageModeFlowFX } from './components/StageModeFlowFX';
-import { FunctionalBlockAuraFX } from './components/FunctionalBlockAuraFX';
-import { ItemMasteryPulseFX } from './components/ItemMasteryPulseFX';
-import { AdaptiveGraphicsGovernor, AdaptiveStageVisuals } from './components/AdaptiveGraphics';
-import {
-  CanvasResolutionPipeline,
-  GraphicsPostFX,
-  RendererColorPipeline,
-  SceneReflectionPipeline,
-} from './components/GraphicsQuality';
-import { StageConditionSystem } from './components/StageConditionSystem';
-import { StageChallengeRewardSystem } from './components/StageChallengeRewardSystem';
-import { StageEventSystem } from './components/StageEventSystem';
-import { StagePressureSystem } from './components/StagePressureSystem';
-import { MobManager } from './components/mobs/MobManager';
-import { RemotePlayers } from './components/RemotePlayers';
-import { PlayerNameOverlay } from './components/ui/PlayerNameOverlay';
-import { SoundManager } from './components/SoundManager';
-import { Helicopter } from './components/vehicles/Helicopter';
-import { Tank } from './components/vehicles/Tank';
-import { Airplane } from './components/vehicles/Airplane';
-import { Car } from './components/vehicles/Car';
-// CockpitView は無効化済み — ヘリ胴体自体がガラス化するため不要
-import { MachineGun } from './components/vehicles/MachineGun';
-import { VehicleWeapons } from './components/vehicles/VehicleWeapons';
-import { VehicleCombat } from './components/vehicles/VehicleCombat';
-import { VehicleExplosionEffect } from './components/vehicles/VehicleExplosionEffect';
-import { VehicleHealthBars } from './components/vehicles/VehicleHealthBars';
-import { VehicleMotionTrailFX } from './components/vehicles/VehicleMotionTrailFX';
-import { PlayerMachineGun } from './components/PlayerMachineGun';
-import { Lightsaber } from './components/Lightsaber';
-import { CockpitHUD } from './components/ui/CockpitHUD';
-import { VehicleAimHUD } from './components/ui/VehicleAimHUD';
-import { MinimapHUD } from './components/ui/MinimapHUD';
-import { CoasterHUD } from './components/ui/CoasterHUD';
-import { MultiplayerConnectionHUD } from './components/ui/MultiplayerConnectionHUD';
-import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from './stores/useVehicleStore';
-import { useGameStore } from './stores/useGameStore';
-import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from './utils/terrain/constants';
-import { getTerrainHeight } from './utils/terrain/heightmap';
-import { Crosshair } from './components/ui/Crosshair';
-import { MachineGunScopeHUD } from './components/ui/MachineGunScopeHUD';
-import { Hotbar } from './components/ui/Hotbar';
-import { HealthBar } from './components/ui/HealthBar';
-import { DamageOverlay } from './components/ui/DamageOverlay';
-import { AttackIndicator } from './components/ui/AttackIndicator';
-import { RocketCooldownIndicator } from './components/ui/RocketCooldownIndicator';
-import { TimeDisplay } from './components/ui/TimeDisplay';
-import { StageProgressHUD } from './components/ui/StageProgressHUD';
-import { StageLandmarkMomentHUD } from './components/ui/StageLandmarkMomentHUD';
-import { StageMasteryMomentHUD } from './components/ui/StageMasteryMomentHUD';
-import { StageChallengeHUD } from './components/ui/StageChallengeHUD';
-import { StageConditionHUD } from './components/ui/StageConditionHUD';
-import { StageEventHUD } from './components/ui/StageEventHUD';
-import { StagePressureHUD } from './components/ui/StagePressureHUD';
-import { BossEncounterHUD } from './components/ui/BossEncounterHUD';
-import { ModeFlowHUD } from './components/ui/ModeFlowHUD';
-import { StageOpeningBriefing } from './components/ui/StageOpeningBriefing';
-import { StageResultOverlay } from './components/ui/StageResultOverlay';
-import { MasteryHUD } from './components/ui/MasteryHUD';
-import { CombatFeedbackHUD } from './components/ui/CombatFeedbackHUD';
-import { ProgressCelebration } from './components/ui/ProgressCelebration';
+import { Suspense, lazy, useCallback, useRef, useState } from 'react';
 import { StartScreen } from './components/ui/StartScreen';
-import { PauseScreen } from './components/ui/PauseScreen';
-import { CraftingScreen } from './components/ui/CraftingScreen';
-import { ToolHUD } from './components/ui/ToolHUD';
-import { ArmorHUD } from './components/ui/ArmorHUD';
-import { EffectIcons } from './components/ui/EffectIcons';
-import { XPBar } from './components/ui/XPBar';
-import { VoiceChatUI } from './components/ui/VoiceChatUI';
 import { MaintenanceOverlay } from './components/ui/MaintenanceOverlay';
-import { ControlsGuide } from './components/ui/ControlsGuide';
-import { DesktopInputHint } from './components/ui/DesktopInputHint';
-import { WeaponSwitchPopover } from './components/ui/WeaponSwitchPopover';
-import { MobileControls } from './components/ui/mobile/MobileControls';
-import { SkinSelector } from './components/ui/SkinSelector';
-import { AirSupplyBar } from './components/ui/AirSupplyBar';
-import { UnderwaterOverlay } from './components/ui/UnderwaterOverlay';
-import { HungerBar } from './components/ui/HungerBar';
 import { SettingsButton, SettingsMenu } from './components/ui/SettingsMenu';
+import { useGameStore } from './stores/useGameStore';
 import { isTouchDevice } from './utils/device';
 import { activateDesktopGameplayInput } from './utils/gameCanvas';
-import { isNarrowGameplayHud } from './utils/hudDensity';
-import { getPerformanceProfile } from './utils/performance';
-import { useSettingsStore } from './stores/useSettingsStore';
 import './App.css';
 
 const RIG_LAB_ENABLED = import.meta.env.DEV
@@ -133,252 +14,32 @@ const RIG_LAB_ENABLED = import.meta.env.DEV
 const RigLab = import.meta.env.DEV
   ? lazy(() => import('./components/mobs/RigLab'))
   : null;
-
-function GameCanvas() {
-  const isTouch = isTouchDevice();
-  useSettingsStore((s) => s.graphicsPreset);
-  useSettingsStore((s) => s.renderDistance);
-  useSettingsStore((s) => s.shadowQuality);
-  useSettingsStore((s) => s.resolutionScale);
-  const performanceProfile = getPerformanceProfile();
-  const premiumRendering = performanceProfile.tier === 'high' && !isTouch;
-  const handleCanvasCreated = useCallback(({ gl, camera }: { gl: THREE.WebGLRenderer; camera: THREE.Camera }) => {
-    if (typeof window === 'undefined') return;
-
-    const width = Math.max(1, window.innerWidth);
-    const height = Math.max(1, window.innerHeight);
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, performanceProfile.maxDpr));
-    gl.setPixelRatio(dpr);
-    gl.setSize(width, height, false);
-    if (camera instanceof THREE.PerspectiveCamera) {
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    }
-  }, [performanceProfile.maxDpr]);
-
-  return (
-    <div className="game-canvas-shell">
-      <Canvas
-        shadows={performanceProfile.shadowsEnabled
-          ? { type: premiumRendering ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap }
-          : false}
-        camera={{
-          fov: isTouch ? 65 : 70,
-          near: 0.1,
-          far: performanceProfile.cameraFar,
-        }}
-        dpr={[0.75, performanceProfile.maxDpr]}
-        gl={{
-          antialias: false,
-          powerPreference: isTouch ? 'default' : 'high-performance',
-          stencil: false,
-          depth: true,
-        }}
-        onCreated={handleCanvasCreated}
-        tabIndex={0}
-        style={{ width: '100%', height: '100%', outline: 'none' }}
-      >
-        <AdaptiveGraphicsGovernor />
-        <CanvasResolutionPipeline />
-        <RendererColorPipeline />
-        <SceneReflectionPipeline />
-        <Suspense fallback={null}>
-          <Environment />
-          <AdaptiveStageVisuals />
-          <StageConditionFX />
-          <StageEventFX />
-          <StageLandmarkBeaconFX />
-          <StageModeFlowFX />
-          <FunctionalBlockAuraFX />
-          <ItemMasteryPulseFX />
-          <World />
-          <TorchRenderer />
-          <BedRenderer />
-          <DoorRenderer />
-          <LadderRenderer />
-          <CampfireRenderer />
-          <CandleRenderer />
-          <WheatSeedsRenderer />
-          <LeverRenderer />
-          <StairsRenderer />
-          <NetherPortalRenderer />
-          <TurretRenderer />
-          <BlockLights />
-          <Player />
-          <BlockInteraction />
-          <BuilderHeldItem />
-          <BlockBreakEffect />
-          <BlockUseEffect />
-          <DamagePopup />
-          <HitImpactEffect />
-          <AllyMeleeAttackFX />
-          <CombatExplosionFX />
-          <MobDeathEffect />
-          <RocketLauncher />
-          <PlayerMachineGun />
-          <Lightsaber />
-          <GravityGlove />
-          <BombSlinger />
-          <DroppedItems />
-          <MobManager />
-          <Helicopter />
-          <Tank />
-          <Airplane />
-          <Car />
-          <MachineGun />
-          <VehicleWeapons />
-          <VehicleCombat />
-          <VehicleMotionTrailFX />
-          <VehicleExplosionEffect />
-          <VehicleHealthBars />
-          {/* CockpitView は無効化 — ヘリ胴体自体がガラス化するため不要 */}
-          {/* <CockpitView /> */}
-          <RemotePlayers />
-          <PlayerNameOverlay />
-          <SoundManager />
-          <RailRenderer />
-          <CoasterCart />
-          <WaterRenderer />
-          <LavaRenderer />
-          <LiquidSurfaceFX />
-          <StageConditionSystem />
-          <StageEventSystem />
-          <StagePressureSystem />
-          <GraphicsPostFX />
-        </Suspense>
-      </Canvas>
-    </div>
-  );
-}
+const GameExperience = lazy(() => import('./components/GameExperience'));
 
 function MainGameApp() {
-  const phase = useGameStore((s) => s.phase);
+  const phase = useGameStore((state) => state.phase);
+  const togglePause = useGameStore((state) => state.togglePause);
   const isTouch = isTouchDevice();
-  const hudDensity = useSettingsStore((s) => s.hudDensity);
-  const showDetailedHud = hudDensity === 'detailed' && !isNarrowGameplayHud();
-  const spawnHelicopter = useVehicleStore((s) => s.spawnHelicopter);
-  const spawnTank = useVehicleStore((s) => s.spawnTank);
-  const spawnAirplane = useVehicleStore((s) => s.spawnAirplane);
-  const spawnCar = useVehicleStore((s) => s.spawnCar);
-  const helicopterSpawned = useVehicleStore((s) => s.helicopter.spawned);
-  const tankSpawned = useVehicleStore((s) => s.tank.spawned);
-  const airplaneSpawned = useVehicleStore((s) => s.airplane.spawned);
-  const carSpawned = useVehicleStore((s) => s.car.spawned);
-
-  // ゲーム開始時に乗り物を各専用エリアにスポーン
-  useEffect(() => {
-    if (phase === 'playing' && !helicopterSpawned) {
-      const spawnX = HELIPORT_CENTER.x;
-      const spawnZ = HELIPORT_CENTER.z;
-      const terrainY = getTerrainHeight(spawnX, spawnZ);
-      spawnHelicopter(spawnX, terrainY + 2.0, spawnZ);
-    }
-    if (phase === 'playing' && !tankSpawned) {
-      const terrainY = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z);
-      spawnTank(TANK_SPAWN.x, terrainY + TANK_CONSTANTS.BODY_HEIGHT, TANK_SPAWN.z);
-    }
-    if (phase === 'playing' && !airplaneSpawned) {
-      const terrainY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
-      spawnAirplane(AIRPLANE_SPAWN.x, terrainY + AIRPLANE_CONSTANTS.BODY_HEIGHT, AIRPLANE_SPAWN.z);
-    }
-    if (phase === 'playing' && !carSpawned) {
-      const terrainY = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z);
-      spawnCar(CAR_SPAWN.x, terrainY + CAR_CONSTANTS.BODY_HEIGHT, CAR_SPAWN.z);
-    }
-  }, [
-    phase,
-    helicopterSpawned,
-    tankSpawned,
-    airplaneSpawned,
-    carSpawned,
-    spawnHelicopter,
-    spawnTank,
-    spawnAirplane,
-    spawnCar,
-  ]);
-
-  // クラフト画面の開閉状態（モバイル用：外部から制御）
-  const [craftingOpen, setCraftingOpen] = useState(false);
-
-  const handleOpenCrafting = useCallback(() => {
-    setCraftingOpen(true);
-  }, []);
-
-  const handleCloseCrafting = useCallback(() => {
-    setCraftingOpen(false);
-  }, []);
-
-  // スキン変更UI の開閉状態
-  const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // プレイ中に UI を開いたとき自動ポーズしたかどうか
-  const autoPausedForOverlay = useRef(false);
-  const togglePause = useGameStore((s) => s.togglePause);
-
-  const pauseForOverlay = useCallback(() => {
-    if (useGameStore.getState().phase === 'playing') {
-      togglePause();
-      autoPausedForOverlay.current = true;
-    }
-  }, [togglePause]);
-
-  const resumeIfAutoPaused = useCallback(() => {
-    if (autoPausedForOverlay.current && useGameStore.getState().phase === 'paused') {
-      togglePause();
-    }
-    autoPausedForOverlay.current = false;
-  }, [togglePause]);
-
-  const toggleSkinSelector = useCallback(() => {
-    setSkinSelectorOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        document.exitPointerLock?.();
-        pauseForOverlay();
-      } else {
-        resumeIfAutoPaused();
-        if (!isTouch) {
-          document.querySelector('canvas')?.requestPointerLock?.();
-        }
-      }
-      return next;
-    });
-  }, [isTouch, pauseForOverlay, resumeIfAutoPaused]);
-
-  // Tab キーでスキンセレクターを開閉
-  useEffect(() => {
-    if (phase === 'menu') return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        toggleSkinSelector();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [phase, toggleSkinSelector]);
-
-  const handleCloseSkinSelector = useCallback(() => {
-    setSkinSelectorOpen(false);
-    resumeIfAutoPaused();
-    if (!isTouch) {
-      activateDesktopGameplayInput();
-    }
-  }, [isTouch, resumeIfAutoPaused]);
+  const autoPausedForSettings = useRef(false);
 
   const handleOpenSettings = useCallback(() => {
     document.exitPointerLock?.();
-    pauseForOverlay();
+    if (useGameStore.getState().phase === 'playing') {
+      togglePause();
+      autoPausedForSettings.current = true;
+    }
     setSettingsOpen(true);
-  }, [pauseForOverlay]);
+  }, [togglePause]);
 
   const handleCloseSettings = useCallback(() => {
     setSettingsOpen(false);
-    resumeIfAutoPaused();
+    if (autoPausedForSettings.current && useGameStore.getState().phase === 'paused') togglePause();
+    autoPausedForSettings.current = false;
     if (useGameStore.getState().phase === 'playing' && !isTouch) {
       window.setTimeout(() => activateDesktopGameplayInput(), 80);
     }
-  }, [isTouch, resumeIfAutoPaused]);
+  }, [isTouch, togglePause]);
 
   return (
     <>
@@ -390,62 +51,16 @@ function MainGameApp() {
       />
       <SettingsMenu open={settingsOpen} onClose={handleCloseSettings} />
       {phase !== 'menu' && (
-        <>
-          <GameCanvas />
-          <Crosshair />
-          <MachineGunScopeHUD />
-          <Hotbar />
-          <HealthBar />
-          {showDetailedHud && <ToolHUD />}
-          {showDetailedHud && <ArmorHUD />}
-          <EffectIcons />
-          <XPBar />
-          <TimeDisplay />
-          <StageProgressHUD />
-          <StageLandmarkMomentHUD />
-          <StageMasteryMomentHUD />
-          {showDetailedHud && <StageChallengeHUD />}
-          {showDetailedHud && <StageConditionHUD />}
-          {showDetailedHud && <StageEventHUD />}
-          {showDetailedHud && <StagePressureHUD />}
-          <StageOpeningBriefing />
-          <BossEncounterHUD />
-          {showDetailedHud && <ModeFlowHUD />}
-          <StageChallengeRewardSystem />
-          <StageResultOverlay />
-          {showDetailedHud && <MasteryHUD />}
-          <CombatFeedbackHUD />
-          <ProgressCelebration />
-          <DamageOverlay />
-          <AttackIndicator />
-          <RocketCooldownIndicator />
-          <WeaponSwitchPopover />
-          <VehicleAimHUD />
-          <CockpitHUD />
-          <MinimapHUD />
-          <CoasterHUD />
-          <MultiplayerConnectionHUD />
-          <AirSupplyBar />
-          <HungerBar />
-          <UnderwaterOverlay />
-          <ControlsGuide />
-          {!isTouch && <DesktopInputHint />}
-          <VoiceChatUI />
-          <CraftingScreen
-            externalOpen={isTouch ? craftingOpen : undefined}
-            onClose={handleCloseCrafting}
-          />
-          {/* モバイルコントロール（タッチデバイスのみ） */}
-          {isTouch && (
-            <MobileControls onOpenCrafting={handleOpenCrafting} />
+        <Suspense
+          fallback={(
+            <div
+              className="game-canvas-shell game-canvas-loading"
+              aria-label="ワールドを読み込み中"
+            />
           )}
-          {/* ポーズ画面 */}
-          <PauseScreen onOpenSettings={handleOpenSettings} />
-          {/* スキン変更オーバーレイ */}
-          {skinSelectorOpen && (
-            <SkinSelector overlay onClose={handleCloseSkinSelector} />
-          )}
-        </>
+        >
+          <GameExperience onOpenSettings={handleOpenSettings} />
+        </Suspense>
       )}
     </>
   );

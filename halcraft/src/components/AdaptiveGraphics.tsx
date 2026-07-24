@@ -9,12 +9,14 @@ import { useGraphicsRuntimeStore, type GraphicsPressure } from '../stores/useGra
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { isTouchDevice } from '../utils/device';
 import { getPerformanceProfile } from '../utils/performance';
+import { calculateFrameWindowMetrics } from '../utils/frameMetrics';
 
 const WARMUP_SECONDS = 6;
 const SAMPLE_SECONDS = 2.5;
 const BAD_SAMPLES_TO_REDUCE = 2;
 const GOOD_SAMPLES_TO_RECOVER = 4;
 const MAX_MEASURED_DELTA = 0.12;
+const BENCHMARK_WINDOW_SECONDS = 30;
 
 function nextPressure(current: GraphicsPressure, direction: -1 | 1): GraphicsPressure {
   return Math.max(0, Math.min(2, current + direction)) as GraphicsPressure;
@@ -35,6 +37,8 @@ export function AdaptiveGraphicsGovernor() {
   const warmupRef = useRef(0);
   const elapsedRef = useRef(0);
   const frameCountRef = useRef(0);
+  const benchmarkFramesRef = useRef<number[]>([]);
+  const benchmarkElapsedRef = useRef(0);
   const badSamplesRef = useRef(0);
   const goodSamplesRef = useRef(0);
   const touchRef = useRef(isTouchDevice());
@@ -47,6 +51,8 @@ export function AdaptiveGraphicsGovernor() {
     warmupRef.current = 0;
     elapsedRef.current = 0;
     frameCountRef.current = 0;
+    benchmarkFramesRef.current = [];
+    benchmarkElapsedRef.current = 0;
     badSamplesRef.current = 0;
     goodSamplesRef.current = 0;
     pressureRef.current = 0;
@@ -58,8 +64,19 @@ export function AdaptiveGraphicsGovernor() {
 
     warmupRef.current += delta;
     if (warmupRef.current < WARMUP_SECONDS) return;
+    const benchmarkDelta = Math.min(delta, MAX_MEASURED_DELTA);
+    benchmarkFramesRef.current.push(benchmarkDelta);
+    benchmarkElapsedRef.current += benchmarkDelta;
+    if (benchmarkElapsedRef.current >= BENCHMARK_WINDOW_SECONDS) {
+      const metrics = calculateFrameWindowMetrics(benchmarkFramesRef.current);
+      gl.domElement.setAttribute('data-fps-window-seconds', String(BENCHMARK_WINDOW_SECONDS));
+      gl.domElement.setAttribute('data-fps-30s-average', metrics.averageFps.toFixed(1));
+      gl.domElement.setAttribute('data-fps-30s-1-percent-low', metrics.onePercentLowFps.toFixed(1));
+      benchmarkFramesRef.current = [];
+      benchmarkElapsedRef.current = 0;
+    }
     // 極端に遅いフレームも低FPSとして数える。タブ復帰時などの巨大deltaだけは上限で丸める。
-    elapsedRef.current += Math.min(delta, MAX_MEASURED_DELTA);
+    elapsedRef.current += benchmarkDelta;
     frameCountRef.current += 1;
     if (elapsedRef.current < SAMPLE_SECONDS) return;
 

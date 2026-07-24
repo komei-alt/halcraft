@@ -10,6 +10,7 @@ import {
 } from '../stores/useSettingsStore';
 
 export type PerformanceTier = 'low' | 'balanced' | 'high';
+export type MaterialDetail = 'base' | 'pbr';
 
 export interface PerformanceProfile {
   tier: PerformanceTier;
@@ -25,6 +26,17 @@ export interface PerformanceProfile {
   shadowMapSize: number;
   shadowCameraSize: number;
   shadowCameraFar: number;
+  /** ワールド生成量に対する植生表示率 */
+  vegetationDensity: number;
+  /** 植生LODの切替距離（m）。Highのみ3段階。 */
+  vegetationLodDistances: readonly number[];
+  /** カメラから何チャンク先まで植生を描くか */
+  vegetationChunkRadius: number;
+  /** 近景の風揺れ強度 */
+  vegetationWind: number;
+  vegetationShadows: boolean;
+  particleBudget: number;
+  materialDetail: MaterialDetail;
 }
 
 function getNavigatorMemory(): number | undefined {
@@ -59,7 +71,7 @@ function getPresetTier(preset: GraphicsPreset): PerformanceTier {
   return getAutoTier();
 }
 
-const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
+export const PERFORMANCE_PROFILES: Readonly<Record<PerformanceTier, PerformanceProfile>> = {
   low: {
     tier: 'low',
     shadowsEnabled: false,
@@ -74,6 +86,13 @@ const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
     shadowMapSize: 0,
     shadowCameraSize: 0,
     shadowCameraFar: 0,
+    vegetationDensity: 0.58,
+    vegetationLodDistances: [44],
+    vegetationChunkRadius: 4,
+    vegetationWind: 0,
+    vegetationShadows: false,
+    particleBudget: 220,
+    materialDetail: 'base',
   },
   balanced: {
     tier: 'balanced',
@@ -90,6 +109,13 @@ const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
     shadowMapSize: 1024,
     shadowCameraSize: 46,
     shadowCameraFar: 140,
+    vegetationDensity: 0.75,
+    vegetationLodDistances: [32, 80],
+    vegetationChunkRadius: 6,
+    vegetationWind: 0.55,
+    vegetationShadows: true,
+    particleBudget: 520,
+    materialDetail: 'pbr',
   },
   high: {
     tier: 'high',
@@ -105,6 +131,13 @@ const BASE_PROFILES: Record<PerformanceTier, PerformanceProfile> = {
     shadowMapSize: 1536,
     shadowCameraSize: 56,
     shadowCameraFar: 170,
+    vegetationDensity: 1,
+    vegetationLodDistances: [36, 92, 150],
+    vegetationChunkRadius: 9,
+    vegetationWind: 1,
+    vegetationShadows: true,
+    particleBudget: 900,
+    materialDetail: 'pbr',
   },
 };
 
@@ -177,7 +210,7 @@ function applyShadowQuality(profile: PerformanceProfile, quality: ShadowQuality)
 export function getPerformanceProfile(): PerformanceProfile {
   const settings = useSettingsStore.getState();
   const tier = getPresetTier(settings.graphicsPreset);
-  const baseProfile = BASE_PROFILES[tier];
+  const baseProfile = PERFORMANCE_PROFILES[tier];
   const effectiveRenderDistance = settings.graphicsPreset === 'auto'
     ? Math.min(settings.renderDistance, baseProfile.visibleChunkRadius)
     : settings.renderDistance;

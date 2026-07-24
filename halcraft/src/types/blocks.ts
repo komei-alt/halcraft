@@ -56,6 +56,16 @@ export const BLOCK_IDS = {
   SOUL_SAND: 48,
   GLOWSTONE: 49,
   NETHER_PORTAL: 50,
+  TALL_GRASS: 51,
+  WILDFLOWER: 52,
+  BUSH: 53,
+  REED: 54,
+  MUSHROOM: 55,
+  DEAD_BUSH: 56,
+  CACTUS: 57,
+  FROST_GRASS: 58,
+  NETHER_FUNGUS: 59,
+  ICE: 60,
 } as const;
 
 export type BlockId = (typeof BLOCK_IDS)[keyof typeof BLOCK_IDS];
@@ -70,6 +80,30 @@ export interface FaceTextures {
   bottom: string;
 }
 
+/** ブロックの描画方式。cube以外は専用InstancedMeshで描画する。 */
+export type BlockRenderKind = 'cube' | 'foliage' | 'cactus' | 'liquid' | 'special';
+
+/** PBRマテリアルの透過方式。 */
+export type MaterialAlphaMode = 'opaque' | 'cutout' | 'blend';
+
+/** 静的アトラスに収録するブロックマテリアルの公開仕様。 */
+export interface BlockMaterialSpec {
+  id: string;
+  family: string;
+  roughness: number;
+  metalness: number;
+  normalStrength: number;
+  emissive?: number;
+  alphaMode?: MaterialAlphaMode;
+}
+
+/** 面別PBRマテリアル指定。 */
+export interface FaceMaterialIds {
+  top: string;
+  side: string;
+  bottom: string;
+}
+
 /** ブロック情報 */
 export interface BlockInfo {
   id: BlockId;
@@ -78,6 +112,14 @@ export interface BlockInfo {
   texture: string;
   /** 面別テクスチャ（指定時は texture より優先） */
   faceTextures?: FaceTextures;
+  /** 静的PBRアトラスのマテリアルID */
+  materialId?: string;
+  /** 面別PBRマテリアル（指定時はmaterialIdより優先） */
+  faceMaterialIds?: FaceMaterialIds;
+  /** 描画方式（未指定はcube） */
+  renderKind?: BlockRenderKind;
+  /** HUD・ドロップ表示用の高品質アイコンURL */
+  iconTexture?: string;
   /** 半透明か（ガラス等） */
   transparent: boolean;
   /** 破壊不可か（岩盤） */
@@ -98,6 +140,8 @@ export interface BlockInfo {
   nonStandard?: boolean;
   /** 当たり判定がないか（松明のように通過できるもの） */
   noCollision?: boolean;
+  /** full=通常立方体、inset=内側AABB、none=非衝突 */
+  collisionShape?: 'full' | 'inset' | 'none';
   /** 液体ブロックか（水・溶岩） */
   isLiquid?: boolean;
   /** 硬さ（破壊にかかる秒数、未指定は0.5） */
@@ -108,6 +152,10 @@ export interface BlockInfo {
   explosive?: boolean;
   /** ブロックカテゴリ（ツール効果判定用: 'stone'|'wood'|'dirt'|'ore'） */
   blockCategory?: string;
+  /** 破壊時に取得するブロック。未指定は自身。nullはドロップなし。 */
+  dropBlockId?: BlockId | null;
+  /** ドロップ確率（0〜1、未指定は1） */
+  dropChance?: number;
 }
 
 /** 全ブロックの定義テーブル */
@@ -121,6 +169,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
       side: 'grass_side.png',
       bottom: 'dirt.png',
     },
+    materialId: 'grass_top',
+    faceMaterialIds: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' },
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -130,6 +180,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.DIRT,
     name: '土ブロック',
     texture: 'dirt.png',
+    materialId: 'dirt',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -139,6 +190,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.WOOD,
     name: '木のブロック',
     texture: 'wood.png',
+    materialId: 'wood_planks',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -148,6 +200,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.IRON,
     name: '鉄ブロック',
     texture: 'iron.png',
+    materialId: 'iron',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -156,6 +209,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.IRON_CRACKED,
     name: 'ひびが入った鉄ブロック',
     texture: 'iron_cracked.png',
+    materialId: 'iron_cracked',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -164,6 +218,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.IRON_MOSSY,
     name: 'カビが生えた鉄ブロック',
     texture: 'iron_mossy.png',
+    materialId: 'iron_mossy',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -172,6 +227,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.BEDROCK,
     name: '岩盤ブロック',
     texture: 'bedrock.png',
+    materialId: 'bedrock',
     transparent: false,
     unbreakable: true,
     emissive: false,
@@ -180,6 +236,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAW_WOOD,
     name: '生の木ブロック',
     texture: 'raw_wood.png',
+    materialId: 'oak_bark',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -188,6 +245,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.GLASS,
     name: 'ガラスブロック',
     texture: 'glass.png',
+    materialId: 'glass',
+    renderKind: 'cube',
     transparent: true,
     unbreakable: false,
     emissive: false,
@@ -196,6 +255,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.ENCHANT,
     name: 'エンチャントブロック',
     texture: 'enchant.png',
+    materialId: 'enchant',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -209,6 +269,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.ELECTRIC,
     name: '電気のブロック',
     texture: 'electric.png',
+    materialId: 'electric',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -222,6 +283,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.SPAWNER,
     name: 'アイアンゴーレムが無限に出てくるブロック',
     texture: 'spawner.png',
+    materialId: 'spawner',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -235,6 +297,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.STAIRS,
     name: '階段',
     texture: 'stairs.png',
+    materialId: 'wood_planks',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -244,6 +308,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.TORCH,
     name: '松明',
     texture: 'torch.png',
+    materialId: 'wood_planks',
+    renderKind: 'special',
     transparent: true,
     unbreakable: false,
     emissive: true,
@@ -259,6 +325,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.BED,
     name: 'ベッド',
     texture: 'bed.png',
+    materialId: 'wood_planks',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -269,6 +337,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.LEAVES,
     name: '葉っぱブロック',
     texture: 'leaves.png',
+    materialId: 'leaves',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -277,6 +346,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.TURRET,
     name: '固定タレット',
     texture: 'turret.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -289,6 +360,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.CORE,
     name: '防衛クリスタル',
     texture: 'enchant.png',
+    materialId: 'enchant',
     transparent: false,
     unbreakable: true, // プレイヤーからは破壊不可。敵の攻撃とシステムでのみ破壊可能
     emissive: true,
@@ -302,6 +374,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.DOOR,
     name: 'ドア',
     texture: 'door.svg',
+    materialId: 'wood_planks',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -312,6 +386,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.LADDER,
     name: 'ハシゴ',
     texture: 'ladder.svg',
+    materialId: 'electric',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -324,6 +400,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.CAMPFIRE,
     name: '焚き火',
     texture: 'campfire.svg',
+    materialId: 'oak_bark',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -339,6 +417,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.CANDLE,
     name: '蝋燭',
     texture: 'candle.svg',
+    materialId: 'glowstone',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -359,6 +439,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
       side: 'snow_side.png',
       bottom: 'dirt.png',
     },
+    materialId: 'snow_top',
+    faceMaterialIds: { top: 'snow_top', side: 'snow_side', bottom: 'dirt' },
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -367,6 +449,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.SAND,
     name: '砂ブロック',
     texture: 'desert_sandstone.png',
+    materialId: 'sandstone',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -375,6 +458,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAIL,
     name: 'レール',
     texture: 'rail.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -385,6 +470,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAIL_SLOPE,
     name: '坂道レール',
     texture: 'rail_slope.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -395,6 +482,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAIL_BOOSTER,
     name: 'ブースターレール',
     texture: 'rail_booster.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -410,6 +499,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAIL_LOOP,
     name: 'ループレール',
     texture: 'rail_loop.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -422,6 +513,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.RAIL_CHAIN,
     name: 'チェーンリフト',
     texture: 'rail_chain.svg',
+    materialId: 'iron',
+    renderKind: 'special',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -437,6 +530,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.WATER,
     name: '水',
     texture: 'water.png',
+    materialId: 'glass',
+    renderKind: 'liquid',
     transparent: true,
     unbreakable: false,
     emissive: false,
@@ -448,6 +543,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.STONE,
     name: '石ブロック',
     texture: 'stone.png',
+    materialId: 'stone',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -459,6 +555,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.LAVA,
     name: '溶岩',
     texture: 'lava.png',
+    materialId: 'netherrack',
+    renderKind: 'liquid',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -475,6 +573,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.COAL_ORE,
     name: '石炭鉱石',
     texture: 'coal_ore.png',
+    materialId: 'coal_ore',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -486,6 +585,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.IRON_ORE,
     name: '鉄鉱石',
     texture: 'iron_ore.png',
+    materialId: 'iron_ore',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -497,6 +597,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.GOLD_ORE,
     name: '金鉱石',
     texture: 'gold_ore.png',
+    materialId: 'gold_ore',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -508,6 +609,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.DIAMOND_ORE,
     name: 'ダイヤモンド鉱石',
     texture: 'diamond_ore.png',
+    materialId: 'diamond_ore',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -519,6 +621,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.CHEST,
     name: 'チェスト',
     texture: 'chest.png',
+    materialId: 'chest',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -528,6 +631,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.FURNACE,
     name: 'かまど',
     texture: 'furnace.png',
+    materialId: 'furnace',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -540,6 +644,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.TNT,
     name: 'TNT',
     texture: 'tnt.png',
+    materialId: 'tnt',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -550,6 +655,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.IRON_INGOT,
     name: '鉄インゴット',
     texture: 'iron_ingot.png',
+    materialId: 'iron_ingot',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -558,6 +664,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.GOLD_INGOT,
     name: '金インゴット',
     texture: 'gold_ingot.png',
+    materialId: 'gold_ingot',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -566,6 +673,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.DIAMOND_GEM,
     name: 'ダイヤモンド',
     texture: 'diamond_gem.png',
+    materialId: 'diamond_gem',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -576,6 +684,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.STICK,
     name: '棒',
     texture: 'stick.png',
+    materialId: 'oak_bark',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -584,6 +693,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.WHEAT_SEEDS,
     name: '小麦の種',
     texture: 'grass_top.png',
+    materialId: 'grass_top',
+    renderKind: 'special',
     transparent: true,
     unbreakable: false,
     emissive: false,
@@ -595,6 +706,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.FARMLAND,
     name: '耕地',
     texture: 'dirt.png',
+    materialId: 'farmland',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -605,6 +717,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.LEVER,
     name: 'レバー',
     texture: 'stone.png',
+    materialId: 'stone',
+    renderKind: 'special',
     transparent: true,
     unbreakable: false,
     emissive: false,
@@ -616,6 +730,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.NETHERRACK,
     name: 'ネザーラック',
     texture: 'desert_terracotta.png',
+    materialId: 'netherrack',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -626,6 +741,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.SOUL_SAND,
     name: 'ソウルサンド',
     texture: 'desert_sandstone.png',
+    materialId: 'soul_sand',
     transparent: false,
     unbreakable: false,
     emissive: false,
@@ -636,6 +752,7 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.GLOWSTONE,
     name: 'グロウストーン',
     texture: 'enchant.png',
+    materialId: 'glowstone',
     transparent: false,
     unbreakable: false,
     emissive: true,
@@ -650,6 +767,8 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     id: BLOCK_IDS.NETHER_PORTAL,
     name: 'ネザーポータル',
     texture: 'enchant.png',
+    materialId: 'nether_portal',
+    renderKind: 'special',
     transparent: true,
     unbreakable: true,
     emissive: true,
@@ -660,6 +779,168 @@ export const BLOCK_DEFS: Record<number, BlockInfo> = {
     lightDistance: 15,
     nonStandard: true,
     noCollision: true,
+  },
+  [BLOCK_IDS.TALL_GRASS]: {
+    id: BLOCK_IDS.TALL_GRASS,
+    name: '背の高い草',
+    texture: 'grass_top.png',
+    iconTexture: '/textures/material-icons/tall_grass.webp',
+    materialId: 'grass_top',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.08,
+    dropBlockId: BLOCK_IDS.WHEAT_SEEDS,
+    dropChance: 0.34,
+  },
+  [BLOCK_IDS.WILDFLOWER]: {
+    id: BLOCK_IDS.WILDFLOWER,
+    name: '野の花',
+    texture: 'grass_top.png',
+    iconTexture: '/textures/material-icons/wildflower.webp',
+    materialId: 'grass_top',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.06,
+    dropBlockId: BLOCK_IDS.WHEAT_SEEDS,
+    dropChance: 0.24,
+  },
+  [BLOCK_IDS.BUSH]: {
+    id: BLOCK_IDS.BUSH,
+    name: '木の実の茂み',
+    texture: 'leaves.png',
+    iconTexture: '/textures/material-icons/bush.webp',
+    materialId: 'leaves',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.18,
+    dropBlockId: BLOCK_IDS.LEAVES,
+  },
+  [BLOCK_IDS.REED]: {
+    id: BLOCK_IDS.REED,
+    name: '水辺のアシ',
+    texture: 'grass_top.png',
+    iconTexture: '/textures/material-icons/reed.webp',
+    materialId: 'grass_top',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.08,
+    dropBlockId: null,
+  },
+  [BLOCK_IDS.MUSHROOM]: {
+    id: BLOCK_IDS.MUSHROOM,
+    name: '森のキノコ',
+    texture: 'wood.png',
+    iconTexture: '/textures/material-icons/mushroom.webp',
+    materialId: 'wood_planks',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.08,
+    dropBlockId: null,
+  },
+  [BLOCK_IDS.DEAD_BUSH]: {
+    id: BLOCK_IDS.DEAD_BUSH,
+    name: '砂漠の枯れ木',
+    texture: 'raw_wood.png',
+    iconTexture: '/textures/material-icons/dead_bush.webp',
+    materialId: 'oak_bark',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.12,
+    dropBlockId: BLOCK_IDS.STICK,
+  },
+  [BLOCK_IDS.CACTUS]: {
+    id: BLOCK_IDS.CACTUS,
+    name: '花咲くサボテン',
+    texture: 'leaves.png',
+    iconTexture: '/textures/material-icons/cactus_blossom.webp',
+    materialId: 'cactus',
+    renderKind: 'cactus',
+    transparent: false,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    collisionShape: 'inset',
+    hardness: 0.35,
+    dropBlockId: BLOCK_IDS.CACTUS,
+  },
+  [BLOCK_IDS.FROST_GRASS]: {
+    id: BLOCK_IDS.FROST_GRASS,
+    name: '霜の草',
+    texture: 'snow_top.png',
+    iconTexture: '/textures/material-icons/frost_grass.webp',
+    materialId: 'snow_top',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.08,
+    dropBlockId: BLOCK_IDS.WHEAT_SEEDS,
+    dropChance: 0.28,
+  },
+  [BLOCK_IDS.NETHER_FUNGUS]: {
+    id: BLOCK_IDS.NETHER_FUNGUS,
+    name: 'ネザーの光るキノコ',
+    texture: 'enchant.png',
+    iconTexture: '/textures/material-icons/nether_fungus.webp',
+    materialId: 'netherrack',
+    renderKind: 'foliage',
+    transparent: true,
+    unbreakable: false,
+    emissive: true,
+    emissiveColor: new THREE.Color(0x43e8ff),
+    emissiveIntensity: 0.7,
+    nonStandard: true,
+    noCollision: true,
+    collisionShape: 'none',
+    hardness: 0.1,
+    dropBlockId: null,
+  },
+  [BLOCK_IDS.ICE]: {
+    id: BLOCK_IDS.ICE,
+    name: '氷ブロック',
+    texture: 'glass.png',
+    iconTexture: '/textures/material-icons/ice.webp',
+    materialId: 'ice',
+    renderKind: 'cube',
+    transparent: true,
+    unbreakable: false,
+    emissive: false,
+    collisionShape: 'full',
+    hardness: 0.45,
+    dropBlockId: BLOCK_IDS.ICE,
   },
 };
 
@@ -688,6 +969,16 @@ export const HOTBAR_BLOCKS: BlockId[] = [
   BLOCK_IDS.SAND,
   BLOCK_IDS.WATER,
   BLOCK_IDS.LAVA,
+  BLOCK_IDS.TALL_GRASS,
+  BLOCK_IDS.WILDFLOWER,
+  BLOCK_IDS.BUSH,
+  BLOCK_IDS.REED,
+  BLOCK_IDS.MUSHROOM,
+  BLOCK_IDS.DEAD_BUSH,
+  BLOCK_IDS.CACTUS,
+  BLOCK_IDS.FROST_GRASS,
+  BLOCK_IDS.NETHER_FUNGUS,
+  BLOCK_IDS.ICE,
 ];
 
 /** チャンクサイズ定数 */

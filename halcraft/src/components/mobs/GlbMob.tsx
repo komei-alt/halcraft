@@ -15,6 +15,7 @@ import {
   type ProceduralMobRig,
 } from '../../utils/mobProceduralRig';
 import { MOB_RIG_PROFILES, sampleRigSurfaceY } from '../../utils/mobRigMotion';
+import { cloneHaruModelScene } from '../../utils/modelMaterials';
 
 export interface GlbMobModelConfig {
   path: string;
@@ -50,28 +51,7 @@ interface GlbMobProps {
 }
 
 function cloneSceneWithMaterials(scene: THREE.Group): THREE.Group {
-  const clone = scene.clone(true);
-  clone.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      child.renderOrder = 0;
-      if (Array.isArray(child.material)) {
-        child.material = child.material.map((mat) => {
-          const cloned = mat.clone();
-          cloned.depthWrite = true;
-          cloned.depthTest = true;
-          return cloned;
-        });
-      } else {
-        const cloned = child.material.clone();
-        cloned.depthWrite = true;
-        cloned.depthTest = true;
-        child.material = cloned;
-      }
-    }
-  });
-  return clone;
+  return cloneHaruModelScene(scene);
 }
 
 function disposeSceneMaterials(scene: THREE.Object3D): void {

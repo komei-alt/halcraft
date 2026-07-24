@@ -666,6 +666,8 @@ export function CombatExplosionFX() {
     return () => registerCombatExplosionSpawner(() => {});
   }, [spawn]);
 
+  // R3Fのフレームループ内で寿命・速度を更新する、意図したミュータブル粒子プール。
+  /* eslint-disable react-hooks/immutability */
   useFrame((_, delta) => {
     const list = explosionsRef.current;
     const dt = Math.min(delta, 0.05);
@@ -974,6 +976,7 @@ export function CombatExplosionFX() {
       lightRef.current.color.setHex(0xff7a28);
     }
   });
+  /* eslint-enable react-hooks/immutability */
 
   return (
     <group>

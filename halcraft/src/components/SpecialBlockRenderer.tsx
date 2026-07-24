@@ -5,6 +5,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useWorldStore } from '../stores/useWorldStore';
 import { BLOCK_IDS, type BlockId } from '../types/blocks';
+import { mapGeometryToMaterialAtlas, useAtlasPbrMaterial } from '../utils/blockPbrAtlas';
 
 function usePlacedBlockPositions(blockId: BlockId) {
   const blockIndexVersion = useWorldStore((state) => state.blockIndexVersion);
@@ -16,31 +17,23 @@ function usePlacedBlockPositions(blockId: BlockId) {
   }, [blockId, blockIndexVersion, getIndexedBlockPositions]);
 }
 
-const stairLowerGeometry = new THREE.BoxGeometry(0.96, 0.48, 0.96);
-const stairUpperGeometry = new THREE.BoxGeometry(0.96, 0.48, 0.48);
-const stairLowerMaterial = new THREE.MeshStandardMaterial({ color: 0x9a6b3a, roughness: 0.9 });
-const stairUpperMaterial = new THREE.MeshStandardMaterial({ color: 0xb2824d, roughness: 0.86 });
+const stairLowerGeometry = mapGeometryToMaterialAtlas(
+  new THREE.BoxGeometry(0.96, 0.48, 0.96),
+  'wood_planks',
+);
+const stairUpperGeometry = mapGeometryToMaterialAtlas(
+  new THREE.BoxGeometry(0.96, 0.48, 0.48),
+  'wood_planks',
+);
 
-const portalFrameGeometry = new THREE.BoxGeometry(0.94, 0.94, 0.16);
-const portalSurfaceGeometry = new THREE.PlaneGeometry(0.74, 0.74, 1, 1);
-const portalFrameMaterial = new THREE.MeshStandardMaterial({
-  color: 0x21162e,
-  emissive: new THREE.Color(0x3b1268),
-  emissiveIntensity: 0.38,
-  metalness: 0.18,
-  roughness: 0.7,
-});
-const portalSurfaceMaterial = new THREE.MeshBasicMaterial({
-  color: 0xb95cff,
-  transparent: true,
-  opacity: 0.7,
-  depthWrite: false,
-  // 壁越しにポータルが光って見えるのを防ぐ
-  depthTest: true,
-  side: THREE.DoubleSide,
-  blending: THREE.AdditiveBlending,
-  toneMapped: false,
-});
+const portalFrameGeometry = mapGeometryToMaterialAtlas(
+  new THREE.BoxGeometry(0.94, 0.94, 0.16),
+  'netherrack',
+);
+const portalSurfaceGeometry = mapGeometryToMaterialAtlas(
+  new THREE.PlaneGeometry(0.74, 0.74, 1, 1),
+  'nether_portal',
+);
 const instanceDummy = new THREE.Object3D();
 
 function setInstanceTransform(
@@ -62,6 +55,7 @@ export function StairsRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.STAIRS);
   const lowerRef = useRef<THREE.InstancedMesh>(null);
   const upperRef = useRef<THREE.InstancedMesh>(null);
+  const stairMaterial = useAtlasPbrMaterial('wood_planks');
 
   useLayoutEffect(() => {
     positions.forEach((position, index) => {
@@ -80,8 +74,8 @@ export function StairsRenderer() {
 
   return (
     <group>
-      <instancedMesh ref={lowerRef} args={[stairLowerGeometry, stairLowerMaterial, positions.length]} castShadow receiveShadow />
-      <instancedMesh ref={upperRef} args={[stairUpperGeometry, stairUpperMaterial, positions.length]} castShadow receiveShadow />
+      <instancedMesh ref={lowerRef} args={[stairLowerGeometry, stairMaterial, positions.length]} castShadow receiveShadow />
+      <instancedMesh ref={upperRef} args={[stairUpperGeometry, stairMaterial, positions.length]} castShadow receiveShadow />
     </group>
   );
 }
@@ -91,6 +85,15 @@ export function NetherPortalRenderer() {
   const positions = usePlacedBlockPositions(BLOCK_IDS.NETHER_PORTAL);
   const frameRef = useRef<THREE.InstancedMesh>(null);
   const surfaceRef = useRef<THREE.InstancedMesh>(null);
+  const portalFrameMaterial = useAtlasPbrMaterial('netherrack', { emissiveIntensity: 0.2 });
+  const portalSurfaceMaterial = useAtlasPbrMaterial('nether_portal', {
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    emissiveIntensity: 1.2,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
 
   useLayoutEffect(() => {
     positions.forEach((position, index) => {
@@ -106,7 +109,12 @@ export function NetherPortalRenderer() {
   }, [positions]);
 
   useFrame(({ clock }) => {
-    portalSurfaceMaterial.opacity = 0.62 + Math.sin(clock.elapsedTime * 2.4) * 0.08;
+    const material = surfaceRef.current?.material;
+    if (material instanceof THREE.MeshStandardMaterial) {
+      // R3Fのフレームループ内で、共有ポータル面の明滅だけを更新する。
+      // eslint-disable-next-line react-hooks/immutability
+      material.opacity = 0.62 + Math.sin(clock.elapsedTime * 2.4) * 0.08;
+    }
   });
 
   if (positions.length === 0) return null;
