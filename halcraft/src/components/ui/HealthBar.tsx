@@ -16,7 +16,7 @@ function useIsRegenerating(): boolean {
   const isDead = usePlayerStore((s) => s.isDead);
   const [isRegen, setIsRegen] = useState(false);
   // タイマーで外部状態（performance.now）を定期ポーリングして同期するパターン
-  /* eslint-disable react-hooks/set-state-in-effect */
+
   useEffect(() => {
     if (isDead || hp >= maxHp) {
       setIsRegen(false);
@@ -31,7 +31,7 @@ function useIsRegenerating(): boolean {
     const timer = setInterval(check, 1000);
     return () => clearInterval(timer);
   }, [hp, maxHp, lastDamageTime, isDead]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+
 
   return isRegen;
 }

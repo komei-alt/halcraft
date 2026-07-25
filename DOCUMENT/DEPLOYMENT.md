@@ -4,8 +4,9 @@
 
 ```
 Status: 確定
-Version: 1.0
+Version: 1.3
 Created: 2026-03-22
+Updated: 2026-07-25
 ```
 
 ---
@@ -68,6 +69,13 @@ Mac Studio (or MacBook Air)
 
 2. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/halcraft.conf`)
    - `halcraft.rosch.jp:443` → `localhost:4000`
+   - 証明書: `/usr/local/etc/nginx/ssl/halcraft.rosch.jp/`
+
+3. **Let's Encrypt 自動更新**
+   - HTTP-01 配信元: `/var/lib/acme-halcraft/.well-known/acme-challenge/`
+   - コンテナ内: `/var/www/acme/.well-known/acme-challenge/`（read-only）
+   - Cloudflare API トークンは使用しない
+   - NAS の既存 `acme.sh --cron` から自動更新し、成功時に Nginx を reload する
 
 ### RTX1210 への静的DNS追加方法
 
@@ -84,7 +92,7 @@ Mac Studio (or MacBook Air)
 nslookup halcraft.rosch.jp 192.168.100.1
 
 # ローカルアクセス速度テスト
-curl -sS -k -o /dev/null -w "HTTP:%{http_code} IP:%{remote_ip} Time:%{time_total}s\n" https://halcraft.rosch.jp
+curl -sS -o /dev/null -w "HTTP:%{http_code} IP:%{remote_ip} Time:%{time_total}s\n" https://halcraft.rosch.jp
 ```
 
 ---
@@ -230,4 +238,4 @@ ssh nas "sudo /usr/local/bin/docker image prune -f"
 
 ---
 
-*最終更新: 2026-03-22 v1.2*
+*最終更新: 2026-07-25 v1.3*

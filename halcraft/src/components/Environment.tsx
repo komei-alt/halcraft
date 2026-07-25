@@ -538,7 +538,7 @@ export function Environment() {
     starGeometry.dispose();
   }, [cloudTexture, starGeometry]);
 
-  /* eslint-disable react-hooks/immutability */
+
   useEffect(() => {
     const previousAutoUpdate = gl.shadowMap.autoUpdate;
     gl.shadowMap.autoUpdate = false;
@@ -548,10 +548,10 @@ export function Environment() {
       gl.shadowMap.needsUpdate = true;
     };
   }, [gl]);
-  /* eslint-enable react-hooks/immutability */
+
 
   // 毎フレーム昼夜サイクルを更新
-  /* eslint-disable react-hooks/immutability */
+
   useFrame((_, delta) => {
     // ゲーム時間を進める
     advanceTime(delta);
@@ -808,7 +808,7 @@ export function Environment() {
         * (0.12 + nightMix * 0.56);
     }
   });
-  /* eslint-enable react-hooks/immutability */
+
 
   return (
     <>

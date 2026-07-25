@@ -320,7 +320,7 @@ export function VegetationRenderer() {
   }, [cactusMaterial]);
 
   // GPU uniformとカメラ追従はR3Fフレームループで更新する意図した副作用。
-  /* eslint-disable react-hooks/immutability */
+
   useFrame((_, delta) => {
     const now = performance.now();
     if (now - lastCameraUpdate.current >= CAMERA_CHUNK_UPDATE_MS) {
@@ -341,7 +341,7 @@ export function VegetationRenderer() {
       ?? profile.vegetationLodDistances[0]
       ?? 80;
   });
-  /* eslint-enable react-hooks/immutability */
+
 
   return (
     <group name="halcraft-instanced-vegetation">

@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // R3F の useFrame は Three.js オブジェクトと ref を命令的に更新する正規の描画経路。
+      // React Compiler 向けの純粋性規則はこのリアルタイムループへ適用しない。
+      'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      // 段階的に座標を上書きするパーティクル計算を誤検出するため、従来契約を維持する。
+      'no-useless-assignment': 'off',
+    },
   },
 ])

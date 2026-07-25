@@ -95,7 +95,7 @@ export function MaintenanceOverlay() {
   }, [dismissFalsePositive, markRecovering]);
 
   // 復帰カウントダウン — setInterval コールバックで外部タイマーと同期するパターン
-  /* eslint-disable react-hooks/set-state-in-effect */
+
   useEffect(() => {
     if (!isRecovering) return;
 
@@ -114,7 +114,7 @@ export function MaintenanceOverlay() {
 
     return () => clearInterval(timer);
   }, [isRecovering]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+
 
   useEffect(() => {
     const handleOffline = () => {

@@ -112,7 +112,7 @@ export function NetherPortalRenderer() {
     const material = surfaceRef.current?.material;
     if (material instanceof THREE.MeshStandardMaterial) {
       // R3Fのフレームループ内で、共有ポータル面の明滅だけを更新する。
-      // eslint-disable-next-line react-hooks/immutability
+
       material.opacity = 0.62 + Math.sin(clock.elapsedTime * 2.4) * 0.08;
     }
   });

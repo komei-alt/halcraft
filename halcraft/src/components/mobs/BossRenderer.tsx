@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/immutability -- useFrame内でThree.jsのマテリアルと行列を直接更新する */
+
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';

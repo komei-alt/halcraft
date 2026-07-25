@@ -429,7 +429,7 @@ function LiquidRenderer({
   }, [material]);
 
   // 毎フレーム time uniform を更新（Three.js のマテリアル副作用）
-  /* eslint-disable react-hooks/immutability */
+
   useFrame((_, delta) => {
     const now = performance.now();
     if (now - lastCenterUpdate.current >= LIQUID_CENTER_UPDATE_INTERVAL_MS) {
@@ -457,7 +457,7 @@ function LiquidRenderer({
       nightMixUniform.value = getLiquidNightMix(gameState.gameTime, gameState.dimension);
     }
   });
-  /* eslint-enable react-hooks/immutability */
+
 
   if (faceCount === 0) return null;
 

@@ -25,6 +25,10 @@ services:
     restart: always
     ports:
       - "4000:80"
+    volumes:
+      # Cloudflare Tunnel と社内向けリバースプロキシの両方から
+      # HTTP-01 チャレンジを配信し、NAS 単体で証明書を自動更新する。
+      - /var/lib/acme-halcraft:/var/www/acme:ro
     networks:
       - halcraft-net
 

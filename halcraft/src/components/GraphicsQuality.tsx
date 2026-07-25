@@ -276,7 +276,7 @@ export function CanvasResolutionPipeline() {
     if (!needsResize) return;
 
     // Three.jsとR3Fの両方にサイズを渡し、レイキャストと描画解像度をそろえる。
-    /* eslint-disable react-hooks/immutability */
+
     setDpr(targetDpr);
     setSize(width, height);
     gl.setPixelRatio(targetDpr);
@@ -285,7 +285,7 @@ export function CanvasResolutionPipeline() {
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
-    /* eslint-enable react-hooks/immutability */
+
   }, [camera, gl, pressure, setDpr, setSize]);
 
   useEffect(() => {
@@ -322,7 +322,7 @@ export function RendererColorPipeline() {
       : 1.02;
 
   // Three.jsレンダラーはR3F外部オブジェクトなので、色管理だけを副作用で同期する。
-  /* eslint-disable react-hooks/immutability */
+
   useEffect(() => {
     gl.outputColorSpace = THREE.SRGBColorSpace;
     // ポストFXの ToneMapping と二重適用すると色が潰れる／白っぽくなるため切り替える
@@ -347,7 +347,7 @@ export function RendererColorPipeline() {
       * (1 + Math.max(0, stageBoost - 1) * 0.08);
     gl.toneMappingExposure = THREE.MathUtils.lerp(gl.toneMappingExposure, dynamicExposure, 0.08);
   });
-  /* eslint-enable react-hooks/immutability */
+
 
   return null;
 }
@@ -361,7 +361,7 @@ export function SceneReflectionPipeline() {
   const profile = getPerformanceProfile();
   const enabled = graphicsPreset !== 'light' && lightingQuality !== 'simple' && profile.tier !== 'low';
 
-  /* eslint-disable react-hooks/immutability */
+
   useEffect(() => {
     if (!enabled) return undefined;
 
@@ -400,7 +400,7 @@ export function SceneReflectionPipeline() {
     scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, targetIntensity, 0.055);
     scene.environmentRotation.y = gameState.gameTime * Math.PI * 2 * 0.08;
   });
-  /* eslint-enable react-hooks/immutability */
+
 
   return null;
 }
