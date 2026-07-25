@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, 'dist');
+const acmeRootDir = process.env.ACME_WEBROOT ?? '/var/www/acme';
+const acmeChallengePrefix = '/.well-known/acme-challenge/';
 const port = Number.parseInt(process.env.PORT ?? '80', 10);
 
 const mimeTypes = new Map([
@@ -82,6 +84,25 @@ async function resolveAsset(urlPath) {
   return path.join(rootDir, 'index.html');
 }
 
+async function resolveAcmeChallenge(urlPath) {
+  const token = urlPath.slice(acmeChallengePrefix.length);
+
+  // ACME HTTP-01 の token 以外は受け付けず、パストラバーサルと SPA fallback を防ぐ。
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) {
+    return null;
+  }
+
+  const challengeDir = path.join(acmeRootDir, '.well-known', 'acme-challenge');
+  const challengePath = path.join(challengeDir, token);
+
+  try {
+    const stats = await fs.stat(challengePath);
+    return stats.isFile() ? challengePath : null;
+  } catch {
+    return null;
+  }
+}
+
 function setHeaders(response, filePath) {
   const extension = path.extname(filePath).toLowerCase();
   response.setHeader('Content-Type', mimeTypes.get(extension) ?? 'application/octet-stream');
@@ -111,15 +132,21 @@ const server = createServer(async (request, response) => {
   }
 
   const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
-  const filePath = await resolveAsset(url.pathname);
+  const isAcmeChallenge = url.pathname.startsWith(acmeChallengePrefix);
+  const filePath = isAcmeChallenge
+    ? await resolveAcmeChallenge(url.pathname)
+    : await resolveAsset(url.pathname);
 
   if (!filePath) {
-    response.writeHead(403);
-    response.end('Forbidden');
+    response.writeHead(isAcmeChallenge ? 404 : 403);
+    response.end(isAcmeChallenge ? 'Not Found' : 'Forbidden');
     return;
   }
 
   setHeaders(response, filePath);
+  if (isAcmeChallenge) {
+    response.setHeader('Cache-Control', 'no-store');
+  }
 
   if (request.method === 'HEAD') {
     response.end();

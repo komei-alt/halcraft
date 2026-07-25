@@ -6,7 +6,7 @@
 # Cloudflare Tunnel 経由で halcraft.rosch.jp から公開。
 #
 # 構成:
-#   - halcraft: ゲーム本体（Nginx）
+#   - halcraft: ゲーム本体（Node 静的サーバー）
 #   - deploy-webhook: GitHub push → 自動デプロイ
 #
 # 使い方:
@@ -25,6 +25,8 @@ services:
     restart: always
     ports:
       - "4000:80"
+    environment:
+      - ACME_WEBROOT=/var/www/acme
     volumes:
       # Cloudflare Tunnel と社内向けリバースプロキシの両方から
       # HTTP-01 チャレンジを配信し、NAS 単体で証明書を自動更新する。

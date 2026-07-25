@@ -1,6 +1,6 @@
 # ハルクラ デプロイ・運用ドキュメント
 
-> ハルクラは Vite + React の SPA。Nginx コンテナで配信し、Cloudflare Tunnel で公開する。
+> ハルクラは Vite + React の SPA。Node 静的サーバーのコンテナで配信し、Cloudflare Tunnel で公開する。
 
 ```
 Status: 確定
@@ -22,7 +22,7 @@ Mac Studio (or MacBook Air)
   → docker compose up -d
 
 [外部アクセス]
-ユーザー → halcraft.rosch.jp → Cloudflare Tunnel → NAS:4000 (Nginx)
+ユーザー → halcraft.rosch.jp → Cloudflare Tunnel → NAS:4000 (Node static server)
 
 [社内アクセス（RTX1210 静的DNS）]
 ブラウザ → halcraft.rosch.jp
@@ -49,7 +49,7 @@ Mac Studio (or MacBook Air)
 
 | コンテナ名 | イメージ | ポート | 用途 |
 |-----------|---------|--------|------|
-| `halcraft` | `halcraft:latest` | 4000:80 | Nginx SPA 配信 |
+| `halcraft` | `halcraft:latest` | 4000:80 | Node SPA 配信・ACME HTTP-01 |
 
 > DB は不要。ゲーム状態はクライアントサイドの Zustand で管理。
 
