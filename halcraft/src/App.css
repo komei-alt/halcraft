@@ -24,6 +24,29 @@
     #080b0d;
 }
 
+.world-streaming-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: #fff4cf;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(242, 184, 79, 0.18), transparent 34%),
+    #080b0d;
+}
+
+.world-streaming-loading span {
+  padding: 0.75rem 1.1rem;
+  border: 1px solid rgba(255, 235, 175, 0.34);
+  border-radius: 999px;
+  background: rgba(15, 18, 20, 0.8);
+}
+
 /* タッチ端末とLow設定はブラーを切り、合成負荷を増やさない。 */
 @media (pointer: coarse) {
   .hc-hud-glass {

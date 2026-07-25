@@ -5,7 +5,10 @@
 import { create } from 'zustand';
 import { BLOCK_DEFS, BLOCK_IDS, CHUNK_SIZE, WORLD_HEIGHT, type BlockId } from '../types/blocks';
 import { generateChunk } from '../utils/terrain/chunkGenerator';
-import type { ChunkData } from '../utils/terrain/types';
+import { getCurrentBiome } from '../utils/terrain/biomeConfig';
+import { getCurrentTerrainStage } from '../utils/terrain/stageConfig';
+import { unpackChunkData, type ChunkData } from '../utils/terrain/types';
+import type { ChunkWorkerRequest, ChunkWorkerResponse } from '../utils/terrain/chunkWorker';
 import { getPerformanceProfile } from '../utils/performance';
 
 /** チャンクキーの生成 */
@@ -13,12 +16,6 @@ const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
 
 /** ワールド座標キーの生成 */
 const blockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
-
-/** 1フレームあたりに必ず生成するチャンク数 */
-const MIN_CHUNKS_PER_FRAME = 1;
-
-/** 初期ロード時の即座生成半径（足元付近を確実に表示） */
-const IMMEDIATE_RADIUS = 2;
 
 /** 1フレームで処理する流体更新の上限 */
 const MAX_FLUID_UPDATES_PER_FRAME = 96;
@@ -53,6 +50,87 @@ const fluidLevels = new Map<string, number>();
 const fluidUpdateQueue: FluidUpdateTarget[] = [];
 const queuedFluidUpdates = new Set<string>();
 
+interface ChunkWorkerSlot {
+  worker: Worker;
+  busy: boolean;
+  job: { cx: number; cz: number } | null;
+}
+
+const completedChunkResults: ChunkWorkerResponse[] = [];
+const failedChunkJobs: Array<[number, number]> = [];
+const inFlightChunkKeys = new Set<string>();
+const chunkEditOverrides = new Map<string, Map<number, BlockId>>();
+let chunkWorkerSlots: ChunkWorkerSlot[] = [];
+let chunkGeneration = 0;
+let nextChunkJobId = 1;
+let chunkWorkersDisabled = false;
+
+function resetChunkScheduler(): void {
+  chunkGeneration++;
+  for (const slot of chunkWorkerSlots) slot.worker.terminate();
+  chunkWorkerSlots = [];
+  completedChunkResults.length = 0;
+  failedChunkJobs.length = 0;
+  inFlightChunkKeys.clear();
+  chunkWorkersDisabled = false;
+}
+
+function blockOffset(lx: number, y: number, lz: number): number {
+  return (lx * WORLD_HEIGHT + y) * CHUNK_SIZE + lz;
+}
+
+function recordChunkEdit(key: string, lx: number, y: number, lz: number, blockId: BlockId): void {
+  const edits = chunkEditOverrides.get(key) ?? new Map<number, BlockId>();
+  edits.set(blockOffset(lx, y, lz), blockId);
+  chunkEditOverrides.set(key, edits);
+}
+
+function applyChunkEdits(key: string, chunk: ChunkData): void {
+  const edits = chunkEditOverrides.get(key);
+  if (!edits) return;
+  for (const [offset, blockId] of edits) {
+    const lx = Math.floor(offset / (WORLD_HEIGHT * CHUNK_SIZE));
+    const remainder = offset % (WORLD_HEIGHT * CHUNK_SIZE);
+    const y = Math.floor(remainder / CHUNK_SIZE);
+    const lz = remainder % CHUNK_SIZE;
+    chunk[lx][y][lz] = blockId;
+    if (blockId !== BLOCK_IDS.AIR && y > chunk.maxFilledY) chunk.maxFilledY = y;
+  }
+}
+
+function disableChunkWorkers(): void {
+  chunkWorkersDisabled = true;
+  for (const slot of chunkWorkerSlots) {
+    if (slot.job) failedChunkJobs.push([slot.job.cx, slot.job.cz]);
+    slot.worker.terminate();
+  }
+  chunkWorkerSlots = [];
+  inFlightChunkKeys.clear();
+}
+
+function ensureChunkWorkerPool(): void {
+  if (chunkWorkersDisabled || typeof Worker === 'undefined' || chunkWorkerSlots.length > 0) return;
+  const workerCount = getPerformanceProfile().tier === 'low' ? 1 : 2;
+
+  try {
+    for (let index = 0; index < workerCount; index++) {
+      const worker = new Worker(new URL('../utils/terrain/chunkWorker.ts', import.meta.url), { type: 'module' });
+      const slot: ChunkWorkerSlot = { worker, busy: false, job: null };
+      worker.onmessage = (event: MessageEvent<ChunkWorkerResponse>) => {
+        const result = event.data;
+        inFlightChunkKeys.delete(chunkKey(result.cx, result.cz));
+        slot.busy = false;
+        slot.job = null;
+        completedChunkResults.push(result);
+      };
+      worker.onerror = () => disableChunkWorkers();
+      chunkWorkerSlots.push(slot);
+    }
+  } catch {
+    disableChunkWorkers();
+  }
+}
+
 function isLiquidBlock(blockId: BlockId): blockId is typeof BLOCK_IDS.WATER | typeof BLOCK_IDS.LAVA {
   return blockId === BLOCK_IDS.WATER || blockId === BLOCK_IDS.LAVA;
 }
@@ -82,11 +160,15 @@ function clearFluidSimulation(): void {
 }
 
 function getChunkCoords(x: number, z: number) {
-  const cx = Math.floor(x / CHUNK_SIZE);
-  const cz = Math.floor(z / CHUNK_SIZE);
-  const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-  const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-  return { cx, cz, lx, lz, key: chunkKey(cx, cz) };
+  // 物理・AIは連続座標を扱うため、ワールド境界で必ずブロック座標へ正規化する。
+  // 小数を配列添字へ流すと undefined 参照になり、描画ループ全体が停止する。
+  const blockX = Math.floor(x);
+  const blockZ = Math.floor(z);
+  const cx = Math.floor(blockX / CHUNK_SIZE);
+  const cz = Math.floor(blockZ / CHUNK_SIZE);
+  const lx = ((blockX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const lz = ((blockZ % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  return { blockX, blockZ, cx, cz, lx, lz, key: chunkKey(cx, cz) };
 }
 
 export interface IndexedBlockPosition {
@@ -96,17 +178,13 @@ export interface IndexedBlockPosition {
   blockId: BlockId;
 }
 
+/** 未生成チャンクと空気を混同しないワールド読み取り結果。 */
+export type BlockRead =
+  | { status: 'ready'; blockId: BlockId }
+  | { status: 'unloaded' }
+  | { status: 'outside' };
+
 type ChunkBlockIndex = Map<BlockId, IndexedBlockPosition[]>;
-
-function nowMs(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-function getAdaptiveChunkLimit(): number {
-  const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 8 : 8;
-  const profileLimit = getPerformanceProfile().maxChunksPerFrame;
-  return Math.max(MIN_CHUNKS_PER_FRAME, Math.min(profileLimit, Math.floor(cores / 2)));
-}
 
 function shouldIndexBlock(blockId: BlockId): boolean {
   if (blockId === BLOCK_IDS.AIR) return false;
@@ -159,6 +237,12 @@ interface WorldState {
   /** 初期チャンク生成中フラグ */
   isInitialLoading: boolean;
 
+  /** Worker が最後に生成したチャンクの処理時間 */
+  lastChunkGenerationMs: number;
+
+  /** Worker が生成したチャンクの最大処理時間 */
+  maxChunkGenerationMs: number;
+
   /** 初期チャンクを生成（足元を即座に、残りはキューへ） */
   initChunks: (renderDistance: number) => void;
 
@@ -183,6 +267,12 @@ interface WorldState {
   /** ワールド座標でブロックを取得 */
   getBlock: (x: number, y: number, z: number) => BlockId;
 
+  /** 未生成・範囲外を区別してブロックを取得 */
+  readBlock: (x: number, y: number, z: number) => BlockRead;
+
+  /** 物理判定用。未生成領域は安全境界として岩盤を返す */
+  getCollisionBlock: (x: number, y: number, z: number) => BlockId;
+
   /** ワールド座標でブロックを設置 */
   setBlock: (x: number, y: number, z: number, blockId: BlockId) => void;
 
@@ -199,9 +289,13 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   blockIndexVersion: 0,
   chunkGenQueue: [],
   isInitialLoading: false,
+  lastChunkGenerationMs: 0,
+  maxChunkGenerationMs: 0,
 
   clearChunks: () => {
     clearFluidSimulation();
+    resetChunkScheduler();
+    chunkEditOverrides.clear();
     set({
       chunks: new Map(),
       chunkVersions: new Map(),
@@ -209,35 +303,19 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       blockIndexVersion: get().blockIndexVersion + 1,
       chunkGenQueue: [],
       isInitialLoading: false,
+      lastChunkGenerationMs: 0,
+      maxChunkGenerationMs: 0,
     });
   },
 
   initChunks: (renderDistance) => {
     clearFluidSimulation();
-    const newChunks = new Map<string, ChunkData>();
-    const newVersions = new Map<string, number>();
-    const newIndexes = new Map<string, ChunkBlockIndex>();
-
-    // Phase 1: 足元の小範囲を即座に生成（プレイヤーが落ちないようにする）
-    for (let cx = -IMMEDIATE_RADIUS; cx <= IMMEDIATE_RADIUS; cx++) {
-      for (let cz = -IMMEDIATE_RADIUS; cz <= IMMEDIATE_RADIUS; cz++) {
-        if (cx * cx + cz * cz > (IMMEDIATE_RADIUS + 0.35) ** 2) continue;
-        const key = chunkKey(cx, cz);
-        const chunk = generateChunk(cx, cz);
-        newChunks.set(key, chunk);
-        newVersions.set(key, 0);
-        newIndexes.set(key, buildChunkBlockIndex(chunk, cx, cz));
-      }
-    }
-
-    // Phase 2: 残りをキューに追加（距離順ソート）
+    resetChunkScheduler();
     const queue: Array<{ cx: number; cz: number; dist: number }> = [];
     for (let cx = -renderDistance; cx <= renderDistance; cx++) {
       for (let cz = -renderDistance; cz <= renderDistance; cz++) {
         const distanceSquared = cx * cx + cz * cz;
         if (distanceSquared > (renderDistance + 0.35) ** 2) continue;
-        // 既に生成済みの即座生成範囲はスキップ
-        if (distanceSquared <= (IMMEDIATE_RADIUS + 0.35) ** 2) continue;
         const dist = Math.sqrt(distanceSquared);
         queue.push({ cx, cz, dist });
       }
@@ -247,64 +325,97 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const sortedQueue: Array<[number, number]> = queue.map(q => [q.cx, q.cz]);
 
     set({
-      chunks: newChunks,
-      chunkVersions: newVersions,
-      chunkBlockIndexes: newIndexes,
+      chunks: new Map(),
+      chunkVersions: new Map(),
+      chunkBlockIndexes: new Map(),
       blockIndexVersion: get().blockIndexVersion + 1,
       chunkGenQueue: sortedQueue,
       isInitialLoading: sortedQueue.length > 0,
+      lastChunkGenerationMs: 0,
+      maxChunkGenerationMs: 0,
     });
   },
 
   processChunkQueue: () => {
-    const { chunks, chunkVersions, chunkBlockIndexes, chunkGenQueue } = get();
-    if (chunkGenQueue.length === 0) {
-      // キューが空になったらローディング完了
-      if (get().isInitialLoading) {
-        set({ isInitialLoading: false });
-      }
-      return;
+    const { chunks, chunkVersions, chunkBlockIndexes } = get();
+    while (completedChunkResults.length > 0 && completedChunkResults[0].generation !== chunkGeneration) {
+      completedChunkResults.shift();
     }
 
-    // 1フレームで処理する数を、CPUの余力とフレーム予算に合わせて調整
-    const chunkLimit = Math.min(getAdaptiveChunkLimit(), chunkGenQueue.length);
-    const startedAt = nowMs();
-    const newChunks = new Map(chunks);
-    const newVersions = new Map(chunkVersions);
-    const newIndexes = new Map(chunkBlockIndexes);
-    let processed = 0;
-    let generated = 0;
-
-    while (processed < chunkGenQueue.length) {
-      if (
-        generated >= MIN_CHUNKS_PER_FRAME &&
-        (generated >= chunkLimit || nowMs() - startedAt >= getPerformanceProfile().chunkGenerationBudgetMs)
-      ) {
-        break;
+    // React/Three側のメッシュ生成が一度に連鎖しないよう、公開は1フレーム1チャンクに制限する。
+    const completed = completedChunkResults.shift();
+    if (completed) {
+      const key = chunkKey(completed.cx, completed.cz);
+      if (!chunks.has(key)) {
+        const chunk = unpackChunkData(new Uint8Array(completed.buffer), completed.maxFilledY);
+        applyChunkEdits(key, chunk);
+        chunks.set(key, chunk);
+        chunkVersions.set(key, 0);
+        chunkBlockIndexes.set(key, buildChunkBlockIndex(chunk, completed.cx, completed.cz));
       }
+      set((state) => ({
+        blockIndexVersion: state.blockIndexVersion + 1,
+        lastChunkGenerationMs: completed.durationMs,
+        maxChunkGenerationMs: Math.max(state.maxChunkGenerationMs, completed.durationMs),
+      }));
+    }
 
-      const [cx, cz] = chunkGenQueue[processed];
-      processed++;
+    if (failedChunkJobs.length > 0) {
+      const retry = failedChunkJobs.splice(0, failedChunkJobs.length);
+      set({ chunkGenQueue: [...retry, ...get().chunkGenQueue] });
+    }
+
+    ensureChunkWorkerPool();
+    const currentQueue = get().chunkGenQueue;
+    if (!chunkWorkersDisabled && chunkWorkerSlots.length > 0) {
+      let consumed = 0;
+      for (const slot of chunkWorkerSlots) {
+        if (slot.busy) continue;
+        while (consumed < currentQueue.length) {
+          const [cx, cz] = currentQueue[consumed++];
+          const key = chunkKey(cx, cz);
+          if (chunks.has(key) || inFlightChunkKeys.has(key)) continue;
+          const request: ChunkWorkerRequest = {
+            jobId: nextChunkJobId++,
+            generation: chunkGeneration,
+            cx,
+            cz,
+            biome: getCurrentBiome(),
+            stage: getCurrentTerrainStage(),
+          };
+          slot.busy = true;
+          slot.job = { cx, cz };
+          inFlightChunkKeys.add(key);
+          slot.worker.postMessage(request);
+          break;
+        }
+      }
+      if (consumed > 0) set({ chunkGenQueue: currentQueue.slice(consumed) });
+    } else if (currentQueue.length > 0) {
+      // テスト/SSRまたはWorker初期化失敗時の互換経路。ブラウザ本番では通らない。
+      const [cx, cz] = currentQueue[0];
       const key = chunkKey(cx, cz);
-      if (!newChunks.has(key)) {
+      if (!chunks.has(key)) {
+        const startedAt = performance.now();
         const chunk = generateChunk(cx, cz);
-        newChunks.set(key, chunk);
-        newVersions.set(key, 0);
-        newIndexes.set(key, buildChunkBlockIndex(chunk, cx, cz));
-        generated++;
+        applyChunkEdits(key, chunk);
+        chunks.set(key, chunk);
+        chunkVersions.set(key, 0);
+        chunkBlockIndexes.set(key, buildChunkBlockIndex(chunk, cx, cz));
+        const durationMs = performance.now() - startedAt;
+        set((state) => ({
+          blockIndexVersion: state.blockIndexVersion + 1,
+          lastChunkGenerationMs: durationMs,
+          maxChunkGenerationMs: Math.max(state.maxChunkGenerationMs, durationMs),
+        }));
       }
+      set({ chunkGenQueue: currentQueue.slice(1) });
     }
 
-    const remaining = chunkGenQueue.slice(processed);
-
-    set((state) => ({
-      chunks: generated > 0 ? newChunks : chunks,
-      chunkVersions: generated > 0 ? newVersions : chunkVersions,
-      chunkBlockIndexes: generated > 0 ? newIndexes : chunkBlockIndexes,
-      blockIndexVersion: generated > 0 ? state.blockIndexVersion + 1 : state.blockIndexVersion,
-      chunkGenQueue: remaining,
-      isInitialLoading: remaining.length > 0,
-    }));
+    const loading = get().chunkGenQueue.length > 0
+      || inFlightChunkKeys.size > 0
+      || completedChunkResults.some((result) => result.generation === chunkGeneration);
+    if (get().isInitialLoading !== loading) set({ isInitialLoading: loading });
   },
 
   processFluidSimulation: () => {
@@ -346,6 +457,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       }
 
       chunk[lx][y][lz] = blockId;
+      recordChunkEdit(key, lx, y, lz, blockId);
       if (isLiquidBlock(blockId)) {
         fluidLevels.set(positionKey, fluidLevel);
       } else {
@@ -470,8 +582,22 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   ensureChunksAround: (camCx, camCz, radius) => {
-    const { chunks, chunkGenQueue } = get();
-    const queuedKeys = new Set(chunkGenQueue.map(([cx, cz]) => chunkKey(cx, cz)));
+    const { chunks, chunkVersions, chunkBlockIndexes, chunkGenQueue } = get();
+    const retainRadius = radius + 3;
+    let evicted = false;
+    for (const key of chunks.keys()) {
+      const [cx, cz] = key.split(',').map(Number);
+      if (Math.hypot(cx - camCx, cz - camCz) <= retainRadius) continue;
+      chunks.delete(key);
+      chunkVersions.delete(key);
+      chunkBlockIndexes.delete(key);
+      evicted = true;
+    }
+
+    const retainedQueue = chunkGenQueue.filter(([cx, cz]) =>
+      Math.hypot(cx - camCx, cz - camCz) <= retainRadius,
+    );
+    const queuedKeys = new Set(retainedQueue.map(([cx, cz]) => chunkKey(cx, cz)));
     const additions: Array<[number, number]> = [];
 
     for (let dx = -radius; dx <= radius; dx++) {
@@ -480,16 +606,24 @@ export const useWorldStore = create<WorldState>((set, get) => ({
         const cx = camCx + dx;
         const cz = camCz + dz;
         const key = chunkKey(cx, cz);
-        if (chunks.has(key) || queuedKeys.has(key)) continue;
+        if (chunks.has(key) || queuedKeys.has(key) || inFlightChunkKeys.has(key)) continue;
         queuedKeys.add(key);
         additions.push([cx, cz]);
       }
     }
 
-    if (additions.length === 0) return;
+    if (additions.length === 0) {
+      if (evicted || retainedQueue.length !== chunkGenQueue.length) {
+        set((state) => ({
+          chunkGenQueue: retainedQueue,
+          blockIndexVersion: evicted ? state.blockIndexVersion + 1 : state.blockIndexVersion,
+        }));
+      }
+      return;
+    }
 
     const mergedQueue: Array<[number, number]> = [
-      ...chunkGenQueue,
+      ...retainedQueue,
       ...additions,
     ].sort((a, b) => {
       const da = Math.hypot(a[0] - camCx, a[1] - camCz);
@@ -497,10 +631,11 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       return da - db;
     });
 
-    set({
+    set((state) => ({
       chunkGenQueue: mergedQueue,
       isInitialLoading: true,
-    });
+      blockIndexVersion: evicted ? state.blockIndexVersion + 1 : state.blockIndexVersion,
+    }));
   },
 
   getChunk: (cx, cz) => {
@@ -528,31 +663,50 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   getBlock: (x, y, z) => {
-    if (y < 0 || y >= WORLD_HEIGHT) return BLOCK_IDS.AIR;
+    const blockY = Math.floor(y);
+    if (blockY < 0 || blockY >= WORLD_HEIGHT) return BLOCK_IDS.AIR;
     const { key, lx, lz } = getChunkCoords(x, z);
     const chunk = get().chunks.get(key);
     if (!chunk) return BLOCK_IDS.AIR;
-    return chunk[lx][y][lz];
+    return chunk[lx][blockY][lz];
+  },
+
+  readBlock: (x, y, z) => {
+    const blockY = Math.floor(y);
+    if (blockY < 0 || blockY >= WORLD_HEIGHT) return { status: 'outside' };
+    const { key, lx, lz } = getChunkCoords(x, z);
+    const chunk = get().chunks.get(key);
+    if (!chunk) return { status: 'unloaded' };
+    return { status: 'ready', blockId: chunk[lx][blockY][lz] };
+  },
+
+  getCollisionBlock: (x, y, z) => {
+    if (y >= WORLD_HEIGHT) return BLOCK_IDS.AIR;
+    if (y < 0) return BLOCK_IDS.BEDROCK;
+    const result = get().readBlock(x, y, z);
+    return result.status === 'ready' ? result.blockId : BLOCK_IDS.BEDROCK;
   },
 
   setBlock: (x, y, z, blockId) => {
-    if (y < 0 || y >= WORLD_HEIGHT) return;
-    const { cx, cz, key, lx, lz } = getChunkCoords(x, z);
+    const blockY = Math.floor(y);
+    if (blockY < 0 || blockY >= WORLD_HEIGHT) return;
+    const { blockX, blockZ, cx, cz, key, lx, lz } = getChunkCoords(x, z);
 
     const chunk = get().chunks.get(key);
     if (!chunk) return;
 
     // チャンクデータを直接変更（パフォーマンスのため）
-    chunk[lx][y][lz] = blockId;
-    if (blockId !== BLOCK_IDS.AIR && y > chunk.maxFilledY) {
-      chunk.maxFilledY = y;
+    chunk[lx][blockY][lz] = blockId;
+    recordChunkEdit(key, lx, blockY, lz, blockId);
+    if (blockId !== BLOCK_IDS.AIR && blockY > chunk.maxFilledY) {
+      chunk.maxFilledY = blockY;
     }
     if (isLiquidBlock(blockId)) {
-      fluidLevels.set(blockKey(x, y, z), 0);
+      fluidLevels.set(blockKey(blockX, blockY, blockZ), 0);
     } else {
-      fluidLevels.delete(blockKey(x, y, z));
+      fluidLevels.delete(blockKey(blockX, blockY, blockZ));
     }
-    queueFluidNeighborhood(x, y, z);
+    queueFluidNeighborhood(blockX, blockY, blockZ);
 
     // バージョンをインクリメントして再描画を促す
     set((state) => {

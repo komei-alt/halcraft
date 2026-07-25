@@ -3,7 +3,7 @@
 
 import type { MobData } from '../../stores/useMobStore';
 import { useMobStore } from '../../stores/useMobStore';
-import { getTerrainHeight } from '../terrain';
+import { findSurfaceY } from '../collision';
 import { playHurtSound } from '../sounds';
 import { spawnDamagePopup } from '../effectTriggers';
 import {
@@ -18,6 +18,7 @@ import {
   PROTOTYPE_HEIGHT, PROTOTYPE_RADIUS,
   PROTOTYPE_JUMP_VEL, PROTOTYPE_STUCK_TIME, PROTOTYPE_STUCK_DIST,
   applyMobGravityAndYCollision,
+  canEntityAabbsReach,
   type MobAIContext,
 } from './constants';
 
@@ -41,6 +42,33 @@ export interface AllyMobState {
 
 function isHeavyAlly(m: MobData): boolean {
   return m.type === 'iron_golem';
+}
+
+function getMobCollisionShape(mob: MobData): { radius: number; height: number } {
+  switch (mob.type) {
+    case 'spider':
+      return { radius: 0.4, height: 0.6 };
+    case 'chicken':
+      return { radius: 0.2, height: 0.6 };
+    case 'boss_giant':
+      return { radius: 1.2, height: 4.8 };
+    case 'prototype':
+    case 'iron_golem':
+      return { radius: PROTOTYPE_RADIUS, height: PROTOTYPE_HEIGHT };
+    case 'zombie':
+    case 'darwin':
+    default:
+      return { radius: 0.3, height: 1.8 };
+  }
+}
+
+function canAllyReachMob(attacker: MobData, target: MobData): boolean {
+  const targetShape = getMobCollisionShape(target);
+  return canEntityAabbsReach(
+    { x: attacker.x, y: attacker.y, z: attacker.z, radius: PROTOTYPE_RADIUS, height: PROTOTYPE_HEIGHT },
+    { x: target.x, y: target.y, z: target.z, ...targetShape },
+    PROTOTYPE_ATTACK_RANGE,
+  );
 }
 
 function startAttack(
@@ -130,6 +158,18 @@ function resolveAttackHit(
   if (state.attackElapsed < PROTOTYPE_ATTACK_HIT_AT) return;
   state.attackHitApplied = true;
 
+  if (state.attackTarget === 'player') {
+    const playerReachable = canEntityAabbsReach(
+      { x: m.x, y: m.y, z: m.z, radius: PROTOTYPE_RADIUS, height: PROTOTYPE_HEIGHT },
+      { x: ctx.playerX, y: ctx.playerY, z: ctx.playerZ, radius: 0.3, height: 1.7 },
+      PROTOTYPE_ATTACK_RANGE,
+    );
+    if (!playerReachable) return;
+  } else if (typeof state.attackTarget === 'string') {
+    const target = useMobStore.getState().mobs.find((mob) => mob.id === state.attackTarget);
+    if (!target || !canAllyReachMob(m, target)) return;
+  }
+
   const pose = resolveHitPose(m, state, ctx);
   const heavy = isHeavyAlly(m);
 
@@ -162,7 +202,7 @@ export function updateAllyMobAI(
   state: AllyMobState,
   takeDamage: (damage: number, kbX: number, kbZ: number) => boolean,
 ): boolean {
-  const { dt, playerX, playerZ, checkCollision, allMobs } = ctx;
+  const { dt, playerX, playerY, playerZ, checkCollision, allMobs } = ctx;
 
   // 攻撃アニメ進行（スイング音・ヒットフレーム）
   if (m.attackTimer > 0) {
@@ -210,7 +250,9 @@ export function updateAllyMobAI(
       const tpDist = Math.min(distP, PROTOTYPE_FOLLOW_MIN);
       m.x = playerX - Math.cos(angle) * tpDist;
       m.z = playerZ - Math.sin(angle) * tpDist;
-      m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
+      m.y = ctx.getBlock
+        ? findSurfaceY(ctx.getBlock, m.x, m.z, playerY + 20, 96, playerY)
+        : playerY;
       m.vx = 0;
       m.vz = 0;
       m.vy = 0;
@@ -226,12 +268,22 @@ export function updateAllyMobAI(
     }
 
     if (!isAttacking) {
-      if (distP > PROTOTYPE_ATTACK_RANGE) {
-        const nx = dxP / distP;
-        const nz = dzP / distP;
-        const chaseSpeed = PROTOTYPE_SPEED * 1.8;
-        m.vx = nx * chaseSpeed;
-        m.vz = nz * chaseSpeed;
+      const playerReachable = canEntityAabbsReach(
+        { x: m.x, y: m.y, z: m.z, radius: PROTOTYPE_RADIUS, height: PROTOTYPE_HEIGHT },
+        { x: playerX, y: ctx.playerY, z: playerZ, radius: 0.3, height: 1.7 },
+        PROTOTYPE_ATTACK_RANGE,
+      );
+      if (!playerReachable) {
+        if (distP > 0.01) {
+          const nx = dxP / distP;
+          const nz = dzP / distP;
+          const chaseSpeed = PROTOTYPE_SPEED * 1.8;
+          m.vx = nx * chaseSpeed;
+          m.vz = nz * chaseSpeed;
+        } else {
+          m.vx = 0;
+          m.vz = 0;
+        }
       } else {
         m.vx = 0;
         m.vz = 0;
@@ -276,12 +328,18 @@ export function updateAllyMobAI(
         m.rotation = Math.atan2(tdx, tdz);
       }
 
-      if (tDist > PROTOTYPE_ATTACK_RANGE) {
-        const nx = tdx / tDist;
-        const nz = tdz / tDist;
-        const chaseSpeed = PROTOTYPE_SPEED * 2.0;
-        m.vx = nx * chaseSpeed;
-        m.vz = nz * chaseSpeed;
+      const targetReachable = canAllyReachMob(m, targetEnemy);
+      if (!targetReachable) {
+        if (tDist > 0.01) {
+          const nx = tdx / tDist;
+          const nz = tdz / tDist;
+          const chaseSpeed = PROTOTYPE_SPEED * 2.0;
+          m.vx = nx * chaseSpeed;
+          m.vz = nz * chaseSpeed;
+        } else {
+          m.vx = 0;
+          m.vz = 0;
+        }
       } else {
         m.vx = 0;
         m.vz = 0;
@@ -351,7 +409,9 @@ export function updateAllyMobAI(
   if (m.y < -20) {
     m.x = playerX + 3;
     m.z = playerZ + 3;
-    m.y = getTerrainHeight(Math.floor(m.x), Math.floor(m.z)) + 2;
+    m.y = ctx.getBlock
+      ? findSurfaceY(ctx.getBlock, m.x, m.z, playerY + 20, 96, playerY)
+      : playerY;
     m.vy = 0;
   }
 

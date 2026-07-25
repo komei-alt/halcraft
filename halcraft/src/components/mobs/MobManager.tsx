@@ -14,7 +14,7 @@ import { useInventoryStore } from '../../stores/useInventoryStore';
 import { useItemFeedbackStore } from '../../stores/useItemFeedbackStore';
 import { getTerrainHeight } from '../../utils/terrain/heightmap';
 import { BLOCK_DEFS, BLOCK_IDS, type BlockId } from '../../types/blocks';
-import { checkAABBCollision } from '../../utils/collision';
+import { checkAABBCollision, findSurfaceY } from '../../utils/collision';
 import { Zombie } from './Zombie';
 import { Darwin } from './Darwin';
 import { Prototype } from './Prototype';
@@ -127,6 +127,7 @@ export function MobManager() {
   const trySpawnSpider = useMobStore((s) => s.trySpawnSpider);
   const despawnFarMobs = useMobStore((s) => s.despawnFarMobs);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const getCollisionBlock = useWorldStore((s) => s.getCollisionBlock);
   const breakBlock = useWorldStore((s) => s.breakBlock);
   const takeDamage = usePlayerStore((s) => s.takeDamage);
   const updateRegen = usePlayerStore((s) => s.updateRegen);
@@ -154,8 +155,8 @@ export function MobManager() {
   // 衝突チェック関数（可変サイズ版）
   const checkCollisionFn = useCallback(
     (px: number, py: number, pz: number, radius: number, height: number): boolean =>
-      checkAABBCollision(getBlock, px, py, pz, radius, height),
-    [getBlock],
+      checkAABBCollision(getCollisionBlock, px, py, pz, radius, height),
+    [getCollisionBlock],
   );
 
   useFrame((_, delta) => {
@@ -189,6 +190,12 @@ export function MobManager() {
     const playerX = camera.position.x;
     const playerZ = camera.position.z;
     const playerY = camera.position.y - 1.6; // 足元
+    const resolveSpawnSurfaceY = (x: number, z: number): number | null => {
+      const world = useWorldStore.getState();
+      if (world.readBlock(x, 0, z).status !== 'ready') return null;
+      const terrainBlockY = getTerrainHeight(x, z);
+      return findSurfaceY(world.getBlock, x, z, terrainBlockY + 24, 64, terrainBlockY + 1);
+    };
 
     // 夜→昼の切り替わり、または建築モードでは敵モブ削除（味方は残す）
     if ((wasNight.current && !isNight) || gameState.isBuildMode) {
@@ -199,13 +206,13 @@ export function MobManager() {
 
     // 戦争ステージの夜間のみ敵スポーン。ステージごとに湧き方を変える
     if (isWarMode && enemyTuning && isNight) {
-      trySpawnZombie(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
-      trySpawnSpider(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
-      trySpawnDarwin(playerX, playerZ, (x, z) => getTerrainHeight(x, z), enemyTuning);
+      trySpawnZombie(playerX, playerZ, resolveSpawnSurfaceY, enemyTuning);
+      trySpawnSpider(playerX, playerZ, resolveSpawnSurfaceY, enemyTuning);
+      trySpawnDarwin(playerX, playerZ, resolveSpawnSurfaceY, enemyTuning);
     }
 
     // 味方プロトタイプ（倒されたら約2分後に再スポーン）
-    useMobStore.getState().trySpawnPrototype(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+    useMobStore.getState().trySpawnPrototype(playerX, playerZ, resolveSpawnSurfaceY);
 
     // 撃破数がステージ目標に届いたらボスを出す（撃破後は長めのクールダウンで再出現）
     if (
@@ -220,7 +227,7 @@ export function MobManager() {
         const canRespawn = gameState.bossSpawned && mobState.lastBossDeathTime > 0;
         if (canFirstSpawn || canRespawn) {
           const before = mobState.mobs.length;
-          mobState.trySpawnBoss(playerX, playerZ, (x, z) => getTerrainHeight(x, z), gameState.currentStageId);
+          mobState.trySpawnBoss(playerX, playerZ, resolveSpawnSurfaceY, gameState.currentStageId);
           if (useMobStore.getState().mobs.length > before) {
             useGameStore.getState().setBossSpawned(true);
           }
@@ -230,7 +237,7 @@ export function MobManager() {
 
     // 昼間はニワトリスポーン
     if (!isNight) {
-      trySpawnChicken(playerX, playerZ, (x, z) => getTerrainHeight(x, z));
+      trySpawnChicken(playerX, playerZ, resolveSpawnSurfaceY);
     }
 
     // SPAWNERブロックベースのアイアンゴーレムスポーン
@@ -248,7 +255,7 @@ export function MobManager() {
             const surfaceY = getTerrainHeight(sx, sz);
             for (let dy = -2; dy <= 5; dy++) {
               if (getBlock(sx, surfaceY + dy, sz) === BLOCK_IDS.SPAWNER) {
-                useMobStore.getState().spawnMob('iron_golem', sx + 0.5, surfaceY + dy + 2, sz + 0.5);
+                useMobStore.getState().spawnMob('iron_golem', sx + 0.5, surfaceY + dy + 1, sz + 0.5);
                 useMobStore.setState({ lastProtoSpawnTime: now });
                 dx = SPAWNER_SEARCH_RANGE + 1;
                 dz = SPAWNER_SEARCH_RANGE + 1;
@@ -292,6 +299,10 @@ export function MobManager() {
 
     for (const mob of currentMobs) {
       const m = { ...mob };
+      if (useWorldStore.getState().readBlock(m.x, 0, m.z).status !== 'ready') {
+        updatedMobs.push(m);
+        continue;
+      }
       m.hitTimer = Math.max(0, m.hitTimer - dt);
       m.attackTimer = Math.max(0, (m.attackTimer ?? 0) - dt);
 

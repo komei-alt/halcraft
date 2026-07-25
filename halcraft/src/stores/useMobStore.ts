@@ -163,6 +163,9 @@ interface EnemySpawnData {
   mobData: Partial<MobData>;
 }
 
+/** 実ブロック上面の接地Y。未生成チャンクでは null を返してスポーンを延期する。 */
+type SurfaceYResolver = (x: number, z: number) => number | null;
+
 function getEnemySpawnData(type: MobType, tuning?: StageEnemyTuning): EnemySpawnData {
   const role = getEnemyRole(type);
   if (!role || !tuning?.threatProfileId) {
@@ -258,22 +261,22 @@ interface MobState {
   setMobs: (mobs: MobData[]) => void;
 
   /** 夜のスポーンロジック */
-  trySpawnZombie: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
+  trySpawnZombie: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver, tuning?: StageEnemyTuning) => void;
 
   /** プロトタイプ味方モブのスポーンロジック（常時1体） */
-  trySpawnPrototype: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnPrototype: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver) => void;
 
   /** 昼間のニワトリスポーン */
-  trySpawnChicken: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number) => void;
+  trySpawnChicken: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver) => void;
 
   /** 夜間のクモスポーン */
-  trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
+  trySpawnSpider: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver, tuning?: StageEnemyTuning) => void;
 
   /** 夜間のダーウィンスポーン */
-  trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, tuning?: StageEnemyTuning) => void;
+  trySpawnDarwin: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver, tuning?: StageEnemyTuning) => void;
 
   /** 巨大ボスのスポーンロジック */
-  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: (x: number, z: number) => number, stageId?: string | null) => void;
+  trySpawnBoss: (playerX: number, playerZ: number, surfaceYFn: SurfaceYResolver, stageId?: string | null) => void;
 
   /** 遠すぎるモブを削除 */
   despawnFarMobs: (playerX: number, playerZ: number) => void;
@@ -483,7 +486,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('zombie', spawnX, spawnY, spawnZ, tuning);
     set({ lastSpawnTime: now });
@@ -510,7 +514,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const landmarkDistance = Math.max(1, Math.hypot(landmarkDx, landmarkDz));
     const spawnX = playerX - (landmarkDx / landmarkDistance) * PROTOTYPE_FOLLOW_DISTANCE;
     const spawnZ = playerZ - (landmarkDz / landmarkDistance) * PROTOTYPE_FOLLOW_DISTANCE;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('prototype', spawnX, spawnY, spawnZ);
   },
@@ -528,7 +533,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const distance = SPAWN_DISTANCE_MIN + Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('chicken', spawnX, spawnY, spawnZ);
     set({ _lastChickenSpawnTime: now } as Partial<MobState>);
@@ -548,7 +554,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('spider', spawnX, spawnY, spawnZ, tuning);
     set({ _lastSpiderSpawnTime: now } as Partial<MobState>);
@@ -568,7 +575,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const distance = getSpawnDistance(tuning);
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 1;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('darwin', spawnX, spawnY, spawnZ, tuning);
     set({ _lastDarwinSpawnTime: now } as Partial<MobState>);
@@ -594,7 +602,8 @@ export const useMobStore = create<MobState>((set, get) => ({
     const distance = 20;
     const spawnX = playerX + Math.cos(angle) * distance;
     const spawnZ = playerZ + Math.sin(angle) * distance;
-    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ)) + 2;
+    const spawnY = surfaceYFn(Math.floor(spawnX), Math.floor(spawnZ));
+    if (spawnY === null) return;
 
     get().spawnMob('boss_giant', spawnX, spawnY, spawnZ, undefined, stageId);
   },

@@ -9,6 +9,8 @@ import { getAABBCollisionTop, type GetBlockFn } from '../collision';
 
 /** 重力加速度 */
 export const MOB_GRAVITY = -20;
+/** 1回の衝突判定で進める最大距離。1ブロック床の飛び越しを防ぐ。 */
+export const MOB_PHYSICS_MAX_STEP = 0.25;
 
 // ─── ゾンビ定数 ──────────────────────────────────────
 
@@ -74,6 +76,57 @@ export const BOSS_ATTACK_HIT_AT = 0.32;
 
 /** プレイヤー胴体の高さ（足元〜頭）。近接ヒットの縦判定に使う */
 export const PLAYER_BODY_HEIGHT = 1.7;
+export const PLAYER_BODY_RADIUS = 0.3;
+
+export interface EntityAabb {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+function axisGap(minA: number, maxA: number, minB: number, maxB: number): number {
+  if (maxA < minB) return minB - maxA;
+  if (maxB < minA) return minA - maxB;
+  return 0;
+}
+
+/** 中心間のXZ距離ではなく、両AABB間の最短3D距離を返す。 */
+export function getAabbGapDistance(a: EntityAabb, b: EntityAabb): number {
+  return Math.hypot(
+    axisGap(a.minX, a.maxX, b.minX, b.maxX),
+    axisGap(a.minY, a.maxY, b.minY, b.maxY),
+    axisGap(a.minZ, a.maxZ, b.minZ, b.maxZ),
+  );
+}
+
+/** 足元Y基準の2エンティティが、指定した3D間合いに入っているか。 */
+export function canEntityAabbsReach(
+  attacker: { x: number; y: number; z: number; radius: number; height: number },
+  target: { x: number; y: number; z: number; radius: number; height: number },
+  reach: number,
+): boolean {
+  return getAabbGapDistance(
+    {
+      minX: attacker.x - attacker.radius,
+      maxX: attacker.x + attacker.radius,
+      minY: attacker.y,
+      maxY: attacker.y + attacker.height,
+      minZ: attacker.z - attacker.radius,
+      maxZ: attacker.z + attacker.radius,
+    },
+    {
+      minX: target.x - target.radius,
+      maxX: target.x + target.radius,
+      minY: target.y,
+      maxY: target.y + target.height,
+      minZ: target.z - target.radius,
+      maxZ: target.z + target.radius,
+    },
+  ) <= reach;
+}
 
 /**
  * 近接攻撃がプレイヤーに届くか（水平距離・高さ・任意で正面方向）。
@@ -101,14 +154,23 @@ export function canMeleeHitPlayer(
   const dx = playerX - mobX;
   const dz = playerZ - mobZ;
   const distXZ = Math.hypot(dx, dz);
-  if (distXZ > options.attackRange) return false;
-
-  const playerFeet = playerY;
-  const playerHead = playerY + PLAYER_BODY_HEIGHT;
-  const minY = mobY + options.attackMinY;
-  const maxY = mobY + options.attackMaxY;
-  // プレイヤーAABBと攻撃縦範囲が重なるときだけヒット
-  if (playerHead < minY || playerFeet > maxY) return false;
+  const attackAabb: EntityAabb = {
+    minX: mobX,
+    maxX: mobX,
+    minY: mobY + options.attackMinY,
+    maxY: mobY + options.attackMaxY,
+    minZ: mobZ,
+    maxZ: mobZ,
+  };
+  const playerAabb: EntityAabb = {
+    minX: playerX - PLAYER_BODY_RADIUS,
+    maxX: playerX + PLAYER_BODY_RADIUS,
+    minY: playerY,
+    maxY: playerY + PLAYER_BODY_HEIGHT,
+    minZ: playerZ - PLAYER_BODY_RADIUS,
+    maxZ: playerZ + PLAYER_BODY_RADIUS,
+  };
+  if (getAabbGapDistance(attackAabb, playerAabb) > options.attackRange) return false;
 
   if (options.requireFacing && distXZ > 0.12) {
     const forwardX = Math.sin(mobRotation);
@@ -167,19 +229,24 @@ export function applyMobGravityAndYCollision(
     if (m.vy < -30) m.vy = -30;
   }
 
-  const newY = m.y + m.vy * dt;
-  if (checkCollision(m.x, newY, m.z, radius, height)) {
-    if (m.vy <= 0) {
-      if (getBlock) {
-        const top = getAABBCollisionTop(getBlock, m.x, newY, m.z, radius, height);
-        m.y = top !== null ? top + 0.001 : Math.floor(newY) + 1.001;
-      } else {
-        m.y = Math.floor(newY) + 1.001;
+  const displacement = m.vy * dt;
+  const steps = Math.max(1, Math.ceil(Math.abs(displacement) / MOB_PHYSICS_MAX_STEP));
+  const stepY = displacement / steps;
+  for (let step = 0; step < steps; step++) {
+    const newY = m.y + stepY;
+    if (checkCollision(m.x, newY, m.z, radius, height)) {
+      if (m.vy <= 0) {
+        if (getBlock) {
+          const top = getAABBCollisionTop(getBlock, m.x, newY, m.z, radius, height);
+          m.y = top !== null ? top + 0.001 : Math.floor(newY) + 1.001;
+        } else {
+          m.y = Math.floor(newY) + 1.001;
+        }
       }
+      m.vy = 0;
+      onGround = true;
+      break;
     }
-    m.vy = 0;
-    onGround = true;
-  } else {
     m.y = newY;
     onGround = false;
   }
@@ -199,16 +266,22 @@ export function applyMobXCollision(
   stepJumpVel: number = 4,
   allowStepUp: boolean = true,
 ): void {
-  const newX = m.x + m.vx * dt;
-  if (checkCollision(newX, m.y, m.z, radius, height)) {
-    if (allowStepUp && !checkCollision(newX, m.y + 1, m.z, radius, height)) {
-      m.vy = stepJumpVel;
-      m.x = newX;
+  const displacement = m.vx * dt;
+  const steps = Math.max(1, Math.ceil(Math.abs(displacement) / MOB_PHYSICS_MAX_STEP));
+  const stepX = displacement / steps;
+  for (let step = 0; step < steps; step++) {
+    const newX = m.x + stepX;
+    if (checkCollision(newX, m.y, m.z, radius, height)) {
+      if (allowStepUp && !checkCollision(newX, m.y + 1, m.z, radius, height)) {
+        m.vy = stepJumpVel;
+        m.x = newX;
+      } else {
+        m.vx = 0;
+      }
+      break;
     } else {
-      m.vx = 0;
+      m.x = newX;
     }
-  } else {
-    m.x = newX;
   }
 }
 
@@ -224,15 +297,21 @@ export function applyMobZCollision(
   stepJumpVel: number = 4,
   allowStepUp: boolean = true,
 ): void {
-  const newZ = m.z + m.vz * dt;
-  if (checkCollision(m.x, m.y, newZ, radius, height)) {
-    if (allowStepUp && !checkCollision(m.x, m.y + 1, newZ, radius, height)) {
-      m.vy = stepJumpVel;
-      m.z = newZ;
+  const displacement = m.vz * dt;
+  const steps = Math.max(1, Math.ceil(Math.abs(displacement) / MOB_PHYSICS_MAX_STEP));
+  const stepZ = displacement / steps;
+  for (let step = 0; step < steps; step++) {
+    const newZ = m.z + stepZ;
+    if (checkCollision(m.x, m.y, newZ, radius, height)) {
+      if (allowStepUp && !checkCollision(m.x, m.y + 1, newZ, radius, height)) {
+        m.vy = stepJumpVel;
+        m.z = newZ;
+      } else {
+        m.vz = 0;
+      }
+      break;
     } else {
-      m.vz = 0;
+      m.z = newZ;
     }
-  } else {
-    m.z = newZ;
   }
 }

@@ -432,20 +432,6 @@ function buildChunkMeshes(
   return { geometries, faceCount };
 }
 
-function getNeighborMeshSignature(cx: number, cz: number): string {
-  const state = useWorldStore.getState();
-  return [
-    [cx, cz],
-    [cx - 1, cz],
-    [cx + 1, cz],
-    [cx, cz - 1],
-    [cx, cz + 1],
-  ].map(([nx, nz]) => {
-    const key = `${nx},${nz}`;
-    return `${state.chunks.has(key) ? 1 : 0}.${state.chunkVersions.get(key) ?? 0}`;
-  }).join(':');
-}
-
 function ChunkRenderer({
   cx,
   cz,
@@ -456,11 +442,12 @@ function ChunkRenderer({
 }: ChunkRendererProps) {
   const chunkKey = `${cx},${cz}`;
   const chunk = useWorldStore((state) => state.chunks.get(chunkKey));
-  const meshSignature = useWorldStore(() => getNeighborMeshSignature(cx, cz));
+  const meshVersion = useWorldStore((state) => state.chunkVersions.get(chunkKey) ?? 0);
   const meshSet = useMemo(() => {
-    if (!chunk || meshSignature.length === 0) return null;
+    void meshVersion;
+    if (!chunk) return null;
     return buildChunkMeshes(chunk, cx, cz, atlas);
-  }, [atlas, chunk, cx, cz, meshSignature]);
+  }, [atlas, chunk, cx, cz, meshVersion]);
 
   useEffect(() => () => {
     if (!meshSet) return;
@@ -509,13 +496,15 @@ export function World() {
   );
   const visibleDistance = Math.min(RENDER_DISTANCE, performanceProfile.visibleChunkRadius);
   const initialRenderDistance = Math.min(RENDER_DISTANCE, performanceProfile.initialRenderDistance);
+  const streamDistance = Math.min(RENDER_DISTANCE + 2, visibleDistance + 2);
   const castBlockShadows = performanceProfile.shadowsEnabled && performanceProfile.tier !== 'low';
   const [visibleChunks, setVisibleChunks] = useState<VisibleChunk[]>([]);
   const lastUpdateTime = useRef(0);
   const lastTelemetryTime = useRef(0);
   const visibleChunkCount = useRef(0);
+  const visibleChunkHoleCount = useRef(0);
   const previousVisibleKey = useRef('');
-  const initialRenderDistanceRef = useRef(initialRenderDistance);
+  const initialRenderDistanceRef = useRef(Math.max(initialRenderDistance, streamDistance));
 
   useEffect(() => {
     initChunks(initialRenderDistanceRef.current);
@@ -530,9 +519,14 @@ export function World() {
     const now = performance.now();
     if (now - lastTelemetryTime.current < 1000) return;
     lastTelemetryTime.current = now;
-    gl.domElement.setAttribute('data-world-renderer', 'surface-mesh-v3-pbr');
+    const worldState = useWorldStore.getState();
+    gl.domElement.setAttribute('data-world-renderer', 'surface-mesh-v4-worker');
     gl.domElement.setAttribute('data-material-pipeline', 'pbr-atlas-v1');
     gl.domElement.setAttribute('data-visible-chunks', String(visibleChunkCount.current));
+    gl.domElement.setAttribute('data-visible-chunk-holes', String(visibleChunkHoleCount.current));
+    gl.domElement.setAttribute('data-chunk-queue', String(worldState.chunkGenQueue.length));
+    gl.domElement.setAttribute('data-chunk-generation-last-ms', worldState.lastChunkGenerationMs.toFixed(1));
+    gl.domElement.setAttribute('data-chunk-generation-max-ms', worldState.maxChunkGenerationMs.toFixed(1));
     gl.domElement.setAttribute('data-render-calls', String(gl.info.render.calls));
     gl.domElement.setAttribute('data-render-triangles', String(gl.info.render.triangles));
   }), [gl]);
@@ -547,10 +541,12 @@ export function World() {
 
     const cameraChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     const cameraChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
-    ensureChunksAround(cameraChunkX, cameraChunkZ, visibleDistance);
+    // 見える範囲より2チャンク先を先読みし、中心移動後も未生成リングを画面へ出さない。
+    ensureChunksAround(cameraChunkX, cameraChunkZ, streamDistance);
 
     const state = useWorldStore.getState();
     const visible: VisibleChunk[] = [];
+    let missingVisibleChunks = 0;
     const radiusSquared = (visibleDistance + 0.35) ** 2;
     for (let dx = -visibleDistance; dx <= visibleDistance; dx++) {
       for (let dz = -visibleDistance; dz <= visibleDistance; dz++) {
@@ -558,7 +554,10 @@ export function World() {
         if (distanceSquared > radiusSquared) continue;
         const cx = cameraChunkX + dx;
         const cz = cameraChunkZ + dz;
-        if (!state.chunks.has(`${cx},${cz}`)) continue;
+        if (!state.chunks.has(`${cx},${cz}`)) {
+          missingVisibleChunks++;
+          continue;
+        }
         visible.push({ cx, cz, distance: Math.sqrt(distanceSquared) });
       }
     }
@@ -567,6 +566,7 @@ export function World() {
     if (visibleKey === previousVisibleKey.current) return;
     previousVisibleKey.current = visibleKey;
     visibleChunkCount.current = visible.length;
+    visibleChunkHoleCount.current = missingVisibleChunks;
     setVisibleChunks(visible);
   });
 

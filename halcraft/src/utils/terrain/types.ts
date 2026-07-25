@@ -35,3 +35,36 @@ export function finalizeChunkBounds(chunk: ChunkData): void {
   }
   chunk.maxFilledY = 0;
 }
+
+/**
+ * Worker との受け渡し用にチャンクを1本の連続バッファへ詰める。
+ * 16x64 個の小さな ArrayBuffer を structured clone するより、Safari のGC負荷を抑えられる。
+ */
+export function packChunkData(chunk: ChunkData): Uint8Array {
+  const packed = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
+  let offset = 0;
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      packed.set(chunk[x][y], offset);
+      offset += CHUNK_SIZE;
+    }
+  }
+  return packed;
+}
+
+/** 転送された連続バッファを、既存の chunk[x][y][z] 形式のviewへ戻す。 */
+export function unpackChunkData(packed: Uint8Array, maxFilledY: number): ChunkData {
+  const expectedLength = CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE;
+  if (packed.byteLength !== expectedLength) {
+    throw new Error(`Invalid chunk buffer length: ${packed.byteLength} (expected ${expectedLength})`);
+  }
+
+  const chunk = Array.from({ length: CHUNK_SIZE }, (_, x) =>
+    Array.from({ length: WORLD_HEIGHT }, (_, y) => {
+      const offset = packed.byteOffset + (x * WORLD_HEIGHT + y) * CHUNK_SIZE;
+      return new Uint8Array(packed.buffer, offset, CHUNK_SIZE) as unknown as BlockId[];
+    }),
+  ) as ChunkData;
+  chunk.maxFilledY = maxFilledY;
+  return chunk;
+}

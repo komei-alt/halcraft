@@ -7,6 +7,8 @@ describe('frame window metrics', () => {
     expect(metrics.averageFps).toBeCloseTo(60, 5);
     expect(metrics.onePercentLowFps).toBeCloseTo(60, 5);
     expect(metrics.elapsedSeconds).toBeCloseTo(30, 5);
+    expect(metrics.maxFrameMs).toBeCloseTo(1000 / 60, 5);
+    expect(metrics.framesOver100Ms).toBe(0);
   });
 
   it('遅い1%のフレームを1% Lowへ反映する', () => {
@@ -17,5 +19,13 @@ describe('frame window metrics', () => {
     const metrics = calculateFrameWindowMetrics(deltas);
     expect(metrics.averageFps).toBeGreaterThan(59);
     expect(metrics.onePercentLowFps).toBeCloseTo(40, 5);
+  });
+
+  it('長時間停止を平均用クランプで隠さず閾値別に数える', () => {
+    const metrics = calculateFrameWindowMetrics([1 / 60, 0.12, 0.3, 2.4]);
+    expect(metrics.maxFrameMs).toBe(2400);
+    expect(metrics.framesOver100Ms).toBe(3);
+    expect(metrics.framesOver250Ms).toBe(2);
+    expect(metrics.framesOver500Ms).toBe(1);
   });
 });

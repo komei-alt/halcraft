@@ -45,9 +45,11 @@ import { HungerBar } from './ui/HungerBar';
 import { StageChallengeRewardSystem } from './StageChallengeRewardSystem';
 import { useVehicleStore, TANK_CONSTANTS, AIRPLANE_CONSTANTS, CAR_CONSTANTS } from '../stores/useVehicleStore';
 import { useGameStore } from '../stores/useGameStore';
+import { useWorldStore } from '../stores/useWorldStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { AIRPLANE_SPAWN, CAR_SPAWN, HELIPORT_CENTER, TANK_SPAWN } from '../utils/terrain/constants';
 import { getTerrainHeight } from '../utils/terrain/heightmap';
+import { findSurfaceY } from '../utils/collision';
 import { isTouchDevice } from '../utils/device';
 import { activateDesktopGameplayInput } from '../utils/gameCanvas';
 import { isNarrowGameplayHud } from '../utils/hudDensity';
@@ -79,6 +81,8 @@ export default function GameExperience({ onOpenSettings }: GameExperienceProps) 
   const tankSpawned = useVehicleStore((state) => state.tank.spawned);
   const airplaneSpawned = useVehicleStore((state) => state.airplane.spawned);
   const carSpawned = useVehicleStore((state) => state.car.spawned);
+  const worldRevision = useWorldStore((state) => state.blockIndexVersion);
+  const spawnChunkReady = useWorldStore((state) => state.chunks.has('0,0'));
   const togglePause = useGameStore((state) => state.togglePause);
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [skinSelectorOpen, setSkinSelectorOpen] = useState(false);
@@ -104,21 +108,28 @@ export default function GameExperience({ onOpenSettings }: GameExperienceProps) 
   }, []);
 
   useEffect(() => {
+    const world = useWorldStore.getState();
+    const resolveSpawnY = (x: number, z: number): number | null => {
+      if (world.readBlock(x, 0, z).status !== 'ready') return null;
+      const terrainBlockY = getTerrainHeight(x, z);
+      return findSurfaceY(world.getBlock, x, z, terrainBlockY + 24, 64, terrainBlockY + 1);
+    };
+
     if (phase === 'playing' && !helicopterSpawned) {
-      const terrainY = getTerrainHeight(HELIPORT_CENTER.x, HELIPORT_CENTER.z);
-      spawnHelicopter(HELIPORT_CENTER.x, terrainY + 2, HELIPORT_CENTER.z);
+      const surfaceY = resolveSpawnY(HELIPORT_CENTER.x, HELIPORT_CENTER.z);
+      if (surfaceY !== null) spawnHelicopter(HELIPORT_CENTER.x, surfaceY, HELIPORT_CENTER.z);
     }
     if (phase === 'playing' && !tankSpawned) {
-      const terrainY = getTerrainHeight(TANK_SPAWN.x, TANK_SPAWN.z);
-      spawnTank(TANK_SPAWN.x, terrainY + TANK_CONSTANTS.BODY_HEIGHT, TANK_SPAWN.z);
+      const surfaceY = resolveSpawnY(TANK_SPAWN.x, TANK_SPAWN.z);
+      if (surfaceY !== null) spawnTank(TANK_SPAWN.x, surfaceY + TANK_CONSTANTS.BODY_HEIGHT, TANK_SPAWN.z);
     }
     if (phase === 'playing' && !airplaneSpawned) {
-      const terrainY = getTerrainHeight(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
-      spawnAirplane(AIRPLANE_SPAWN.x, terrainY + AIRPLANE_CONSTANTS.BODY_HEIGHT, AIRPLANE_SPAWN.z);
+      const surfaceY = resolveSpawnY(AIRPLANE_SPAWN.x, AIRPLANE_SPAWN.z);
+      if (surfaceY !== null) spawnAirplane(AIRPLANE_SPAWN.x, surfaceY + AIRPLANE_CONSTANTS.BODY_HEIGHT, AIRPLANE_SPAWN.z);
     }
     if (phase === 'playing' && !carSpawned) {
-      const terrainY = getTerrainHeight(CAR_SPAWN.x, CAR_SPAWN.z);
-      spawnCar(CAR_SPAWN.x, terrainY + CAR_CONSTANTS.BODY_HEIGHT, CAR_SPAWN.z);
+      const surfaceY = resolveSpawnY(CAR_SPAWN.x, CAR_SPAWN.z);
+      if (surfaceY !== null) spawnCar(CAR_SPAWN.x, surfaceY + CAR_CONSTANTS.BODY_HEIGHT, CAR_SPAWN.z);
     }
   }, [
     airplaneSpawned,
@@ -130,6 +141,7 @@ export default function GameExperience({ onOpenSettings }: GameExperienceProps) 
     spawnHelicopter,
     spawnTank,
     tankSpawned,
+    worldRevision,
   ]);
 
   const resumeSkinPause = useCallback(() => {
@@ -173,6 +185,11 @@ export default function GameExperience({ onOpenSettings }: GameExperienceProps) 
   return (
     <>
       <GameCanvas />
+      {!spawnChunkReady && (
+        <div className="world-streaming-loading" role="status" aria-live="polite">
+          <span>ワールドを準備中…</span>
+        </div>
+      )}
       <Crosshair />
       <MachineGunScopeHUD />
       <Hotbar />

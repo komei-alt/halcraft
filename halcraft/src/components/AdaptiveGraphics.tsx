@@ -65,13 +65,18 @@ export function AdaptiveGraphicsGovernor() {
     warmupRef.current += delta;
     if (warmupRef.current < WARMUP_SECONDS) return;
     const benchmarkDelta = Math.min(delta, MAX_MEASURED_DELTA);
-    benchmarkFramesRef.current.push(benchmarkDelta);
-    benchmarkElapsedRef.current += benchmarkDelta;
+    // 平均品質制御は上限付き、停止検出は生deltaで記録して2〜3秒停止を隠さない。
+    benchmarkFramesRef.current.push(delta);
+    benchmarkElapsedRef.current += delta;
     if (benchmarkElapsedRef.current >= BENCHMARK_WINDOW_SECONDS) {
       const metrics = calculateFrameWindowMetrics(benchmarkFramesRef.current);
       gl.domElement.setAttribute('data-fps-window-seconds', String(BENCHMARK_WINDOW_SECONDS));
       gl.domElement.setAttribute('data-fps-30s-average', metrics.averageFps.toFixed(1));
       gl.domElement.setAttribute('data-fps-30s-1-percent-low', metrics.onePercentLowFps.toFixed(1));
+      gl.domElement.setAttribute('data-frame-max-ms', metrics.maxFrameMs.toFixed(1));
+      gl.domElement.setAttribute('data-frames-over-100ms', String(metrics.framesOver100Ms));
+      gl.domElement.setAttribute('data-frames-over-250ms', String(metrics.framesOver250Ms));
+      gl.domElement.setAttribute('data-frames-over-500ms', String(metrics.framesOver500Ms));
       benchmarkFramesRef.current = [];
       benchmarkElapsedRef.current = 0;
     }

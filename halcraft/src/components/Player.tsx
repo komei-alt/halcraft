@@ -225,6 +225,7 @@ export function Player() {
 
   const selectSlot = usePlayerStore((s) => s.selectSlot);
   const getBlock = useWorldStore((s) => s.getBlock);
+  const getCollisionBlock = useWorldStore((s) => s.getCollisionBlock);
   const sendPosition = useMultiplayerStore((s) => s.sendPosition);
   const sendHelicopterBoard = useMultiplayerStore((s) => s.sendHelicopterBoard);
   const sendHelicopterDismount = useMultiplayerStore((s) => s.sendHelicopterDismount);
@@ -261,8 +262,8 @@ export function Player() {
 
   // 指定位置にプレイヤーのAABBが固体ブロックと重なるか判定
   const checkCollision = useCallback((px: number, py: number, pz: number): boolean =>
-    checkAABBCollision(getBlock, px, py, pz, PLAYER_RADIUS, PLAYER_HEIGHT, isBlockSolid),
-  [getBlock]);
+    checkAABBCollision(getCollisionBlock, px, py, pz, PLAYER_RADIUS, PLAYER_HEIGHT, isBlockSolid),
+  [getCollisionBlock]);
 
   // 下向き衝突時の正確な上面を取得（階段の0.48/0.96段への着地に使用）
   const getCollisionTop = useCallback((px: number, py: number, pz: number): number | null =>
@@ -501,6 +502,10 @@ export function Player() {
     const pos = position.current;
     const gameState = useGameStore.getState();
     if (gameState.phase !== 'playing') return;
+    if (useWorldStore.getState().readBlock(pos.x, 0, pos.z).status !== 'ready') {
+      vel.set(0, 0, 0);
+      return;
+    }
 
     // --- 乗り物ストアの状態を取得（本体座標報告より先に） ---
     const vehicleState = useVehicleStore.getState();

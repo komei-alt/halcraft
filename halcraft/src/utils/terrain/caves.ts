@@ -10,6 +10,9 @@ import type { ChunkData } from './types';
 /** 洞窟の上に必ず残す地表ブロックの厚み */
 const MIN_SURFACE_CRUST_DEPTH = 4;
 
+/** 崖や谷の横から洞窟が露出しないよう、周囲の地表も含めて残す殻の半径 */
+const SURFACE_CRUST_RADIUS = 5;
+
 /** 洞窟ノイズ生成器（シード固定でワールド全体で一貫した洞窟） */
 let caveNoise3D: NoiseFunction3D | null = null;
 let spaghettiNoise3D: NoiseFunction3D | null = null;
@@ -37,6 +40,39 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
+ * チャンク各列の洞窟上限を、周辺で最も低い地表を基準に求める。
+ *
+ * 真上の地表だけを見ると、急斜面の高い列で削った洞窟が低い列の横から露出し、
+ * 地面一帯が抜けて見える。拡張領域の高さを先にキャッシュして、生成負荷を
+ * 増やしすぎずに垂直・水平方向の地表殻を保証する。
+ */
+export function buildCaveCeilingMap(cx: number, cz: number): number[][] {
+  const diameter = SURFACE_CRUST_RADIUS * 2;
+  const expandedSize = CHUNK_SIZE + diameter;
+  const baseX = cx * CHUNK_SIZE - SURFACE_CRUST_RADIUS;
+  const baseZ = cz * CHUNK_SIZE - SURFACE_CRUST_RADIUS;
+  const heights = Array.from({ length: expandedSize }, (_, x) =>
+    Array.from({ length: expandedSize }, (_, z) => getTerrainHeight(baseX + x, baseZ + z)),
+  );
+
+  return Array.from({ length: CHUNK_SIZE }, (_, lx) =>
+    Array.from({ length: CHUNK_SIZE }, (_, lz) => {
+      let minimumSurfaceY = WORLD_HEIGHT - 1;
+      for (let dx = 0; dx <= diameter; dx++) {
+        for (let dz = 0; dz <= diameter; dz++) {
+          minimumSurfaceY = Math.min(minimumSurfaceY, heights[lx + dx][lz + dz]);
+        }
+      }
+      return Math.min(
+        SEA_LEVEL - 1,
+        WORLD_HEIGHT - 2,
+        minimumSurfaceY - MIN_SURFACE_CRUST_DEPTH,
+      );
+    }),
+  );
+}
+
+/**
  * 洞窟のカービング — チャンク内の固体ブロックを空気に置き換える
  *
  * 2種類の洞窟を組み合わせ:
@@ -57,19 +93,15 @@ export function carveCaves(chunk: ChunkData, cx: number, cz: number): void {
 
   const baseX = cx * CHUNK_SIZE;
   const baseZ = cz * CHUNK_SIZE;
+  const caveCeilings = buildCaveCeilingMap(cx, cz);
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     const worldX = baseX + lx;
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       const worldZ = baseZ + lz;
-      const surfaceY = getTerrainHeight(worldX, worldZ);
-      const caveCeilingY = Math.min(
-        SEA_LEVEL - 1,
-        WORLD_HEIGHT - 2,
-        surfaceY - MIN_SURFACE_CRUST_DEPTH,
-      );
+      const caveCeilingY = caveCeilings[lx][lz];
 
-      // 川底や低地でも地表の殻を残し、洞窟が地面を貫通して地下溶岩を露出させない。
+      // 川底・低地・崖の横方向にも殻を残し、地下溶岩や巨大空洞を露出させない。
       for (let ly = 2; ly <= caveCeilingY; ly++) {
         // 岩盤は削らない
         if (ly <= 1) continue;
