@@ -70,8 +70,14 @@ const WORLD_POSITION_MIN_VERTICAL_DELTA = 0.45;
 const WATER_SPEED_MULT = 0.45;
 /** 水中の重力倍率 */
 const WATER_GRAVITY_MULT = 0.15;
-/** 水中の泳ぎ上昇速度 */
+/** 水中の泳ぎ上昇速度（Space 長押し） */
 const WATER_SWIM_SPEED = 3.5;
+/** 水中の潜水速度（Shift / 下降ボタン） */
+const WATER_DIVE_SPEED = 3.2;
+/** 水面で飛び出すときの上昇速度（岸への脱出用） */
+const WATER_SURFACE_EXIT_SPEED = 6.5;
+/** 水中の沈降終端速度 */
+const WATER_SINK_TERMINAL = -5;
 /** 最大息（秒） */
 const MAX_AIR_SUPPLY = 15;
 /** 溶岩ダメージ（毎秒） */
@@ -1612,34 +1618,73 @@ export function Player() {
       }
     }
 
-    // --- ジャンプ（重力適用前に処理） ---
-    if (isInputActive && jumpRequested) {
-      if (isSwimming) {
-        // 水中: ジャンプキーで泳ぎ上昇
-        vel.y = WATER_SWIM_SPEED;
-      } else if (onGround.current) {
+    // --- ジャンプ / 泳ぎ / 重力（垂直制御） ---
+    // 注意: 水底で onGround のまま vel.y を 0 固定すると浮上不能になる。
+    // 水中は接地ロックを外し、Space 浮上 / Shift 潜水 / 岸ジャンプを別経路で扱う。
+    const descendRequested = isTouch.current ? mobileActions.descend : keys.current.descend;
+
+    if (isSwimming) {
+      if (isInputActive && jumpRequested) {
+        // 目が水面より上（浅瀬 or 水面）→ 岸へ飛び出すジャンプ
+        if (!inWaterEye) {
+          if (onGround.current) {
+            // 浅瀬に立っている: 通常ジャンプ相当で脱出
+            let jumpVel = JUMP_VELOCITY;
+            const jumpLevel = useEffectStore.getState().getEffectLevel('jump_boost');
+            if (jumpLevel > 0) {
+              jumpVel = JUMP_VELOCITY * getJumpBoostMultiplier(jumpLevel);
+            }
+            vel.y = jumpVel;
+            playJumpSound();
+          } else {
+            // 水面を泳ぎながら: 脱出ブースト
+            vel.y = Math.max(vel.y, WATER_SURFACE_EXIT_SPEED);
+          }
+          onGround.current = false;
+        } else {
+          // 完全に水中: Space で浮上（水底からの離陸も許可）
+          vel.y = WATER_SWIM_SPEED;
+          onGround.current = false;
+        }
+      } else if (isInputActive && descendRequested) {
+        // Shift / モバイル下降: 潜水
+        if (onGround.current) {
+          // すでに水底 → それ以上沈まない
+          vel.y = 0;
+        } else {
+          vel.y = -WATER_DIVE_SPEED;
+        }
+      } else if (!onGround.current) {
+        // 入力なし: ゆっくり沈む
+        vel.y += GRAVITY * WATER_GRAVITY_MULT * dt;
+        if (vel.y < WATER_SINK_TERMINAL) vel.y = WATER_SINK_TERMINAL;
+        // 水面付近でわずかに浮力（沈み込みすぎ防止）
+        if (!inWaterEye && vel.y < 0) {
+          vel.y *= 0.85;
+        }
+      } else {
+        // 水底で静止（水平移動のみ）
+        vel.y = 0;
+      }
+    } else {
+      // 陸上: 通常ジャンプ
+      if (isInputActive && jumpRequested && onGround.current) {
         vel.y = JUMP_VELOCITY;
         onGround.current = false;
-        // ジャンプブーストエフェクト
         const jumpLevel = useEffectStore.getState().getEffectLevel('jump_boost');
         if (jumpLevel > 0) {
           vel.y = JUMP_VELOCITY * getJumpBoostMultiplier(jumpLevel);
         }
         playJumpSound();
       }
-    }
 
-    // --- 重力（空中の場合のみ適用、接地中はスキップして振動を防ぐ） ---
-    if (!onGround.current) {
-      // 水中は重力を大幅に弱める
-      const gravity = isSwimming ? GRAVITY * WATER_GRAVITY_MULT : GRAVITY;
-      vel.y += gravity * dt;
-      // 終端速度を制限（水中は遅い）
-      const terminalVel = isSwimming ? -5 : -40;
-      if (vel.y < terminalVel) vel.y = terminalVel;
-    } else {
-      // 接地中は垂直速度を強制的にゼロ維持（重力→衝突→スナップの振動を防止）
-      vel.y = 0;
+      // 陸上重力（接地中は垂直速度をゼロ維持して振動防止）
+      if (!onGround.current) {
+        vel.y += GRAVITY * dt;
+        if (vel.y < -40) vel.y = -40;
+      } else {
+        vel.y = 0;
+      }
     }
 
     // --- ノックバック適用 ---
@@ -1707,13 +1752,13 @@ export function Player() {
     if (hasVerticalCollision) {
       // 落下中に衝突 → 接地
       if (vel.y < 0 && downwardCollisionTop !== null) {
-        // 落下ダメージを計算
+        // 落下ダメージを計算（水中着地は無効）
         const fallDistance = lastGroundY.current - newY;
-        if (fallDistance > 0 && wasFalling.current) {
+        if (fallDistance > 0 && wasFalling.current && !isSwimming) {
           applyFallDamage(fallDistance);
         }
-        // 少しでも落下していれば着地音を鳴らして接地の手応えを出す
-        if (fallDistance > 0.45 && wasFalling.current) {
+        // 少しでも落下していれば着地音を鳴らして接地の手応えを出す（水中は静かに）
+        if (fallDistance > 0.45 && wasFalling.current && !isSwimming) {
           const stage = useGameStore.getState().currentStage;
           const groundBlock = getBlock(
             Math.floor(pos.x),
