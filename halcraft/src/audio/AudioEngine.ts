@@ -23,7 +23,7 @@ const BUS_IDS: AudioBusId[] = [
   'world',
   'player',
   'ui',
-  'dialogue',
+  'creature',
   'voiceChat',
 ];
 
@@ -33,7 +33,7 @@ const DEFAULT_BUS_VOLUMES: Record<AudioBusId, number> = {
   world: 1,
   player: 1,
   ui: 0.9,
-  dialogue: 1,
+  creature: 1,
   voiceChat: 1,
 };
 
@@ -121,7 +121,7 @@ class AudioEngine {
     this.busVolumes.world = clamp01(settings.sfxVolume);
     this.busVolumes.player = clamp01(settings.sfxVolume);
     this.busVolumes.ui = clamp01(settings.sfxVolume * 0.9);
-    this.busVolumes.dialogue = clamp01(settings.dialogueVolume);
+    this.busVolumes.creature = clamp01(settings.creatureVolume);
     this.busVolumes.voiceChat = clamp01(settings.voiceChatVolume);
 
     const context = this.context;
@@ -196,10 +196,14 @@ class AudioEngine {
     const ambienceCutoff = environment.underwater ? 1150 : environment.underground ? 4800 : 17500;
     const now = context.currentTime;
     for (const [id, graph] of this.buses) {
-      const cutoff = id === 'ambience' ? ambienceCutoff : id === 'world' || id === 'player' ? worldCutoff : 19000;
+      const cutoff = id === 'ambience'
+        ? ambienceCutoff
+        : id === 'world' || id === 'player' || id === 'creature'
+          ? worldCutoff
+          : 19000;
       setAudioParam(graph.tone.frequency, cutoff, now, 0.22);
       graph.tone.Q.setTargetAtTime(environment.underwater ? 0.9 : 0.35, now, 0.08);
-      const send = id === 'world'
+      const send = id === 'world' || id === 'creature'
         ? environment.underground ? 0.34 : environment.dimension === 'nether' ? 0.2 : 0.035
         : id === 'ambience'
           ? environment.underground ? 0.18 : environment.dimension === 'nether' ? 0.12 : 0.025
@@ -362,7 +366,7 @@ class AudioEngine {
   }
 
   private getDuckGain(bus: AudioBusId): number {
-    const presence = bus === 'music' || bus === 'ambience' || bus === 'world' || bus === 'player'
+    const presence = bus === 'music' || bus === 'ambience' || bus === 'world' || bus === 'player' || bus === 'creature'
       ? this.presence
       : 1;
     if (this.duckTokens.size === 0) return presence;
@@ -370,6 +374,7 @@ class AudioEngine {
     if (bus === 'ambience') return 0.5 * presence;
     if (bus === 'world') return 0.72 * presence;
     if (bus === 'player') return 0.82 * presence;
+    if (bus === 'creature') return 0.78 * presence;
     return presence;
   }
 

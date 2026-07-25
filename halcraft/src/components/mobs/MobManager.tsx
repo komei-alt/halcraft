@@ -23,6 +23,7 @@ import { Spider } from './Spider';
 import { IronGolem } from './IronGolem';
 import { BossRenderer } from './BossRenderer';
 import { playHurtSound, playMobDeathSound, playStageRewardSound } from '../../utils/sounds';
+import { playCreatureCue } from '../../audio';
 import { spawnBlockBreakEffect, spawnMobDeathEffect } from '../../utils/effectTriggers';
 import { useEffectStore } from '../../stores/useEffectStore';
 import { getRegenRate } from '../../types/potions';
@@ -450,6 +451,10 @@ export function MobManager() {
       const ddz = event.z - playerZ;
       const distance = Math.sqrt(ddx * ddx + ddz * ddz);
       playMobDeathSound(distance, { x: event.x, y: event.y, z: event.z });
+      playCreatureCue(event.type, 'death', {
+        position: { x: event.x, y: event.y + 0.8, z: event.z },
+        entityId: `death:${event.type}:${Math.round(event.x)}:${Math.round(event.z)}`,
+      });
 
       if (event.type === 'zombie' || event.type === 'spider' || event.type === 'darwin' || event.type === 'boss_giant') {
         useGameStore.getState().registerEnemyDefeat();

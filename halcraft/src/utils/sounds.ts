@@ -5,7 +5,15 @@
 import type { BlockUseFeedbackSoundKind } from './blockUseFeedback';
 import type { BiomeId, StageCategory } from '../types/stages';
 import type { StageChallengeMedal } from '../types/stageChallenges';
-import { audioEngine, playRecordedCue, preloadCoreRecordedAudio, type AudioVector3 } from '../audio';
+import {
+  audioEngine,
+  playRecordedCue,
+  playSurfaceFootstep,
+  preloadCoreRecordedAudio,
+  resolveFootstepSurface,
+  type AudioVector3,
+} from '../audio';
+import type { BlockId } from '../types/blocks';
 import type { BlockAudioMaterial } from './blockAudioMaterial';
 
 /** 効果音全体の音量係数（設定スライダー 0-1） */
@@ -382,104 +390,17 @@ export function playHurtSound(): void {
   pulse.stop(now + 0.15);
 }
 
-// ============================================
-// 3. 足音
-// ============================================
-
-interface FootstepProfile {
-  key: string;
-  filterType: BiquadFilterType;
-  noiseFrequency: number;
-  noiseQ: number;
-  noiseGain: number;
-  noiseDuration: number;
-  thudFrequency: number;
-  thudGain: number;
-  thudDuration: number;
-  gritFrequency: number;
-  gritGain: number;
-  gritDuration: number;
-  modeClickFrequency: number;
-}
-
-const FOOTSTEP_PROFILES: Record<BiomeId, FootstepProfile> = {
-  forest: {
-    key: 'forest',
-    filterType: 'bandpass',
-    noiseFrequency: 1250,
-    noiseQ: 3.4,
-    noiseGain: 0.105,
-    noiseDuration: 0.066,
-    thudFrequency: 68,
-    thudGain: 0.055,
-    thudDuration: 0.046,
-    gritFrequency: 2800,
-    gritGain: 0.035,
-    gritDuration: 0.035,
-    modeClickFrequency: 980,
-  },
-  tropical: {
-    key: 'tropical',
-    filterType: 'bandpass',
-    noiseFrequency: 920,
-    noiseQ: 1.8,
-    noiseGain: 0.12,
-    noiseDuration: 0.078,
-    thudFrequency: 74,
-    thudGain: 0.05,
-    thudDuration: 0.052,
-    gritFrequency: 1900,
-    gritGain: 0.046,
-    gritDuration: 0.046,
-    modeClickFrequency: 1220,
-  },
-  snow: {
-    key: 'snow',
-    filterType: 'highpass',
-    noiseFrequency: 1850,
-    noiseQ: 0.78,
-    noiseGain: 0.09,
-    noiseDuration: 0.09,
-    thudFrequency: 48,
-    thudGain: 0.035,
-    thudDuration: 0.07,
-    gritFrequency: 3300,
-    gritGain: 0.04,
-    gritDuration: 0.052,
-    modeClickFrequency: 1460,
-  },
-  desert: {
-    key: 'desert',
-    filterType: 'bandpass',
-    noiseFrequency: 1450,
-    noiseQ: 1.25,
-    noiseGain: 0.115,
-    noiseDuration: 0.086,
-    thudFrequency: 58,
-    thudGain: 0.045,
-    thudDuration: 0.054,
-    gritFrequency: 2450,
-    gritGain: 0.052,
-    gritDuration: 0.044,
-    modeClickFrequency: 840,
-  },
-};
-
-export function playFootstep(): void {
-  playBiomeFootstepSound();
-}
-
 /**
  * 着地音。落下距離に応じて足音より重く鳴らす。
  * fallDistance はブロック単位の目安（1〜12 程度）。
  */
 export function playLandingSound(
+  groundBlock: BlockId,
   biome: BiomeId = 'forest',
-  category: StageCategory | null = null,
   fallDistance = 1.5,
 ): void {
   const intensity = Math.min(1.55, 0.85 + Math.max(0, fallDistance) * 0.09);
-  playBiomeFootstepSound(biome, category, intensity);
+  playSurfaceFootstep(resolveFootstepSurface(groundBlock, biome), 'land', intensity);
 }
 
 /** ジャンプ音（短く軽いフワッとした音） */
@@ -515,210 +436,6 @@ export function playJumpSound(): void {
   nGain.connect(getSfxDestination());
   noise.start(now);
   noise.stop(now + 0.09);
-}
-
-export function playBiomeFootstepSound(
-  biome: BiomeId = 'forest',
-  category: StageCategory | null = null,
-  intensity = 1,
-): void {
-  const ctx = getAudioContext();
-  const profile = FOOTSTEP_PROFILES[biome];
-  if (!ctx || !canPlay(`step:${profile.key}`, 92)) return;
-
-  const recordedFootstep = biome === 'snow'
-    ? 'footstep.snow'
-    : biome === 'desert'
-      ? 'footstep.soft'
-      : category === 'war'
-        ? 'footstep.stone'
-        : 'footstep.grass';
-  playRecordedCue(recordedFootstep, { gain: Math.min(1.18, Math.max(0.72, intensity)) });
-
-  const now = ctx.currentTime;
-  const strength = Math.min(1.35, Math.max(0.72, intensity));
-  const warPush = category === 'war' ? 1.18 : 1;
-  const buildSoftness = category === 'build' ? 0.84 : 1;
-  const pitchJitter = 0.92 + Math.random() * 0.18;
-  const timingJitter = 0.9 + Math.random() * 0.16;
-
-  // 地面素材ごとの接地音。森は葉、南国は湿った砂、雪は圧雪、砂漠は乾いた砂を狙う。
-  const noise = ctx.createBufferSource();
-  noise.buffer = getNoiseBuffer(ctx);
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = profile.filterType;
-  filter.frequency.setValueAtTime(profile.noiseFrequency * pitchJitter * warPush, now);
-  filter.Q.setValueAtTime(profile.noiseQ, now);
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(profile.noiseGain * strength * buildSoftness, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + profile.noiseDuration * timingJitter);
-
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(getSfxDestination());
-  noise.start(now);
-  noise.stop(now + profile.noiseDuration * timingJitter);
-
-  // 低い衝撃音（地面の振動）
-  const thud = ctx.createOscillator();
-  thud.type = 'sine';
-  thud.frequency.setValueAtTime(profile.thudFrequency * (0.95 + Math.random() * 0.12), now);
-
-  const thudGain = ctx.createGain();
-  thudGain.gain.setValueAtTime(profile.thudGain * strength * (category === 'war' ? 1.12 : 0.92), now);
-  thudGain.gain.exponentialRampToValueAtTime(0.001, now + profile.thudDuration * timingJitter);
-
-  thud.connect(thudGain);
-  thudGain.connect(getSfxDestination());
-  thud.start(now);
-  thud.stop(now + profile.thudDuration * timingJitter);
-
-  // 表面の粒立ち。走っている時ほど少しだけ増え、足元の質感を耳で拾える。
-  const grit = ctx.createBufferSource();
-  grit.buffer = getNoiseBuffer(ctx);
-
-  const gritFilter = ctx.createBiquadFilter();
-  gritFilter.type = 'highpass';
-  gritFilter.frequency.setValueAtTime(profile.gritFrequency * pitchJitter, now);
-
-  const gritGain = ctx.createGain();
-  gritGain.gain.setValueAtTime(profile.gritGain * Math.max(0.7, strength - 0.08), now + 0.012);
-  gritGain.gain.exponentialRampToValueAtTime(0.001, now + profile.gritDuration * timingJitter);
-
-  grit.connect(gritFilter);
-  gritFilter.connect(gritGain);
-  gritGain.connect(getSfxDestination());
-  grit.start(now + 0.006);
-  grit.stop(now + profile.gritDuration * timingJitter);
-
-  if (category === 'war') {
-    const tick = ctx.createOscillator();
-    tick.type = 'square';
-    tick.frequency.setValueAtTime(profile.modeClickFrequency * pitchJitter, now + 0.014);
-
-    const tickGain = ctx.createGain();
-    tickGain.gain.setValueAtTime(0.018 * strength, now + 0.014);
-    tickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.048);
-
-    tick.connect(tickGain);
-    tickGain.connect(getSfxDestination());
-    tick.start(now + 0.014);
-    tick.stop(now + 0.052);
-  }
-}
-
-// ============================================
-// 4. 味方の動作音（メカニカルなハム）
-// ============================================
-
-export function playAllyMove(distance: number): void {
-  const ctx = getAudioContext();
-  if (!ctx || !canPlay('ally', 800)) return;
-
-  // 距離による音量減衰（最大距離15ブロック）
-  const maxDist = 15;
-  if (distance > maxDist) return;
-  const volume = Math.max(0, 0.15 * (1 - distance / maxDist));
-
-  const now = ctx.currentTime;
-
-  // メカニカルなハム音
-  const osc = ctx.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(90 + Math.random() * 20, now);
-
-  const lfo = ctx.createOscillator();
-  lfo.type = 'sine';
-  lfo.frequency.setValueAtTime(6, now);
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.setValueAtTime(10, now);
-  lfo.connect(lfoGain);
-  lfoGain.connect(osc.frequency);
-  lfo.start(now);
-  lfo.stop(now + 0.3);
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(300, now);
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(volume, now);
-  gain.gain.setValueAtTime(volume, now + 0.1);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(getSfxDestination());
-  osc.start(now);
-  osc.stop(now + 0.3);
-}
-
-// ============================================
-// 5. ゾンビのうめき声
-// ============================================
-
-export function playZombieGrunt(distance: number): void {
-  const ctx = getAudioContext();
-  if (!ctx || !canPlay('zombie', 2000)) return;
-
-  // 距離による音量減衰（最大距離20ブロック）
-  const maxDist = 20;
-  if (distance > maxDist) return;
-  const volume = Math.max(0, 0.3 * (1 - distance / maxDist));
-
-  const now = ctx.currentTime;
-  const duration = 0.4 + Math.random() * 0.3; // ランダムな長さ
-
-  // 低い唸り声（デチューンしたノコギリ波）
-  const osc1 = ctx.createOscillator();
-  osc1.type = 'sawtooth';
-  const baseFreq = 70 + Math.random() * 30;
-  osc1.frequency.setValueAtTime(baseFreq, now);
-  osc1.frequency.linearRampToValueAtTime(baseFreq * 0.7, now + duration);
-
-  const osc2 = ctx.createOscillator();
-  osc2.type = 'sawtooth';
-  osc2.frequency.setValueAtTime(baseFreq * 1.02, now); // 微妙にデチューン
-  osc2.frequency.linearRampToValueAtTime(baseFreq * 0.72, now + duration);
-
-  // フィルターで籠った音に
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(250, now);
-  filter.frequency.linearRampToValueAtTime(150, now + duration);
-  filter.Q.setValueAtTime(3, now);
-
-  // ビブラート（不安定さ）
-  const vibrato = ctx.createOscillator();
-  vibrato.type = 'sine';
-  vibrato.frequency.setValueAtTime(4 + Math.random() * 3, now);
-  const vibratoGain = ctx.createGain();
-  vibratoGain.gain.setValueAtTime(8, now);
-  vibrato.connect(vibratoGain);
-  vibratoGain.connect(osc1.frequency);
-  vibratoGain.connect(osc2.frequency);
-  vibrato.start(now);
-  vibrato.stop(now + duration);
-
-  // 音量エンベロープ
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(volume, now + 0.05);
-  gain.gain.setValueAtTime(volume, now + duration * 0.7);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-  // 接続
-  osc1.connect(filter);
-  osc2.connect(filter);
-  filter.connect(gain);
-  gain.connect(getSfxDestination());
-
-  osc1.start(now);
-  osc2.start(now);
-  osc1.stop(now + duration);
-  osc2.stop(now + duration);
 }
 
 // ============================================

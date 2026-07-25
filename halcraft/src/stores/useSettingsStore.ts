@@ -31,8 +31,8 @@ export interface SettingsSnapshot {
   ambienceVolume: number;
   /** 効果音 音量 0-1 */
   sfxVolume: number;
-  /** キャラクター・案内音声音量 0-1 */
-  dialogueVolume: number;
+  /** 生き物・モブ音量 0-1 */
+  creatureVolume: number;
   /** ボイスチャット音量 0-1 */
   voiceChatVolume: number;
   audioMuted: boolean;
@@ -55,7 +55,7 @@ interface SettingsState extends SettingsSnapshot {
   setBgmVolume: (volume: number) => void;
   setAmbienceVolume: (volume: number) => void;
   setSfxVolume: (volume: number) => void;
-  setDialogueVolume: (volume: number) => void;
+  setCreatureVolume: (volume: number) => void;
   setVoiceChatVolume: (volume: number) => void;
   setAudioMuted: (muted: boolean) => void;
   setDynamicRange: (mode: DynamicRangeMode) => void;
@@ -77,7 +77,7 @@ export const DEFAULT_SETTINGS: SettingsSnapshot = {
   bgmVolume: 0.85,
   ambienceVolume: 0.82,
   sfxVolume: 1,
-  dialogueVolume: 1,
+  creatureVolume: 1,
   voiceChatVolume: 1,
   audioMuted: false,
   dynamicRange: 'standard',
@@ -160,6 +160,12 @@ function clampVolume(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+export function resolveCreatureVolume(creatureValue: unknown, legacyDialogueValue: unknown): number {
+  if (typeof creatureValue === 'number') return clampVolume(creatureValue);
+  if (typeof legacyDialogueValue === 'number') return clampVolume(legacyDialogueValue);
+  return DEFAULT_SETTINGS.creatureVolume;
+}
+
 function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot {
   return {
     graphicsPreset: state.graphicsPreset,
@@ -175,7 +181,7 @@ function pickSnapshot(state: SettingsState | SettingsSnapshot): SettingsSnapshot
     bgmVolume: state.bgmVolume,
     ambienceVolume: state.ambienceVolume,
     sfxVolume: state.sfxVolume,
-    dialogueVolume: state.dialogueVolume,
+    creatureVolume: state.creatureVolume,
     voiceChatVolume: state.voiceChatVolume,
     audioMuted: state.audioMuted,
     dynamicRange: state.dynamicRange,
@@ -199,8 +205,8 @@ function loadSettings(): SettingsSnapshot {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
 
-    const parsed = JSON.parse(raw) as Partial<Record<keyof SettingsSnapshot, unknown>>;
-    return {
+    const parsed = JSON.parse(raw) as Partial<Record<keyof SettingsSnapshot | 'dialogueVolume', unknown>>;
+    const loaded: SettingsSnapshot = {
       graphicsPreset: isGraphicsPreset(parsed.graphicsPreset) ? parsed.graphicsPreset : DEFAULT_SETTINGS.graphicsPreset,
       renderDistance: typeof parsed.renderDistance === 'number'
         ? clampRenderDistance(parsed.renderDistance)
@@ -236,9 +242,7 @@ function loadSettings(): SettingsSnapshot {
       sfxVolume: typeof parsed.sfxVolume === 'number'
         ? clampVolume(parsed.sfxVolume)
         : DEFAULT_SETTINGS.sfxVolume,
-      dialogueVolume: typeof parsed.dialogueVolume === 'number'
-        ? clampVolume(parsed.dialogueVolume)
-        : DEFAULT_SETTINGS.dialogueVolume,
+      creatureVolume: resolveCreatureVolume(parsed.creatureVolume, parsed.dialogueVolume),
       voiceChatVolume: typeof parsed.voiceChatVolume === 'number'
         ? clampVolume(parsed.voiceChatVolume)
         : DEFAULT_SETTINGS.voiceChatVolume,
@@ -252,6 +256,10 @@ function loadSettings(): SettingsSnapshot {
         ? parsed.spatialAudio
         : DEFAULT_SETTINGS.spatialAudio,
     };
+    if (typeof parsed.creatureVolume !== 'number' && typeof parsed.dialogueVolume === 'number') {
+      saveSettings(loaded);
+    }
+    return loaded;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -281,7 +289,7 @@ export const useSettingsStore = create<SettingsState>((set) => {
         bgmVolume: state.bgmVolume,
         ambienceVolume: state.ambienceVolume,
         sfxVolume: state.sfxVolume,
-        dialogueVolume: state.dialogueVolume,
+        creatureVolume: state.creatureVolume,
         voiceChatVolume: state.voiceChatVolume,
         audioMuted: state.audioMuted,
         dynamicRange: state.dynamicRange,
@@ -302,7 +310,7 @@ export const useSettingsStore = create<SettingsState>((set) => {
     setBgmVolume: (bgmVolume) => setAndSave({ bgmVolume: clampVolume(bgmVolume) }),
     setAmbienceVolume: (ambienceVolume) => setAndSave({ ambienceVolume: clampVolume(ambienceVolume) }),
     setSfxVolume: (sfxVolume) => setAndSave({ sfxVolume: clampVolume(sfxVolume) }),
-    setDialogueVolume: (dialogueVolume) => setAndSave({ dialogueVolume: clampVolume(dialogueVolume) }),
+    setCreatureVolume: (creatureVolume) => setAndSave({ creatureVolume: clampVolume(creatureVolume) }),
     setVoiceChatVolume: (voiceChatVolume) => setAndSave({ voiceChatVolume: clampVolume(voiceChatVolume) }),
     setAudioMuted: (audioMuted) => setAndSave({ audioMuted }),
     setDynamicRange: (dynamicRange) => setAndSave({ dynamicRange }),

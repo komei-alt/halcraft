@@ -46,6 +46,8 @@ export interface RecordedCueOptions {
   gain?: number;
   playbackRate?: number;
   priority?: number;
+  /** 定義済みバスを上書きする。録音素材を別カテゴリのレイヤーへ再利用する場合に使う。 */
+  bus?: AudioBusId;
 }
 
 interface ActiveVoice {
@@ -173,14 +175,15 @@ export function playRecordedCue(id: RecordedCueId, options: RecordedCueOptions =
     gain.gain.value = definition.gain * (options.gain ?? 1);
     source.connect(gain);
 
+    const targetBus = options.bus ?? definition.bus;
     const spatial = definition.spatial && options.position
-      ? audioEngine.createSpatialOutput(definition.bus, {
+      ? audioEngine.createSpatialOutput(targetBus, {
           position: options.position,
           occlusion: options.occlusion,
         })
       : null;
     if (spatial) gain.connect(spatial.input);
-    else gain.connect(audioEngine.getBusInput(definition.bus));
+    else gain.connect(audioEngine.getBusInput(targetBus));
 
     const releaseDuck = definition.duck ? audioEngine.beginDuck() : null;
     const voice: ActiveVoice = { source, priority, startedAt: context.currentTime };

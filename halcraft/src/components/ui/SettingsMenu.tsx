@@ -323,7 +323,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const bgmVolume = useSettingsStore((s) => s.bgmVolume);
   const ambienceVolume = useSettingsStore((s) => s.ambienceVolume);
   const sfxVolume = useSettingsStore((s) => s.sfxVolume);
-  const dialogueVolume = useSettingsStore((s) => s.dialogueVolume);
+  const creatureVolume = useSettingsStore((s) => s.creatureVolume);
   const voiceChatVolume = useSettingsStore((s) => s.voiceChatVolume);
   const audioMuted = useSettingsStore((s) => s.audioMuted);
   const dynamicRange = useSettingsStore((s) => s.dynamicRange);
@@ -342,7 +342,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
   const setBgmVolumeSetting = useSettingsStore((s) => s.setBgmVolume);
   const setAmbienceVolume = useSettingsStore((s) => s.setAmbienceVolume);
   const setSfxVolumeSetting = useSettingsStore((s) => s.setSfxVolume);
-  const setDialogueVolume = useSettingsStore((s) => s.setDialogueVolume);
+  const setCreatureVolume = useSettingsStore((s) => s.setCreatureVolume);
   const setVoiceChatVolume = useSettingsStore((s) => s.setVoiceChatVolume);
   const setAudioMuted = useSettingsStore((s) => s.setAudioMuted);
   const setDynamicRange = useSettingsStore((s) => s.setDynamicRange);
@@ -384,7 +384,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
       musicVolume: bgmVolume,
       ambienceVolume,
       sfxVolume,
-      dialogueVolume,
+      creatureVolume,
       voiceChatVolume,
       muted: audioMuted,
       dynamicRange,
@@ -394,7 +394,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
     ambienceVolume,
     audioMuted,
     bgmVolume,
-    dialogueVolume,
+    creatureVolume,
     dynamicRange,
     masterVolume,
     sfxVolume,
@@ -657,7 +657,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             <div>
               <div style={{ color: '#fff', fontWeight: 900, fontSize: 14 }}>サウンドミックス</div>
               <div style={{ color: 'rgba(255,255,255,0.48)', fontSize: 11, marginTop: 3 }}>
-                冒険の迫力と、声の聞き取りやすさを別々に調整できるよ
+                冒険の迫力と、生き物の気配を別々に調整できるよ
               </div>
             </div>
             <button
@@ -678,7 +678,7 @@ export function SettingsMenu({ open, onClose }: SettingsMenuProps) {
             <VolumeSlider label="音楽" value={bgmVolume} color="#63c8ff" onChange={setBgmVolumeSetting} />
             <VolumeSlider label="環境音" value={ambienceVolume} color="#78d89a" onChange={setAmbienceVolume} />
             <VolumeSlider label="効果音" value={sfxVolume} color="#ffc06d" onChange={setSfxVolumeSetting} />
-            <VolumeSlider label="キャラクターの声" value={dialogueVolume} color="#d39cff" onChange={setDialogueVolume} />
+            <VolumeSlider label="生き物・モブ" value={creatureVolume} color="#d39cff" onChange={setCreatureVolume} />
             <VolumeSlider label="ボイスチャット" value={voiceChatVolume} color="#7edcff" onChange={setVoiceChatVolume} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : '1.2fr 0.8fr', gap: 10, alignItems: 'center' }}>

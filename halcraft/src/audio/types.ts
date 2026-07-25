@@ -4,7 +4,7 @@ export type AudioBusId =
   | 'world'
   | 'player'
   | 'ui'
-  | 'dialogue'
+  | 'creature'
   | 'voiceChat';
 
 export type DynamicRangeMode = 'night' | 'standard' | 'wide';
@@ -32,7 +32,7 @@ export interface AudioMixSettings {
   musicVolume: number;
   ambienceVolume: number;
   sfxVolume: number;
-  dialogueVolume: number;
+  creatureVolume: number;
   voiceChatVolume: number;
   muted: boolean;
   dynamicRange: DynamicRangeMode;

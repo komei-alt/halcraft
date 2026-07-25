@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "language": "none",
+  "description": "言葉を含まない鳴き声・咆哮・唸り・電子音だけを登録する。拡張子なしの相対パスを指定する。",
+  "cues": {}
+}

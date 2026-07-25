@@ -4,7 +4,13 @@
 
 import { SEA_LEVEL } from '../types/blocks';
 import type { BiomeId, StageCategory } from '../types/stages';
-import { audioEngine } from '../audio';
+import {
+  audioEngine,
+  preloadAmbientBeds,
+  setRecordedAmbientPresence,
+  stopRecordedAmbientBed,
+  updateRecordedAmbientBed,
+} from '../audio';
 
 interface AmbientProfile {
   windLevel: number;
@@ -276,6 +282,7 @@ export function initAmbientSounds(): void {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
   }
+  void preloadAmbientBeds();
 
   masterGain = audioCtx.createGain();
   masterGain.gain.value = AMBIENT_VOLUME * ambientPresence;
@@ -495,6 +502,7 @@ export function updateAmbientSounds(
   stageCategory: StageCategory | null = null,
   modeFlowRatio = 0,
   modeFlowRank = 0,
+  dimension: 'overworld' | 'nether' = 'overworld',
 ): void {
   if (
     !audioCtx ||
@@ -514,6 +522,13 @@ export function updateAmbientSounds(
   const now = audioCtx.currentTime;
   const profile = AMBIENT_PROFILES[biomeId];
   const stageIntensity = clamp(stageAmbientIntensity, 0, MAX_STAGE_AMBIENT);
+  updateRecordedAmbientBed({
+    biome: biomeId,
+    isNight,
+    isUnderground,
+    isUnderwater,
+    dimension,
+  }, ambientPresence * stageIntensity);
   const nightBoost = isNight ? 1.08 : 1;
   const gust =
     0.78 +
@@ -647,6 +662,7 @@ export function updateAmbientSounds(
 /** ポーズ/死亡時などに環境音を一時的に下げる（0=無音、1=通常） */
 export function setAmbientPresence(presence: number): void {
   ambientPresence = Math.max(0, Math.min(1, presence));
+  setRecordedAmbientPresence(ambientPresence);
   if (masterGain && audioCtx) {
     const now = audioCtx.currentTime;
     masterGain.gain.cancelScheduledValues(now);
@@ -657,6 +673,7 @@ export function setAmbientPresence(presence: number): void {
 
 /** 環境音の停止 */
 export function stopAmbientSounds(): void {
+  stopRecordedAmbientBed();
   if (!isRunning) return;
   isRunning = false;
 

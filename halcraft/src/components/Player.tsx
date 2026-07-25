@@ -1715,7 +1715,12 @@ export function Player() {
         // 少しでも落下していれば着地音を鳴らして接地の手応えを出す
         if (fallDistance > 0.45 && wasFalling.current) {
           const stage = useGameStore.getState().currentStage;
-          playLandingSound(stage?.biome, stage?.category ?? null, fallDistance);
+          const groundBlock = getBlock(
+            Math.floor(pos.x),
+            Math.floor(downwardCollisionTop - 0.05),
+            Math.floor(pos.z),
+          );
+          playLandingSound(groundBlock, stage?.biome, fallDistance);
         }
         onGround.current = true;
         // 実際の衝突形状上面へスナップ（微量上げて境界振動を防止）

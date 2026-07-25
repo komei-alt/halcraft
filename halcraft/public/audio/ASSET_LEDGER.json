@@ -1,7 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedFor": "HalCraft audio overhaul",
-  "policy": "Only edited production exports belong under public/audio. Family recording masters must remain outside Git and outside public paths.",
+  "policy": "Only edited production exports belong under public/audio. Original masters and identifying performer metadata stay outside Git and public paths. Intelligible dialogue is not accepted.",
+  "runtimeManifests": [
+    "creatures/manifest.json",
+    "ambience/manifest.json"
+  ],
   "sources": [
     {
       "provider": "Kenney",
@@ -72,13 +76,26 @@
       "paths": ["music/boss.ogg", "music/boss.mp3"]
     }
   ],
-  "familyVoice": {
+  "originalRecordingPolicy": {
     "included": false,
+    "language": "none",
+    "allowed": [
+      "creature cries",
+      "roars and growls",
+      "nonverbal breaths",
+      "mechanical and material performances"
+    ],
+    "forbidden": [
+      "intelligible dialogue",
+      "names and personal identifiers",
+      "lyrics"
+    ],
     "requiredBeforeInclusion": [
-      "explicit publication consent",
+      "explicit performer and guardian publication consent when applicable",
       "edited export without unnecessary personal metadata",
-      "subtitle entry",
-      "loudness and peak validation"
+      "48 kHz delivery",
+      "loudness, peak, channel and file-pair validation",
+      "manifest and source-ledger registration"
     ]
   }
 }

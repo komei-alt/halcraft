@@ -6,14 +6,10 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import { usePlayerStore } from '../stores/usePlayerStore';
-import { useMobStore } from '../stores/useMobStore';
+import { useMobStore, type MobType } from '../stores/useMobStore';
 import { useGameStore } from '../stores/useGameStore';
-import {
-  playBiomeFootstepSound,
-  playAllyMove,
-  playZombieGrunt,
-  playHelicopterRotor,
-} from '../utils/sounds';
+import { useWorldStore } from '../stores/useWorldStore';
+import { playHelicopterRotor } from '../utils/sounds';
 import { useVehicleStore } from '../stores/useVehicleStore';
 import { useCoasterStore } from '../stores/useCoasterStore';
 import { useModeFlowStore } from '../stores/useModeFlowStore';
@@ -27,28 +23,53 @@ import { SEA_LEVEL } from '../types/blocks';
 import { getStageModeRule } from '../types/stageModeRules';
 import { stopLightsaberHumLoop } from '../utils/lightsaberSounds';
 import { useSettingsStore } from '../stores/useSettingsStore';
-import { audioEngine } from '../audio';
+import {
+  audioEngine,
+  playCreatureCue,
+  playSurfaceFootstep,
+  preloadCreatureAudio,
+  resolveFootstepSurface,
+} from '../audio';
+import { BLOCK_IDS } from '../types/blocks';
 
 /** 足音の最小水平速度（これ以下では鳴らない） */
 const FOOTSTEP_MIN_SPEED = 2.0;
 /** 垂直速度がこれ以上だと空中とみなし足音を止める */
 const FOOTSTEP_MAX_VERTICAL_SPEED = 3.2;
-/** 足音の間隔（秒） */
-const FOOTSTEP_INTERVAL = 0.35;
-/** ゾンビのうめき声の最小間隔（秒） */
-const ZOMBIE_GRUNT_MIN_INTERVAL = 3.0;
-/** ゾンビのうめき声の最大間隔（秒） */
-const ZOMBIE_GRUNT_MAX_INTERVAL = 8.0;
-/** 味方動作音の最小間隔（秒） */
-const ALLY_SOUND_INTERVAL = 1.5;
+/** 1歩ごとの移動距離。ダッシュは歩幅が広くても接地回数が増えるため少し短くする。 */
+const FOOTSTEP_WALK_STRIDE = 1.58;
+const FOOTSTEP_RUN_STRIDE = 1.34;
+/** カメラと足元の高さ差。 */
+const PLAYER_EYE_OFFSET = 1.6;
+const CREATURE_IDLE_INTERVALS: Record<MobType, readonly [number, number]> = {
+  zombie: [3.8, 7.4],
+  spider: [4.6, 8.8],
+  darwin: [4.2, 7.8],
+  chicken: [3.2, 6.1],
+  prototype: [7.5, 12],
+  iron_golem: [8.5, 14],
+  boss_giant: [4.8, 8],
+};
+
+interface MobAudioSnapshot {
+  attackActive: boolean;
+  hitTimer: number;
+  hpRatio: number;
+  near: boolean;
+}
+
+function randomIdleInterval(type: MobType): number {
+  const [minimum, maximum] = CREATURE_IDLE_INTERVALS[type];
+  return minimum + Math.random() * (maximum - minimum);
+}
 
 export function SoundManager() {
   const { camera } = useThree();
 
   // タイマー管理
-  const footstepTimer = useRef(0);
-  const zombieGruntTimer = useRef(-1);
-  const allySoundTimer = useRef(0);
+  const footstepDistance = useRef(0);
+  const creatureIdleTimers = useRef(new Map<MobType, number>());
+  const mobAudioSnapshots = useRef(new Map<string, MobAudioSnapshot>());
 
   // 前フレームのカメラ位置（速度推定用）
   const lastCameraPos = useRef({ x: 0, y: 0, z: 0 });
@@ -65,6 +86,10 @@ export function SoundManager() {
   }, []);
 
   useEffect(() => {
+    void preloadCreatureAudio();
+  }, []);
+
+  useEffect(() => {
     const applySettings = (): void => {
       const settings = useSettingsStore.getState();
       audioEngine.applyMix({
@@ -72,7 +97,7 @@ export function SoundManager() {
         musicVolume: settings.bgmVolume,
         ambienceVolume: settings.ambienceVolume,
         sfxVolume: settings.sfxVolume,
-        dialogueVolume: settings.dialogueVolume,
+        creatureVolume: settings.creatureVolume,
         voiceChatVolume: settings.voiceChatVolume,
         muted: settings.audioMuted,
         dynamicRange: settings.dynamicRange,
@@ -136,12 +161,6 @@ export function SoundManager() {
       bossActive,
     });
 
-    // --- zombieGruntTimer の lazy init ---
-    if (zombieGruntTimer.current < 0) {
-      zombieGruntTimer.current =
-        ZOMBIE_GRUNT_MIN_INTERVAL + Math.random() * (ZOMBIE_GRUNT_MAX_INTERVAL - ZOMBIE_GRUNT_MIN_INTERVAL);
-    }
-
     // --- 初回の位置初期化 ---
     if (!initialized.current) {
       lastCameraPos.current = { x: cx, y: cy, z: cz };
@@ -161,7 +180,8 @@ export function SoundManager() {
     const dy = cy - lastCameraPos.current.y;
     const dz = cz - lastCameraPos.current.z;
     const horizontalSpeed = Math.sqrt(dx * dx + dz * dz) / dt;
-    const verticalSpeed = Math.abs(dy) / dt;
+    const verticalVelocity = dy / dt;
+    const verticalSpeed = Math.abs(verticalVelocity);
     lastCameraPos.current = { x: cx, y: cy, z: cz };
 
     // --- 足音（地上歩行のみ。乗り物・飛行・水中では鳴らさない） ---
@@ -177,59 +197,102 @@ export function SoundManager() {
       && !creativeFlying
       && verticalSpeed < FOOTSTEP_MAX_VERTICAL_SPEED;
 
+    const blockX = Math.floor(cx);
+    const blockZ = Math.floor(cz);
+    const footY = Math.floor(cy - PLAYER_EYE_OFFSET - 0.06);
+    let groundBlock = useWorldStore.getState().getBlock(blockX, footY, blockZ);
+    if (groundBlock === BLOCK_IDS.AIR) {
+      groundBlock = useWorldStore.getState().getBlock(blockX, footY - 1, blockZ);
+    }
+    const footstepSurface = resolveFootstepSurface(groundBlock, gameState.currentStage?.biome);
     if (canPlayFootstep && horizontalSpeed > FOOTSTEP_MIN_SPEED) {
-      footstepTimer.current += dt;
-      // ダッシュ時は少し早めに鳴らしてリズムを足に合わせる
-      const interval = horizontalSpeed > 6.2 ? FOOTSTEP_INTERVAL * 0.78 : FOOTSTEP_INTERVAL;
-      if (footstepTimer.current >= interval) {
-        playBiomeFootstepSound(
-          gameState.currentStage?.biome,
-          gameState.currentStage?.category ?? null,
-          Math.min(1.32, horizontalSpeed / 5.5),
+      footstepDistance.current += Math.sqrt(dx * dx + dz * dz);
+      const running = horizontalSpeed > 6.2;
+      const stride = running ? FOOTSTEP_RUN_STRIDE : FOOTSTEP_WALK_STRIDE;
+      if (footstepDistance.current >= stride) {
+        playSurfaceFootstep(
+          footstepSurface,
+          running ? 'run' : 'walk',
+          Math.min(1.28, horizontalSpeed / 5.5),
         );
-        footstepTimer.current = 0;
+        footstepDistance.current %= stride;
       }
     } else {
-      // 止まったらタイマーリセット（次の一歩目ですぐ鳴る）
-      footstepTimer.current = FOOTSTEP_INTERVAL;
+      // 止まった後の初動が無音にならないよう、次の一歩までの距離を短く保つ。
+      footstepDistance.current = Math.min(footstepDistance.current, FOOTSTEP_WALK_STRIDE * 0.62);
     }
 
-    // --- モブのサウンド ---
-    // ゾンビのうめき声（最も近いゾンビの距離で判定）
-    zombieGruntTimer.current -= dt;
-    if (zombieGruntTimer.current <= 0) {
-      let closestZombieDist = Infinity;
-      for (const mob of mobs) {
-        if (mob.type !== 'zombie') continue;
-        const mdx = mob.x - cx;
-        const mdz = mob.z - cz;
-        const dist = Math.sqrt(mdx * mdx + mdz * mdz);
-        if (dist < closestZombieDist) closestZombieDist = dist;
+    // --- モブの非言語音 ---
+    const activeMobIds = new Set<string>();
+    for (const mob of mobs) {
+      activeMobIds.add(mob.id);
+      const mdx = mob.x - cx;
+      const mdy = mob.y - cy;
+      const mdz = mob.z - cz;
+      const distance = Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+      const position = { x: mob.x, y: mob.y + 0.8, z: mob.z };
+      const nearDistance = mob.type === 'boss_giant' ? 30 : mob.type === 'chicken' ? 7 : 14;
+      const near = distance <= nearDistance;
+      const attackActive = mob.attackTimer > 0.04;
+      const hpRatio = mob.maxHp > 0 ? mob.hp / mob.maxHp : 0;
+      const previous = mobAudioSnapshots.current.get(mob.id);
+
+      if (!previous) {
+        if (distance <= (mob.type === 'boss_giant' ? 48 : 34)) {
+          playCreatureCue(mob.type, 'spawn', { position, entityId: mob.id, gain: 0.9 });
+        }
+      } else {
+        if (!previous.near && near) {
+          playCreatureCue(mob.type, 'alert', { position, entityId: mob.id });
+        }
+        if (!previous.attackActive && attackActive) {
+          playCreatureCue(mob.type, 'attack', { position, entityId: mob.id });
+        }
+        if (mob.hitTimer > previous.hitTimer + 0.025) {
+          playCreatureCue(mob.type, 'hurt', { position, entityId: mob.id });
+        }
+        if (mob.type === 'boss_giant') {
+          const crossedPhase = (previous.hpRatio > 0.66 && hpRatio <= 0.66)
+            || (previous.hpRatio > 0.33 && hpRatio <= 0.33);
+          if (crossedPhase) {
+            playCreatureCue(mob.type, 'special', { position, entityId: mob.id, gain: 1.08 });
+          }
+        }
       }
-      if (closestZombieDist < 20) {
-        playZombieGrunt(closestZombieDist);
-      }
-      // 次のうめき声タイマーをランダムにリセット
-      zombieGruntTimer.current =
-        ZOMBIE_GRUNT_MIN_INTERVAL + Math.random() * (ZOMBIE_GRUNT_MAX_INTERVAL - ZOMBIE_GRUNT_MIN_INTERVAL);
+
+      mobAudioSnapshots.current.set(mob.id, { attackActive, hitTimer: mob.hitTimer, hpRatio, near });
+    }
+    for (const id of mobAudioSnapshots.current.keys()) {
+      if (!activeMobIds.has(id)) mobAudioSnapshots.current.delete(id);
     }
 
-    // 味方の動作音
-    allySoundTimer.current -= dt;
-    if (allySoundTimer.current <= 0) {
-      let closestAllyDist = Infinity;
+    for (const type of Object.keys(CREATURE_IDLE_INTERVALS) as MobType[]) {
+      const remaining = (creatureIdleTimers.current.get(type) ?? randomIdleInterval(type)) - dt;
+      if (remaining > 0) {
+        creatureIdleTimers.current.set(type, remaining);
+        continue;
+      }
+      let closest: (typeof mobs)[number] | null = null;
+      let closestDistance = Infinity;
       for (const mob of mobs) {
-        if (!mob.isAlly) continue;
+        if (mob.type !== type) continue;
         const mdx = mob.x - cx;
+        const mdy = mob.y - cy;
         const mdz = mob.z - cz;
-        const dist = Math.sqrt(mdx * mdx + mdz * mdz);
-        if (dist < closestAllyDist) closestAllyDist = dist;
+        const distance = Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+        const audibleDistance = type === 'boss_giant' ? 48 : type === 'chicken' ? 16 : 28;
+        if (distance < audibleDistance && distance < closestDistance) {
+          closest = mob;
+          closestDistance = distance;
+        }
       }
-      // 味方が動いている場合のみ
-      if (closestAllyDist < 15) {
-        playAllyMove(closestAllyDist);
+      if (closest) {
+        playCreatureCue(type, 'idle', {
+          position: { x: closest.x, y: closest.y + 0.8, z: closest.z },
+          entityId: closest.id,
+        });
       }
-      allySoundTimer.current = ALLY_SOUND_INTERVAL;
+      creatureIdleTimers.current.set(type, randomIdleInterval(type));
     }
 
     // --- ヘリコプターのローター音 ---
@@ -268,6 +331,7 @@ export function SoundManager() {
       gameState.currentStage?.category ?? null,
       modeFlowRatio,
       modeState.flowRank,
+      gameState.dimension,
     );
   });
 
