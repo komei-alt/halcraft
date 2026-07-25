@@ -67,7 +67,7 @@ Mac Studio (or MacBook Air)
    - `os.rosch.co.jp` → `192.168.100.100` ※ROSCH OS用
    - `core.rosch.co.jp` → `192.168.100.100` ※DSM用
 
-2. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/halcraft.conf`)
+2. **NAS Synology Nginx リバースプロキシ** (`/etc/nginx/conf.d/http.rosch-non-os.conf`)
    - `halcraft.rosch.jp:443` → `localhost:4000`
    - 証明書: `/usr/local/etc/nginx/ssl/halcraft.rosch.jp/`
 
@@ -75,7 +75,8 @@ Mac Studio (or MacBook Air)
    - HTTP-01 配信元: `/var/lib/acme-halcraft/.well-known/acme-challenge/`
    - コンテナ内: `/var/www/acme/.well-known/acme-challenge/`（read-only）
    - Cloudflare API トークンは使用しない
-   - NAS の既存 `acme.sh --cron` から自動更新し、成功時に Nginx を reload する
+   - NAS の既存 `/opt/nas-deploy/maintenance/renew-rosch-wildcard-cert.sh` から毎日 `acme.sh --cron` を実行する
+   - 更新成功時は `/usr/bin/nginx -s reload -c /etc/nginx/nginx.conf.run` を実行する
 
 ### RTX1210 への静的DNS追加方法
 
